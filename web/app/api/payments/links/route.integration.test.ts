@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 
 const routeState = Symbol.for("openbooks-payment-links-route-test");
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[routeState] = {
+(globalThis as typeof globalThis & Record<symbol, unknown>)[routeState] = {
   authz: null as { user: { orgId: string; id: string } } | null,
 };
 
@@ -19,7 +19,7 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../lib/authz" && context.parentURL?.includes("payments/links")) {
+    if (specifier === "@/lib/authz" && context.parentURL?.includes("payments/links")) {
       return { url: "mock:payment-links-authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -38,9 +38,8 @@ const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sealJson } = await import("@openbooks/engine/platform/secrets");
 const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/testing/fixtures",
-);
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } =
+  await import("@openbooks/engine/testing/fixtures");
 
 function request(body: unknown): Request {
   return new Request("http://localhost/api/payments/links", {
@@ -49,7 +48,7 @@ function request(body: unknown): Request {
   });
 }
 
-test.after(() => hooks.deregister())
+test.after(() => hooks.deregister());
 test("payment-link API rejects a malformed bank reference before any link write", async () => {
   const { org, actorId } = await withBypassContext(async () => {
     const seeded = await createScratchOrg();
@@ -67,18 +66,26 @@ test("payment-link API rejects a malformed bank reference before any link write"
     };
     state.authz = { user: { orgId: org.orgId, id: actorId } };
 
-    const before = await db.execute<{ count: number }>(sql`
+    const before = await db.execute<{ count: number }>(
+      sql`
       select count(*)::int as count from payment_links where org_id = ${org.orgId}
-    `, "objects");
-    const response = await POST(request({
-      provider: "stripe",
-      documentId: randomUUID(),
-      bankAccountId: "not-a-uuid",
-    }));
+    `,
+      "objects",
+    );
+    const response = await POST(
+      request({
+        provider: "stripe",
+        documentId: randomUUID(),
+        bankAccountId: "not-a-uuid",
+      }),
+    );
     assert.equal(response.status, 400);
-    const after = await db.execute<{ count: number }>(sql`
+    const after = await db.execute<{ count: number }>(
+      sql`
       select count(*)::int as count from payment_links where org_id = ${org.orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.equal(after[0]!.count, before[0]!.count);
   } finally {
     const state = (globalThis as typeof globalThis & Record<symbol, unknown>)[routeState] as {
@@ -113,9 +120,11 @@ async function linkFixture() {
     await db.execute(sql`
       update documents set status = 'approved', updated_at = now()
        where id = ${invoiceId} and org_id = ${org.orgId}`);
-    await withOrgContext(org.orgId, () => postDocument(invoiceId, {
-      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-    }));
+    await withOrgContext(org.orgId, () =>
+      postDocument(invoiceId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      }),
+    );
     await db.execute(sql`
       insert into psp_provider_configs
         (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
@@ -131,19 +140,27 @@ async function linkFixture() {
 
 async function getLinks(orgId: string, invoiceId: string) {
   const response = await withOrgContext(orgId, () =>
-    GET(new Request(`http://localhost/api/payments/links?documentId=${invoiceId}`)));
-  return { status: response.status, json: (await response.json()) as {
-    links: { id: string; token: string; tokenState: string }[];
-  } };
+    GET(new Request(`http://localhost/api/payments/links?documentId=${invoiceId}`)),
+  );
+  return {
+    status: response.status,
+    json: (await response.json()) as {
+      links: { id: string; token: string; tokenState: string }[];
+    },
+  };
 }
 
 test("a mintable link lists with a usable token", async () => {
   const { org, invoiceId } = await linkFixture();
   try {
-    const created = await withOrgContext(org.orgId, () => POST(request({
-      provider: "stripe",
-      documentId: invoiceId,
-    })));
+    const created = await withOrgContext(org.orgId, () =>
+      POST(
+        request({
+          provider: "stripe",
+          documentId: invoiceId,
+        }),
+      ),
+    );
     assert.equal(created.status, 201);
     const listed = await getLinks(org.orgId, invoiceId);
     assert.equal(listed.status, 200);
@@ -162,20 +179,30 @@ test("a mintable link lists with a usable token", async () => {
 test("a tampered sealed token lists the link as unavailable with no URL", async () => {
   const { org, invoiceId } = await linkFixture();
   try {
-    const created = await withOrgContext(org.orgId, () => POST(request({
-      provider: "stripe",
-      documentId: invoiceId,
-    })));
+    const created = await withOrgContext(org.orgId, () =>
+      POST(
+        request({
+          provider: "stripe",
+          documentId: invoiceId,
+        }),
+      ),
+    );
     assert.equal(created.status, 201);
     const linkId = ((await created.json()) as { id: string }).id;
-    await withBypassContext(() => (db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       update payment_links set token_sealed = 'tampered' where id = ${linkId} and org_id = ${org.orgId}
-    `)));
+    `),
+    );
     const listed = await getLinks(org.orgId, invoiceId);
     assert.equal(listed.status, 200);
     assert.equal(listed.json.links.length, 1);
     assert.equal(listed.json.links[0]!.tokenState, "unsealable");
-    assert.equal(listed.json.links[0]!.token, "", "an unsealable link carries no token to build a URL from");
+    assert.equal(
+      listed.json.links[0]!.token,
+      "",
+      "an unsealable link carries no token to build a URL from",
+    );
   } finally {
     const state = (globalThis as typeof globalThis & Record<symbol, unknown>)[routeState] as {
       authz: { user: { orgId: string; id: string } } | null;

@@ -1,37 +1,29 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { defineRoute } from '@/lib/api/route'
-import { z } from 'zod'
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
-import { PaymentAcceptanceError, voidPaymentLink } from "@openbooks/engine/payments/acceptance/operations";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
+import {
+  PaymentAcceptanceError,
+  voidPaymentLink,
+} from "@openbooks/engine/payments/acceptance/operations";
+import { paymentLinkScope } from "@openbooks/engine/payments/payment-queries";
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
-import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../lib/features";
-import { isUuid } from "../../../../../lib/list-params";
+import { guardPermission, guardSubsidiaryScope, type Authz } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
 import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
-async function deletePaymentLink(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("ar.create");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "onlinePayments"))) {
-    return NextResponse.json({ error: "feature disabled" }, { status: 404 });
-  }
+async function deletePaymentLink({ params }: { params: Promise<{ id: string }> }, gate: Authz) {
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
   // Void is a payment-link record boundary: the stored legal entity is
   // loaded with the org probe, then the shared gate runs before the
   // bearer token can be cancelled. Missing and out-of-scope links both
   // 404, matching /api/documents/[id] and /api/payments/[id].
-  const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select subsidiary_id as "subsidiaryId" from payment_links
-     where id = ${id} and org_id = ${gate.user.orgId}
-  `, "objects"));
-  if (!owned[0]) return notFound("record");
-  const denied = guardSubsidiaryScope(gate, owned[0].subsidiaryId);
+  const owned = await paymentLinkScope(gate.user.orgId, id);
+  if (!owned) return notFound("record");
+  const denied = guardSubsidiaryScope(gate, owned.subsidiaryId);
   if (denied) return denied;
   try {
     await voidPaymentLink(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds);
@@ -44,8 +36,9 @@ async function deletePaymentLink(_req: Request, { params }: { params: Promise<{ 
 }
 
 export const DELETE = defineRoute({
-  authorize: () => guardPermission('ar.create'),
-  feature: { none: 'The link handler applies the onlinePayments feature and record scope after permission authorization.' },
+  authorize: () => guardPermission("ar.create"),
+  feature: "onlinePayments",
   params: z.object({ id: z.string() }),
-  handler: async ({ request, params }) => deletePaymentLink(request, { params: Promise.resolve(params) }),
-})
+  handler: async ({ params, authz }) =>
+    deletePaymentLink({ params: Promise.resolve(params) }, authz),
+});

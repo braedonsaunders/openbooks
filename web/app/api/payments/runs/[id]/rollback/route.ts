@@ -1,30 +1,35 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
-import { z } from 'zod'
-import { rollbackPaymentRun } from '@openbooks/engine/payments/operations'
-import { isUuid } from '@/lib/list-params'
-import { parseJsonBody } from '@/lib/api/json'
-import { guardPaymentRunPermission, paymentErrorResponse } from '@/app/api/payments/lib'
+import { z } from "zod";
+import { rollbackPaymentRun } from "@openbooks/engine/payments/operations";
+import { isUuid } from "@/lib/list-params";
+import type { Authz } from "@/lib/authz";
+import { guardPaymentRunPermission, paymentErrorResponse } from "@/app/api/payments/lib";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const rollbackBody = z.object({
-  reason: z.string().default(''),
+  reason: z.string().default(""),
   /** The run number typed back to attest the bank did not process a delivered file. */
   bankNotProcessedAttestation: z.string().optional(),
-})
+});
 
-async function legacyPOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const gate = await guardPaymentRunPermission(id)
-  if (gate instanceof NextResponse) return gate
-  const parsed = await parseJsonBody(req, rollbackBody)
-  if (!parsed.ok) return parsed.response
-  try { await rollbackPaymentRun(id, gate.user.orgId, gate.user.id, parsed.data.reason, { bankNotProcessedAttestation: parsed.data.bankNotProcessedAttestation ?? null }); return NextResponse.json({ ok: true }) }
-  catch (e) { return paymentErrorResponse(e) }
+async function legacyPOST(
+  { params }: { params: Promise<{ id: string }> },
+  gate: Authz,
+  body: z.infer<typeof rollbackBody>,
+) {
+  const { id } = await params;
+  if (!isUuid(id)) return notFound("record");
+  try {
+    await rollbackPaymentRun(id, gate.user.orgId, gate.user.id, body.reason, {
+      bankNotProcessedAttestation: body.bankNotProcessedAttestation ?? null,
+    });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return paymentErrorResponse(e);
+  }
 }
 
 export const POST = defineRoute({
@@ -32,6 +37,15 @@ export const POST = defineRoute({
     const runId = String((params as { id?: string } | undefined)?.id ?? "");
     return guardPaymentRunPermission(runId);
   },
-  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
-  handler: async ({ request, params }) => legacyPOST(request, { params: Promise.resolve(params as never) }),
+  feature: {
+    none: "Payment-run authorization checks the run direction, capability, and subsidiary scope.",
+  },
+  body: rollbackBody,
+  opaque: {
+    reason: "Rollback uses an optional operator reason with a default empty value.",
+    bankNotProcessedAttestation:
+      "The bank attestation is optional for runs that were not delivered.",
+  },
+  handler: async ({ params, authz, body }) =>
+    legacyPOST({ params: Promise.resolve(params as never) }, authz, body),
 });

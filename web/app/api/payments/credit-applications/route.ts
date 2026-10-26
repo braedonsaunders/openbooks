@@ -1,24 +1,26 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { db } from '@openbooks/engine/platform/db'
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { z } from "zod";
 import {
   applyStandaloneCredits,
   creditSettlementState,
   unapplyCreditSettlement,
-} from '@openbooks/engine/payments/credit-settlement'
-import { CreditApplicationConflictError } from '@openbooks/engine/payments-core/payment-errors'
-import { exactMoney, isoDate, parseJsonBody, uuidId } from '@/lib/api/json'
-import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
-import { isUuid } from '../../../../lib/list-params'
-import { paymentErrorResponse } from '../lib'
-import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
+} from "@openbooks/engine/payments/credit-settlement";
+import {
+  creditApplicationDocumentScope,
+  creditApplicationSettlementScope,
+  paymentPartyScope,
+} from "@openbooks/engine/payments/payment-queries";
+import { CreditApplicationConflictError } from "@openbooks/engine/payments-core/payment-errors";
+import { exactMoney, isoDate, uuidId } from "@/lib/api/json";
+import { guardPermission, guardSubsidiaryScope, type Authz } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import { paymentErrorResponse } from "../lib";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { notFound } from "@/lib/api/responses";
-import { defineRoute } from '@/lib/api/route'
+import { defineRoute } from "@/lib/api/route";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Settle a posted credit memo — or a payment's unapplied cash: a receipt's
@@ -34,7 +36,7 @@ export const runtime = 'nodejs'
 
 const applyBody = z.object({
   partyId: uuidId,
-  side: z.enum(['ap', 'ar']),
+  side: z.enum(["ap", "ar"]),
   appliedOn: isoDate(),
   credits: z
     .array(
@@ -45,26 +47,20 @@ const applyBody = z.object({
         sourceDocumentId: uuidId,
       }),
     )
-    .min(1, 'select at least one credit to apply'),
-})
+    .min(1, "select at least one credit to apply"),
+});
 
 // The caller states which side it is releasing so the permission can be
 // resolved before any tenant read. The settlement's ACTUAL side is checked
 // against it below, inside the org scope — otherwise an AR-only user could
 // name 'ar' and release an AP credit.
-const releaseBody = z.object({ applicationId: uuidId, side: z.enum(['ap', 'ar']) })
+const releaseBody = z.object({ applicationId: uuidId, side: z.enum(["ap", "ar"]) });
 
-async function guardParty(
-  gate: Exclude<Awaited<ReturnType<typeof guardPermission>>, NextResponse>,
-  partyId: string,
-): Promise<NextResponse | null> {
-  const party = (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select subsidiary_id as "subsidiaryId" from parties
-     where id = ${partyId} and org_id = ${gate.user.orgId}
-  `, 'objects'))
-  if (!party[0]) return notFound("record")
+async function guardParty(gate: Authz, partyId: string): Promise<NextResponse | null> {
+  const party = await paymentPartyScope(gate.user.orgId, partyId);
+  if (!party) return notFound("record");
   // Null-subsidiary parties are org-wide, like every other party reader here.
-  return guardSubsidiaryScope(gate, party[0].subsidiaryId, { orgWideNull: true })
+  return guardSubsidiaryScope(gate, party.subsidiaryId, { orgWideNull: true });
 }
 
 /**
@@ -72,76 +68,76 @@ async function guardParty(
  * this so its remaining figure and the engine's open-balance check come from
  * the same rows.
  */
-async function getCreditApplications(req: Request) {
-  const url = new URL(req.url)
-  const side = url.searchParams.get('side')
-  if (side !== 'ap' && side !== 'ar') {
-    return NextResponse.json({ error: 'side must be ap or ar' }, { status: 400 })
+async function getCreditApplications(req: Request, gate: Authz) {
+  const url = new URL(req.url);
+  const side = url.searchParams.get("side");
+  if (side !== "ap" && side !== "ar") {
+    return NextResponse.json({ error: "side must be ap or ar" }, { status: 400 });
   }
-  const documentId = url.searchParams.get('documentId') ?? ''
+  const documentId = url.searchParams.get("documentId") ?? "";
   if (!isUuid(documentId)) {
-    return NextResponse.json({ error: 'documentId is required' }, { status: 400 })
+    return NextResponse.json({ error: "documentId is required" }, { status: 400 });
   }
-  const gate = await guardPermission(side === 'ap' ? 'ap.read' : 'ar.read')
-  if (gate instanceof NextResponse) return gate
   // Bind the document to the side it claims before reading its settlements:
   // an AR reader must not learn what a vendor credit paid.
-  const doc = (await db.execute<{ partyId: string | null; subsidiaryId: string | null }>(sql`
-    select party_id as "partyId", subsidiary_id as "subsidiaryId" from documents
-     where id = ${documentId} and org_id = ${gate.user.orgId}
-       and kind in ${side === 'ap' ? ['vendor_credit', 'vendor_payment'] : ['customer_credit', 'customer_payment']}
-  `, 'objects'))
-  if (!doc[0]) return notFound("record")
-  const documentDenied = guardSubsidiaryScope(gate, doc[0].subsidiaryId)
-  if (documentDenied) return documentDenied
-  if (doc[0].partyId) {
-    const denied = await guardParty(gate, doc[0].partyId)
-    if (denied) return denied
+  const doc = await creditApplicationDocumentScope(gate.user.orgId, documentId, side);
+  if (!doc) return notFound("record");
+  const documentDenied = guardSubsidiaryScope(gate, doc.subsidiaryId);
+  if (documentDenied) return documentDenied;
+  if (doc.partyId) {
+    const denied = await guardParty(gate, doc.partyId);
+    if (denied) return denied;
   }
   try {
-    return NextResponse.json({ state: await creditSettlementState(gate.user.orgId, documentId, gate.allowedSubsidiaryIds) })
+    return NextResponse.json({
+      state: await creditSettlementState(gate.user.orgId, documentId, gate.allowedSubsidiaryIds),
+    });
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) return notFound("record")
-    throw error
+    if (error instanceof ScopeNotFoundError) return notFound("record");
+    throw error;
   }
 }
 
-async function applyCredits(req: Request) {
+async function applyCredits(req: Request, gate: Authz, body: z.infer<typeof applyBody>) {
   // One key, one settlement: a retried submit (network timeout, double
   // click) must resolve to the settlement it already wrote, never a second
   // one beside it — the deferred app_check_open trigger only stops a retry
   // that overdraws the credit, so a partial application duplicated silently.
-  const idempotencyKey = req.headers.get('Idempotency-Key') ?? ''
+  const idempotencyKey = req.headers.get("Idempotency-Key") ?? "";
   if (!isUuid(idempotencyKey)) {
     return NextResponse.json(
-      { error: 'an Idempotency-Key header with a UUID is required, so a retried apply cannot settle twice' },
+      {
+        error:
+          "an Idempotency-Key header with a UUID is required, so a retried apply cannot settle twice",
+      },
       { status: 400 },
-    )
+    );
   }
-  const parsed = await parseJsonBody(req, applyBody)
-  if (!parsed.ok) return parsed.response
-  const { partyId, side, appliedOn, credits } = parsed.data
-  const gate = await guardPermission(side === 'ap' ? 'ap.pay' : 'ar.pay')
-  if (gate instanceof NextResponse) return gate
-  const denied = await guardParty(gate, partyId)
-  if (denied) return denied
+  const { partyId, side, appliedOn, credits } = body;
+  const denied = await guardParty(gate, partyId);
+  if (denied) return denied;
   try {
-    const result = await applyStandaloneCredits(gate.user.orgId, gate.user.id, {
-      partyId,
-      side,
-      appliedOn,
-      credits,
-      idempotencyKey,
-    }, gate.allowedSubsidiaryIds)
-    return NextResponse.json(result)
+    const result = await applyStandaloneCredits(
+      gate.user.orgId,
+      gate.user.id,
+      {
+        partyId,
+        side,
+        appliedOn,
+        credits,
+        idempotencyKey,
+      },
+      gate.allowedSubsidiaryIds,
+    );
+    return NextResponse.json(result);
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return notFound("record")
+    if (e instanceof ScopeNotFoundError) return notFound("record");
     // A reused key that cannot replay is a conflict with a named remedy, not
     // a validation failure: the operator must reload and review what settled.
     if (e instanceof CreditApplicationConflictError) {
-      return apiErrorResponse(e, { safeStatus: 409 })
+      return apiErrorResponse(e, { safeStatus: 409 });
     }
-    return paymentErrorResponse(e)
+    return paymentErrorResponse(e);
   }
 }
 
@@ -150,35 +146,26 @@ async function applyCredits(req: Request) {
  * behind the void refusal "unapply them before voiding"; cash applications are
  * refused by name and pointed at the void that owns their evidence.
  */
-async function releaseCredits(req: Request) {
-  const parsed = await parseJsonBody(req, releaseBody)
-  if (!parsed.ok) return parsed.response
-  const { applicationId, side } = parsed.data
-  const gate = await guardPermission(side === 'ap' ? 'ap.pay' : 'ar.pay')
-  if (gate instanceof NextResponse) return gate
+async function releaseCredits(gate: Authz, body: z.infer<typeof releaseBody>) {
+  const { applicationId, side } = body;
 
   // Now inside the caller's org: confirm the settlement really is the side the
   // caller was gated on, and that its party is in scope. A mismatch is the
   // tenant-opaque 404 every other id lookup here returns — naming the other
   // side's kind would itself disclose it.
-  const settlement = (await db.execute<{ kind: string | null; partyId: string | null }>(sql`
-    select credit.kind, credit.party_id as "partyId"
-      from applications a
-      join journal_lines jl on jl.id = a.from_line_id and jl.org_id = a.org_id
-      join journal_entries je on je.id = jl.entry_id and je.org_id = a.org_id
-      left join documents credit
-        on credit.id = je.source_document_id and credit.org_id = a.org_id
-     where a.id = ${applicationId} and a.org_id = ${gate.user.orgId}
-  `, 'objects'))
-  const row = settlement[0]
-  const actualSide = row?.kind === 'vendor_credit' || row?.kind === 'vendor_payment' ? 'ap'
-    : row?.kind === 'customer_credit' || row?.kind === 'customer_payment' ? 'ar' : null
+  const row = await creditApplicationSettlementScope(gate.user.orgId, applicationId);
+  const actualSide =
+    row?.kind === "vendor_credit" || row?.kind === "vendor_payment"
+      ? "ap"
+      : row?.kind === "customer_credit" || row?.kind === "customer_payment"
+        ? "ar"
+        : null;
   if (!row || actualSide !== side) {
-    return notFound("record")
+    return notFound("record");
   }
   if (row.partyId) {
-    const denied = await guardParty(gate, row.partyId)
-    if (denied) return denied
+    const denied = await guardParty(gate, row.partyId);
+    if (denied) return denied;
   }
   try {
     const result = await unapplyCreditSettlement(
@@ -186,39 +173,47 @@ async function releaseCredits(req: Request) {
       gate.user.id,
       applicationId,
       gate.allowedSubsidiaryIds,
-    )
-    return NextResponse.json(result)
+    );
+    return NextResponse.json(result);
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return notFound("record")
-    return paymentErrorResponse(e)
+    if (e instanceof ScopeNotFoundError) return notFound("record");
+    return paymentErrorResponse(e);
   }
 }
 
-const sidePermission = async (request: Request, verb: 'read' | 'pay') => {
-  let side: unknown
+const sidePermission = async (request: Request, verb: "read" | "pay") => {
+  let side: unknown;
   try {
-    const value: unknown = request.method === 'GET'
-      ? new URL(request.url).searchParams.get('side')
-      : (await request.clone().json() as { side?: unknown }).side
-    side = value
+    const value: unknown =
+      request.method === "GET"
+        ? new URL(request.url).searchParams.get("side")
+        : ((await request.clone().json()) as { side?: unknown }).side;
+    side = value;
   } catch {
-    return NextResponse.json({ error: 'invalid request body' }, { status: 400 })
+    return NextResponse.json({ error: "invalid request body" }, { status: 400 });
   }
-  if (side !== 'ap' && side !== 'ar') {
-    return NextResponse.json({ error: 'side must be ap or ar' }, { status: 400 })
+  if (side !== "ap" && side !== "ar") {
+    return NextResponse.json({ error: "side must be ap or ar" }, { status: 400 });
   }
-  return guardPermission(side === 'ap' ? `ap.${verb}` : `ar.${verb}`)
-}
-const creditAppFeature = { none: 'The selected AP or AR permission gates each credit-application operation.' } as const
+  return guardPermission(side === "ap" ? `ap.${verb}` : `ar.${verb}`);
+};
+const creditAppFeature = {
+  none: "The selected AP or AR permission gates each credit-application operation.",
+} as const;
 export const GET = defineRoute({
-  authorize: ({ request }) => sidePermission(request, 'read'), feature: creditAppFeature,
-  handler: async ({ request }) => getCreditApplications(request),
-})
+  authorize: ({ request }) => sidePermission(request, "read"),
+  feature: creditAppFeature,
+  handler: async ({ request, authz }) => getCreditApplications(request, authz),
+});
 export const POST = defineRoute({
-  authorize: ({ request }) => sidePermission(request, 'pay'), feature: creditAppFeature,
-  handler: async ({ request }) => applyCredits(request),
-})
+  authorize: ({ request }) => sidePermission(request, "pay"),
+  feature: creditAppFeature,
+  body: applyBody,
+  handler: async ({ request, authz, body }) => applyCredits(request, authz, body),
+});
 export const DELETE = defineRoute({
-  authorize: ({ request }) => sidePermission(request, 'pay'), feature: creditAppFeature,
-  handler: async ({ request }) => releaseCredits(request),
-})
+  authorize: ({ request }) => sidePermission(request, "pay"),
+  feature: creditAppFeature,
+  body: releaseBody,
+  handler: async ({ authz, body }) => releaseCredits(authz, body),
+});

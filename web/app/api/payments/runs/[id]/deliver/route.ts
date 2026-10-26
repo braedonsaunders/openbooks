@@ -1,55 +1,52 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { defineRoute } from "@/lib/api/route";
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { db } from '@openbooks/engine/platform/db'
-import { deliverRunToSftp } from '@openbooks/engine/sftp/import-job'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { paymentRunSftpServers } from "@openbooks/engine/payments/payment-queries";
+import { deliverRunToSftp } from "@openbooks/engine/sftp/import-job";
 import { PaymentError } from "@openbooks/engine/payments-core/payment-errors";
-import { isUuid } from '../../../../../../lib/list-params'
-import { unexpectedServerError } from '../../../../../../lib/api/unexpected'
-import { parseJsonBody, uuidId } from '../../../../../../lib/api/json'
-import { guardPaymentRunPermission } from '../../../lib'
+import { isUuid } from "@/lib/list-params";
+import { unexpectedServerError } from "@/lib/api/unexpected";
+import { uuidId } from "@/lib/api/json";
+import type { Authz } from "@/lib/authz";
+import { guardPaymentRunPermission } from "../../../lib";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const deliverBody = z.object({
   sftpServerId: z
-    .string({ error: 'sftpServerId is required' })
-    .refine((v) => uuidId.safeParse(v).success, 'sftpServerId is required'),
-})
+    .string({ error: "sftpServerId is required" })
+    .refine((v) => uuidId.safeParse(v).success, "sftpServerId is required"),
+});
 
 /** Active SFTP servers the run can be delivered to (picker for the run drawer). */
-async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const gate = await guardPaymentRunPermission(id)
-  if (gate instanceof NextResponse) return gate
-  const r = (await db.execute(sql`
-    select s.id, s.name from payment_runs r join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
-      join sftp_servers s on s.org_id = r.org_id and s.is_active and (p.sftp_server_id is null or p.sftp_server_id = s.id)
-     where r.id = ${id} and r.org_id = ${gate.user.orgId} order by s.name
-  `, 'objects'))
-  return NextResponse.json({ servers: r })
+async function legacyGET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+  gate: Authz,
+) {
+  const { id } = await params;
+  if (!isUuid(id)) return notFound("record");
+  const r = await paymentRunSftpServers(gate.user.orgId, id);
+  return NextResponse.json({ servers: r });
 }
 
 /** Deliver a payment run's bank file to an SFTP server's outbound folder: { sftpServerId }. */
-async function legacyPOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const gate = await guardPaymentRunPermission(id)
-  if (gate instanceof NextResponse) return gate
-  const { user } = gate
-  const parsed = await parseJsonBody(req, deliverBody)
-  if (!parsed.ok) return parsed.response
+async function legacyPOST(
+  { params }: { params: Promise<{ id: string }> },
+  gate: Authz,
+  body: z.infer<typeof deliverBody>,
+) {
+  const { id } = await params;
+  if (!isUuid(id)) return notFound("record");
+  const { user } = gate;
   try {
-    const res = await deliverRunToSftp(id, parsed.data.sftpServerId, user.orgId, user.id, new Date())
-    return NextResponse.json({ ok: true, ...res })
+    const res = await deliverRunToSftp(id, body.sftpServerId, user.orgId, user.id, new Date());
+    return NextResponse.json({ ok: true, ...res });
   } catch (e) {
-    if (e instanceof PaymentError) return apiErrorResponse(e, { safeStatus: 422 })
-    return unexpectedServerError('payments/deliver', e)
+    if (e instanceof PaymentError) return apiErrorResponse(e, { safeStatus: 422 });
+    return unexpectedServerError("payments/deliver", e);
   }
 }
 
@@ -58,14 +55,21 @@ export const GET = defineRoute({
     const runId = String((params as { id?: string } | undefined)?.id ?? "");
     return guardPaymentRunPermission(runId);
   },
-  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
-  handler: async ({ request, params }) => legacyGET(request, { params: Promise.resolve(params as never) }),
+  feature: {
+    none: "Payment-run authorization checks the run direction, capability, and subsidiary scope.",
+  },
+  handler: async ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params as never) }, authz),
 });
 export const POST = defineRoute({
   authorize: async ({ params }) => {
     const runId = String((params as { id?: string } | undefined)?.id ?? "");
     return guardPaymentRunPermission(runId);
   },
-  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
-  handler: async ({ request, params }) => legacyPOST(request, { params: Promise.resolve(params as never) }),
+  feature: {
+    none: "Payment-run authorization checks the run direction, capability, and subsidiary scope.",
+  },
+  body: deliverBody,
+  handler: async ({ params, authz, body }) =>
+    legacyPOST({ params: Promise.resolve(params as never) }, authz, body),
 });

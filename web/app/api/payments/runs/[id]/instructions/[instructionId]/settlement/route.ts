@@ -1,42 +1,37 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { db } from '@openbooks/engine/platform/db'
-import { recordPaymentSettlement } from '@openbooks/engine/payments/operations'
-import { isoDate, parseJsonBody } from '@/lib/api/json'
-import { isUuid } from '@/lib/list-params'
-import { guardPaymentRunPermission, paymentErrorResponse } from '@/app/api/payments/lib'
+import { z } from "zod";
+import { paymentInstructionInRun } from "@openbooks/engine/payments/payment-queries";
+import { recordPaymentSettlement } from "@openbooks/engine/payments/operations";
+import { isoDate } from "@/lib/api/json";
+import { isUuid } from "@/lib/list-params";
+import type { Authz } from "@/lib/authz";
+import { guardPaymentRunPermission, paymentErrorResponse } from "@/app/api/payments/lib";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const settlementBody = z
   .object({
-    status: z.enum(['settled', 'returned', 'rejected'], { error: 'A valid outcome is required' }),
-    effectiveOn: isoDate('A valid effective date is required'),
+    status: z.enum(["settled", "returned", "rejected"], { error: "A valid outcome is required" }),
+    effectiveOn: isoDate("A valid effective date is required"),
     bankReference: z.string().nullable().optional(),
     returnCode: z.string().nullable().optional(),
     returnReason: z.string().nullable().optional(),
   })
-  .refine((body) => body.status === 'settled' || !!body.returnReason?.trim(), {
-    error: 'A return reason is required',
-  })
+  .refine((body) => body.status === "settled" || !!body.returnReason?.trim(), {
+    error: "A return reason is required",
+  });
 
-async function legacyPOST(req: Request, { params }: { params: Promise<{ id: string; instructionId: string }> }) {
-  const { id, instructionId } = await params
-  if (!isUuid(id) || !isUuid(instructionId)) return notFound("record")
-  const gate = await guardPaymentRunPermission(id)
-  if (gate instanceof NextResponse) return gate
-  const owned = (await db.execute(sql`
-    select 1 from payment_instructions i join payment_runs r on r.id = i.payment_run_id and r.org_id = i.org_id
-     where i.id = ${instructionId} and r.id = ${id} and r.org_id = ${gate.user.orgId}
-  `, 'objects'))
-  if (!owned[0]) return NextResponse.json({ error: 'Payment instruction not found' }, { status: 404 })
-  const parsed = await parseJsonBody(req, settlementBody)
-  if (!parsed.ok) return parsed.response
-  const body = parsed.data
+async function legacyPOST(
+  { params }: { params: Promise<{ id: string; instructionId: string }> },
+  gate: Authz,
+  body: z.infer<typeof settlementBody>,
+) {
+  const { id, instructionId } = await params;
+  if (!isUuid(id) || !isUuid(instructionId)) return notFound("record");
+  const owned = await paymentInstructionInRun(gate.user.orgId, id, instructionId);
+  if (!owned) return NextResponse.json({ error: "Payment instruction not found" }, { status: 404 });
   try {
     await recordPaymentSettlement({
       instructionId,
@@ -47,10 +42,10 @@ async function legacyPOST(req: Request, { params }: { params: Promise<{ id: stri
       bankReference: body.bankReference ?? null,
       returnCode: body.returnCode ?? null,
       returnReason: body.returnReason ?? null,
-    })
-    return NextResponse.json({ ok: true })
+    });
+    return NextResponse.json({ ok: true });
   } catch (error) {
-    return paymentErrorResponse(error)
+    return paymentErrorResponse(error);
   }
 }
 
@@ -59,6 +54,10 @@ export const POST = defineRoute({
     const runId = String((params as { id?: string } | undefined)?.id ?? "");
     return guardPaymentRunPermission(runId);
   },
-  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
-  handler: async ({ request, params }) => legacyPOST(request, { params: Promise.resolve(params as never) }),
+  feature: {
+    none: "Payment-run authorization checks the run direction, capability, and subsidiary scope.",
+  },
+  body: settlementBody,
+  handler: async ({ params, authz, body }) =>
+    legacyPOST({ params: Promise.resolve(params as never) }, authz, body),
 });
