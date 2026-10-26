@@ -6,106 +6,201 @@ import test from "node:test";
 import type { SessionUser } from "../../../lib/auth";
 
 const engineRoot = new URL("../../../../engine/", import.meta.url).href;
-const state: { user: SessionUser | null; allowedSubsidiaryId: string | null } = { user: null, allowedSubsidiaryId: null };
+const state: { user: SessionUser | null; allowedSubsidiaryId: string | null } = {
+  user: null,
+  allowedSubsidiaryId: null,
+};
 Object.assign(globalThis, { __subcontractRehomeRace: state });
-registerHooks({ resolve(specifier, context, nextResolve) {
-  if (specifier === "../../../lib/authz" && context.parentURL?.endsWith("/api/subcontracts/route.ts")) {
-    return { shortCircuit: true, url: "mock:subcontract-rehome-authz" };
-  }
-  if (specifier === "../../../lib/subcontracts-gate" && context.parentURL?.endsWith("/api/subcontracts/route.ts")) {
-    return { shortCircuit: true, url: "mock:subcontract-rehome-gate" };
-  }
-  if (specifier.startsWith("@openbooks/engine/")) {
-    return nextResolve(new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href, context);
-  }
-  if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
-    return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__subcontractRehomeRace.user}" };
-  }
-  return nextResolve(specifier, context);
-}, load(url, context, nextLoad) {
-  if (url === "mock:subcontract-rehome-authz") return { format: "module", shortCircuit: true, source: `
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "@/lib/authz" && context.parentURL?.endsWith("/api/subcontracts/route.ts")) {
+      return { shortCircuit: true, url: "mock:subcontract-rehome-authz" };
+    }
+    if (specifier.startsWith("@openbooks/engine/")) {
+      return nextResolve(
+        new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href,
+        context,
+      );
+    }
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__subcontractRehomeRace.user}",
+      };
+    }
+    return nextResolve(specifier, context);
+  },
+  load(url, context, nextLoad) {
+    if (url === "mock:subcontract-rehome-authz")
+      return {
+        format: "module",
+        shortCircuit: true,
+        source: `
     const state = globalThis.__subcontractRehomeRace;
     export async function guardPermission() { return { user: state.user, allowedSubsidiaryIds: new Set([state.allowedSubsidiaryId]) }; }
     export function guardSubsidiaryScope(authz, subsidiaryId) { return authz.allowedSubsidiaryIds.has(subsidiaryId) ? null : new Response(JSON.stringify({error:'not_found'}), {status:404}); }
-  ` };
-  if (url === "mock:subcontract-rehome-gate") return { format: "module", shortCircuit: true, source: "export async function guardSubcontractsFeature() { return null }" };
-  return nextLoad(url, context);
-} });
+  `,
+      };
+    return nextLoad(url, context);
+  },
+});
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { waitForLockWaiter } = await import("@openbooks/engine/testing/lock-wait");
 const { createSubcontract } = await import("@openbooks/engine/projects/subcontracts");
 const { GET, POST } = await import("./route.ts");
 
-
 function session(orgId: string, actorId: string): SessionUser {
-  return { id: actorId, orgId, name: "Subcontract clerk", email: "clerk@scratch.test", roles: [], isSuperAdmin: false,
-    envKind: "production", productionOrgId: orgId, homeOrgId: orgId, homeUserId: actorId };
+  return {
+    id: actorId,
+    orgId,
+    name: "Subcontract clerk",
+    email: "clerk@scratch.test",
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: orgId,
+    homeOrgId: orgId,
+    homeUserId: actorId,
+  };
 }
 
 test("POST rechecks the project scope after waiting out a concurrent rehome", async () => {
   const org = await withBypassContext(() => createScratchOrg());
-  const holder = await new Pool({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL }).connect();
+  const holder = await new Pool({
+    connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL,
+  }).connect();
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Subcontract clerk", "subcontract_clerk"));
-    await withBypassContext(() => db.execute(sql`
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Subcontract clerk", "subcontract_clerk"),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       update app_roles set permissions = '["ap.create","ap.read"]'::jsonb,
         subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
        where org_id = ${org.orgId} and key = 'subcontract_clerk'
-    `));
-    await withBypassContext(() => db.execute(sql`
+    `),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}',
         coalesce(settings->'features','{}'::jsonb) || '{"projects":true,"subcontracts":true}'::jsonb)
        where id = ${org.orgId}
-    `));
+    `),
+    );
     const subsidiaryB = randomUUID();
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${subsidiaryB}, ${org.orgId}, ${org.subsidiaryId}, 'Other Entity', 'CAD', 'CA')
-    `));
-    const projectId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    `),
+    );
+    const projectId = (
+      await withBypassContext(() =>
+        db.execute<{ id: string }>(
+          sql`
       insert into projects (org_id, subsidiary_id, code, name, status, is_active, custom)
       values (${org.orgId}, ${org.subsidiaryId}, 'SC-RACE', 'Scope race project', 'active', true, '{}'::jsonb)
       returning id
-    `, "objects")))[0]!.id;
-    const vendorId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    `,
+          "objects",
+        ),
+      )
+    )[0]!.id;
+    const vendorId = (
+      await withBypassContext(() =>
+        db.execute<{ id: string }>(
+          sql`
       insert into parties (org_id, kind, display_name, is_active)
       values (${org.orgId}, 'company', 'Scope race vendor', true) returning id
-    `, "objects")))[0]!.id;
-    await withBypassContext(() => db.execute(sql`
+    `,
+          "objects",
+        ),
+      )
+    )[0]!.id;
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into vendor_roles (org_id, party_id, is_active) values (${org.orgId}, ${vendorId}, true)
-    `));
-    const subcontractId = (await withBypassContext(() => createSubcontract({
-      orgId: org.orgId, userId: actorId, projectId, vendorId, number: "SC-RACE-1", title: "Before race", originalCommitment: "100.00",
-    }))).id;
-    const revisionRows = await withBypassContext(() => db.execute<{ token: string }>(sql`
+    `),
+    );
+    const subcontractId = (
+      await withBypassContext(() =>
+        createSubcontract({
+          orgId: org.orgId,
+          userId: actorId,
+          projectId,
+          vendorId,
+          number: "SC-RACE-1",
+          title: "Before race",
+          originalCommitment: "100.00",
+        }),
+      )
+    ).id;
+    const revisionRows = await withBypassContext(() =>
+      db.execute<{ token: string }>(
+        sql`
       select updated_at::text as token from subcontracts where org_id = ${org.orgId} and id = ${subcontractId}
-    `, "objects"));
-    assert.equal(revisionRows.length, 1, "the concurrent edit must start from one existing subcontract revision");
+    `,
+        "objects",
+      ),
+    );
+    assert.equal(
+      revisionRows.length,
+      1,
+      "the concurrent edit must start from one existing subcontract revision",
+    );
     const expectedUpdatedAt = revisionRows[0]!.token;
     state.user = session(org.orgId, actorId);
     state.allowedSubsidiaryId = org.subsidiaryId;
     await holder.query("begin"); // 0399 gates the bypass GUC by session role: the holder connects as the privileged test login above.
-    const locked = await holder.query("select id from projects where id = $1 for update", [projectId]);
+    const locked = await holder.query("select id from projects where id = $1 for update", [
+      projectId,
+    ]);
     assert.equal(locked.rows.length, 1);
     let settled = false;
-    const pending = withOrgContext(org.orgId, () => POST(new Request("http://openbooks.test/api/subcontracts", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "updateSubcontract", id: subcontractId, title: "After race", originalCommitment: "100.00", defaultRetainagePercent: "10", expectedUpdatedAt }),
-    }))).then((response) => { settled = true; return response; });
+    const pending = withOrgContext(org.orgId, () =>
+      POST(
+        new Request("http://openbooks.test/api/subcontracts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "updateSubcontract",
+            id: subcontractId,
+            title: "After race",
+            originalCommitment: "100.00",
+            defaultRetainagePercent: "10",
+            expectedUpdatedAt,
+          }),
+        }),
+      ),
+    ).then((response) => {
+      settled = true;
+      return response;
+    });
     await waitForLockWaiter(holder, { label: "POST to wait on the locked project row" });
     assert.equal(settled, false, "POST must wait on the locked project row");
-    await holder.query("update projects set subsidiary_id = $1 where id = $2", [subsidiaryB, projectId]);
+    await holder.query("update projects set subsidiary_id = $1 where id = $2", [
+      subsidiaryB,
+      projectId,
+    ]);
     await holder.query("commit");
     const response = await pending;
     assert.equal(response.status, 404, JSON.stringify(await response.clone().json()));
     assert.deepEqual(await response.json(), { error: "not_found" });
-    const result = (await withBypassContext(() => db.execute(sql`
+    const result = (
+      await withBypassContext(() =>
+        db.execute(
+          sql`
       select s.title, p.subsidiary_id from subcontracts s join projects p on p.id = s.project_id and p.org_id = s.org_id
        where s.org_id = ${org.orgId} and s.id = ${subcontractId}
-    `, "objects")))[0] as { title: string; subsidiary_id: string };
+    `,
+          "objects",
+        ),
+      )
+    )[0] as { title: string; subsidiary_id: string };
     assert.deepEqual(result, { title: "Before race", subsidiary_id: subsidiaryB });
   } finally {
     await holder.query("rollback").catch(() => undefined);
@@ -118,50 +213,101 @@ test("POST rechecks the project scope after waiting out a concurrent rehome", as
 
 test("GET detail retries a stale snapshot after a project is rehomed", async () => {
   const org = await withBypassContext(() => createScratchOrg());
-  const holder = await new Pool({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL }).connect();
+  const holder = await new Pool({
+    connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL,
+  }).connect();
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Subcontract clerk", "subcontract_clerk"));
-    await withBypassContext(() => db.execute(sql`
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Subcontract clerk", "subcontract_clerk"),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       update app_roles set permissions = '["ap.create","ap.read"]'::jsonb,
         subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
        where org_id = ${org.orgId} and key = 'subcontract_clerk'
-    `));
-    await withBypassContext(() => db.execute(sql`
+    `),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}',
         coalesce(settings->'features','{}'::jsonb) || '{"projects":true,"subcontracts":true}'::jsonb)
        where id = ${org.orgId}
-    `));
+    `),
+    );
     const subsidiaryB = randomUUID();
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${subsidiaryB}, ${org.orgId}, ${org.subsidiaryId}, 'Other Entity', 'CAD', 'CA')
-    `));
-    const projectId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    `),
+    );
+    const projectId = (
+      await withBypassContext(() =>
+        db.execute<{ id: string }>(
+          sql`
       insert into projects (org_id, subsidiary_id, code, name, status, is_active, custom)
       values (${org.orgId}, ${org.subsidiaryId}, 'SC-GET-RACE', 'Scope read project', 'active', true, '{}'::jsonb)
       returning id
-    `, "objects")))[0]!.id;
-    const vendorId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    `,
+          "objects",
+        ),
+      )
+    )[0]!.id;
+    const vendorId = (
+      await withBypassContext(() =>
+        db.execute<{ id: string }>(
+          sql`
       insert into parties (org_id, kind, display_name, is_active)
       values (${org.orgId}, 'company', 'Scope read vendor', true) returning id
-    `, "objects")))[0]!.id;
-    await withBypassContext(() => db.execute(sql`
+    `,
+          "objects",
+        ),
+      )
+    )[0]!.id;
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into vendor_roles (org_id, party_id, is_active) values (${org.orgId}, ${vendorId}, true)
-    `));
-    const subcontractId = (await withBypassContext(() => createSubcontract({
-      orgId: org.orgId, userId: actorId, projectId, vendorId, number: "SC-GET-RACE-1", title: "Read race", originalCommitment: "100.00",
-    }))).id;
+    `),
+    );
+    const subcontractId = (
+      await withBypassContext(() =>
+        createSubcontract({
+          orgId: org.orgId,
+          userId: actorId,
+          projectId,
+          vendorId,
+          number: "SC-GET-RACE-1",
+          title: "Read race",
+          originalCommitment: "100.00",
+        }),
+      )
+    ).id;
     state.user = session(org.orgId, actorId);
     state.allowedSubsidiaryId = org.subsidiaryId;
     await holder.query("begin"); // 0399 gates the bypass GUC by session role: the holder connects as the privileged test login above.
     await holder.query("select id from projects where id = $1 for update", [projectId]);
     let settledResponse: Response | undefined;
-    const pending = withOrgContext(org.orgId, () => GET(new Request(
-      `http://openbooks.test/api/subcontracts?id=${subcontractId}`,
-    ))).then((response) => { settledResponse = response; return response; });
+    const pending = withOrgContext(org.orgId, () =>
+      GET(new Request(`http://openbooks.test/api/subcontracts?id=${subcontractId}`)),
+    ).then((response) => {
+      settledResponse = response;
+      return response;
+    });
     await waitForLockWaiter(holder, { label: "the subcontract GET" });
-    assert.equal(settledResponse, undefined, `GET must wait on the locked project row, got ${settledResponse?.status}: ${JSON.stringify(await settledResponse?.clone().json().catch(() => null))}`);
-    await holder.query("update projects set subsidiary_id = $1 where id = $2", [subsidiaryB, projectId]);
+    assert.equal(
+      settledResponse,
+      undefined,
+      `GET must wait on the locked project row, got ${settledResponse?.status}: ${JSON.stringify(
+        await settledResponse
+          ?.clone()
+          .json()
+          .catch(() => null),
+      )}`,
+    );
+    await holder.query("update projects set subsidiary_id = $1 where id = $2", [
+      subsidiaryB,
+      projectId,
+    ]);
     await holder.query("commit");
     const response = await pending;
     assert.equal(response.status, 404, JSON.stringify(await response.clone().json()));

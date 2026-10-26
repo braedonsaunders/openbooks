@@ -673,6 +673,7 @@
     "./projects/revenue": "./src/projects/revenue.ts",
     "./projects/subcontract-commitments": "./src/projects/subcontract-commitments.ts",
     "./projects/subcontracts": "./src/projects/subcontracts.ts",
+    "./projects/subcontracts-read": "./src/projects/subcontracts-read.ts",
     "./projects/time-lifecycle": "./src/projects/time-lifecycle.ts",
     "./projects/time-type-correction": "./src/projects/time-type-correction.ts",
     "./projects/time-work-target": "./src/projects/time-work-target.ts",

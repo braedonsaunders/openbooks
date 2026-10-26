@@ -1,9 +1,13 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { isoDate, parseJsonBody, uuidId } from "@/lib/api/json";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { isoDate, uuidId } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { ScopeNotFoundError, lockProjectForScope, withScopeSnapshot } from "@openbooks/engine/organization/scope";
+import {
+  ScopeNotFoundError,
+  lockProjectForScope,
+  withScopeSnapshot,
+} from "@openbooks/engine/organization/scope";
 import {
   SubcontractConflictError,
   SubcontractError,
@@ -29,18 +33,19 @@ import {
   voidVendorPayApplication,
   listSubcontractRegister,
 } from "@openbooks/engine/projects/subcontracts";
+import {
+  readSubcontractActionProjectScope,
+  readSubcontractDetail,
+} from "@openbooks/engine/projects/subcontracts-read";
 import { normalizeMoney } from "@openbooks/engine/money/money";
-import { guardPermission, guardSubsidiaryScope } from "../../../lib/authz";
-import { canonicalDecimal } from "../../../lib/exact-decimal";
-import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
-import { isFeatureEnabled } from "../../../lib/features";
-import { isUuid } from "../../../lib/list-params";
-import { guardSubcontractsFeature } from "../../../lib/subcontracts-gate";
-import { subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
+import { guardPermission, guardSubsidiaryScope, type Authz } from "@/lib/authz";
+import { canonicalDecimal } from "@/lib/exact-decimal";
+import { moneyRefusal } from "@/lib/payroll-decimal-refusal";
+import { isFeatureEnabled } from "@/lib/features";
+import { isUuid } from "@/lib/list-params";
 import { notFound } from "@/lib/api/responses";
-import { defineRoute } from '@/lib/api/route'
+import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
-
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,141 +70,90 @@ function invalidDecimal(label: string, raw: unknown, noun = "an amount") {
   return NextResponse.json({ error: moneyRefusal(label, raw, noun) }, { status: 422 });
 }
 
-async function listSubcontracts(request: Request) {
-  const authz = await guardPermission("ap.read");
-  if (authz instanceof NextResponse) return authz;
-  const feature = await guardSubcontractsFeature(authz.user.orgId);
-  if (feature) return feature;
+async function listSubcontracts(request: Request, authz: Authz) {
   const orgId = authz.user.orgId;
   const url = new URL(request.url);
   const id = url.searchParams.get("id");
   if (!id) {
     const statusValue = url.searchParams.get("status") ?? "all";
-    const status = statusValue === "all"
-      ? undefined
-      : ["draft", "pending_approval", "active", "substantially_complete", "closed", "void"].includes(statusValue)
-          ? (statusValue as "draft" | "pending_approval" | "active" | "substantially_complete" | "closed" | "void")
+    const status =
+      statusValue === "all"
+        ? undefined
+        : [
+              "draft",
+              "pending_approval",
+              "active",
+              "substantially_complete",
+              "closed",
+              "void",
+            ].includes(statusValue)
+          ? (statusValue as
+              | "draft"
+              | "pending_approval"
+              | "active"
+              | "substantially_complete"
+              | "closed"
+              | "void")
           : null;
     const page = Number(url.searchParams.get("page") ?? "1");
     const perPage = Number(url.searchParams.get("perPage") ?? "25");
     const q = url.searchParams.get("q") ?? undefined;
-    if (status === null || !Number.isInteger(page) || page < 1 || page > 100_000
-      || !Number.isInteger(perPage) || perPage < 10 || perPage > 100
-      || (q !== undefined && q.length > 200)) {
-      return NextResponse.json({ error: "Choose a valid subcontract search, status and page." }, { status: 422 });
+    if (
+      status === null ||
+      !Number.isInteger(page) ||
+      page < 1 ||
+      page > 100_000 ||
+      !Number.isInteger(perPage) ||
+      perPage < 10 ||
+      perPage > 100 ||
+      (q !== undefined && q.length > 200)
+    ) {
+      return NextResponse.json(
+        { error: "Choose a valid subcontract search, status and page." },
+        { status: 422 },
+      );
     }
     try {
-      const result = await withScopeSnapshot(orgId, () => listSubcontractRegister(db, {
-        orgId,
-        actorId: authz.user.id,
-        requestedScope: authz.allowedSubsidiaryIds,
-        q,
-        status,
-        page,
-        perPage,
-      }));
+      const result = await withScopeSnapshot(orgId, () =>
+        listSubcontractRegister(db, {
+          orgId,
+          actorId: authz.user.id,
+          requestedScope: authz.allowedSubsidiaryIds,
+          q,
+          status,
+          page,
+          perPage,
+        }),
+      );
       return NextResponse.json({ subcontracts: result.rows, ...result });
     } catch (error) {
       if (error instanceof ScopeNotFoundError) return notFound("record");
-      if (error instanceof SubcontractError) return NextResponse.json({ error: error.message }, { status: 422 });
+      if (error instanceof SubcontractError)
+        return NextResponse.json({ error: error.message }, { status: 422 });
       throw error;
     }
   }
 
   if (!isUuid(id)) return notFound("record");
   try {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-  return await withScopeSnapshot(orgId, async () => {
-  const contract = await db.execute<Record<string, unknown> & { projectSubsidiaryId: string | null }>(sql`
-    select s.id, s.number, s.title, s.description, s.status, s.currency, p.subsidiary_id as "projectSubsidiaryId",
-           s.project_id as "projectId", p.name as "projectName", s.vendor_id as "vendorId", v.display_name as "vendorName",
-           s.updated_at as "updatedAt",
-           s.original_commitment as "originalCommitment", s.default_retainage_percent as "defaultRetainagePercent",
-           s.purchase_order_id as "purchaseOrderId", s.starts_on as "startsOn", s.ends_on as "endsOn",
-           s.payment_hold_reason as "paymentHoldReason", s.submitted_at as "submittedAt", s.approved_at as "approvedAt",
-           (s.original_commitment + coalesce(ch.approved, 0))::text as "revisedCommitment"
-      from subcontracts s join projects p on p.id = s.project_id and p.org_id = s.org_id
-      join parties v on v.id = s.vendor_id and v.org_id = s.org_id
-      left join lateral (select sum(amount) filter (where status = 'approved') as approved
-        from subcontract_change_orders where org_id = s.org_id and subcontract_id = s.id) ch on true
-     where s.org_id = ${orgId} and s.id = ${id}
-       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
-  `, "objects")
-          if (!contract[0]) return notFound("record");
-          // A subcontract on a project outside the caller's scope is a missing one.
-          const { projectSubsidiaryId, ...subcontract } = contract[0];
-          const denied = guardSubsidiaryScope(authz, projectSubsidiaryId);
-          if (denied) return denied
-          await lockProjectForScope(db, orgId, String(contract[0].projectId), authz.allowedSubsidiaryIds, "share");
-          const sov = await db.execute(sql`
-      select l.id, l.item_no as "itemNo", l.description, l.scheduled_value as "scheduledValue",
-             l.retainage_percent as "retainagePercent", l.expense_account_id as "expenseAccountId",
-             l.change_order_id as "changeOrderId", l.sort_order as "sortOrder",
-             coalesce(earned.earned, 0)::text as "earnedToDate"
-        from subcontract_sov_lines l
-        left join lateral (
-          select vpal.previous_earned + vpal.work_completed_this_period + vpal.materials_stored_current - vpal.previous_materials_stored as earned
-            from vendor_pay_application_lines vpal join vendor_pay_applications vpa on vpa.id = vpal.pay_application_id and vpa.org_id = vpal.org_id
-           where vpal.org_id = l.org_id and vpal.sov_line_id = l.id and vpa.status = 'billed'
-           order by vpa.application_number desc limit 1
-        ) earned on true
-       where l.org_id = ${orgId} and l.subcontract_id = ${id} order by l.sort_order, l.item_no
-    `, "objects");
-          const changes = await db.execute(sql`
-      select id, number, description, status, amount, target_sov_line_id as "targetSovLineId",
-             approved_on as "approvedOn"
-        from subcontract_change_orders where org_id = ${orgId} and subcontract_id = ${id} order by created_at desc
-    `, "objects")
-          const applications = await db.execute(sql`
-      select a.id, a.application_number as "applicationNumber", a.period_end as "periodEnd",
-             a.vendor_invoice_number as "vendorInvoiceNumber", a.status, a.revision,
-             a.gross_this_period as "grossThisPeriod", a.retainage_this_period as "retainageThisPeriod", a.net_due as "netDue",
-             a.vendor_bill_document_id as "vendorBillDocumentId", d.document_number as "vendorBillNumber", d.status as "vendorBillStatus"
-        from vendor_pay_applications a left join documents d on d.id = a.vendor_bill_document_id and d.org_id = a.org_id
-       where a.org_id = ${orgId} and a.subcontract_id = ${id} order by a.application_number desc
-    `, "objects")
-          const lines = await db.execute(sql`
-      select l.pay_application_id as "payApplicationId", l.sov_line_id as "sovLineId", sov.item_no as "itemNo", sov.description,
-             sov.scheduled_value as "scheduledValue", l.previous_earned as "previousEarned",
-             l.previous_materials_stored as "previousMaterialsStored", l.work_completed_this_period as "workCompletedThisPeriod",
-             l.materials_stored_current as "materialsStoredCurrent", l.retainage_percent as "retainagePercent"
-        from vendor_pay_application_lines l join vendor_pay_applications a on a.id = l.pay_application_id and a.org_id = l.org_id
-        join subcontract_sov_lines sov on sov.id = l.sov_line_id and sov.org_id = l.org_id
-       where l.org_id = ${orgId} and a.subcontract_id = ${id} order by a.application_number desc, sov.sort_order
-    `, "objects");
-          const controls = await db.execute(sql`
-      select c.id, c.control_type as "controlType", c.status, c.pay_application_id as "payApplicationId",
-             c.vendor_bill_document_id as "vendorBillDocumentId", c.joint_payee_party_id as "jointPayeePartyId",
-             p.display_name as "jointPayeeName", c.amount_limit as "amountLimit", c.reason,
-             c.effective_on as "effectiveOn", c.expires_on as "expiresOn", c.release_reason as "releaseReason"
-        from subcontract_payment_controls c left join parties p on p.id = c.joint_payee_party_id and p.org_id = c.org_id
-       where c.org_id = ${orgId} and c.subcontract_id = ${id} order by c.created_at desc
-    `, "objects");
-          const releases = await db.execute(sql`
-      select r.id, r.period_end as "periodEnd", r.amount, r.vendor_bill_document_id as "vendorBillDocumentId",
-             d.document_number as "vendorBillNumber", d.status as "vendorBillStatus", r.memo
-        from vendor_retainage_releases r join documents d on d.id = r.vendor_bill_document_id and d.org_id = r.org_id
-       where r.org_id = ${orgId} and r.subcontract_id = ${id} order by r.period_end desc
-    `, "objects");
-          return NextResponse.json({
-    subcontract,
-    sovLines: sov,
-    changeOrders: changes,
-    payApplications: applications,
-    payApplicationLines: lines,
-    paymentControls: controls,
-    retainageReleases: releases,
-  });
-        })
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await withScopeSnapshot(orgId, async () => {
+          const detail = await readSubcontractDetail(db, {
+            orgId,
+            id,
+            allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+          });
+          return detail ? NextResponse.json(detail) : notFound("record");
+        });
       } catch (error) {
-      // A REPEATABLE READ reader can observe the old project header, then
-      // lose the lock race to a committed rehome. PostgreSQL marks that
-      // snapshot stale (40001); retry once so the caller sees the new scope.
-      const failure = error as { code?: string; cause?: { code?: string } };
-      const code = failure.code ?? failure.cause?.code;
-      if (code !== "40001" || attempt > 0) throw error;
-    }
+        // A REPEATABLE READ reader can observe the old project header, then
+        // lose the lock race to a committed rehome. PostgreSQL marks that
+        // snapshot stale (40001); retry once so the caller sees the new scope.
+        const failure = error as { code?: string; cause?: { code?: string } };
+        const code = failure.code ?? failure.cause?.code;
+        if (code !== "40001" || attempt > 0) throw error;
+      }
     }
     throw new Error("Subcontract detail snapshot could not be refreshed");
   } catch (error) {
@@ -212,103 +166,143 @@ const postingActions = new Set(["createVendorBill", "releaseRetainage"]);
 const paymentActions = new Set(["addPaymentControl", "releasePaymentControl"]);
 
 const subcontractRequestBody = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("createSubcontract"), projectId: uuidId, vendorId: uuidId, number: z.string().trim().min(1), title: z.string().trim().min(1), description: z.string().nullable().optional(), currency: z.string().optional(), originalCommitment: z.string(), defaultRetainagePercent: z.string().nullable().optional(), purchaseOrderId: uuidId.nullable().optional(), startsOn: z.string().nullable().optional(), endsOn: z.string().nullable().optional() }).strict(),
-  z.object({ action: z.literal("updateSubcontract"), id: uuidId, title: z.string().trim().min(1), description: z.string().nullable().optional(), originalCommitment: z.string(), defaultRetainagePercent: z.string(), startsOn: z.string().nullable().optional(), endsOn: z.string().nullable().optional(), expectedUpdatedAt: z.string() }).strict(),
-  z.object({ action: z.literal("addSovLine"), subcontractId: uuidId, itemNo: z.string().nullable().optional(), description: z.string().trim().min(1), scheduledValue: z.string(), retainagePercent: z.string().nullable().optional(), expenseAccountId: uuidId.nullable().optional(), sortOrder: z.number().int().optional() }).strict(),
+  z
+    .object({
+      action: z.literal("createSubcontract"),
+      projectId: uuidId,
+      vendorId: uuidId,
+      number: z.string().trim().min(1),
+      title: z.string().trim().min(1),
+      description: z.string().nullable().optional(),
+      currency: z.string().optional(),
+      originalCommitment: z.string(),
+      defaultRetainagePercent: z.string().nullable().optional(),
+      purchaseOrderId: uuidId.nullable().optional(),
+      startsOn: z.string().nullable().optional(),
+      endsOn: z.string().nullable().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("updateSubcontract"),
+      id: uuidId,
+      title: z.string().trim().min(1),
+      description: z.string().nullable().optional(),
+      originalCommitment: z.string(),
+      defaultRetainagePercent: z.string(),
+      startsOn: z.string().nullable().optional(),
+      endsOn: z.string().nullable().optional(),
+      expectedUpdatedAt: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("addSovLine"),
+      subcontractId: uuidId,
+      itemNo: z.string().nullable().optional(),
+      description: z.string().trim().min(1),
+      scheduledValue: z.string(),
+      retainagePercent: z.string().nullable().optional(),
+      expenseAccountId: uuidId.nullable().optional(),
+      sortOrder: z.number().int().optional(),
+    })
+    .strict(),
   z.object({ action: z.literal("removeSovLine"), id: uuidId }).strict(),
   z.object({ action: z.literal("submitSubcontract"), id: uuidId }).strict(),
   z.object({ action: z.literal("approveSubcontract"), id: uuidId }).strict(),
-  z.object({ action: z.literal("transitionSubcontract"), id: uuidId, transition: z.enum(["substantially_complete", "close", "void"]) }).strict(),
-  z.object({ action: z.literal("addChangeOrder"), subcontractId: uuidId, number: z.string().trim().min(1), description: z.string().nullable().optional(), amount: z.string(), targetSovLineId: uuidId.nullable().optional() }).strict(),
-  z.object({ action: z.literal("approveChangeOrder"), id: uuidId, approvedOn: isoDate("approvedOn must be a valid calendar date (YYYY-MM-DD)") }).strict(),
+  z
+    .object({
+      action: z.literal("transitionSubcontract"),
+      id: uuidId,
+      transition: z.enum(["substantially_complete", "close", "void"]),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("addChangeOrder"),
+      subcontractId: uuidId,
+      number: z.string().trim().min(1),
+      description: z.string().nullable().optional(),
+      amount: z.string(),
+      targetSovLineId: uuidId.nullable().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("approveChangeOrder"),
+      id: uuidId,
+      approvedOn: isoDate("approvedOn must be a valid calendar date (YYYY-MM-DD)"),
+    })
+    .strict(),
   z.object({ action: z.literal("voidChangeOrder"), id: uuidId }).strict(),
-  z.object({ action: z.literal("createPayApplication"), subcontractId: uuidId, periodEnd: z.string(), vendorInvoiceNumber: z.string().nullable().optional() }).strict(),
-  z.object({ action: z.literal("updatePayApplication"), payApplicationId: uuidId, expectedRevision: z.number().int().positive(), lines: z.array(z.object({ sovLineId: z.string(), workCompletedThisPeriod: z.string().optional(), materialsStoredCurrent: z.string().optional() }).strict()) }).strict(),
+  z
+    .object({
+      action: z.literal("createPayApplication"),
+      subcontractId: uuidId,
+      periodEnd: z.string(),
+      vendorInvoiceNumber: z.string().nullable().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("updatePayApplication"),
+      payApplicationId: uuidId,
+      expectedRevision: z.number().int().positive(),
+      lines: z.array(
+        z
+          .object({
+            sovLineId: z.string(),
+            workCompletedThisPeriod: z.string().optional(),
+            materialsStoredCurrent: z.string().optional(),
+          })
+          .strict(),
+      ),
+    })
+    .strict(),
   z.object({ action: z.literal("submitPayApplication"), id: uuidId }).strict(),
   z.object({ action: z.literal("approvePayApplication"), id: uuidId }).strict(),
   z.object({ action: z.literal("voidPayApplication"), id: uuidId }).strict(),
   z.object({ action: z.literal("createVendorBill"), id: uuidId }).strict(),
-  z.object({ action: z.literal("releaseRetainage"), subcontractId: uuidId, periodEnd: z.string(), amount: z.string(), memo: z.string().nullable().optional() }).strict(),
-  z.object({ action: z.literal("addPaymentControl"), subcontractId: uuidId, payApplicationId: uuidId.nullable().optional(), vendorBillDocumentId: uuidId.nullable().optional(), controlType: z.enum(["joint_check", "payment_hold"]), jointPayeePartyId: uuidId.nullable().optional(), amountLimit: z.string().nullable().optional(), reason: z.string().trim().min(1), effectiveOn: z.string(), expiresOn: z.string().nullable().optional() }).strict(),
-  z.object({ action: z.literal("releasePaymentControl"), id: uuidId, releaseReason: z.string().trim().min(1) }).strict(),
+  z
+    .object({
+      action: z.literal("releaseRetainage"),
+      subcontractId: uuidId,
+      periodEnd: z.string(),
+      amount: z.string(),
+      memo: z.string().nullable().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("addPaymentControl"),
+      subcontractId: uuidId,
+      payApplicationId: uuidId.nullable().optional(),
+      vendorBillDocumentId: uuidId.nullable().optional(),
+      controlType: z.enum(["joint_check", "payment_hold"]),
+      jointPayeePartyId: uuidId.nullable().optional(),
+      amountLimit: z.string().nullable().optional(),
+      reason: z.string().trim().min(1),
+      effectiveOn: z.string(),
+      expiresOn: z.string().nullable().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("releasePaymentControl"),
+      id: uuidId,
+      releaseReason: z.string().trim().min(1),
+    })
+    .strict(),
 ]);
 
-/**
- * Which request field names the record each action touches, and the table that
- * record lives in. Every action reaches a project through this chain, so the
- * caller's subsidiary scope is enforced on the PROJECT before any engine work.
- */
-type ScopeTable = "projects" | "subcontracts" | "subcontract_sov_lines" | "subcontract_change_orders" | "vendor_pay_applications" | "subcontract_payment_controls";
-const ACTION_SCOPE: Record<string, { table: ScopeTable; key: string }> = {
-  createSubcontract: { table: "projects", key: "projectId" },
-  updateSubcontract: { table: "subcontracts", key: "id" },
-  submitSubcontract: { table: "subcontracts", key: "id" },
-  approveSubcontract: { table: "subcontracts", key: "id" },
-  transitionSubcontract: { table: "subcontracts", key: "id" },
-  addSovLine: { table: "subcontracts", key: "subcontractId" },
-  addChangeOrder: { table: "subcontracts", key: "subcontractId" },
-  createPayApplication: { table: "subcontracts", key: "subcontractId" },
-  releaseRetainage: { table: "subcontracts", key: "subcontractId" },
-  addPaymentControl: { table: "subcontracts", key: "subcontractId" },
-  removeSovLine: { table: "subcontract_sov_lines", key: "id" },
-  approveChangeOrder: { table: "subcontract_change_orders", key: "id" },
-  voidChangeOrder: { table: "subcontract_change_orders", key: "id" },
-  updatePayApplication: { table: "vendor_pay_applications", key: "payApplicationId" },
-  submitPayApplication: { table: "vendor_pay_applications", key: "id" },
-  approvePayApplication: { table: "vendor_pay_applications", key: "id" },
-  voidPayApplication: { table: "vendor_pay_applications", key: "id" },
-  createVendorBill: { table: "vendor_pay_applications", key: "id" },
-  releasePaymentControl: { table: "subcontract_payment_controls", key: "id" },
-};
-
-/**
- * The subsidiary of the project an action targets: `undefined` for an unknown
- * action (the dispatcher answers 400), `{ found: false }` when the named record
- * does not exist in this org (malformed ids included), else the project's
- * subsidiary for the scope gate.
- */
-async function actionProjectSubsidiary(
-  orgId: string,
-  action: string,
-  body: Record<string, unknown>,
-): Promise<{ found: boolean; subsidiaryId: string | null; projectId: string | null } | undefined> {
-  const source = ACTION_SCOPE[action];
-  if (!source) return undefined;
-  const id = body[source.key];
-  if (typeof id !== "string" || !isUuid(id)) return { found: false, subsidiaryId: null, projectId: null };
-  let query: SQL;
-  if (source.table === "projects") {
-    query = sql`select p.id as project_id, p.subsidiary_id from projects p where p.org_id = ${orgId} and p.id = ${id}`;
-  } else if (source.table === "subcontracts") {
-    query = sql`select p.id as project_id, p.subsidiary_id from subcontracts s
-                  join projects p on p.id = s.project_id and p.org_id = s.org_id
-                 where s.org_id = ${orgId} and s.id = ${id}`;
-  } else {
-    query = sql`select p.id as project_id, p.subsidiary_id from ${sql.raw(source.table)} child
-                  join subcontracts s on s.id = child.subcontract_id and s.org_id = child.org_id
-                  join projects p on p.id = s.project_id and p.org_id = s.org_id
-                 where child.org_id = ${orgId} and child.id = ${id}`;
-  }
-  const row = (await db.execute<{ project_id: string; subsidiary_id: string | null }>(query, "objects"))[0];
-  return row ? { found: true, subsidiaryId: row.subsidiary_id, projectId: row.project_id } : { found: false, subsidiaryId: null, projectId: null };
-}
-
-async function dispatchSubcontractAction(request: Request) {
-  // A well-formed body that fails a field contract is a 422 refusal naming
-  // the field; only unreadable JSON is a 400.
-  const parsedBody = await parseJsonBody(request, subcontractRequestBody, { status: 422 });
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as unknown as Record<string, unknown>;
-  const action = String(body.action)
-  const permission = postingActions.has(action) ? "ap.post"
-      : paymentActions.has(action) ? "ap.pay"
-        : "ap.create"
-  const authz = await guardPermission(permission);
-  if (authz instanceof NextResponse) return authz;
-  const feature = await guardSubcontractsFeature(authz.user.orgId);
-  if (feature) return feature
-  const orgId = authz.user.orgId
-  const userId = authz.user.id
+async function dispatchSubcontractAction(
+  requestBody: z.infer<typeof subcontractRequestBody>,
+  authz: Authz,
+) {
+  const body = requestBody as unknown as Record<string, unknown>;
+  const action = String(body.action);
+  const orgId = authz.user.orgId;
+  const userId = authz.user.id;
   // Lifecycle transitions are validated before any lookup so malformed input
   // never reaches the database.
   if (action === "transitionSubcontract") {
@@ -323,7 +317,7 @@ async function dispatchSubcontractAction(request: Request) {
   }
   // Every action is scoped by the project it reaches: a record on a project
   // outside the caller's subsidiary scope is indistinguishable from a missing one.
-  const scope = await actionProjectSubsidiary(orgId, action, body);
+  const scope = await readSubcontractActionProjectScope(db, orgId, action, body);
   if (scope) {
     if (!scope.found) return notFound("record");
     const denied = guardSubsidiaryScope(authz, scope.subsidiaryId);
@@ -331,220 +325,396 @@ async function dispatchSubcontractAction(request: Request) {
   }
   try {
     return await db.transaction(async (tx) => {
-    if (scope) {
-      // The outer transaction keeps this parent-row lock alive until the
-      // service's own transaction has committed, so a project rehome cannot
-      // slip between this locked scope check and the dispatched mutation.
-      // SHARE blocks subsidiary rehomes but remains compatible with the
-      // key-share locks PostgreSQL takes for child foreign-key inserts.
-      await lockProjectForScope(tx, orgId, String(scope.projectId), authz.allowedSubsidiaryIds, "share");
-    }
-    let result: unknown = { ok: true };
-    switch (action) {
-      case "createSubcontract": {
-        // Transaction currency is Multi-currency configuration. Turning that
-        // switch off must refuse a new write; omitting currency keeps the
-        // vendor / subsidiary / org fallback so stored contracts stay valid.
-        if (
-          body.currency !== undefined &&
-          !(await isFeatureEnabled(orgId, "multiCurrency"))
-        ) {
-          return apiErrorResponse(
-            new SubcontractError(
-              "Multi-currency is disabled; enable it in Company Settings → Features before choosing a subcontract transaction currency",
-            ),
-            { safeStatus: 422 },
-          );
-        }
-        const originalCommitment = exactMoney(body.originalCommitment);
-        if (originalCommitment === null) return invalidDecimal("Original commitment", body.originalCommitment);
-        const retainageInput = body.defaultRetainagePercent;
-        const defaultRetainagePercent = retainageInput == null || retainageInput === ""
-          ? undefined
-          : exactMoney(retainageInput);
-        if (defaultRetainagePercent === null) return invalidDecimal("Retainage percent", retainageInput, "a percent");
-        result = await createSubcontract({
-          ...body, orgId, userId, originalCommitment, defaultRetainagePercent,
-        } as unknown as { orgId: string; userId: string; projectId: string; vendorId: string; number: string; title: string; description?: string | null; currency?: string | null; originalCommitment: string; defaultRetainagePercent?: string; purchaseOrderId?: string | null; startsOn?: string | null; endsOn?: string | null; });
-        break;
+      if (scope) {
+        // The outer transaction keeps this parent-row lock alive until the
+        // service's own transaction has committed, so a project rehome cannot
+        // slip between this locked scope check and the dispatched mutation.
+        // SHARE blocks subsidiary rehomes but remains compatible with the
+        // key-share locks PostgreSQL takes for child foreign-key inserts.
+        await lockProjectForScope(
+          tx,
+          orgId,
+          String(scope.projectId),
+          authz.allowedSubsidiaryIds,
+          "share",
+        );
       }
-      case "updateSubcontract": {
-        const originalCommitment = exactMoney(body.originalCommitment);
-        if (originalCommitment === null) return invalidDecimal("Original commitment", body.originalCommitment);
-        const defaultRetainagePercent = exactMoney(body.defaultRetainagePercent);
-        if (defaultRetainagePercent === null) return invalidDecimal("Retainage percent", body.defaultRetainagePercent, "a percent");
-        // Concurrent editors are fenced by the stamp the loader read: a
-        // missing token is 422, a stale one 409s in the engine — mirroring
-        // the pay-application revision token.
-        if (typeof body.expectedUpdatedAt !== "string" || !Number.isFinite(Date.parse(body.expectedUpdatedAt))) {
-          return NextResponse.json({ error: "expectedUpdatedAt must be the updated-at token the loader read" }, { status: 422 });
-        }
-        await updateDraftSubcontract({
-          ...body, orgId, userId, originalCommitment, defaultRetainagePercent,
-        } as unknown as { orgId: string; userId: string; id: string; title: string; description?: string | null; originalCommitment: string; defaultRetainagePercent: string; startsOn?: string | null; endsOn?: string | null; expectedUpdatedAt: string; });
-        break;
-      }
-      case "addSovLine": {
-        const scheduledValue = exactMoney(body.scheduledValue);
-        if (scheduledValue === null) return invalidDecimal("Scheduled value", body.scheduledValue);
-        let retainagePercent: string | null = null;
-        if (body.retainagePercent != null && body.retainagePercent !== "") {
-          retainagePercent = exactMoney(body.retainagePercent);
-          if (retainagePercent === null) return invalidDecimal("Retainage percent", body.retainagePercent, "a percent");
-        }
-        result = await addSubcontractSovLine({
-          ...body, orgId, userId, scheduledValue, retainagePercent,
-        } as unknown as { orgId: string; userId: string; subcontractId: string; itemNo?: string | null; description: string; scheduledValue: string; retainagePercent?: string | null; expenseAccountId?: string | null; sortOrder?: number; });
-        break;
-      }
-      case "removeSovLine":
-        await removeSubcontractSovLine(orgId, userId, String(body.id));
-        break;
-      case "submitSubcontract":
-        await submitSubcontract(orgId, userId, String(body.id));
-        break;
-      case "approveSubcontract":
-        await approveSubcontract(orgId, userId, String(body.id));
-        break;
-      case "transitionSubcontract": {
-        let transition: ReturnType<typeof parseSubcontractTransitionAction>;
-        try {
-          transition = parseSubcontractTransitionAction(body.transition);
-        } catch (error) {
-          if (error instanceof SubcontractError) {
-            return apiErrorResponse(error, { safeStatus: 400 });
+      let result: unknown = { ok: true };
+      switch (action) {
+        case "createSubcontract": {
+          // Transaction currency is Multi-currency configuration. Turning that
+          // switch off must refuse a new write; omitting currency keeps the
+          // vendor / subsidiary / org fallback so stored contracts stay valid.
+          if (body.currency !== undefined && !(await isFeatureEnabled(orgId, "multiCurrency"))) {
+            return apiErrorResponse(
+              new SubcontractError(
+                "Multi-currency is disabled; enable it in Company Settings → Features before choosing a subcontract transaction currency",
+              ),
+              { safeStatus: 422 },
+            );
           }
-          throw error;
-        }
-        await transitionSubcontract({ orgId, userId, id: String(body.id), action: transition });
-        break;
-      }
-      case "addChangeOrder": {
-        const amount = exactMoney(body.amount);
-        if (amount === null) return invalidDecimal("Amount", body.amount);
-        result = await createSubcontractChangeOrder({ ...body, orgId, userId, amount } as unknown as { orgId: string; userId: string; subcontractId: string; number: string; description?: string | null; amount: string; targetSovLineId?: string | null; });
-        break;
-      }
-      case "approveChangeOrder":
-        await approveSubcontractChangeOrder(orgId, userId, String(body.id), String(body.approvedOn));
-        break;
-      case "voidChangeOrder":
-        await voidSubcontractChangeOrder(orgId, userId, String(body.id));
-        break;
-      case "createPayApplication":
-        result = await createVendorPayApplication({ ...body, orgId, userId } as unknown as { orgId: string; userId: string; subcontractId: string; periodEnd: string; vendorInvoiceNumber?: string | null; });
-        break;
-      case "updatePayApplication": {
-        // Malformed lines never reach the engine: a non-array (or an entry
-        // without a line identity or with an unparseable amount) is 422
-        // naming the line, not a 500 from deep inside the update.
-        // Concurrent editors are fenced by the revision token the loader
-        // read: a missing token is 422, a stale one 409s in the engine.
-        if (!Array.isArray(body.lines)) {
-          return NextResponse.json({ error: "lines must be an array of pay-application lines" }, { status: 422 });
-        }
-        if (!Number.isInteger(body.expectedRevision) || (body.expectedRevision as number) < 1) {
-          return NextResponse.json({ error: "expectedRevision must be the positive integer revision token the loader read" }, { status: 422 });
-        }
-        const lines = [];
-        for (const [index, entry] of (body.lines as Array<unknown>).entries()) {
-          const label = `line ${index + 1}`;
-          if (typeof entry !== "object" || entry === null) {
-            return NextResponse.json({ error: `${label}: a pay-application line object is required` }, { status: 422 });
-          }
-          const line = entry as Record<string, unknown>;
-          const sovLineId = String(line.sovLineId ?? "");
-          if (!isUuid(sovLineId)) {
-            return NextResponse.json({ error: `${label}: sovLineId must be a valid uuid` }, { status: 422 });
-          }
-          const workCompletedThisPeriod = exactMoney(line.workCompletedThisPeriod ?? "0");
-          if (workCompletedThisPeriod === null) {
-            return NextResponse.json({ error: moneyRefusal(`${label} (${sovLineId}): work completed`, line.workCompletedThisPeriod ?? "0") }, { status: 422 });
-          }
-          const materialsStoredCurrent = exactMoney(line.materialsStoredCurrent ?? "0");
-          if (materialsStoredCurrent === null) {
-            return NextResponse.json({ error: moneyRefusal(`${label} (${sovLineId}): materials stored`, line.materialsStoredCurrent ?? "0") }, { status: 422 });
-          }
-          lines.push({
-            sovLineId,
-            workCompletedThisPeriod,
-            materialsStoredCurrent,
+          const originalCommitment = exactMoney(body.originalCommitment);
+          if (originalCommitment === null)
+            return invalidDecimal("Original commitment", body.originalCommitment);
+          const retainageInput = body.defaultRetainagePercent;
+          const defaultRetainagePercent =
+            retainageInput == null || retainageInput === ""
+              ? undefined
+              : exactMoney(retainageInput);
+          if (defaultRetainagePercent === null)
+            return invalidDecimal("Retainage percent", retainageInput, "a percent");
+          result = await createSubcontract({
+            ...body,
+            orgId,
+            userId,
+            originalCommitment,
+            defaultRetainagePercent,
+          } as unknown as {
+            orgId: string;
+            userId: string;
+            projectId: string;
+            vendorId: string;
+            number: string;
+            title: string;
+            description?: string | null;
+            currency?: string | null;
+            originalCommitment: string;
+            defaultRetainagePercent?: string;
+            purchaseOrderId?: string | null;
+            startsOn?: string | null;
+            endsOn?: string | null;
           });
+          break;
         }
-        result = await updateVendorPayApplicationLines({ ...body, orgId, userId, lines } as unknown as { orgId: string; userId: string; payApplicationId: string; expectedRevision: number; lines: Array<{ sovLineId: string; workCompletedThisPeriod: string; materialsStoredCurrent: string; }>; });
-        break;
-      }
-      case "submitPayApplication":
-        result = await submitVendorPayApplication(orgId, userId, String(body.id));
-        break;
-      case "approvePayApplication":
-        await approveVendorPayApplication(orgId, userId, String(body.id));
-        break;
-      case "voidPayApplication":
-        await voidVendorPayApplication(orgId, userId, String(body.id));
-        break;
-      case "createVendorBill":
-        result = await generateVendorPayApplicationBill(orgId, userId, String(body.id));
-        break;
-      case "releaseRetainage": {
-        const amount = exactMoney(body.amount);
-        if (amount === null) return invalidDecimal("Amount", body.amount);
-        result = await releaseVendorRetainage({ ...body, orgId, userId, amount } as unknown as { orgId: string; userId: string; subcontractId: string; periodEnd: string; amount: string; memo?: string | null; });
-        break;
-      }
-      case "addPaymentControl": {
-        let amountLimit: string | null = null;
-        if (body.amountLimit != null && body.amountLimit !== "") {
-          amountLimit = exactMoney(body.amountLimit);
-          if (amountLimit === null) return invalidDecimal("Amount limit", body.amountLimit);
+        case "updateSubcontract": {
+          const originalCommitment = exactMoney(body.originalCommitment);
+          if (originalCommitment === null)
+            return invalidDecimal("Original commitment", body.originalCommitment);
+          const defaultRetainagePercent = exactMoney(body.defaultRetainagePercent);
+          if (defaultRetainagePercent === null)
+            return invalidDecimal("Retainage percent", body.defaultRetainagePercent, "a percent");
+          // Concurrent editors are fenced by the stamp the loader read: a
+          // missing token is 422, a stale one 409s in the engine — mirroring
+          // the pay-application revision token.
+          if (
+            typeof body.expectedUpdatedAt !== "string" ||
+            !Number.isFinite(Date.parse(body.expectedUpdatedAt))
+          ) {
+            return NextResponse.json(
+              { error: "expectedUpdatedAt must be the updated-at token the loader read" },
+              { status: 422 },
+            );
+          }
+          await updateDraftSubcontract({
+            ...body,
+            orgId,
+            userId,
+            originalCommitment,
+            defaultRetainagePercent,
+          } as unknown as {
+            orgId: string;
+            userId: string;
+            id: string;
+            title: string;
+            description?: string | null;
+            originalCommitment: string;
+            defaultRetainagePercent: string;
+            startsOn?: string | null;
+            endsOn?: string | null;
+            expectedUpdatedAt: string;
+          });
+          break;
         }
-        result = await createSubcontractPaymentControl({ ...body, orgId, userId, amountLimit } as unknown as { orgId: string; userId: string; subcontractId: string; payApplicationId?: string | null; vendorBillDocumentId?: string | null; controlType: "joint_check" | "payment_hold"; jointPayeePartyId?: string | null; amountLimit?: string | null; reason: string; effectiveOn: string; expiresOn?: string | null; });
-        break;
+        case "addSovLine": {
+          const scheduledValue = exactMoney(body.scheduledValue);
+          if (scheduledValue === null)
+            return invalidDecimal("Scheduled value", body.scheduledValue);
+          let retainagePercent: string | null = null;
+          if (body.retainagePercent != null && body.retainagePercent !== "") {
+            retainagePercent = exactMoney(body.retainagePercent);
+            if (retainagePercent === null)
+              return invalidDecimal("Retainage percent", body.retainagePercent, "a percent");
+          }
+          result = await addSubcontractSovLine({
+            ...body,
+            orgId,
+            userId,
+            scheduledValue,
+            retainagePercent,
+          } as unknown as {
+            orgId: string;
+            userId: string;
+            subcontractId: string;
+            itemNo?: string | null;
+            description: string;
+            scheduledValue: string;
+            retainagePercent?: string | null;
+            expenseAccountId?: string | null;
+            sortOrder?: number;
+          });
+          break;
+        }
+        case "removeSovLine":
+          await removeSubcontractSovLine(orgId, userId, String(body.id));
+          break;
+        case "submitSubcontract":
+          await submitSubcontract(orgId, userId, String(body.id));
+          break;
+        case "approveSubcontract":
+          await approveSubcontract(orgId, userId, String(body.id));
+          break;
+        case "transitionSubcontract": {
+          let transition: ReturnType<typeof parseSubcontractTransitionAction>;
+          try {
+            transition = parseSubcontractTransitionAction(body.transition);
+          } catch (error) {
+            if (error instanceof SubcontractError) {
+              return apiErrorResponse(error, { safeStatus: 400 });
+            }
+            throw error;
+          }
+          await transitionSubcontract({ orgId, userId, id: String(body.id), action: transition });
+          break;
+        }
+        case "addChangeOrder": {
+          const amount = exactMoney(body.amount);
+          if (amount === null) return invalidDecimal("Amount", body.amount);
+          result = await createSubcontractChangeOrder({
+            ...body,
+            orgId,
+            userId,
+            amount,
+          } as unknown as {
+            orgId: string;
+            userId: string;
+            subcontractId: string;
+            number: string;
+            description?: string | null;
+            amount: string;
+            targetSovLineId?: string | null;
+          });
+          break;
+        }
+        case "approveChangeOrder":
+          await approveSubcontractChangeOrder(
+            orgId,
+            userId,
+            String(body.id),
+            String(body.approvedOn),
+          );
+          break;
+        case "voidChangeOrder":
+          await voidSubcontractChangeOrder(orgId, userId, String(body.id));
+          break;
+        case "createPayApplication":
+          result = await createVendorPayApplication({ ...body, orgId, userId } as unknown as {
+            orgId: string;
+            userId: string;
+            subcontractId: string;
+            periodEnd: string;
+            vendorInvoiceNumber?: string | null;
+          });
+          break;
+        case "updatePayApplication": {
+          // Malformed lines never reach the engine: a non-array (or an entry
+          // without a line identity or with an unparseable amount) is 422
+          // naming the line, not a 500 from deep inside the update.
+          // Concurrent editors are fenced by the revision token the loader
+          // read: a missing token is 422, a stale one 409s in the engine.
+          if (!Array.isArray(body.lines)) {
+            return NextResponse.json(
+              { error: "lines must be an array of pay-application lines" },
+              { status: 422 },
+            );
+          }
+          if (!Number.isInteger(body.expectedRevision) || (body.expectedRevision as number) < 1) {
+            return NextResponse.json(
+              {
+                error:
+                  "expectedRevision must be the positive integer revision token the loader read",
+              },
+              { status: 422 },
+            );
+          }
+          const lines = [];
+          for (const [index, entry] of (body.lines as Array<unknown>).entries()) {
+            const label = `line ${index + 1}`;
+            if (typeof entry !== "object" || entry === null) {
+              return NextResponse.json(
+                { error: `${label}: a pay-application line object is required` },
+                { status: 422 },
+              );
+            }
+            const line = entry as Record<string, unknown>;
+            const sovLineId = String(line.sovLineId ?? "");
+            if (!isUuid(sovLineId)) {
+              return NextResponse.json(
+                { error: `${label}: sovLineId must be a valid uuid` },
+                { status: 422 },
+              );
+            }
+            const workCompletedThisPeriod = exactMoney(line.workCompletedThisPeriod ?? "0");
+            if (workCompletedThisPeriod === null) {
+              return NextResponse.json(
+                {
+                  error: moneyRefusal(
+                    `${label} (${sovLineId}): work completed`,
+                    line.workCompletedThisPeriod ?? "0",
+                  ),
+                },
+                { status: 422 },
+              );
+            }
+            const materialsStoredCurrent = exactMoney(line.materialsStoredCurrent ?? "0");
+            if (materialsStoredCurrent === null) {
+              return NextResponse.json(
+                {
+                  error: moneyRefusal(
+                    `${label} (${sovLineId}): materials stored`,
+                    line.materialsStoredCurrent ?? "0",
+                  ),
+                },
+                { status: 422 },
+              );
+            }
+            lines.push({
+              sovLineId,
+              workCompletedThisPeriod,
+              materialsStoredCurrent,
+            });
+          }
+          result = await updateVendorPayApplicationLines({
+            ...body,
+            orgId,
+            userId,
+            lines,
+          } as unknown as {
+            orgId: string;
+            userId: string;
+            payApplicationId: string;
+            expectedRevision: number;
+            lines: Array<{
+              sovLineId: string;
+              workCompletedThisPeriod: string;
+              materialsStoredCurrent: string;
+            }>;
+          });
+          break;
+        }
+        case "submitPayApplication":
+          result = await submitVendorPayApplication(orgId, userId, String(body.id));
+          break;
+        case "approvePayApplication":
+          await approveVendorPayApplication(orgId, userId, String(body.id));
+          break;
+        case "voidPayApplication":
+          await voidVendorPayApplication(orgId, userId, String(body.id));
+          break;
+        case "createVendorBill":
+          result = await generateVendorPayApplicationBill(orgId, userId, String(body.id));
+          break;
+        case "releaseRetainage": {
+          const amount = exactMoney(body.amount);
+          if (amount === null) return invalidDecimal("Amount", body.amount);
+          result = await releaseVendorRetainage({ ...body, orgId, userId, amount } as unknown as {
+            orgId: string;
+            userId: string;
+            subcontractId: string;
+            periodEnd: string;
+            amount: string;
+            memo?: string | null;
+          });
+          break;
+        }
+        case "addPaymentControl": {
+          let amountLimit: string | null = null;
+          if (body.amountLimit != null && body.amountLimit !== "") {
+            amountLimit = exactMoney(body.amountLimit);
+            if (amountLimit === null) return invalidDecimal("Amount limit", body.amountLimit);
+          }
+          result = await createSubcontractPaymentControl({
+            ...body,
+            orgId,
+            userId,
+            amountLimit,
+          } as unknown as {
+            orgId: string;
+            userId: string;
+            subcontractId: string;
+            payApplicationId?: string | null;
+            vendorBillDocumentId?: string | null;
+            controlType: "joint_check" | "payment_hold";
+            jointPayeePartyId?: string | null;
+            amountLimit?: string | null;
+            reason: string;
+            effectiveOn: string;
+            expiresOn?: string | null;
+          });
+          break;
+        }
+        case "releasePaymentControl":
+          await releaseSubcontractPaymentControl(
+            orgId,
+            userId,
+            String(body.id),
+            String(body.releaseReason ?? ""),
+          );
+          break;
+        default:
+          return NextResponse.json({ error: "unknown action" }, { status: 400 });
       }
-      case "releasePaymentControl":
-        await releaseSubcontractPaymentControl(orgId, userId, String(body.id), String(body.releaseReason ?? ""));
-        break;
-      default:
-        return NextResponse.json({ error: "unknown action" }, { status: 400 });
-    }
-    return NextResponse.json(result, { status: action.startsWith("create") || action.startsWith("add") ? 201 : 200 });
+      return NextResponse.json(result, {
+        status: action.startsWith("create") || action.startsWith("add") ? 201 : 200,
+      });
     });
   } catch (error) {
     // A stale revision token is a conflict (409), not a validation refusal:
     // the record moved under the editor, so the message names the remedy
     // (reload, then re-enter) and the client can tell it apart from a 422.
-    if (error instanceof SubcontractConflictError) return apiErrorResponse(error, { safeStatus: 409 });
+    if (error instanceof SubcontractConflictError)
+      return apiErrorResponse(error, { safeStatus: 409 });
     if (error instanceof SubcontractError) return apiErrorResponse(error, { safeStatus: 422 });
     if (error instanceof ScopeNotFoundError) return notFound("record");
     const code = (error as { code?: string }).code;
-    if (code === "23505") return NextResponse.json({ error: "That number is already in use" }, { status: 409 });
+    if (code === "23505")
+      return NextResponse.json({ error: "That number is already in use" }, { status: 409 });
     console.error("[subcontracts] action failed", error);
     return NextResponse.json({ error: "Subcontract action failed" }, { status: 500 });
   }
 }
 
 export const GET = defineRoute({
-  authorize: () => guardPermission('ap.read'),
-  feature: { none: 'The handler enforces the Projects parent and subcontract capability gates.' },
-  handler: async ({ request }) => listSubcontracts(request),
-})
+  authorize: () => guardPermission("ap.read"),
+  feature: "subcontracts",
+  handler: async ({ request, authz }) => listSubcontracts(request, authz),
+});
 export const POST = defineRoute({
   authorize: async ({ request }) => {
-    let action: string | undefined
+    let action: string | undefined;
     try {
-      const payload: unknown = await request.clone().json()
-      if (typeof payload === 'object' && payload !== null && 'action' in payload && typeof payload.action === 'string') action = payload.action
+      const payload: unknown = await request.clone().json();
+      if (
+        typeof payload === "object" &&
+        payload !== null &&
+        "action" in payload &&
+        typeof payload.action === "string"
+      )
+        action = payload.action;
     } catch {
-      // The discriminated body schema returns the malformed-body response in the handler.
+      // The route body schema returns the malformed-body refusal after authorization.
     }
     const permission =
       action === undefined
-        ? 'ap.create'
-        : postingActions.has(action) ? "ap.post"
-      : paymentActions.has(action) ? "ap.pay"
-        : "ap.create"
-    return guardPermission(permission)
+        ? "ap.create"
+        : postingActions.has(action)
+          ? "ap.post"
+          : paymentActions.has(action)
+            ? "ap.pay"
+            : "ap.create";
+    return guardPermission(permission);
   },
-  feature: { none: 'The handler enforces the Projects parent and subcontract capability gates after action authorization.' },
-  handler: async ({ request }) => dispatchSubcontractAction(request),
-})
+  feature: "subcontracts",
+  body: subcontractRequestBody,
+  invalidBodyStatus: 422,
+  handler: async ({ body, authz }) => dispatchSubcontractAction(body, authz),
+});

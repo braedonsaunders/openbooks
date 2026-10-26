@@ -18,7 +18,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.subcontract-magnitude-test')]
@@ -33,17 +33,21 @@ const engineRoot = new URL("../../../../engine/", import.meta.url).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "next/navigation") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export function redirect() {}" };
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export function redirect() {}",
+      };
     }
     // Bare @openbooks/engine/* resolves cross-checkout to main; pin the
     // engine graph to the worktree copy under test.
     if (specifier.startsWith("@openbooks/engine/")) {
-      return nextResolve(new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href, context);
+      return nextResolve(
+        new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href,
+        context,
+      );
     }
-    if (
-      specifier === "../../../lib/authz" &&
-      context.parentURL?.includes("/api/subcontracts/")
-    ) {
+    if (specifier === "@/lib/authz" && context.parentURL?.includes("/api/subcontracts/")) {
       return { url: "mock:subcontract-magnitude-authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -60,9 +64,8 @@ const routeUrl = "./route.ts?subcontract-magnitude-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 interface Fixture {
   orgId: string;
@@ -78,43 +81,64 @@ async function seed(): Promise<Fixture> {
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features','{}'::jsonb) || '{"projects": true, "subcontracts": true}'::jsonb)
      where id = ${org.orgId}`);
-  const projectId = (await db.execute<{ id: string }>(sql`
+  const projectId = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into projects (org_id, name, is_active)
     values (${org.orgId}, 'Magnitude Project', true)
-    returning id`, "objects"))[0]!.id;
-  const vendorId = (await db.execute<{ id: string }>(sql`
+    returning id`,
+      "objects",
+    )
+  )[0]!.id;
+  const vendorId = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into parties (org_id, kind, display_name, is_active)
     values (${org.orgId}, 'company', 'Magnitude Vendor', true)
-    returning id`, "objects"))[0]!.id;
+    returning id`,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(sql`
     insert into vendor_roles (org_id, party_id, is_active)
     values (${org.orgId}, ${vendorId}, true)`);
   return { orgId: org.orgId, actorId, projectId, vendorId };
 }
 
-async function post(fixture: Fixture, body: Record<string, unknown>): Promise<{ status: number; json: unknown }> {
+async function post(
+  fixture: Fixture,
+  body: Record<string, unknown>,
+): Promise<{ status: number; json: unknown }> {
   routeState.authz = {
     user: { orgId: fixture.orgId, id: fixture.actorId },
     permissions: new Set(["*"]),
     allowedSubsidiaryIds: null,
   };
   try {
-    const response = await withOrgContext(fixture.orgId, () => POST(
-      new Request("http://openbooks.test/api/subcontracts", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-    ));
+    const response = await withOrgContext(fixture.orgId, () =>
+      POST(
+        new Request("http://openbooks.test/api/subcontracts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      ),
+    );
     return { status: response.status, json: await response.json().catch(() => null) };
   } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } };
+    return {
+      status: 500,
+      json: { thrown: error instanceof Error ? error.message : String(error) },
+    };
   }
 }
 
 async function subcontractCount(orgId: string): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from subcontracts where org_id = ${orgId}`, "objects");
+  const rows = await db.execute<{ n: number }>(
+    sql`
+    select count(*)::int as n from subcontracts where org_id = ${orgId}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
@@ -129,12 +153,16 @@ function createBody(fixture: Fixture, originalCommitment: string) {
   };
 }
 
-test.after(() => hooks.deregister())
+test.after(() => hooks.deregister());
 test("POST refuses a commitment wider than numeric(19,4) without writing", async () => {
   const fixture = await withBypass(seed);
   try {
     const result = await post(fixture, createBody(fixture, "99999999999999999999"));
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`);
+    assert.equal(
+      result.status,
+      422,
+      `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
     assert.equal(await subcontractCount(fixture.orgId), 0);
   } finally {
     await withBypass(() => dropScratchOrg(fixture.orgId));
@@ -145,7 +173,11 @@ test("POST still creates a subcontract at the column maximum", async () => {
   const fixture = await withBypass(seed);
   try {
     const result = await post(fixture, createBody(fixture, "999999999999999.9999"));
-    assert.equal(result.status, 201, `expected 201, got ${result.status}: ${JSON.stringify(result.json)}`);
+    assert.equal(
+      result.status,
+      201,
+      `expected 201, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
     assert.equal(await subcontractCount(fixture.orgId), 1);
   } finally {
     await withBypass(() => dropScratchOrg(fixture.orgId));
