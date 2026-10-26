@@ -26,7 +26,7 @@ import {
 import { claimSyncRun, setProgress } from "./sync-run-claiming.ts";
 import { applySyncDocuments, type ExistingSourceDocument } from "./sync-run-apply.ts";
 import { resolveSyncSourceDeletions } from "./sync-run-deletions.ts";
-import { reconcileAndCompleteSyncRun } from "./sync-run-reconciliation.ts";
+import { reconcileAndCompleteSyncRun, type LateSourceCatchUp } from "./sync-run-reconciliation.ts";
 
 type SyncSupplemental = Pick<
   SyncResult,
@@ -516,35 +516,116 @@ export async function runSync(
         existing,
         skipped,
       });
-    return await reconcileAndCompleteSyncRun({
-      source,
-      triggeredBy,
-      org,
-      connectionId,
-      kind,
-      targetedRefs,
-      refKey,
-      since,
-      run: run!,
-      started,
-      selection,
-      changes,
-      existing,
-      ctx,
-      entityStats,
-      partyOutcome,
-      supplemental,
-      docsNew,
-      docsAmended,
-      docsUnchanged,
-      docsFailed,
-      ordersNew,
-      skipped,
-      writeFailures,
-      deletedAtSource,
-      autoResolvedDeletions,
-      convergedCancelledRefs,
-    });
+    // Transactions entered at the source while this run is in flight are
+    // applied by a further pass when verification finds them missing.
+    const catchUp: LateSourceCatchUp | undefined = targetedRefs
+      ? undefined
+      : async (lateSince) => {
+          await setProgress(
+            org.id,
+            run!.id,
+            { phase: "pull", message: "Applying source changes made during this run…" },
+            true,
+          );
+          await loadSyncEntities({
+            source,
+            triggeredBy,
+            connectionId,
+            org,
+            run: run!,
+            since,
+            targetedRefs,
+            opts,
+          });
+          const late = await pullNativeChanges({
+            source,
+            org,
+            run: run!,
+            refKey,
+            since: lateSince,
+            targetedRefs: null,
+            supplemental: {},
+          });
+          const lateChanges = late.changes;
+          if (
+            lateChanges.documents.length === 0 &&
+            lateChanges.applications.length === 0 &&
+            lateChanges.deletedRefs.length === 0 &&
+            lateChanges.unbuildable.length === 0
+          ) {
+            return null;
+          }
+          const lateDocuments = await loadExistingSourceDocuments({
+            org,
+            refKey,
+            changes: lateChanges,
+          });
+          const applied = await applySyncDocuments({
+            source,
+            triggeredBy,
+            org,
+            connectionId,
+            refKey,
+            kind,
+            since: lateSince,
+            postedChangeAuthorization,
+            outOfPeriodDatePolicy,
+            run: run!,
+            changes: lateChanges,
+            ctx: late.ctx,
+            deps: late.deps,
+            existing: lateDocuments.existing,
+            allDocumentRows: lateDocuments.allDocumentRows,
+          });
+          const deletions = await resolveSyncSourceDeletions({
+            orgId: org.id,
+            connectionId,
+            sourceName: source.name,
+            since: lateSince,
+            changes: lateChanges,
+            existing: lateDocuments.existing,
+            skipped: applied.skipped,
+          });
+          return {
+            changes: lateChanges,
+            ctx: late.ctx,
+            existing: lateDocuments.existing,
+            ...applied,
+            ...deletions,
+          };
+        };
+    return await reconcileAndCompleteSyncRun(
+      {
+        source,
+        triggeredBy,
+        org,
+        connectionId,
+        kind,
+        targetedRefs,
+        refKey,
+        since,
+        run: run!,
+        started,
+        selection,
+        changes,
+        existing,
+        ctx,
+        entityStats,
+        partyOutcome,
+        supplemental,
+        docsNew,
+        docsAmended,
+        docsUnchanged,
+        docsFailed,
+        ordersNew,
+        skipped,
+        writeFailures,
+        deletedAtSource,
+        autoResolvedDeletions,
+        convergedCancelledRefs,
+      },
+      catchUp,
+    );
   } catch (e) {
     const verificationResult = e instanceof SyncVerificationError ? e.result : null;
     const failureMessage = (

@@ -20,6 +20,23 @@ export function syncErrorMessage(error: unknown, limit = 300): string {
   ).slice(0, limit);
 }
 
+/**
+ * Whether the only verification failures are ledger comparisons with the
+ * source (trial balance, open items, account-month and project buckets),
+ * which a source transaction entered while the run was in flight can explain.
+ */
+export function onlyLedgerComparisonsDiffer(result: SyncResult): boolean {
+  return (
+    syncVerificationFailures({
+      ...result,
+      tb: { ...result.tb, accounts: result.tb.matches },
+      openItems: null,
+      periods: { ...result.periods, checked: result.periods.matches },
+      projectPeriods: null,
+    }).length === 0
+  );
+}
+
 export function syncVerificationFailures(result: SyncResult): string[] {
   const failures: string[] = [];
   if (result.docsFailed > 0) failures.push(`${result.docsFailed} transaction writes failed`);

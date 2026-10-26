@@ -17,6 +17,7 @@ import type { EntityLoadStats, PartyMirrorOutcome } from "./migrate.ts";
 import type { SourceLedgerVerification, SyncResult } from "./sync-result.ts";
 import {
   SyncVerificationError,
+  onlyLedgerComparisonsDiffer,
   syncVerificationFailures,
   verifyCurrentLedgerState,
   verifyTargetedDocumentKeys,
@@ -449,10 +450,91 @@ async function completeSyncRun(args: SyncRunContinuation, result: SyncResult): P
   });
 }
 
-export async function reconcileAndCompleteSyncRun(args: SyncRunContinuation): Promise<SyncResult> {
+/** Source transactions that changed after a run's cutoff, applied by one more mirror pass. */
+export type LateSourcePass = Pick<
+  SyncRunContinuation,
+  | "changes"
+  | "ctx"
+  | "existing"
+  | "docsNew"
+  | "docsAmended"
+  | "docsUnchanged"
+  | "docsFailed"
+  | "ordersNew"
+  | "skipped"
+  | "writeFailures"
+  | "deletedAtSource"
+  | "autoResolvedDeletions"
+  | "convergedCancelledRefs"
+>;
+
+/** Applies source changes made after `since`; null when the source has none. */
+export type LateSourceCatchUp = (since: Date) => Promise<LateSourcePass | null>;
+
+/** Verifications a run may repeat after applying source changes that arrived while it ran. */
+const MAX_LATE_SOURCE_PASSES = 2;
+
+function withLatePass(current: SyncRunContinuation, late: LateSourcePass): SyncRunContinuation {
+  return {
+    ...current,
+    // The watermark stays at the first pull, so the next run re-reads late
+    // transactions and their supplemental records unchanged.
+    changes: {
+      ...current.changes,
+      unbuildable: [...current.changes.unbuildable, ...late.changes.unbuildable],
+    },
+    existing: new Map([...current.existing, ...late.existing]),
+    docsNew: current.docsNew + late.docsNew,
+    docsAmended: current.docsAmended + late.docsAmended,
+    docsUnchanged: current.docsUnchanged + late.docsUnchanged,
+    docsFailed: current.docsFailed + late.docsFailed,
+    ordersNew: current.ordersNew + late.ordersNew,
+    skipped: [...current.skipped, ...late.skipped],
+    writeFailures: [...current.writeFailures, ...late.writeFailures].slice(0, 20),
+    deletedAtSource: new Set([...current.deletedAtSource, ...late.deletedAtSource]),
+    autoResolvedDeletions: [...current.autoResolvedDeletions, ...late.autoResolvedDeletions],
+    convergedCancelledRefs: new Set([
+      ...current.convergedCancelledRefs,
+      ...late.convergedCancelledRefs,
+    ]),
+  };
+}
+
+/**
+ * Verification compares the mirror with the source as it stands at the end of
+ * the run, so a transaction entered at the source while the run was in flight
+ * appears on one side only. When verification disagrees, the run applies the
+ * source changes made after its cutoff and verifies again. Only ledger
+ * comparisons qualify; write failures and other refusals stand as they are. A
+ * disagreement that persists with no further source changes is a real
+ * difference and refuses.
+ */
+export async function reconcileAndCompleteSyncRun(
+  args: SyncRunContinuation,
+  catchUp?: LateSourceCatchUp,
+): Promise<SyncResult> {
   const operations = await reconcileSyncRun(args);
   await syncSupplementalPopulations(args);
-  const result = await buildSyncRunResult(args, operations);
+  let current = args;
+  let lateSince = args.changes.syncedThrough;
+  let result: SyncResult;
+  for (let latePasses = 0; ; latePasses++) {
+    try {
+      result = await buildSyncRunResult(current, operations);
+      break;
+    } catch (error) {
+      if (!(error instanceof SyncVerificationError) || !catchUp || current.targetedRefs)
+        throw error;
+      if (latePasses >= MAX_LATE_SOURCE_PASSES || !onlyLedgerComparisonsDiffer(error.result)) {
+        throw error;
+      }
+      const late = await catchUp(lateSince);
+      if (!late) throw error;
+      if (late.changes.syncedThrough > lateSince) lateSince = late.changes.syncedThrough;
+      await reconcileSyncRun({ ...current, ...late });
+      current = withLatePass(current, late);
+    }
+  }
   await completeSyncRun(args, result);
   return result;
 }
