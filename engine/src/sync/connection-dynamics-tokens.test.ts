@@ -19,6 +19,7 @@ function dynamicsRow(secrets: Record<string, unknown>): ConnectionRow {
     mirrorEnabled: false,
     mirrorSchedule: "",
     postedChangePolicy: "review_required",
+    outOfPeriodDatePolicy: "refuse",
     postedChangeAuthorizedBy: null,
     postedChangeAuthorizedAt: null,
     cursor: null,

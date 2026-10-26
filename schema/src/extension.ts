@@ -260,6 +260,16 @@ export const connections = pgTable(
     postedChangeAuthorizedAt: timestamp("posted_change_authorized_at", {
       withTimezone: true,
     }),
+    /**
+     * How a source transaction dated outside the posting period it names is mirrored: refused
+     * until the source corrects it, or posted on the nearest date of that period with the source
+     * date kept as its document date.
+     */
+    outOfPeriodDatePolicy: text("out_of_period_date_policy", {
+      enum: ["refuse", "period_boundary"],
+    })
+      .notNull()
+      .default("refuse"),
     /** Source-clock high-water mark of the last successful sync. */
     cursor: timestamp("cursor", { withTimezone: true }),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),

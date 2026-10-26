@@ -34,6 +34,7 @@ export const connectionPatchBody = z.object({
   mirrorEnabled: z.boolean().optional(),
   mirrorSchedule: z.string().optional(),
   postedChangePolicy: z.enum(["review_required", "append_only_automatic"]).optional(),
+  outOfPeriodDatePolicy: z.enum(["refuse", "period_boundary"]).optional(),
   status: z.enum(["active", "paused"]).optional(),
 }).strict();
 export type ConnectionPatch = z.infer<typeof connectionPatchBody>;
@@ -179,6 +180,12 @@ export async function updateConnection(
         body.postedChangePolicy === "append_only_automatic"
           ? new Date()
           : null;
+    }
+    if (
+      body.outOfPeriodDatePolicy !== undefined &&
+      body.outOfPeriodDatePolicy !== existing.outOfPeriodDatePolicy
+    ) {
+      updates.outOfPeriodDatePolicy = body.outOfPeriodDatePolicy;
     }
     if (body.status === "active" || body.status === "paused") {
       updates.status = body.status;

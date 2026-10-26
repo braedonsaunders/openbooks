@@ -272,6 +272,12 @@
       "automatic": "Anexar reversión y reemplazo automáticamente",
       "help": "Las correcciones automáticas nunca reescriben el historial contabilizado. OpenBooks conserva el original, contabiliza una reversión y un reemplazo vinculados, transfiere las aplicaciones elegibles y aun así se detiene ante conciliaciones, períodos cerrados, inventario, reconocimiento de ingresos o documentos derivados."
     },
+    "outOfPeriodDates": {
+      "label": "Fechas de origen fuera de su período contable",
+      "refuse": "Rechazar hasta que se corrija la fecha de origen",
+      "periodBoundary": "Contabilizar en la fecha más cercana del período de origen",
+      "help": "Algunos orígenes aceptan una transacción con fecha fuera del período contable que indican. Al rechazarla, queda fuera del espejo hasta que se corrija la fecha en el origen. Al contabilizar en el límite del período, se conserva el período del origen, se contabiliza en la fecha del período más cercana a la fecha de origen, la fecha de origen se mantiene como fecha del documento y se registran ambas."
+    },
     "structuredRequired": "Esta opción necesita un editor estructurado. Actualice la configuración del conector antes de editarla.",
     "entityMappings": {
       "workspace": "Espacio de asignaciones",

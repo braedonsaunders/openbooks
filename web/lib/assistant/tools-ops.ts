@@ -205,6 +205,7 @@ const listSyncConnections: AssistantToolDef = {
         mirrorEnabled: c.mirrorEnabled,
         mirrorSchedule: c.mirrorSchedule,
         postedChangePolicy: c.postedChangePolicy,
+        outOfPeriodDatePolicy: c.outOfPeriodDatePolicy,
         cursor: c.cursor,
         lastRunAt: c.lastRunAt,
         lastError: c.lastError ? truncateText(c.lastError, 300) : null,

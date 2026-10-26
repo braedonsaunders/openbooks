@@ -32,6 +32,12 @@ import {
   refreshDocumentHeaderTotals,
 } from "./sync-document-lines.ts";
 import type { SyncTx } from "./sync-document-lines.ts";
+import {
+  placeSourcePostingDate,
+  sourcePeriodWindowReader,
+  SOURCE_POSTING_DATE_EVIDENCE_KEY,
+  type OutOfPeriodDatePolicy,
+} from "./source-posting-date.ts";
 
 export interface ExistingSourceDocument {
   id: string;
@@ -61,6 +67,7 @@ export async function applySyncDocuments(args: {
   kind: NonNullable<SyncOptions["kind"]>;
   since: Date | null;
   postedChangeAuthorization: SyncOptions["postedChangeAuthorization"];
+  outOfPeriodDatePolicy: OutOfPeriodDatePolicy;
   run: { id: string };
   changes: NativeChanges;
   ctx: NativeContext;
@@ -85,6 +92,7 @@ export async function applySyncDocuments(args: {
     kind,
     since,
     postedChangeAuthorization,
+    outOfPeriodDatePolicy,
     run,
     changes,
     ctx,
@@ -132,6 +140,7 @@ export async function applySyncDocuments(args: {
   const connectorReplay = postedChangeAuthorization
     ? { requestId: run.id, actorId: postedChangeAuthorization.actorId }
     : undefined;
+  const readPeriodWindow = sourcePeriodWindowReader(org.id);
   for (const sourceDoc of changes.documents) {
     docIndex++;
     if (appliedSourceRefs.has(sourceDoc.sourceRef)) {
@@ -159,6 +168,21 @@ export async function applySyncDocuments(args: {
       currency: sourceDoc.currency ?? source.baseCurrency,
     };
     try {
+      const placement = await placeSourcePostingDate(
+        doc,
+        readPeriodWindow,
+        outOfPeriodDatePolicy,
+        source.name,
+      );
+      // The policy decides only what this run writes; an unchanged mirrored document stays as stored.
+      const placedPostingDate = () => {
+        if ("refused" in placement) throw new Error(placement.refused);
+        return placement.postingDate;
+      };
+      const postingDateEvidence =
+        "evidence" in placement && placement.evidence
+          ? { [SOURCE_POSTING_DATE_EVIDENCE_KEY]: placement.evidence }
+          : {};
       const taxEvidence = await importedTaxEvidence(
         org.id,
         doc.documentDate,
@@ -195,7 +219,7 @@ export async function applySyncDocuments(args: {
               subsidiaryId: doc.subsidiaryId,
               extraDims: doc.extraDims ?? {},
               documentDate: doc.documentDate,
-              postingDate: doc.postingDate ?? doc.documentDate,
+              postingDate: placedPostingDate(),
               postingPeriodId: doc.postingPeriodId ?? null,
               dueDate: doc.dueDate,
               currency: doc.currency ?? source.baseCurrency,
@@ -208,6 +232,7 @@ export async function applySyncDocuments(args: {
               referenceNumber: doc.referenceNumber,
               custom: {
                 ...doc.mappedCustom,
+                ...postingDateEvidence,
                 ...(Object.keys(doc.mappedCustom ?? {}).length
                   ? { connectorMappedValues: doc.mappedCustom }
                   : {}),
@@ -315,11 +340,11 @@ export async function applySyncDocuments(args: {
             await tx.execute(sql`
                 update documents
                    set document_number = ${healedNumber},
-                       posting_date = ${doc.postingDate ?? doc.documentDate},
+                       posting_date = ${placedPostingDate()},
                        posting_period_id = ${doc.postingPeriodId ?? null},
                        status = 'approved',
                        memo = ${doc.memo}, reference_number = ${doc.referenceNumber}, due_date = ${doc.dueDate},
-                       custom = (custom - 'connectorMappedValues') || ${JSON.stringify(Object.keys(doc.mappedCustom ?? {}).length ? { ...doc.mappedCustom, connectorMappedValues: doc.mappedCustom } : {})}::jsonb,
+                       custom = (custom - 'connectorMappedValues' - ${SOURCE_POSTING_DATE_EVIDENCE_KEY}::text) || ${JSON.stringify({ ...(Object.keys(doc.mappedCustom ?? {}).length ? { ...doc.mappedCustom, connectorMappedValues: doc.mappedCustom } : {}), ...postingDateEvidence })}::jsonb,
                        updated_at = now()
                  where id = ${have.id} and org_id = ${org.id}
               `);
@@ -436,7 +461,7 @@ export async function applySyncDocuments(args: {
               kind = ${doc.kind}, party_id = ${doc.partyId}, subsidiary_id = ${doc.subsidiaryId},
               document_number = ${sourceDocumentNumber},
               document_date = ${doc.documentDate},
-              posting_date = ${doc.postingDate ?? doc.documentDate},
+              posting_date = ${placedPostingDate()},
               posting_period_id = ${doc.postingPeriodId ?? null}, due_date = ${doc.dueDate},
               currency = ${doc.currency ?? source.baseCurrency}, fx_rate = ${persistSyncFxRate(doc.fxRate ?? "1")},
               memo = ${doc.memo}, reference_number = ${doc.referenceNumber},
@@ -445,8 +470,8 @@ export async function applySyncDocuments(args: {
                 else ${doc.lifecycleStatus ?? "approved"}
               end,
               extra_dims = ${JSON.stringify(doc.extraDims ?? {})}::jsonb,
-              custom = (custom - 'connectorMappedValues' - 'controlAccountId')
-                || ${JSON.stringify({ ...(Object.keys(doc.mappedCustom ?? {}).length ? { ...doc.mappedCustom, connectorMappedValues: doc.mappedCustom } : {}), ...(doc.controlAccountId ? { controlAccountId: doc.controlAccountId } : {}) })}::jsonb,
+              custom = (custom - 'connectorMappedValues' - 'controlAccountId' - ${SOURCE_POSTING_DATE_EVIDENCE_KEY}::text)
+                || ${JSON.stringify({ ...(Object.keys(doc.mappedCustom ?? {}).length ? { ...doc.mappedCustom, connectorMappedValues: doc.mappedCustom } : {}), ...(doc.controlAccountId ? { controlAccountId: doc.controlAccountId } : {}), ...postingDateEvidence })}::jsonb,
               updated_at = now()
             where id = ${have.id} and org_id = ${org.id}`);
         const preservedCustom = await preservedImportedLineCustom(tx, org.id, have.id);

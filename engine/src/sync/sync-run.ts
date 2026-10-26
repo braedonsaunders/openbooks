@@ -5,6 +5,7 @@ import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { guardRefusalMessage } from "../platform/database-refusal.ts";
 import { type PostingDeps } from "../journal/posting-contracts.ts";
+import type { OutOfPeriodDatePolicy } from "./source-posting-date.ts";
 import { buildNativeContext, type NativeContext } from "./native.ts";
 import {
   loadEntities,
@@ -92,14 +93,20 @@ async function prepareSyncConnection(
 ): Promise<{
   selection: ReturnType<typeof resolveSyncSelection>;
   since: Date | null;
+  outOfPeriodDatePolicy: OutOfPeriodDatePolicy;
 }> {
   const { org, connectionId, targetedRefs } = identity;
   // Source references are organization-wide, so reject sibling connections before writes.
   await assertNoSiblingConnection(org.id, connectionId, source.name);
   const connection = (
-    await db.execute<{ source: string; config: Record<string, unknown> }>(
+    await db.execute<{
+      source: string;
+      config: Record<string, unknown>;
+      out_of_period_date_policy: OutOfPeriodDatePolicy;
+    }>(
       sql`
-      select source, config from connections where org_id=${org.id} and id=${connectionId}`,
+      select source, config, out_of_period_date_policy
+        from connections where org_id=${org.id} and id=${connectionId}`,
       "objects",
     )
   )[0];
@@ -129,7 +136,7 @@ async function prepareSyncConnection(
     opts.since === undefined || opts.since === "auto"
       ? (lastOk?.syncedThrough ?? new Date(Date.now() - 3 * 24 * 3600 * 1000))
       : opts.since;
-  return { selection, since };
+  return { selection, since, outOfPeriodDatePolicy: connection.out_of_period_date_policy };
 }
 
 async function loadSyncEntities(args: {
@@ -450,7 +457,7 @@ export async function runSync(
   });
 
   try {
-    const { selection, since } = await prepareSyncConnection(source, identity, opts, supplemental);
+    const { selection, since, outOfPeriodDatePolicy } = await prepareSyncConnection(source, identity, opts, supplemental);
     const { entityStats, partyOutcome } = await loadSyncEntities({
       source,
       triggeredBy,
@@ -486,6 +493,7 @@ export async function runSync(
         kind,
         since,
         postedChangeAuthorization,
+        outOfPeriodDatePolicy,
         run: run!,
         changes,
         ctx,

@@ -1,0 +1,1 @@
+Adds a defaulted column with a value check to connections; every existing row takes 'refuse', which is the behavior they already have.

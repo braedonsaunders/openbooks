@@ -348,6 +348,7 @@ export type ConnectionRow = {
   postedChangePolicy: "review_required" | "append_only_automatic";
   postedChangeAuthorizedBy: string | null;
   postedChangeAuthorizedAt: Date | null;
+  outOfPeriodDatePolicy: "refuse" | "period_boundary";
   cursor: Date | null;
   lastRunAt: Date | null;
   lastError: string | null;
@@ -358,6 +359,7 @@ const SELECT_COLS = sql`id, org_id as "orgId", source, display_name as "displayN
   mirror_schedule as "mirrorSchedule", posted_change_policy as "postedChangePolicy",
   posted_change_authorized_by as "postedChangeAuthorizedBy",
   posted_change_authorized_at as "postedChangeAuthorizedAt",
+  out_of_period_date_policy as "outOfPeriodDatePolicy",
   cursor, last_run_at as "lastRunAt", last_error as "lastError"`;
 
 export async function listConnections(orgId: string): Promise<ConnectionRow[]> {

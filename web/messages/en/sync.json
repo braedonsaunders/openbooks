@@ -274,6 +274,12 @@
       "automatic": "Append reversal and replacement automatically",
       "help": "Automatic corrections never rewrite posted history. OpenBooks retains the original, posts a linked reversal and replacement, transfers eligible applications, and still stops for reconciliations, closed periods, inventory, revenue recognition, or downstream documents."
     },
+    "outOfPeriodDates": {
+      "label": "Source dates outside their posting period",
+      "refuse": "Refuse until the source date is corrected",
+      "periodBoundary": "Post on the nearest date of the source period",
+      "help": "Some sources accept a transaction dated outside the posting period it names. Refusing keeps it out of the mirror until the date is corrected at the source. Posting on the period boundary keeps the source's period, posts on the period date nearest the source date, keeps the source date as the document date and records both."
+    },
     "structuredRequired": "This setting needs a structured editor. Update the connector configuration before editing it.",
     "entityMappings": {
       "workspace": "Mapping workspace",

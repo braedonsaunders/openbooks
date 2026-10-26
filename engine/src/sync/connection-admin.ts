@@ -31,6 +31,7 @@ export async function loadConnectionProbeRow(
            posted_change_policy as "postedChangePolicy",
            posted_change_authorized_by as "postedChangeAuthorizedBy",
            posted_change_authorized_at as "postedChangeAuthorizedAt",
+           out_of_period_date_policy as "outOfPeriodDatePolicy",
            cursor, last_run_at as "lastRunAt", last_error as "lastError",
            updated_at as "updatedAt"
       from connections

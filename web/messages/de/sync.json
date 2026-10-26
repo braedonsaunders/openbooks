@@ -272,6 +272,12 @@
       "automatic": "Storno und Ersatz automatisch anhängen",
       "help": "Automatische Korrekturen schreiben gebuchte Historie nie um. OpenBooks behält das Original, bucht ein verknüpftes Storno mit Ersatz, überträgt anrechenbare Verrechnungen und hält dennoch an bei Abstimmungen, geschlossenen Perioden, Bestand, Umsatzrealisierung oder nachgelagerten Belegen."
     },
+    "outOfPeriodDates": {
+      "label": "Quelldaten außerhalb ihrer Buchungsperiode",
+      "refuse": "Ablehnen, bis das Quelldatum korrigiert ist",
+      "periodBoundary": "Am nächstgelegenen Datum der Quellperiode buchen",
+      "help": "Manche Quellen akzeptieren eine Transaktion, deren Datum außerhalb der angegebenen Buchungsperiode liegt. Beim Ablehnen bleibt sie aus der Spiegelung ausgeschlossen, bis das Datum in der Quelle korrigiert ist. Beim Buchen an der Periodengrenze bleibt die Periode der Quelle erhalten: Gebucht wird am Periodendatum, das dem Quelldatum am nächsten liegt, das Quelldatum bleibt Belegdatum und beide Daten werden festgehalten."
+    },
     "structuredRequired": "Diese Einstellung benötigt einen strukturierten Editor. Aktualisieren Sie vor der Bearbeitung die Konnektorkonfiguration.",
     "entityMappings": {
       "workspace": "Zuordnungsbereich",

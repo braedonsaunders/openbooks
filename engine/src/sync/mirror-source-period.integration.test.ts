@@ -200,3 +200,77 @@ test(
     }
   },
 );
+
+test(
+  "a source date outside its posting period follows the connection's out-of-period policy",
+  { skip: !DB, timeout: 240_000 },
+  async () => {
+    const o = await createScratchOrg();
+    try {
+      const connectionId = randomUUID();
+      await db.execute(sql`
+        insert into connections (id, org_id, source, display_name, status)
+        values (${connectionId}, ${o.orgId}, 'qbo', 'period-probe', 'active')`);
+      const invoice = [{ ref: "TYPO-1", date: "2020-07-30" }];
+
+      const refused = await mirror(o, connectionId, invoice);
+      assert.equal(refused.docsNew, 0);
+      assert.equal(refused.docsFailed, 1);
+      assert.match(
+        refused.skipped.join("\n"),
+        /TYPO-1: source date 2020-07-30 is outside its qbo posting period \(2026-07-01 to 2026-07-31\)/,
+      );
+      assert.deepEqual(await postedEntries(o, "TYPO-1"), []);
+
+      await db.execute(sql`
+        update connections set out_of_period_date_policy = 'period_boundary'
+         where id = ${connectionId} and org_id = ${o.orgId}`);
+      const placed = await mirror(o, connectionId, invoice);
+      assert.equal(placed.docsFailed, 0, placed.skipped.join("\n"));
+      assert.equal(placed.docsNew, 1);
+      assert.deepEqual(await postedEntries(o, "TYPO-1"), [
+        { document_date: "2020-07-30", posting_date: "2026-07-01", entry_date: "2026-07-01" },
+      ]);
+      const evidence = await db.execute<{ evidence: unknown; period_id: string }>(
+        sql`
+          select d.custom->'sourcePostingDateOutsidePeriod' as evidence, je.period_id
+            from documents d
+            join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id
+           where d.org_id = ${o.orgId} and d.custom->>'qboId' = 'TYPO-1'`,
+        "objects",
+      );
+      assert.deepEqual(evidence, [
+        {
+          evidence: {
+            sourceDate: "2020-07-30",
+            periodId: o.periodId,
+            postedOn: "2026-07-01",
+            policy: "period_boundary",
+          },
+          period_id: o.periodId,
+        },
+      ]);
+
+      // Change detection compares the source date, so an unchanged source stays unchanged.
+      for (const since of [null, new Date("2026-01-01T00:00:00.000Z")]) {
+        const again = await mirror(o, connectionId, invoice, { since });
+        assert.equal(again.docsFailed, 0, again.skipped.join("\n"));
+        assert.equal(again.docsAmended, 0);
+        assert.equal(again.docsUnchanged, 1);
+      }
+
+      // The policy governs what a run writes; returning to refuse leaves the mirrored posting alone.
+      await db.execute(sql`
+        update connections set out_of_period_date_policy = 'refuse'
+         where id = ${connectionId} and org_id = ${o.orgId}`);
+      const kept = await mirror(o, connectionId, invoice);
+      assert.equal(kept.docsFailed, 0, kept.skipped.join("\n"));
+      assert.equal(kept.docsUnchanged, 1);
+      assert.deepEqual(await postedEntries(o, "TYPO-1"), [
+        { document_date: "2020-07-30", posting_date: "2026-07-01", entry_date: "2026-07-01" },
+      ]);
+    } finally {
+      await dropScratchOrg(o.orgId);
+    }
+  },
+);

@@ -16,6 +16,7 @@ export interface ConnectionAuditRow {
   postedChangePolicy: string;
   postedChangeAuthorizedBy?: string | null;
   postedChangeAuthorizedAt?: Date | string | null;
+  outOfPeriodDatePolicy?: string;
 }
 
 export interface ConnectionAuditSnapshot {
@@ -32,6 +33,7 @@ export interface ConnectionAuditSnapshot {
     authorizedBy: string | null;
     authorizedAt: string | null;
   };
+  outOfPeriodDates: string | null;
 }
 
 const SENSITIVE_CONFIG_KEY =
@@ -86,6 +88,7 @@ export function connectionAuditSnapshot(
           ? authorizedAt.toISOString()
           : authorizedAt ?? null,
     },
+    outOfPeriodDates: row.outOfPeriodDatePolicy ?? null,
   };
 }
 

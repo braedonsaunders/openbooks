@@ -62,7 +62,7 @@ test('structured connection mappings and content save and reopen without losing 
   const root = createRoot(host)
   let editing = { id: 'connection-1', source: 'netsuite', displayName: 'Source account', authKind: 'token', status: 'active' as const,
     config: { realmId: 'callback-owned', entityMappings: { version: 1, entities: {}, sourceOptions: { projectForemanField: 'custentity_foreman', projectStatuses: { 'In Progress': 'active' }, taxCodeFallbacks: { sales: '13' } } } } as Record<string, unknown>,
-    mirrorEnabled: true, mirrorSchedule: 'daily', postedChangePolicy: 'review_required' as const,
+    mirrorEnabled: true, mirrorSchedule: 'daily', postedChangePolicy: 'review_required' as const, outOfPeriodDatePolicy: 'refuse' as const,
     postedChangeAuthorizedAt: null, cursor: null, lastRunAt: null, lastError: null, hasSecrets: true }
   let saved: { config: Record<string, unknown> } | undefined
   const readSaved = (): { config: Record<string, unknown> } | undefined => saved
@@ -145,7 +145,7 @@ test('entity field and value mappings support custom targets, defaults, drafts, 
   const entities = entityMappingMetadata(['items', 'parties'], ['customers', 'vendors', 'employees'])
   entities.find(entity => entity.key === 'items')!.nativeFields.push({ key: 'custom.category', customKey: 'category', label: 'Native category', kind: 'choice', options: [{ value: 'Materials', label: 'Materials' }, { value: 'Services', label: 'Services' }] })
   let editing = { id: 'mapping-connection', source: 'qbo', displayName: 'Accounting source', authKind: 'oauth2', status: 'active' as const,
-    config: { realmId: 'callback-owned' } as Record<string, unknown>, mirrorEnabled: true, mirrorSchedule: 'daily', postedChangePolicy: 'review_required' as const,
+    config: { realmId: 'callback-owned' } as Record<string, unknown>, mirrorEnabled: true, mirrorSchedule: 'daily', postedChangePolicy: 'review_required' as const, outOfPeriodDatePolicy: 'refuse' as const,
     postedChangeAuthorizedAt: null, cursor: null, lastRunAt: null, lastError: null, hasSecrets: true }
   let saved: { config: Record<string, unknown> } | undefined
   const readSaved = (): { config: Record<string, unknown> } | undefined => saved
@@ -234,7 +234,7 @@ test('unrepresentable saved mappings are read-only, preserve nested values, bloc
   const root = createRoot(host)
   const editing = { id: 'saved-connection', source: 'netsuite', displayName: 'Saved connection', authKind: 'token', status: 'active' as const,
     config: { entityMappings: { version: 1, entities: {}, sourceOptions: { projectForemanField: 'custentity_foreman' }, unavailableRules: [{ key: 'obsolete', value: { nested: ['Original saved value', '100.0100'] }, reason: 'This source option is unsupported' }] } },
-    mirrorEnabled: true, mirrorSchedule: 'daily', postedChangePolicy: 'review_required' as const, postedChangeAuthorizedAt: null, cursor: null, lastRunAt: null, lastError: null, hasSecrets: true }
+    mirrorEnabled: true, mirrorSchedule: 'daily', postedChangePolicy: 'review_required' as const, outOfPeriodDatePolicy: 'refuse' as const, postedChangeAuthorizedAt: null, cursor: null, lastRunAt: null, lastError: null, hasSecrets: true }
   let saved: { config: Record<string, unknown> } | undefined
   const readSaved = (): { config: Record<string, unknown> } | undefined => saved
   const previousFetch = globalThis.fetch

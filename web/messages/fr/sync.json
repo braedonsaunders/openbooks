@@ -272,6 +272,12 @@
       "automatic": "Ajouter automatiquement la contre-passation et le remplacement",
       "help": "Les corrections automatiques ne réécrivent jamais l’historique comptabilisé. OpenBooks conserve l’original, comptabilise une contre-passation et un remplacement liés, transfère les affectations admissibles, et s’arrête quand même pour les rapprochements, les périodes clôturées, les stocks, la comptabilisation du revenu ou les documents en aval."
     },
+    "outOfPeriodDates": {
+      "label": "Dates source hors de leur période comptable",
+      "refuse": "Refuser jusqu'à la correction de la date source",
+      "periodBoundary": "Comptabiliser à la date la plus proche de la période source",
+      "help": "Certaines sources acceptent une transaction datée hors de la période comptable qu'elle désigne. Le refus la tient à l'écart du miroir jusqu'à la correction de la date dans la source. La comptabilisation à la limite de la période conserve la période de la source, comptabilise à la date de la période la plus proche de la date source, garde la date source comme date du document et enregistre les deux."
+    },
     "structuredRequired": "Ce paramètre nécessite un éditeur structuré. Mettez à jour la configuration du connecteur avant de le modifier.",
     "entityMappings": {
       "workspace": "Espace de correspondance",

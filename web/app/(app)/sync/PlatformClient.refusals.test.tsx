@@ -116,6 +116,7 @@ const CONNECTION = {
   mirrorEnabled: false,
   mirrorSchedule: "daily",
   postedChangePolicy: "review_required",
+  outOfPeriodDatePolicy: "refuse",
   postedChangeAuthorizedAt: null,
   cursor: null,
   lastRunAt: null,

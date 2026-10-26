@@ -3,6 +3,7 @@ import { db } from "../platform/db.ts";
 import { toUnits, normalizeDecimal } from "../money/money.ts";
 import { type NativeDocument } from "./native.ts";
 import { documentNumberScopeKey } from "../records/numbering.ts";
+import { SOURCE_POSTING_DATE_EVIDENCE_KEY } from "./source-posting-date.ts";
 
 export function effectiveLineSubsidiary(
   lineSubsidiaryId: string | null | undefined,
@@ -223,7 +224,8 @@ export async function storedKey(docId: string, orgId: string): Promise<string> {
   const [d] = await db.execute<StoredDocumentKeyRow>(
     sql`
       select kind, party_id, subsidiary_id,
-             document_date::text, posting_date::text,
+             document_date::text,
+             coalesce(custom->${SOURCE_POSTING_DATE_EVIDENCE_KEY}->>'sourceDate', posting_date::text) as posting_date,
              posting_period_id,
              due_date::text as due,
              memo, reference_number, custom->>'controlAccountId' as ctrl, (select jsonb_object_agg(k,custom->k) from jsonb_object_keys(coalesce(custom->'connectorMappedValues','{}'::jsonb)) k) as mapped_custom, extra_dims, id,
@@ -254,7 +256,8 @@ export async function loadStoredKeys(orgId: string, refKey: string): Promise<Map
   const documents = await db.execute<StoredDocumentKeyRow>(
     sql`
     select id, kind, party_id, subsidiary_id,
-           document_date::text, posting_date::text,
+           document_date::text,
+           coalesce(custom->${SOURCE_POSTING_DATE_EVIDENCE_KEY}->>'sourceDate', posting_date::text) as posting_date,
            posting_period_id,
            due_date::text as due,
            memo, reference_number, custom->>'controlAccountId' as ctrl, (select jsonb_object_agg(k,custom->k) from jsonb_object_keys(coalesce(custom->'connectorMappedValues','{}'::jsonb)) k) as mapped_custom, extra_dims,

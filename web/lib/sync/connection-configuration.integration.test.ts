@@ -60,3 +60,32 @@ test('native connection edits preserve identity, audit nested content choices an
     await dropScratchOrg(org.orgId)
   }
 })
+
+test('the out-of-period date policy saves with an audited before and after and refuses unknown values', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg()
+  try {
+    const userId = await createScratchUser(org.orgId, 'Connection administrator', 'connection_admin')
+    const id = randomUUID()
+    await db.execute(sql`insert into connections (id, org_id, source, display_name, auth_kind, config) values
+      (${id}, ${org.orgId}, 'qbo', 'OAuth account', 'oauth2', '{"environment":"sandbox"}'::jsonb)`)
+    const actor = { orgId: org.orgId, userId }
+    assert.equal((await getConnection(org.orgId, id))!.outOfPeriodDatePolicy, 'refuse')
+
+    const saved = await withOrgContext(org.orgId, () => updateConnection(actor, id, { outOfPeriodDatePolicy: 'period_boundary' }))
+    assert.equal(saved.status, 200)
+    assert.equal((await getConnection(org.orgId, id))!.outOfPeriodDatePolicy, 'period_boundary')
+    const audit = await db.execute<{ actor_id: string; changes: { before: { outOfPeriodDates: string }; after: { outOfPeriodDates: string } } }>(sql`
+      select actor_id, changes from audit_log where org_id=${org.orgId} and table_name='connections' and row_id=${id}`, 'objects')
+    assert.equal(audit.length, 1)
+    assert.equal(audit[0]!.actor_id, userId)
+    assert.equal(audit[0]!.changes.before.outOfPeriodDates, 'refuse')
+    assert.equal(audit[0]!.changes.after.outOfPeriodDates, 'period_boundary')
+
+    await assert.rejects(
+      db.execute(sql`update connections set out_of_period_date_policy = 'nearest' where id = ${id}`),
+      (error: unknown) => /connections_out_of_period_date_policy_check/.test(String((error as { cause?: unknown }).cause)),
+    )
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})

@@ -272,6 +272,12 @@
       "automatic": "Anexar reversão e substituição automaticamente",
       "help": "Correções automáticas nunca reescrevem o histórico lançado. O OpenBooks mantém o original, lança uma reversão e uma substituição vinculadas, transfere as aplicações elegíveis e ainda para diante de conciliações, períodos fechados, estoque, reconhecimento de receita ou documentos derivados."
     },
+    "outOfPeriodDates": {
+      "label": "Datas de origem fora do período contábil",
+      "refuse": "Recusar até que a data de origem seja corrigida",
+      "periodBoundary": "Lançar na data mais próxima do período de origem",
+      "help": "Algumas origens aceitam uma transação datada fora do período contábil que ela indica. Ao recusar, ela fica fora do espelho até que a data seja corrigida na origem. Ao lançar no limite do período, o período da origem é mantido, o lançamento ocorre na data do período mais próxima da data de origem, a data de origem permanece como data do documento e ambas são registradas."
+    },
     "structuredRequired": "Esta configuração precisa de um editor estruturado. Atualize a configuração do conector antes de editá-la.",
     "entityMappings": {
       "workspace": "Área de mapeamento",

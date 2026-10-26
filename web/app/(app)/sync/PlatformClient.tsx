@@ -100,6 +100,7 @@ interface Connection {
   mirrorSchedule: string;
   postedChangePolicy: "review_required" | "append_only_automatic";
   postedChangeAuthorizedAt: string | null;
+  outOfPeriodDatePolicy: "refuse" | "period_boundary";
   cursor: string | null;
   lastRunAt: string | null;
   lastError: string | null;
@@ -1133,6 +1134,9 @@ export function ConnectionDrawer({
   const [postedChangePolicy, setPostedChangePolicy] = useState<
     "review_required" | "append_only_automatic"
   >("review_required");
+  const [outOfPeriodDatePolicy, setOutOfPeriodDatePolicy] = useState<
+    "refuse" | "period_boundary"
+  >("refuse");
   const [saving, setSaving] = useState(false);
 
   // Prefill from the edited connection (or clear for a fresh add) on open,
@@ -1159,12 +1163,14 @@ export function ConnectionDrawer({
       setConfig(savedConfig);
       setSecrets({});
       setPostedChangePolicy(editing.postedChangePolicy);
+      setOutOfPeriodDatePolicy(editing.outOfPeriodDatePolicy);
     } else {
       setSource(presetSource && sourceTypes.some((type) => type.source === presetSource) ? presetSource : "");
       setDisplayName("");
       setConfig({});
       setSecrets({});
       setPostedChangePolicy("review_required");
+      setOutOfPeriodDatePolicy("refuse");
     }
   }
   const def = sourceTypes.find((s) => s.source === source);
@@ -1212,6 +1218,7 @@ export function ConnectionDrawer({
               config: editableConfig,
               secrets: provided,
               postedChangePolicy,
+              outOfPeriodDatePolicy,
             }),
           })
         : await fetch("/api/platform/connections", {
@@ -1353,6 +1360,25 @@ export function ConnectionDrawer({
                 </Select>
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                   {t("drawer.postedChanges.help")}
+                </p>
+                <div className="mt-3">
+                  <Label>{t("drawer.outOfPeriodDates.label")}</Label>
+                </div>
+                <Select
+                  value={outOfPeriodDatePolicy}
+                  onChange={(event) =>
+                    setOutOfPeriodDatePolicy(
+                      event.target.value as "refuse" | "period_boundary",
+                    )
+                  }
+                >
+                  <option value="refuse">{t("drawer.outOfPeriodDates.refuse")}</option>
+                  <option value="period_boundary">
+                    {t("drawer.outOfPeriodDates.periodBoundary")}
+                  </option>
+                </Select>
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  {t("drawer.outOfPeriodDates.help")}
                 </p>
               </div>
             ) : null}

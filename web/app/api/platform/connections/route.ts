@@ -52,6 +52,7 @@ function toClient(c: Awaited<ReturnType<typeof listConnections>>[number]) {
     mirrorSchedule: c.mirrorSchedule,
     postedChangePolicy: c.postedChangePolicy,
     postedChangeAuthorizedAt: c.postedChangeAuthorizedAt,
+    outOfPeriodDatePolicy: c.outOfPeriodDatePolicy,
     cursor: c.cursor,
     lastRunAt: c.lastRunAt,
     lastError: c.lastError,
