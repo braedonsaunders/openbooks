@@ -27,15 +27,17 @@ import { notFound, postingRefusal } from "./responses";
 export type RouteScope = "unrestricted" | "root";
 export type FeatureGate = string | { none: string };
 
-interface CommonOptions<
-  A,
-  P extends z.ZodType | undefined,
-  B extends z.ZodType | undefined,
-> {
+type RouteInputContext<P extends z.ZodType | undefined> = {
+  request: Request;
+  params: P extends z.ZodType ? z.output<P> : unknown;
+};
+
+interface CommonOptions<A, P extends z.ZodType | undefined, B extends z.ZodType | undefined> {
   params?: P;
   /** Preserve an opaque missing-record response for malformed record identifiers. */
   invalidParamsNotFound?: "record" | "route";
-  body?: B;
+  /** Select a schema for methods whose request discriminator selects the body shape. */
+  body?: B | ((ctx: RouteInputContext<P>) => B | undefined);
   /** Top-level JSON body columns that intentionally remain uninterpreted. */
   opaque?: Record<string, string>;
   /**
@@ -45,7 +47,7 @@ interface CommonOptions<
    */
   invalidBodyStatus?: number;
   /** Per-route bounded JSON payload limit; defaults to the shared 1 MiB ceiling. */
-  maxBodyBytes?: number;
+  maxBodyBytes?: number | ((ctx: RouteInputContext<P>) => number | undefined);
   handler: (ctx: {
     request: Request;
     authz: A;
@@ -99,7 +101,10 @@ export interface AuthorizedRouteOptions<
   P extends z.ZodType | undefined = undefined,
   B extends z.ZodType | undefined = undefined,
 > extends CommonOptions<Authz, P, B> {
-  authorize: (ctx: { request: Request; params: unknown }) => Authz | NextResponse | Promise<Authz | NextResponse>;
+  authorize: (ctx: {
+    request: Request;
+    params: unknown;
+  }) => Authz | NextResponse | Promise<Authz | NextResponse>;
   feature: FeatureGate;
   scope?: RouteScope;
 }
@@ -121,10 +126,14 @@ interface LooseOptions {
   feature?: FeatureGate;
   scope?: RouteScope;
   params?: z.ZodType;
-  invalidParamsNotFound?: CommonOptions<unknown, z.ZodType | undefined, z.ZodType | undefined>["invalidParamsNotFound"];
-  body?: z.ZodType;
+  invalidParamsNotFound?: CommonOptions<
+    unknown,
+    z.ZodType | undefined,
+    z.ZodType | undefined
+  >["invalidParamsNotFound"];
+  body?: z.ZodType | ((ctx: { request: Request; params: unknown }) => z.ZodType | undefined);
   opaque?: Record<string, string>;
-  maxBodyBytes?: number;
+  maxBodyBytes?: number | ((ctx: { request: Request; params: unknown }) => number | undefined);
   invalidBodyStatus?: number;
   handler: LooseHandler;
 }
@@ -137,9 +146,7 @@ type NativeRouteHandler = {
 export function defineRoute<
   P extends z.ZodType | undefined = undefined,
   B extends z.ZodType | undefined = undefined,
->(
-  options: TokenRouteOptions<P, B>,
-): NativeRouteHandler;
+>(options: TokenRouteOptions<P, B>): NativeRouteHandler;
 export function defineRoute<
   P extends z.ZodType | undefined = undefined,
   B extends z.ZodType | undefined = undefined,
@@ -251,10 +258,17 @@ export function defineRoute(options: LooseOptions) {
       }
 
       let body: unknown;
-      if (options.body) {
-        const parsedBody = await parseJsonBody(request, options.body as z.ZodType, {
+      const routeInput = { request, params };
+      const bodySchema =
+        typeof options.body === "function" ? options.body(routeInput) : options.body;
+      if (bodySchema) {
+        const maxBodyBytes =
+          typeof options.maxBodyBytes === "function"
+            ? options.maxBodyBytes(routeInput)
+            : options.maxBodyBytes;
+        const parsedBody = await parseJsonBody(request, bodySchema as z.ZodType, {
           status: options.invalidBodyStatus ?? 400,
-          maxBodyBytes: options.maxBodyBytes,
+          maxBodyBytes,
         });
         if (!parsedBody.ok) return parsedBody.response;
         body = parsedBody.data;
@@ -269,8 +283,14 @@ export function defineRoute(options: LooseOptions) {
       // Organization mutations expire preview summaries on a bounded window;
       // coalescing prevents continuous posting from causing repeated cold
       // calculations. Personal layout writes do not change the source data.
-      if (authz && response.ok && !["GET", "HEAD", "OPTIONS"].includes(request.method) && !new URL(request.url).pathname.startsWith("/api/me/")) {
-        const { invalidateAnalyticsPreviews } = await import("@/lib/analytics/preview-invalidation");
+      if (
+        authz &&
+        response.ok &&
+        !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
+        !new URL(request.url).pathname.startsWith("/api/me/")
+      ) {
+        const { invalidateAnalyticsPreviews } =
+          await import("@/lib/analytics/preview-invalidation");
         await invalidateAnalyticsPreviews(authz.user.orgId);
       }
       return response;
