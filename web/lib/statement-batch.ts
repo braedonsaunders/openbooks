@@ -354,21 +354,22 @@ export async function buildStatementBatchPreview(
       : viewedIds === undefined
         ? [...allowedSubsidiaryIds]
         : viewedIds.filter((id) => allowedSubsidiaryIds.has(id));
-  const balances = await partnerBalances(
-    "receivable",
-    orgId,
-    to,
-    selectedBook.id,
-    {
-      subsidiaryIds,
-    },
-    canSeePayroll,
-  );
-  const ids = balances.map((row) => row.id).filter((id): id is string => id !== null);
-  const [parties, overdueByParty] = await Promise.all([
-    loadStatementBatchParties(orgId, ids),
+  // Balances and overdue portions are independent reads of the same ledger.
+  const [balances, overdueByParty] = await Promise.all([
+    partnerBalances(
+      "receivable",
+      orgId,
+      to,
+      selectedBook.id,
+      {
+        subsidiaryIds,
+      },
+      canSeePayroll,
+    ),
     partyOverdueMap(orgId, to, { bookId: selectedBook.id, subsidiaryIds }),
   ]);
+  const ids = balances.map((row) => row.id).filter((id): id is string => id !== null);
+  const parties = await loadStatementBatchParties(orgId, ids);
   const { recipients, excluded } = assembleBatchList({
     balances,
     parties,

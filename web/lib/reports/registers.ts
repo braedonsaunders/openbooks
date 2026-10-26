@@ -350,21 +350,21 @@ export async function partyRegister(
     ? sql`l.memo`
     : sql`case when ${payrollParty} then null else l.memo end`;
 
-  const opening = await reportDb.execute<{ party_id: string | null; bal: string }>(sql`
+  // Opening balances and period activity are independent reads; they run together.
+  const openingRead = reportDb.execute<{ party_id: string | null; bal: string }>(sql`
     select ${reportDb.censusColumn}, ${partyIdExpr} as party_id, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id ${sourceDocumentScope}
-     where a.type = ${acctType} and e.posting_date < ${opts.from}
+     where a.type = ${acctType} and l.posting_date < ${opts.from} and e.posting_date < ${opts.from}
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
      group by ${partyIdExpr}
   `);
-  const openingByParty = new Map(opening.rows.map((r) => [r.party_id, r.bal]));
 
   // Keep the detail cap presentation-only. Closing balances must include all
   // posted activity in the report window, including lines omitted by `limit`.
-  const periodActivity = await reportDb.execute<{ party_id: string | null; activity: string }>(sql`
+  const activityRead = reportDb.execute<{ party_id: string | null; activity: string }>(sql`
     select ${reportDb.censusColumn}, ${partyIdExpr} as party_id, coalesce(sum(l.amount), 0) as activity
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
@@ -375,6 +375,8 @@ export async function partyRegister(
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
      group by ${partyIdExpr}
   `);
+  const [opening, periodActivity] = await Promise.all([openingRead, activityRead]);
+  const openingByParty = new Map(opening.rows.map((r) => [r.party_id, r.bal]));
   const activityByParty = new Map(periodActivity.rows.map((r) => [r.party_id, r.activity]));
 
   // Paged reads choose their party sections first, in display order, and
