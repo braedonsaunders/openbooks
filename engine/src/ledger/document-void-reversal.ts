@@ -21,7 +21,7 @@ import {
   releaseConvertedOrderQuantities,
   releaseVendorBillProvenance,
 } from "./billing-provenance.ts";
-import { reverseDropShipConfirmationPair } from "../inventory/drop-ship-reversal.ts";
+import { voidRemedyHooks } from "../journal/void-remedy-contributors.ts";
 import {
   DocumentVoidError,
   PAYMENT_KINDS,
@@ -30,7 +30,6 @@ import {
   resolveVoidReversalPeriod,
   voidCloseModule,
 } from "./document-void-shared.ts";
-import { reverseOrderShipment } from "./document-void-inventory.ts";
 import { releaseVoidedPayRun } from "./document-void-remedies.ts";
 import type { VoidDocumentRow, VoidTransaction } from "./document-void-guards.ts";
 
@@ -70,7 +69,7 @@ export async function unwindVoidedShipment(
       ? confirmationRecord !== null
       : kind === "sales_fulfillment" && typeof confirmationRecord?.purchaseReceiptId === "string";
   const dropShipPair = isDropShipPair
-    ? await reverseDropShipConfirmationPair(tx, {
+    ? await voidRemedyHooks.require("inventory").reverseDropShipConfirmationPair(tx, {
         orgId,
         documentId,
         document: doc,
@@ -78,7 +77,7 @@ export async function unwindVoidedShipment(
         reversalDate: String(doc.void_reversal_date),
         reason: String(doc.void_reason),
         reverseDocument: (voidDocumentId, voidKind) =>
-          reverseOrderShipment(tx, {
+          voidRemedyHooks.require("inventory").reverseOrderShipment(tx, {
             orgId,
             voidDocumentId,
             voidKind,
@@ -97,7 +96,7 @@ export async function unwindVoidedShipment(
     // inventory kernel and the source order's fulfilled counters are
     // restored, so the quantities can ship again and no relieved stock
     // is stranded. A refused unwind names its real blocker.
-    await reverseOrderShipment(tx, {
+    await voidRemedyHooks.require("inventory").reverseOrderShipment(tx, {
       orgId,
       voidDocumentId: documentId,
       voidKind: String(doc.kind),

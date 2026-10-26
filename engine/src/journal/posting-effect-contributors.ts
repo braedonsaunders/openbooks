@@ -26,6 +26,56 @@ export interface PostingEffectContributors {
     documentPosted(executor: SqlExecutor, orgId: string, documentId: string): Promise<unknown>;
     paymentReceived(executor: SqlExecutor, orgId: string, documentId: string): Promise<unknown>;
   };
+  inventory: {
+    /** Receipts of a vendor bill, inside the posting transaction. */
+    applyBillReceipts(
+      runner: SqlExecutor,
+      orgId: string,
+      actorId: string | null,
+      documentId: string,
+      billEntryId: string,
+      date: string,
+      subsidiaryId: string,
+    ): Promise<unknown>;
+    /** Returns of a vendor credit, inside the posting transaction. */
+    applyVendorCreditReturns(
+      runner: SqlExecutor,
+      orgId: string,
+      actorId: string | null,
+      documentId: string,
+      date: string,
+      subsidiaryId: string,
+    ): Promise<unknown>;
+    issueForInvoice(
+      orgId: string,
+      actorId: string | null,
+      documentId: string,
+      date: string,
+      subsidiaryId: string,
+    ): Promise<unknown>;
+    receiveForBill(
+      orgId: string,
+      actorId: string | null,
+      documentId: string,
+      billEntryId: string,
+      date: string,
+      subsidiaryId: string,
+    ): Promise<unknown>;
+    returnForVendorCredit(
+      orgId: string,
+      actorId: string | null,
+      documentId: string,
+      date: string,
+      subsidiaryId: string,
+    ): Promise<unknown>;
+    returnForCustomerCredit(
+      orgId: string,
+      actorId: string | null,
+      documentId: string,
+      date: string,
+      subsidiaryId: string,
+    ): Promise<unknown>;
+  };
 }
 
 export const postingEffectHooks = postingContributorRegistry<PostingEffectContributors>("effect");

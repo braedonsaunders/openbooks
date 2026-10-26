@@ -12,16 +12,13 @@ import {
   type TransactionAuditSnapshot,
 } from "../records/transaction-audit.ts";
 import { cmp, toUnits } from "../money/money.ts";
-import { DownstreamConsumptionError, InventoryError } from "../inventory/contracts.ts";
-import { reverseInventoryJournal, reverseInventoryMovement } from "../inventory/reversal.ts";
-import { postedReturnQuantity } from "../inventory/return-quantities.ts";
-import { listReceiptVoidBlockers } from "../inventory/receipt-void-dependents.ts";
-import {
-  crossSubsidiaryFulfillmentHandler,
-  crossSubsidiaryShipment,
-} from "../inventory/cross-subsidiary.ts";
+import { DownstreamConsumptionError, InventoryError } from "./contracts.ts";
+import { reverseInventoryJournal, reverseInventoryMovement } from "./reversal.ts";
+import { postedReturnQuantity } from "./return-quantities.ts";
+import { listReceiptVoidBlockers } from "./receipt-void-dependents.ts";
+import { crossSubsidiaryFulfillmentHandler, crossSubsidiaryShipment } from "./cross-subsidiary.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { DocumentVoidError, voidCloseModule } from "./document-void-shared.ts";
+import { DocumentVoidError, voidCloseModule } from "../journal/document-void-refusal.ts";
 
 function dependentKindLabel(kind: string): string {
   if (kind === "sales_fulfillment") return "sales fulfillment";

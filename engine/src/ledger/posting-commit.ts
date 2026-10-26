@@ -32,8 +32,7 @@ import {
   CloseError,
   periodClosedDetailsOf,
 } from "../periods/period-policy.ts";
-import { applyBillInventoryReceipts } from "../inventory/documents-purchasing.ts";
-import { applyVendorCreditInventoryReturns } from "../inventory/documents-vendor-credits.ts";
+import { postingEffectHooks } from "../journal/posting-effect-contributors.ts";
 import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
@@ -600,8 +599,9 @@ async function applyInventoryEffects(
   const { doc, deps, postingDate, subApplied } = prepared;
   if (deps.migration) return;
   if (doc.kind === "vendor_bill") {
+    const inventory = postingEffectHooks.require("inventory");
     await asPostingRefusal(() =>
-      applyBillInventoryReceipts(
+      inventory.applyBillReceipts(
         tx,
         doc.orgId,
         actorId,
@@ -613,8 +613,9 @@ async function applyInventoryEffects(
     );
   }
   if (doc.kind === "vendor_credit") {
+    const inventory = postingEffectHooks.require("inventory");
     await asPostingRefusal(() =>
-      applyVendorCreditInventoryReturns(
+      inventory.applyVendorCreditReturns(
         tx,
         doc.orgId,
         actorId,

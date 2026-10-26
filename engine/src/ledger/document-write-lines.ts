@@ -13,7 +13,7 @@ import {
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { computeBillTotalsWithProvider, taxProfileMap } from "./document-totals.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { activeStockLocations, profiledItemIds } from "../inventory/stock-locations.ts";
+import { postingPreconditionHooks } from "../journal/posting-preconditions.ts";
 import {
   findUnownedCustomReferences,
   loadFieldDefs,
@@ -208,10 +208,11 @@ export async function stampSingleWarehouseDefault<
   Line extends { itemId?: string | null; stockLocationId?: string | null },
 >(orgId: string, lines: Line[]): Promise<Line[]> {
   if (!lines.some((l) => (l.stockLocationId ?? "") === "")) return lines;
-  const active = await activeStockLocations(orgId);
+  const inventory = postingPreconditionHooks.require("inventory");
+  const active = await inventory.activeStockLocations(orgId);
   const singleDefault = active.length === 1 ? active[0]!.id : null;
   if (!singleDefault) return lines;
-  const profiled = await profiledItemIds(
+  const profiled = await inventory.profiledItemIds(
     orgId,
     lines.map((l) => l.itemId).filter((v): v is string => typeof v === "string" && v.length > 0),
   );

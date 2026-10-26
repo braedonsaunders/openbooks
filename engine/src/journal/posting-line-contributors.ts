@@ -17,6 +17,12 @@ export interface CustomGlLineRequest {
   targetId: string;
 }
 
+/** A drop-ship line posted as agent: the vendor's share and the account it clears. */
+export interface AgencyLinePosting {
+  accountId: string;
+  vendorAmount: string;
+}
+
 export interface PostingLineContributors {
   scripting: {
     /**
@@ -34,6 +40,32 @@ export interface PostingLineContributors {
     ): Promise<Map<string, string>>;
     /** Liability account of the store-credit program a credit memo issues into. */
     storeCreditLiability(runner: SqlExecutor, orgId: string, programId: string): Promise<string>;
+  };
+  inventory: {
+    /** Drop-ship agency routing per line; an unroutable line refuses with a PostingError. */
+    agencyByLine(
+      runner: SqlExecutor,
+      orgId: string,
+      documentId: string,
+    ): Promise<Map<string, AgencyLinePosting>>;
+    /** The same routing for historical replay, refusing with inventory's own error. */
+    replayAgencyByLine(
+      runner: SqlExecutor,
+      orgId: string,
+      documentId: string,
+    ): Promise<Map<string, AgencyLinePosting>>;
+    /** Inventory asset account per vendor bill line that receives stock. */
+    billInventoryAccounts(
+      runner: SqlExecutor,
+      orgId: string,
+      documentId: string,
+    ): Promise<Map<string, string>>;
+    /** Return offset account per vendor credit line that returns stock. */
+    vendorCreditReturnAccounts(
+      runner: SqlExecutor,
+      orgId: string,
+      documentId: string,
+    ): Promise<Map<string, string>>;
   };
 }
 

@@ -7,7 +7,6 @@ import { assertCanadianGoodsTaxEvidence } from '../tax/goods-selection.ts'
 import { assertCrossBorderSupplyEvidence } from '../tax/cross-border-posting.ts';
 import { documentTaxDate, staleTaxRateLine } from '../tax/document-tax-date.ts';
 import { CrossBorderTaxError } from '../tax/cross-border-place-of-supply.ts';
-import { resolveAgencyPosting,AgencyError } from '../inventory/drop-ship-agency.ts';
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { assertProviderReturnPosting } from "../payments-core/provider-return-posting.ts";
@@ -25,11 +24,6 @@ import { postDriverResolver } from "../allocations/report-runner.ts";
 import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
 import { consolidationSourceRefusal } from "../records/consolidation-source-policy.ts";
 import { runRecordFlows } from "../flows/run.ts";
-
-import { assertBillReceiptsPostable, autoMatchBillLinesToOrders, resolveBillInventoryAccounts } from "../inventory/documents-purchasing.ts";
-import { assertInvoiceIssuesPostable } from "../inventory/documents-sales.ts";
-import { assertVendorCreditInventoryReturnsPostable, resolveVendorCreditInventoryAccounts } from "../inventory/documents-vendor-credits.ts";
-import { assertCustomerCreditInventoryReturnsPostable } from "../inventory/documents-customer-credits.ts";
 
 import { postingPreconditionHooks, type DocumentScriptContext } from "../journal/posting-preconditions.ts";
 
@@ -145,7 +139,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     };
   }
   deps = await resolveMarketplaceClearingForDocument(db, doc, deps);
-  try {deps = { ...deps, agencyByLine: await resolveAgencyPosting(db, doc.orgId, doc.id) }} catch(error) {if(error instanceof AgencyError)throw new PostingError(error.message);throw error}
+  deps = { ...deps, agencyByLine: await postingLineHooks.require("inventory").agencyByLine(db, doc.orgId, doc.id) };
   if ((doc.kind === "customer_invoice" || doc.kind === "cash_sale") && !deps.deferralAccountByLine) {
     deps = {
       ...deps,
@@ -219,8 +213,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     // A hand-coded line for received stock is matched to its order inside
     // this same posting unit — before the journal maps its debit — so it
     // clears received-not-billed instead of receiving the stock again.
+    const inventory = postingPreconditionHooks.require("inventory");
     try {
-      await autoMatchBillLinesToOrders(db, doc.orgId, doc.id, options.audit?.actorId ?? null);
+      await inventory.matchBillLinesToOrders(db, doc.orgId, doc.id, options.audit?.actorId ?? null);
     } catch (error) {
       if (error instanceof PostingError) throw error;
       throw carryRefusalIdentity(
@@ -232,7 +227,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {
     deps = {
       ...deps,
-      inventoryAssetByLine: await resolveBillInventoryAccounts(
+      inventoryAssetByLine: await postingLineHooks.require("inventory").billInventoryAccounts(
         db,
         doc.orgId,
         doc.id,
@@ -240,8 +235,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     };
   }
   if (doc.kind === "vendor_bill" && !deps.migration) {
+    const inventory = postingPreconditionHooks.require("inventory");
     try {
-      await assertBillReceiptsPostable(db, doc.orgId, doc.id);
+      await inventory.assertBillReceiptsPostable(db, doc.orgId, doc.id);
     } catch (error) {
       if (error instanceof PostingError) throw error;
       throw carryRefusalIdentity(
@@ -251,8 +247,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     }
   }
   if ((doc.kind === "customer_invoice" || doc.kind === "cash_sale") && !deps.migration) {
+    const inventory = postingPreconditionHooks.require("inventory");
     try {
-      await assertInvoiceIssuesPostable(db, doc.orgId, doc.id);
+      await inventory.assertInvoiceIssuesPostable(db, doc.orgId, doc.id);
     } catch (error) {
       if (error instanceof PostingError) throw error;
       throw new PostingError(
@@ -267,7 +264,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   ) {
     deps = {
       ...deps,
-      inventoryReturnOffsetByLine: await resolveVendorCreditInventoryAccounts(
+      inventoryReturnOffsetByLine: await postingLineHooks.require("inventory").vendorCreditReturnAccounts(
         db,
         doc.orgId,
         doc.id,
@@ -275,8 +272,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     };
   }
   if (doc.kind === "vendor_credit" && !deps.migration) {
+    const inventory = postingPreconditionHooks.require("inventory");
     try {
-      await assertVendorCreditInventoryReturnsPostable(
+      await inventory.assertVendorCreditReturnsPostable(
         db,
         doc.orgId,
         doc.id,
@@ -296,8 +294,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     // satisfied must fail BEFORE the journal commits, not inside the
     // post-commit effects drain where the credit is already posted and the
     // stock silently never comes back.
+    const inventory = postingPreconditionHooks.require("inventory");
     try {
-      await assertCustomerCreditInventoryReturnsPostable(
+      await inventory.assertCustomerCreditReturnsPostable(
         db,
         doc.orgId,
         doc.id,

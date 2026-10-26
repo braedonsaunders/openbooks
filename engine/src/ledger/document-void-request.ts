@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { isDocumentRevisionToken } from "../records/revision.ts";
 import { runRecordFlows } from "../flows/run.ts";
-import { listReceiptVoidBlockers } from "../inventory/receipt-void-dependents.ts";
+import { voidRemedyHooks } from "../journal/void-remedy-contributors.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import {
@@ -190,7 +190,7 @@ export async function requestReceiptVoidWithDependents(
 ): Promise<DocumentVoidResult> {
   return withOrgTransaction(input.orgId, async () => {
     await lockLedgerSetupFence(db, input.orgId, "shared");
-    const relief = await listReceiptVoidBlockers(db, input.orgId, input.documentId);
+    const relief = await voidRemedyHooks.require("inventory").receiptVoidBlockers(db, input.orgId, input.documentId);
     if (relief.blockers.length === 0) return requestDocumentVoid(input);
     if (!relief.allowVoidWithDependents) {
       const steps = relief.blockers.flatMap((blocker) =>

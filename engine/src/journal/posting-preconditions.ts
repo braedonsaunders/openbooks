@@ -40,6 +40,22 @@ export interface DocumentScriptHooks {
   ): Promise<DocumentScriptOutcome[]>;
 }
 
+/** Which stock leg a credit returns. */
+export type ReturnSide = "purchase" | "sales";
+
+/** The movement a credit line returns, as the operator chose it. */
+export interface ReturnSourceSelection {
+  side: ReturnSide;
+  /** Null only for a walk-in cash refund returning a walk-in cash sale's goods. */
+  partyId: string | null;
+  itemId: string;
+  stockLocationId: string;
+  movementId: string;
+  subsidiaryIds?: readonly string[] | null;
+  lotId?: string | null;
+  serialId?: string | null;
+}
+
 export interface PostingPreconditions {
   scripting: DocumentScriptHooks & {
     /** Merge a before_post custom mutation without replacing protected posting controls. */
@@ -92,6 +108,50 @@ export interface PostingPreconditions {
       preparedLines: unknown[] | null,
       patch: { currency?: string | undefined; subsidiaryId?: string | null | undefined },
     ): Promise<boolean>;
+  };
+  inventory: {
+    /** Match hand-coded received-stock bill lines to their purchase order lines. */
+    matchBillLinesToOrders(
+      runner: SqlExecutor,
+      orgId: string,
+      documentId: string,
+      actorId: string | null,
+    ): Promise<unknown>;
+    assertBillReceiptsPostable(
+      runner: SqlExecutor,
+      orgId: string,
+      documentId: string,
+    ): Promise<void>;
+    assertInvoiceIssuesPostable(
+      runner: SqlExecutor,
+      orgId: string,
+      documentId: string,
+    ): Promise<void>;
+    assertVendorCreditReturnsPostable(
+      runner: SqlExecutor,
+      orgId: string,
+      documentId: string,
+      vendorId: string | null,
+      subsidiaryId: string,
+    ): Promise<void>;
+    assertCustomerCreditReturnsPostable(
+      runner: SqlExecutor,
+      orgId: string,
+      documentId: string,
+      customerId: string | null,
+      subsidiaryId: string,
+    ): Promise<void>;
+    /** Active warehouses, code-ordered. */
+    activeStockLocations(orgId: string): Promise<{ id: string }[]>;
+    /** The items among itemIds that carry a stock profile. */
+    profiledItemIds(orgId: string, itemIds: string[]): Promise<Set<string>>;
+    /** Refuses, with a DocumentEditError, a return source the picker would not offer. */
+    assertReturnSourceSelectable(
+      runner: SqlExecutor,
+      orgId: string,
+      selection: ReturnSourceSelection,
+      lineLabel: string,
+    ): Promise<void>;
   };
 }
 

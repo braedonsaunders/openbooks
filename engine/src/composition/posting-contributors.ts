@@ -1,6 +1,7 @@
 import { registerAssetsPostingContributors } from "../assets/posting-contributors.ts";
 import { registerCompliancePostingContributors } from "../compliance/posting-contributors.ts";
 import { registerCrmPostingContributors } from "../crm/posting-contributors.ts";
+import { registerInventoryPostingContributors } from "../inventory/posting-contributors.ts";
 import { registerPayrollPostingContributors } from "../payroll/posting-contributors.ts";
 import { registerScriptingPostingContributors } from "../scripting/posting-contributors.ts";
 import { registerStoredValuePostingContributors } from "../stored-value/posting-contributors.ts";
@@ -19,6 +20,7 @@ export function installPostingContributors(): void {
   registerAssetsPostingContributors();
   registerCompliancePostingContributors();
   registerCrmPostingContributors();
+  registerInventoryPostingContributors();
   registerPayrollPostingContributors();
   registerScriptingPostingContributors();
   registerStoredValuePostingContributors();

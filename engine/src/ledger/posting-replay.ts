@@ -2,13 +2,11 @@ import { normalizeJournalCurrencyLines } from "./journal-currency.ts";
 import { assertJournalVoidNotAutomaticallyReversed, cancelScheduledJournalReversal, queueJournalReversal } from "./journal-reversals.ts";
 import { sumMoney } from "../money/brands.ts";
 import { isZero } from "../money/money.ts";
-import { resolveAgencyPosting } from '../inventory/drop-ship-agency.ts';
 import { and, asc, eq, sql } from "drizzle-orm";
 import { toUnits } from "../money/money.ts";
 import { db, schema } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { assertPeriodModulesOpen, closeModuleForDocument } from "../periods/period-policy.ts";
-import { resolveBillInventoryAccounts } from "../inventory/documents-purchasing.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
@@ -139,7 +137,7 @@ export async function regenerateGlImpactTx(
     };
   }
   deps = await resolveMarketplaceClearingForDocument(tx, doc, deps);
-  deps = { ...deps, agencyByLine: await resolveAgencyPosting(tx, doc.orgId, doc.id) };
+  deps = { ...deps, agencyByLine: await postingLineHooks.require("inventory").replayAgencyByLine(tx, doc.orgId, doc.id) };
   if ((doc.kind === "customer_invoice" || doc.kind === "cash_sale") && !deps.deferralAccountByLine) {
     deps = {
       ...deps,
@@ -203,7 +201,7 @@ export async function regenerateGlImpactTx(
   if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {
     deps = {
       ...deps,
-      inventoryAssetByLine: await resolveBillInventoryAccounts(
+      inventoryAssetByLine: await postingLineHooks.require("inventory").billInventoryAccounts(
         tx,
         doc.orgId,
         doc.id,

@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
-import { assertReturnSourceSelectable, type ReturnSide } from "../inventory/returnable-sources.ts";
-import { InventoryError } from "../inventory/contracts.ts";
+import { postingPreconditionHooks, type ReturnSide } from "../journal/posting-preconditions.ts";
 import { cmp } from "../money/money.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { DocumentEditError } from "../records/document-edit-policy.ts";
@@ -89,27 +88,21 @@ export async function applyInventoryReturnSelections(
         `Line ${i + 1}: choose the credit's subsidiary before choosing what this credit returns; nothing was changed`,
       );
     }
-    try {
-      await assertReturnSourceSelectable(
-        tx,
-        orgId,
-        {
-          side,
-          partyId: partyId ?? null,
-          itemId: prepared.itemId,
-          stockLocationId: selection.sourceStockLocationId ?? prepared.stockLocationId,
-          movementId: selection.movementId,
-          subsidiaryIds: [creditSubsidiaryId],
-          lotId: selection.lotId ?? null,
-          serialId: selection.serialId ?? null,
-        },
-        `Line ${i + 1}`,
-      );
-    } catch (error) {
-      if (error instanceof InventoryError)
-        throw new DocumentEditError(422, `${error.message}; nothing was changed`);
-      throw error;
-    }
+    await postingPreconditionHooks.require("inventory").assertReturnSourceSelectable(
+      tx,
+      orgId,
+      {
+        side,
+        partyId: partyId ?? null,
+        itemId: prepared.itemId,
+        stockLocationId: selection.sourceStockLocationId ?? prepared.stockLocationId,
+        movementId: selection.movementId,
+        subsidiaryIds: [creditSubsidiaryId],
+        lotId: selection.lotId ?? null,
+        serialId: selection.serialId ?? null,
+      },
+      `Line ${i + 1}`,
+    );
     // A stored no-goods-returned choice is replaced, not stacked: the line
     // returns goods again, so the allowance flag must go with the old state.
     const { inventoryAllowance: _replaced, ...withoutAllowance } = prepared.custom;

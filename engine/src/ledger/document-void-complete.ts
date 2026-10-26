@@ -26,7 +26,6 @@ import {
   assertPostingEffectsCompleteForVoid,
   refuseBilledCostSourceVoid,
 } from "./document-void-shared.ts";
-import { reverseBillInventoryReceipts } from "./document-void-inventory.ts";
 import {
   assertRetainageDrawVoidable,
   refuseDrawReleaseBehindLaterDraws,
@@ -174,7 +173,7 @@ export async function completeRequestedDocumentVoid(
           // double-received voids clean instead of stranding phantom stock.
           // Consumed stock refuses naming its consumers; anything else the
           // kernel cannot unwind keeps the manual two-leg correction below.
-          await reverseBillInventoryReceipts(tx, {
+          await voidRemedyHooks.require("inventory").reverseBillReceipts(tx, {
             orgId,
             billId: documentId,
             billNumber: String(doc.document_number),

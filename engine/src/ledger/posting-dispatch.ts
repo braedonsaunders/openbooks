@@ -4,10 +4,6 @@ import { effectivePostingDate } from "../journal/posting-contracts.ts";
 import type { DocumentScriptContext } from "../journal/posting-preconditions.ts";
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
-import { applyInventoryReturnsForVendorCredit } from "../inventory/documents-vendor-credits.ts";
-import { applyInventoryReturnsForCustomerCredit } from "../inventory/documents-customer-credits.ts";
-import { applyInventoryIssuesForInvoice } from "../inventory/documents-sales.ts";
-import { applyInventoryReceiptsForBill } from "../inventory/documents-purchasing.ts";
 import { createObligationsFromInvoice } from "../revenue/recognition.ts";
 import { postingEffectHooks } from "../journal/posting-effect-contributors.ts";
 import { hasStoredValueTenders, settleCashRefundTenders } from "../sales/document-tenders.ts";
@@ -55,7 +51,7 @@ export async function applyPostedInventoryEffects(
   actorId: string | null,
 ): Promise<void> {
   if (doc.kind === "customer_invoice" || doc.kind === "cash_sale") {
-    await applyInventoryIssuesForInvoice(doc.orgId, actorId, doc.id, postingDate,
+    await postingEffectHooks.require("inventory").issueForInvoice(doc.orgId, actorId, doc.id, postingDate,
       await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId));
   } else if (doc.kind === "vendor_bill") {
     // A posted vendor_bill carries its entry id by construction — the
@@ -67,17 +63,17 @@ export async function applyPostedInventoryEffects(
         `posted vendor bill ${doc.documentNumber} has no posted journal entry; inventory receipts cannot run`,
       );
     }
-    await applyInventoryReceiptsForBill(doc.orgId, actorId, doc.id, entryId, postingDate,
+    await postingEffectHooks.require("inventory").receiveForBill(doc.orgId, actorId, doc.id, entryId, postingDate,
       await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId));
   } else if (doc.kind === "vendor_credit") {
-    await applyInventoryReturnsForVendorCredit(doc.orgId, actorId, doc.id, postingDate,
+    await postingEffectHooks.require("inventory").returnForVendorCredit(doc.orgId, actorId, doc.id, postingDate,
       await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId));
   } else if (doc.kind === "customer_credit" || doc.kind === "cash_refund") {
     // The sell-side mirror of vendor_credit. Without it a sales return was
     // a purely commercial credit: revenue reversed, the goods never came
     // back into stock, and COGS kept the cost of units the customer had
     // returned. Cash refunds restock through the same return engine.
-    await applyInventoryReturnsForCustomerCredit(doc.orgId, actorId, doc.id, postingDate,
+    await postingEffectHooks.require("inventory").returnForCustomerCredit(doc.orgId, actorId, doc.id, postingDate,
       await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId));
   }
 }
