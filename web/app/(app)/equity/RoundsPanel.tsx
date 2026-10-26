@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer } from '@openbooks/ui'
 import type { RoundModelResult } from '@openbooks/engine/equity'
 import { add } from '@openbooks/engine/money/money'
-import { RegisteredListTable } from '@/components/registered-list-table'
+import { PagedTable } from '@/components/paged-table'
 import { MoneyInput } from '@/components/money-input'
 import { useMoney } from '@/components/money-provider'
 import { perShareFormatOptions } from '@/lib/equity-price'
@@ -51,7 +51,9 @@ export function EquityRoundsPanel({ view }: { view: RoundsViewData | null }) {
   return (
     <div className="space-y-3">
       <PendingActions context={view.context} filter={(request) => request.action === 'round_amendment' || request.action === 'round_void'} />
-      <RegisteredListTable
+      <PagedTable
+        prepared
+        searchable
         source="equity_rounds"
         rows={rows}
         rowClassName={(row) => (row.voidedOn ? 'text-slate-400 dark:text-slate-500' : undefined)}
@@ -307,7 +309,8 @@ function RoundModelDrawer({ context, closeHref }: { context: EquityContext; clos
               <Stat label={t('model.antiDilutionShares')} value={shares(r.antiDilutionShares)} />
               <Stat label={t('model.cashRounding')} value={money(r.investorCashRounding, { currency: context.currency })} />
             </section>
-            <RegisteredListTable
+            <PagedTable
+              prepared
               source="equity_round_model"
               rows={r.dilution}
               rowKey={(row) => row.key}
@@ -322,7 +325,8 @@ function RoundModelDrawer({ context, closeHref }: { context: EquityContext; clos
               ]}
             />
             {r.conversions.length > 0 && (
-              <RegisteredListTable
+              <PagedTable
+                prepared
                 source="equity_round_model_conversions"
                 rows={r.conversions}
                 rowKey={(row) => row.securityId}

@@ -6,7 +6,7 @@ import { SlidersHorizontal } from 'lucide-react'
 import { Badge, EmptyState, Popover, Select, TableCell, TableRow, cn } from '@openbooks/ui'
 import type { WaterfallScenario } from '@openbooks/engine/equity'
 import { add, cmp, formatMoney as fixedPlaces, isZero, neg, sum } from '@openbooks/engine/money/money'
-import { RegisteredListTable } from '@/components/registered-list-table'
+import { PagedTable } from '@/components/paged-table'
 import { ListFilterSelect } from '@/components/list-filter-select'
 import { HomePanel, HomeStatTile } from '@/components/module-home/client'
 import { MoneyInput, useGroupedAmountRefusal } from '@/components/money-input'
@@ -352,7 +352,8 @@ function WaterfallResults({ scenario, classOrder, pending, payoutsBy, onPayoutsB
         </HomePanel>
       )}
       {payoutsBy === 'class' ? (
-        <RegisteredListTable
+        <PagedTable
+          prepared
           source="equity_waterfall_classes"
           rows={lines}
           rowKey={(row) => row.key}
@@ -378,7 +379,9 @@ function WaterfallResults({ scenario, classOrder, pending, payoutsBy, onPayoutsB
           }
         />
       ) : (
-        <RegisteredListTable
+        <PagedTable
+          prepared
+          searchable
           source="equity_waterfall_holders"
           rows={result.holders}
           rowKey={(row) => row.holderPartyId}

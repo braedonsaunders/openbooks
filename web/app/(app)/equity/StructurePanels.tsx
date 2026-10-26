@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, SearchSelect, Textarea, UrlDrawer } from '@openbooks/ui'
 import type { ClassRow } from '@openbooks/engine/equity'
-import { RegisteredListTable } from '@/components/registered-list-table'
+import { PagedTable } from '@/components/paged-table'
 import { DateField } from '@/components/date-field'
 import { useAppAction } from '@/lib/use-app-action'
 import { EquityAsOfControl } from './AsOfControl'
@@ -40,7 +40,9 @@ export function EquityClassesPanel({ view }: { view: StructureViewData | null })
   return (
     <div className="space-y-3">
       <PendingActions context={context} filter={(request) => request.action === 'class_amendment' || request.action === 'split'} />
-      <RegisteredListTable
+      <PagedTable
+        prepared
+        searchable
         source="equity_share_classes"
         rows={view.classRows}
         rowKey={(row) => row.shareClassId}
@@ -219,7 +221,9 @@ export function EquityPlansPanel({ view }: { view: StructureViewData | null }) {
   return (
     <div className="space-y-3">
       <PendingActions context={context} filter={(request) => request.action === 'reserve_change'} />
-      <RegisteredListTable
+      <PagedTable
+        prepared
+        searchable
         source="equity_plans"
         rows={view.structure.plans}
         rowKey={(row) => row.id}
@@ -302,7 +306,9 @@ export function EquityStakeholdersPanel({ view }: { view: StakeholdersViewData |
   const percentText = usePercent()
   if (!view) return null
   return (
-    <RegisteredListTable
+    <PagedTable
+      prepared
+      searchable
       source="equity_stakeholders"
       rows={view.table.holders}
       rowKey={(row) => row.holderPartyId}

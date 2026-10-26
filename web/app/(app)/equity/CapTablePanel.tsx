@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { Badge, TableCell, TableRow } from '@openbooks/ui'
-import { RegisteredListTable } from '@/components/registered-list-table'
+import { PagedTable } from '@/components/paged-table'
 import { ListFilterSelect } from '@/components/list-filter-select'
 import { SearchInput } from '@/components/search-input'
 import { capTableExportHref } from '@/lib/equity-cap-table-export'
@@ -84,7 +84,8 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
     <div className="space-y-4">
       {!view.hasAccountPolicy && <PolicyBanner href={view.accountsSetupHref} />}
       <PendingActions context={context} filter={(request) => request.action === 'split' || request.action === 'class_amendment'} />
-      <RegisteredListTable
+      <PagedTable
+        prepared
         source={view.dimension === 'class' ? 'equity_cap_table_classes' : 'equity_cap_table_holders'}
         rows={layout.lines}
         rowKey={(line) => line.key}

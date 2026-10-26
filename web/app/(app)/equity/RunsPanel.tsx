@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, UrlDrawer } from '@openbooks/ui'
 import type { CompensationRunResult, InterestRunResult } from '@openbooks/engine/equity'
-import { RegisteredListTable } from '@/components/registered-list-table'
+import { PagedTable } from '@/components/paged-table'
 import { ListFilterSelect } from '@/components/list-filter-select'
 import { JournalEntryLink } from '@/components/journal-entry-link'
 import { MoneyProvider, useMoney } from '@/components/money-provider'
@@ -135,7 +135,9 @@ function RunsBody({ view }: { view: RunsViewData }) {
         <>
           {summary}
           {compensation && view.compensation && view.lines === 'expense' && (
-            <RegisteredListTable
+            <PagedTable
+              prepared
+              searchable
               source="equity_compensation_lines"
               rows={view.compensation.lines}
               rowKey={(row) => row.securityId}
@@ -160,7 +162,9 @@ function RunsBody({ view }: { view: RunsViewData }) {
             />
           )}
           {compensation && view.compensation && view.lines === 'releases' && (
-            <RegisteredListTable
+            <PagedTable
+              prepared
+              searchable
               source="equity_compensation_releases"
               rows={view.compensation.releases}
               rowKey={(row) => row.securityId}
@@ -185,7 +189,9 @@ function RunsBody({ view }: { view: RunsViewData }) {
             />
           )}
           {!compensation && view.interest && (
-            <RegisteredListTable
+            <PagedTable
+              prepared
+              searchable
               source="equity_interest_lines"
               rows={view.interest.lines}
               rowKey={(row) => row.securityId}
@@ -228,7 +234,8 @@ function RunHistoryDrawer({ view }: { view: RunsViewData }) {
       description={t('runs.historyDescription')}>
       <div className="p-4">
         {compensation ? (
-          <RegisteredListTable
+          <PagedTable
+            prepared
             source="equity_compensation_runs"
             rows={view.compensationRuns}
             rowKey={(row) => row.id}
@@ -243,7 +250,8 @@ function RunHistoryDrawer({ view }: { view: RunsViewData }) {
             ]}
           />
         ) : (
-          <RegisteredListTable
+          <PagedTable
+            prepared
             source="equity_interest_runs"
             rows={view.interestRuns}
             rowKey={(row) => row.id}

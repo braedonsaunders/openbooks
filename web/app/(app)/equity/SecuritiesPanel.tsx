@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { Badge } from '@openbooks/ui'
-import { RegisteredListTable, type RegisteredListColumn } from '@/components/registered-list-table'
+import { PagedTable, type PagedColumn } from '@/components/paged-table'
 import { ListFilterSelect } from '@/components/list-filter-select'
 import { useMoney } from '@/components/money-provider'
 import { EquityAsOfControl } from './AsOfControl'
@@ -33,7 +33,7 @@ export function EquitySecuritiesPanel({ view }: { view: SecuritiesViewData | nul
   const { context } = view
   const convertibleView = view.kind === 'safe' || view.kind === 'note'
   const convertibles = new Map(view.convertibles.map((row) => [row.securityId, row]))
-  const base: RegisteredListColumn<Row>[] = [
+  const base: PagedColumn<Row>[] = [
     {
       key: 'number', header: <>{t('securities.columns.number')}</>, headerClassName: HEAD, className: CELL,
       cell: (row) => <Link className={`font-mono ${LINK}`} href={row.href}>{row.securityNumber}</Link>,
@@ -85,7 +85,7 @@ export function EquitySecuritiesPanel({ view }: { view: SecuritiesViewData | nul
       ),
     },
   ]
-  const shareColumns: RegisteredListColumn<Row>[] = [
+  const shareColumns: PagedColumn<Row>[] = [
     {
       key: 'outstanding', header: <>{t('securities.columns.outstanding')}</>, headerClassName: NUM_HEAD, className: NUM_CELL,
       sortKey: 'outstanding', sortType: 'decimal', sortValue: (row) => row.outstandingAmount ?? row.outstanding,
@@ -94,7 +94,7 @@ export function EquitySecuritiesPanel({ view }: { view: SecuritiesViewData | nul
     { key: 'vested', header: <>{t('securities.columns.vested')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.vested ? shares(row.vested) : '—'}</>, sortKey: 'vested', sortType: 'decimal', sortValue: (row) => row.vested },
     { key: 'price', header: <>{t('securities.columns.price')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{price(row.price, row.currency)}</>, sortKey: 'price', sortType: 'decimal', sortValue: (row) => row.price },
   ]
-  const convertibleColumns: RegisteredListColumn<Row>[] = [
+  const convertibleColumns: PagedColumn<Row>[] = [
     { key: 'principal', header: <>{t('rounds.columns.principal')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.principal ? money(row.principal, { currency: row.currency }) : '—'}</>, sortKey: 'principal', sortType: 'decimal', sortValue: (row) => row.principal },
     { key: 'outstandingAmount', header: <>{t('securities.columns.outstanding')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.outstandingAmount !== null ? money(row.outstandingAmount, { currency: row.currency }) : '—'}</>, sortKey: 'outstanding', sortType: 'decimal', sortValue: (row) => row.outstandingAmount },
     {
@@ -110,7 +110,9 @@ export function EquitySecuritiesPanel({ view }: { view: SecuritiesViewData | nul
   return (
     <div className="space-y-3">
       <PendingActions context={context} filter={(request) => ['void', 'reverse', 'repurchase', 'repay', 'cancel_convertible', 'mfn_election', 'mfn_reversal'].includes(request.action)} />
-      <RegisteredListTable
+      <PagedTable
+        prepared
+        searchable
         source="equity_securities"
         rows={view.rows}
         rowKey={(row) => row.id}
