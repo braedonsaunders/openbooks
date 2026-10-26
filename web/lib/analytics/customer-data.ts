@@ -1316,7 +1316,10 @@ async function readCustomerData(
             and (d.id is null or d.kind not in ('customer_invoice', 'customer_credit'))
             and e.posting_date >= ${from}) as voids
       from ew e
+      -- Lines carry their entry's posting date: bounding them by it reads
+      -- the window's lines instead of every line the accounts ever held.
       join journal_lines l on l.entry_id = e.id and l.org_id = ${orgId}
+       and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
       join accounts a on a.id = l.account_id and a.org_id = ${orgId}
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = ${orgId}
       left join documents d on d.id = e.source_document_id and d.org_id = ${orgId}
