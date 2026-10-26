@@ -4,7 +4,6 @@ import { sql } from "drizzle-orm";
 import { analyticsQueryLive as analyticsQuery } from "../../../../../lib/analytics/query";
 import { normalizeMoney } from "@openbooks/engine/money";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date";
-import "../../../../../lib/authz";
 import { sentinelAccessDenied } from "../../../../../lib/analytics/sentinel-access";
 import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
 

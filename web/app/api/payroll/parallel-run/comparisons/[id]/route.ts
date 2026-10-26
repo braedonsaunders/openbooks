@@ -7,7 +7,6 @@ import {
   comparisonFindings,
   parallelComparisons,
 } from '@openbooks/engine/payroll/parallel-run-store'
-import '../../../../../../lib/feature-gates';
 import { isUuid } from '../../../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../../../lib/subsidiaries'
 import { notFound } from "@/lib/api/responses";

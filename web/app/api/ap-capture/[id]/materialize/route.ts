@@ -6,7 +6,6 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { materializeCapture, CaptureMaterializationError } from '@openbooks/engine/payables/ap-capture-service'
-import '../../../../../lib/authz';
 import { isUuid } from '../../../../../lib/list-params'
 import { apCaptureSubsidiaryScope } from '@openbooks/engine/records/file-cabinet-access'
 import { notFound } from "@/lib/api/responses";

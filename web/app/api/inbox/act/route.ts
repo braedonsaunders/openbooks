@@ -5,7 +5,6 @@ import {
   InboxError,
 } from "@openbooks/engine/inbox/runtime";
 import { TimeApprovalRefusal } from "@/lib/time-approval-refusal";
-import "../../../../lib/authz";
 import { inboxContext } from "../../../../lib/inbox-context";
 import { parseJsonBody } from "@/lib/api/json";
 import { z } from "zod";

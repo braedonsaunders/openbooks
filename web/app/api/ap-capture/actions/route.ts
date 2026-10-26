@@ -8,7 +8,6 @@ import { apCaptureReprocessJobId, enqueueApCapture } from '@openbooks/jobs'
 import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
 import { lockScopeRows, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import { CaptureMaterializationError, materializeCapture, type ActivatedCaptureRule } from '@openbooks/engine/payables/ap-capture-service'
-import '../../../../lib/authz';
 import { parseBulkActionIds } from '../../../../lib/api/bulk-ids'
 import { apCaptureSubsidiaryScope } from '@openbooks/engine/records/file-cabinet-access'
 

@@ -6,7 +6,6 @@ import { db } from '@openbooks/engine/platform/db'
 import { cmp, normalizeMoney } from '@openbooks/engine/money/money'
 import { createDraftAsset, placeDraftInService } from '@openbooks/engine/assets/asset-drafts'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
-import '../../../../../lib/feature-gates';
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { ensureDefaultCategory } from '../../../assets/categories/_ensure'

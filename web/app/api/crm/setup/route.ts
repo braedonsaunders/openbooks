@@ -9,7 +9,6 @@ import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { ensureCrmDefaults } from "@openbooks/engine/crm/crm";
 import { normalizeMoney } from "@openbooks/engine/money/money";
-import "../../../../lib/feature-gates";
 import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";

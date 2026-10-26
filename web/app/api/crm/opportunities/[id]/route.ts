@@ -16,7 +16,6 @@ import {
   type OpportunityStageRefusal,
 } from '@openbooks/engine/crm/crm-math'
 import { guardPermission } from '../../../../../lib/authz'
-import '../../../../../lib/feature-gates';
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadOpportunity } from '../../../../../lib/crm'

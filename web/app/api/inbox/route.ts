@@ -2,7 +2,6 @@ import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { listInbox, type InboxKind, type InboxSourceNotice } from "@openbooks/engine/inbox/runtime";
-import "../../../lib/authz";
 import { inboxContext, inboxCounts, INBOX_FILTER_KINDS, toInboxNoticeViews } from "../../../lib/inbox-context";
 import { pickString } from "../../../lib/list-params";
 

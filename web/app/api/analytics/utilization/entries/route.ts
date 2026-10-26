@@ -5,7 +5,6 @@ import { sql } from "drizzle-orm";
 import { analyticsQueryLive as analyticsQuery } from "../../../../../lib/analytics/query";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date";
 import { mul, mulDecimal } from "@openbooks/engine/money";
-import "../../../../../lib/feature-gates";
 import { flowRates, presentationCurrency } from "../../../../../lib/fx-presentation";
 import { isUuid } from "../../../../../lib/list-params";
 import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";

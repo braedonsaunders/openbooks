@@ -10,7 +10,6 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { CrmLifecycleRefusalError, promoteCrmAccount, transitionCrmAccountStage } from '@openbooks/engine/crm/crm'
 import { normalizeMoney } from '@openbooks/engine/money/money'
-import '../../../../../lib/feature-gates';
 import { isUuid } from '../../../../../lib/list-params'
 import { loadCrmAccount } from '../../../../../lib/crm'
 import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from '../../../../../lib/custom-fields'

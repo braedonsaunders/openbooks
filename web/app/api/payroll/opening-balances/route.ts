@@ -20,9 +20,7 @@ import {
 import { US_STATES } from '@openbooks/engine/payroll/us/rates'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
-import '../../../../lib/feature-gates';
 import { scopedOpeningBalances } from '../../../../lib/payroll-scoped-views'
-import '../../../../lib/list-params';
 import {
   saveItSurtaxSaldoCarryIns,
   SurtaxSaldoSaveError,

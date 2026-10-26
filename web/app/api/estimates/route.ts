@@ -1,7 +1,6 @@
 import { defineRoute } from '@/lib/api/route'
 import 'next/server';
 import { orderCreateBody, parseJsonBody } from '@/lib/api/json'
-import '../../../lib/feature-gates';
 import { createOrder } from '../_order/create'
 
 export const runtime = 'nodejs'

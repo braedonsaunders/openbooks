@@ -12,7 +12,6 @@ import {
 } from '@openbooks/engine/payroll/parallel-run-store'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
-import '../../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 
 const toleranceAmount = z.string().superRefine((value, ctx) => {

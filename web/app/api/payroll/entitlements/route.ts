@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { entitlementBalances } from '@openbooks/engine/payroll/entitlements/operations'
-import '../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";

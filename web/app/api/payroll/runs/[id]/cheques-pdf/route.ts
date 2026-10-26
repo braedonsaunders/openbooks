@@ -6,7 +6,6 @@ import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { PayrollError } from "@openbooks/engine/payroll/error";
 import { ScopeNotFoundError } from '@openbooks/engine/organization/scope';
 import { PdfTemplateValidationError } from '@openbooks/pdf';
-import '../../../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { db } from '@openbooks/engine/platform/db'
 import { sql } from 'drizzle-orm'

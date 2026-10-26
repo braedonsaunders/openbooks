@@ -8,7 +8,6 @@ import { db } from '@openbooks/engine/platform/db'
 import { loadWorkSchedules } from '@openbooks/engine/payroll/work-schedules/operations'
 import { UNRESTRICTED_SCOPE_REQUIRED } from '@openbooks/engine/organization/scope'
 import { guardSubsidiaryScope, type Authz } from '../../../lib/authz'
-import '../../../lib/feature-gates';
 import { isUuid } from '../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import { parseCycleDays } from '../../../lib/work-schedule-days'

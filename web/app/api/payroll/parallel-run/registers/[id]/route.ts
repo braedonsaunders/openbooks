@@ -9,7 +9,6 @@ import {
   deletePriorRegister,
   PriorRegisterNotFoundError,
 } from '@openbooks/engine/payroll/parallel-run-store'
-import '../../../../../../lib/feature-gates';
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { notFound } from "@/lib/api/responses";

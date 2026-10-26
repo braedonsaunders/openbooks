@@ -2,7 +2,6 @@ import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { MULTIPART_FRAMING_BYTES, parseFormDataBody } from '@/lib/api/form-data'
 import { NextResponse } from 'next/server'
-import '../../../lib/authz';
 import { CAPTURE_MAX_BATCH_BYTES, ingestCaptureFiles } from './ingest'
 
 export const runtime = 'nodejs'

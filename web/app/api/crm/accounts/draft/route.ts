@@ -4,7 +4,6 @@ import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/platform/db'
 import { ensureCrmDefaults } from '@openbooks/engine/crm/crm'
-import '../../../../../lib/feature-gates';
 import { parseJsonBody } from '@/lib/api/json'
 import { notFound } from "@/lib/api/responses";
 

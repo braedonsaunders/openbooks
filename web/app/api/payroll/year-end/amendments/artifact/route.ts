@@ -5,7 +5,6 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { filingArtifact } from '@openbooks/engine/payroll/yearend-amendments'
 import { orgYearEndFilings } from '@openbooks/engine/payroll/yearend'
-import '../../../../../../lib/feature-gates';
 import { isUuid } from '../../../../../../lib/list-params'
 import { suppliedValue } from '../../../../../../lib/payroll-decimal-refusal'
 import { guardPayrollFilingData, guardPayrollFilingRowIds } from '../../../subsidiary-scope'

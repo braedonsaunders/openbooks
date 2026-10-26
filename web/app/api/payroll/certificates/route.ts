@@ -16,7 +16,6 @@ import {
   packCertificates,
   payrollCertificate,
 } from '@openbooks/engine/payroll/certificates'
-import '../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";

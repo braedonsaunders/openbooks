@@ -8,7 +8,6 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { normalizeMoney } from '@openbooks/engine/money/money'
 import { guardPermission } from '../../../../lib/authz'
-import '../../../../lib/feature-gates';
 import { isUuid } from '../../../../lib/list-params'
 import { addCalendarDays, addMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { calculateForecast } from '../../../../lib/crm'

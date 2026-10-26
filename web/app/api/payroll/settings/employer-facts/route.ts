@@ -11,7 +11,6 @@ import { employerFactsFor } from "@openbooks/engine/payroll/employer-facts";
 import { listFilingAccounts } from "@openbooks/engine/payroll/filing";
 import { listPayrollEmployerFacts, upsertPayrollEmployerFact } from "@openbooks/engine/payroll/employer-fact-store";
 import { PayrollPackError, payrollPack } from "@openbooks/engine/payroll/packs";
-import "../../../../../lib/feature-gates";
 import { guardRootSubsidiaryScope } from "../../../../../lib/authz";
 import { isUuid } from "../../../../../lib/list-params";
 import { guardPayrollFilingAccounts } from "../../subsidiary-scope";

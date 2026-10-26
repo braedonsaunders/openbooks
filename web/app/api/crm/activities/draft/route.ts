@@ -6,8 +6,6 @@ import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
-import '../../../../../lib/feature-gates';
-import '../../../../../lib/list-params';
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.strictObject({

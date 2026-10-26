@@ -9,7 +9,6 @@ import { yearEndFiling } from '@openbooks/engine/payroll/filing-registry'
 import { PayrollPackError } from '@openbooks/engine/payroll/packs'
 import { PayrollError } from "@openbooks/engine/payroll/error";
 import { orgYearEndFilings } from '@openbooks/engine/payroll/yearend'
-import '../../../../../lib/feature-gates';
 import { payrollYearRefusal } from '../../../../../lib/payroll-year'
 import type { Authz } from '../../../../../lib/authz'
 import { guardPayrollRoeEmployees, guardPayrollFilingData } from '../../subsidiary-scope'

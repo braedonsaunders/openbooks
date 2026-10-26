@@ -7,7 +7,6 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { readPayRunGlProjection, rebuildPayRunGlProjection } from '@openbooks/engine/payroll/run-gl-rebuild'
 import { PayrollError } from "@openbooks/engine/payroll/error";
-import '../../../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";

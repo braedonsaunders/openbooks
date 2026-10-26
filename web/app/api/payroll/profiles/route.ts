@@ -27,7 +27,6 @@ import {
 } from '@openbooks/engine/payroll/certificates'
 import type { PayrollProfileExemptionFlag } from '@openbooks/engine/payroll/packs'
 import type { PayrollEmployeeFact } from '@openbooks/engine/payroll/employee-facts'
-import '../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { guardPayrollFilingAccounts, payrollVisibleScheduleFilter } from '../subsidiary-scope'

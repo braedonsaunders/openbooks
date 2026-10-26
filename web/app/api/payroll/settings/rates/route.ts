@@ -22,7 +22,6 @@ import {
   payrollTaxYearForDate,
 } from '@openbooks/engine/payroll/packs'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import '../../../../../lib/feature-gates';
 import { guardRootSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'

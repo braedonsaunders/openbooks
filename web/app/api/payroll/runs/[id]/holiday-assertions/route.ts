@@ -20,7 +20,6 @@ import {
   jurisdictionKey,
   occupationCapValues,
 } from '@openbooks/engine/payroll/packs'
-import '../../../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";

@@ -2,7 +2,6 @@ import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
-import "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
 import { parseJsonBody } from "../../../../lib/api/json";
 import { z } from "zod";

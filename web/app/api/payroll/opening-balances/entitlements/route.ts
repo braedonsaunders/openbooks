@@ -14,10 +14,8 @@ import {
 } from '@openbooks/engine/payroll/entitlements/operations'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
-import '../../../../../lib/feature-gates';
 import { scopedEntitlementOpenings } from '../../../../../lib/payroll-scoped-views'
 import { guardPayrollEmployees } from '../../subsidiary-scope'
-import '../../../../../lib/list-params';
 
 const entitlementAmount = z.string().superRefine((value, ctx) => {
   if (value.trim() === '') return
