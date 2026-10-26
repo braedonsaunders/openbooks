@@ -1,99 +1,145 @@
-import { defineRoute } from '@/lib/api/route'
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { crmOpportunityScope, crmSharedScope } from '../../../../../lib/crm-scope'
-import { jsonObject, parseJsonBody, validateJsonBody } from "@/lib/api/json"
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { promoteCrmAccount } from '@openbooks/engine/crm/crm'
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { crmOpportunityScope, crmSharedScope } from "@/lib/crm-scope";
+import { jsonObject, validateJsonBody } from "@/lib/api/json";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { promoteCrmAccount } from "@openbooks/engine/crm/crm";
 import {
   computeOpportunityTotals,
   validateContributionTotal,
   validateOpportunityStageTransition,
   type OpportunityStagePolicy,
   type OpportunityStageRefusal,
-} from '@openbooks/engine/crm/crm-math'
-import { guardPermission } from '../../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../../lib/features'
-import { isUuid } from '../../../../../lib/list-params'
-import { loadOpportunity } from '../../../../../lib/crm'
-import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from '../../../../../lib/custom-fields'
-import { isIsoCalendarDate } from '../../../../../lib/crm-dates'
-import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
-import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
-import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
-import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
+} from "@openbooks/engine/crm/crm-math";
+import { guardPermission } from "@/lib/authz";
+import { isFeatureEnabled } from "@/lib/features";
+import { isUuid } from "@/lib/list-params";
+import { loadOpportunity } from "@/lib/crm";
+import {
+  findUnownedCustomReferences,
+  loadFieldDefs,
+  unknownCustomFieldKey,
+  validateCustomValues,
+} from "@/lib/custom-fields";
+import { isIsoCalendarDate } from "@/lib/crm-dates";
+import { canonicalDecimal, compareDecimal } from "@/lib/exact-decimal";
+import { moneyRefusal } from "@/lib/payroll-decimal-refusal";
+import {
+  documentRevisionCounterSql,
+  isDocumentRevisionToken,
+} from "@openbooks/engine/records/revision";
+import { normalizeMoney, wholeDigits } from "@openbooks/engine/money";
 import { notFound } from "@/lib/api/responses";
 
-const nullableUuid = z.preprocess((value) => value === '' ? null : value, uuidString().nullable())
+const nullableUuid = z.preprocess(
+  (value) => (value === "" ? null : value),
+  uuidString().nullable(),
+);
 const decimalText = (field: string, nullable = false) => {
   const schema = z.string().superRefine((value, context) => {
-    const exact = canonicalDecimal(value, 4)
+    const exact = canonicalDecimal(value, 4);
     if (exact === null) {
-      context.addIssue({ code: 'custom', message: moneyRefusal(field, value, field.toLowerCase().includes('quantity') ? 'a quantity' : 'an amount') })
-    } else if (exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) {
-      context.addIssue({ code: 'custom', message: `${field} must fit the ledger (at most 15 whole digits)` })
+      context.addIssue({
+        code: "custom",
+        message: moneyRefusal(
+          field,
+          value,
+          field.toLowerCase().includes("quantity") ? "a quantity" : "an amount",
+        ),
+      });
+    } else if (exact.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) {
+      context.addIssue({
+        code: "custom",
+        message: `${field} must fit the ledger (at most 15 whole digits)`,
+      });
     }
-  })
-  return nullable ? schema.nullable() : schema
-}
+  });
+  return nullable ? schema.nullable() : schema;
+};
 const opportunityLineSchema = z.strictObject({
   itemId: uuidString(),
   description: z.string(),
-  quantity: decimalText('Line quantity'),
+  quantity: decimalText("Line quantity"),
   unit: z.string(),
-  unitPrice: decimalText('Line unit price'),
-  unitCost: z.union([decimalText('Line unit cost'), z.literal('')]).nullable().optional(),
+  unitPrice: decimalText("Line unit price"),
+  unitCost: z
+    .union([decimalText("Line unit cost"), z.literal("")])
+    .nullable()
+    .optional(),
   probability: z.number().int().min(0).max(100).nullable().optional(),
-})
+});
 const contributionSchema = z.strictObject({
   employeeId: uuidString(),
-  contributionPercent: decimalText('Sales-team contribution'),
+  contributionPercent: decimalText("Sales-team contribution"),
   isPrimary: z.boolean().optional(),
-})
-const optionalRangeMoney = (field: string) => z.preprocess(
-  (value) => value === '' ? null : value,
-  decimalText(field, true),
-).optional()
-const requestBodySchema = z.strictObject({
-  competitorNotes: z.string().nullable().optional(),
-  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
-  custom: z.record(z.string(), z.json()).optional(),
-  description: z.string().nullable(),
-  expectedCloseDate: z.preprocess((value) => value === '' ? null : value, z.string().refine(isIsoCalendarDate, 'expectedCloseDate must be a valid calendar date').nullable()),
-  expectedUpdatedAt: z.string().min(1),
-  forecastCategory: z.enum(['omitted', 'worst_case', 'most_likely', 'upside']),
-  isActive: z.boolean().optional(),
-  leadSourceId: nullableUuid,
-  lines: z.array(opportunityLineSchema),
-  nextStep: z.string().nullable(),
-  ownerUserId: nullableUuid,
-  partyId: nullableUuid,
-  primaryContactId: nullableUuid,
-  probability: z.number().int().min(0).max(100),
-  rangeHigh: optionalRangeMoney('Range high'),
-  rangeLow: optionalRangeMoney('Range low'),
-  salesTeamId: nullableUuid,
-  salesRepId: nullableUuid.optional(),
-  stageReason: z.string().nullable().optional(),
-  statusId: uuidString(),
-  team: z.array(contributionSchema).optional(),
-  title: z.string().trim().min(1),
-  winLossReason: z.string().nullable(),
-}).partial().superRefine((body, context) => {
-  for (const [field, value] of [['rangeLow', body.rangeLow], ['rangeHigh', body.rangeHigh]] as const) {
-    if (value != null && value !== '' && canonicalDecimal(value, 4) !== null && compareDecimal(value, '0') < 0) {
-      context.addIssue({ code: 'custom', path: [field], message: `${field} must be a non-negative amount` })
+});
+const optionalRangeMoney = (field: string) =>
+  z.preprocess((value) => (value === "" ? null : value), decimalText(field, true)).optional();
+const requestBodySchema = z
+  .strictObject({
+    competitorNotes: z.string().nullable().optional(),
+    currency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .optional(),
+    custom: z.record(z.string(), z.json()).optional(),
+    description: z.string().nullable(),
+    expectedCloseDate: z.preprocess(
+      (value) => (value === "" ? null : value),
+      z
+        .string()
+        .refine(isIsoCalendarDate, "expectedCloseDate must be a valid calendar date")
+        .nullable(),
+    ),
+    expectedUpdatedAt: z.string().min(1),
+    forecastCategory: z.enum(["omitted", "worst_case", "most_likely", "upside"]),
+    isActive: z.boolean().optional(),
+    leadSourceId: nullableUuid,
+    lines: z.array(opportunityLineSchema),
+    nextStep: z.string().nullable(),
+    ownerUserId: nullableUuid,
+    partyId: nullableUuid,
+    primaryContactId: nullableUuid,
+    probability: z.number().int().min(0).max(100),
+    rangeHigh: optionalRangeMoney("Range high"),
+    rangeLow: optionalRangeMoney("Range low"),
+    salesTeamId: nullableUuid,
+    salesRepId: nullableUuid.optional(),
+    stageReason: z.string().nullable().optional(),
+    statusId: uuidString(),
+    team: z.array(contributionSchema).optional(),
+    title: z.string().trim().min(1),
+    winLossReason: z.string().nullable(),
+  })
+  .partial()
+  .superRefine((body, context) => {
+    for (const [field, value] of [
+      ["rangeLow", body.rangeLow],
+      ["rangeHigh", body.rangeHigh],
+    ] as const) {
+      if (
+        value != null &&
+        value !== "" &&
+        canonicalDecimal(value, 4) !== null &&
+        compareDecimal(value, "0") < 0
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: [field],
+          message: `${field} must be a non-negative amount`,
+        });
+      }
     }
-  }
-})
+  });
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
-const CATEGORIES = ['omitted', 'worst_case', 'most_likely', 'upside']
-const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+const CATEGORIES = ["omitted", "worst_case", "most_likely", "upside"];
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 class OpportunityDisappeared extends Error {}
 class OpportunityContactMismatch extends Error {}
@@ -101,16 +147,16 @@ class OpportunityValidationError extends Error {}
 /** A stage-entry gate refusal that survives translation: the drawer keys its
  *  field highlight off `refusal`, never off the message wording. */
 class OpportunityStageRefusalError extends OpportunityValidationError {
-  readonly refusal: OpportunityStageRefusal
+  readonly refusal: OpportunityStageRefusal;
   constructor(refusal: OpportunityStageRefusal) {
-    super(STAGE_REFUSAL_MESSAGES[refusal])
-    this.refusal = refusal
+    super(STAGE_REFUSAL_MESSAGES[refusal]);
+    this.refusal = refusal;
   }
 }
 class OpportunityNotFound extends Error {}
 class OpportunityRevisionError extends Error {
   constructor(message: string) {
-    super(message)
+    super(message);
   }
 }
 /**
@@ -118,15 +164,15 @@ class OpportunityRevisionError extends Error {
  * shared mapping carries the operator-actionable message and logs the rest.
  */
 class OpportunityPermissionDenied extends Error {
-  readonly response: NextResponse
+  readonly response: NextResponse;
   constructor(response: NextResponse) {
-    super('permission denied')
-    this.response = response
+    super("permission denied");
+    this.response = response;
   }
 }
 
 function textOrNull(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 /**
@@ -143,15 +189,19 @@ function stagePolicyOf(status: Record<string, unknown>): OpportunityStagePolicy 
     requiresPrimaryContact: status.requires_primary_contact === true,
     requiresPositiveAmount: status.requires_positive_amount === true,
     requiresWinLossReason: status.requires_win_loss_reason === true,
-  }
+  };
 }
 
 /** A stage that declares nothing needs no subject, and in particular needs no
  *  stored line count — most saves are into ungated stages and must not pay for
  *  a query that can only ever return "allowed". */
 function stageGates(policy: OpportunityStagePolicy): boolean {
-  return policy.requiresLines || policy.requiresPrimaryContact
-    || policy.requiresPositiveAmount || policy.requiresWinLossReason
+  return (
+    policy.requiresLines ||
+    policy.requiresPrimaryContact ||
+    policy.requiresPositiveAmount ||
+    policy.requiresWinLossReason
+  );
 }
 
 /**
@@ -161,220 +211,349 @@ function stageGates(policy: OpportunityStagePolicy): boolean {
  * so rewording a message can never silently break the highlight again.
  */
 const STAGE_REFUSAL_MESSAGES: Record<OpportunityStageRefusal, string> = {
-  lines_required: 'this stage requires at least one line',
-  primary_contact_required: 'this stage requires a primary contact',
-  positive_amount_required: 'this stage requires a projected amount greater than zero',
-  win_loss_reason_required: 'a loss reason is required',
-}
+  lines_required: "this stage requires at least one line",
+  primary_contact_required: "this stage requires a primary contact",
+  positive_amount_required: "this stage requires a projected amount greater than zero",
+  win_loss_reason_required: "a loss reason is required",
+};
 
-async function storedLineCount(executor: QueryExecutor, opportunityId: string, orgId: string): Promise<number> {
-  const result = await executor.execute<{ count: string | number }>(sql`
+async function storedLineCount(
+  executor: QueryExecutor,
+  opportunityId: string,
+  orgId: string,
+): Promise<number> {
+  const result = await executor.execute<{ count: string | number }>(
+    sql`
     select count(*)::int as count from crm_opportunity_lines
-     where opportunity_id = ${opportunityId} and org_id = ${orgId}`, 'objects')
-  return Number(result[0]?.count ?? 0)
+     where opportunity_id = ${opportunityId} and org_id = ${orgId}`,
+    "objects",
+  );
+  return Number(result[0]?.count ?? 0);
 }
 
-type QueryExecutor = Pick<typeof db, 'execute'>
+type QueryExecutor = Pick<typeof db, "execute">;
 
 type LockedOpportunityRow = {
-  revision?: unknown
-  party_id: string | null
-  primary_contact_id: string | null
-  owner_user_id: string | null
-  sales_rep_id?: string | null
-  subsidiary_id?: string | null
-  sales_team_id: string | null
-  lead_source_id: string | null
-  status_id: string
-  probability: number | string
-  forecast_category: string
-  title: string
-  currency: string
-  win_loss_reason: string | null
-  custom: Record<string, unknown> | null
-  projected_amount: string | number
-  weighted_amount: string | number
-  is_active: boolean
+  revision?: unknown;
+  party_id: string | null;
+  primary_contact_id: string | null;
+  owner_user_id: string | null;
+  sales_rep_id?: string | null;
+  subsidiary_id?: string | null;
+  sales_team_id: string | null;
+  lead_source_id: string | null;
+  status_id: string;
+  probability: number | string;
+  forecast_category: string;
+  title: string;
+  currency: string;
+  win_loss_reason: string | null;
+  custom: Record<string, unknown> | null;
+  projected_amount: string | number;
+  weighted_amount: string | number;
+  is_active: boolean;
+};
+
+async function orgUuidExistsWith(
+  executor: QueryExecutor,
+  table: "parties" | "contacts" | "users" | "crm_sales_teams" | "crm_lead_sources",
+  id: string | null,
+  orgId: string,
+  lock = false,
+  allowed?: ReadonlySet<string> | null,
+): Promise<boolean> {
+  if (!id) return true;
+  if (!isUuid(id)) return false;
+  const lockClause = lock ? sql` for update` : sql``;
+  const result =
+    table === "parties"
+      ? await executor.execute(
+          sql`select 1 from parties where id = ${id} and org_id = ${orgId}${crmSharedScope(sql`subsidiary_id`, allowed)}${lockClause}`,
+          "objects",
+        )
+      : table === "contacts"
+        ? await executor.execute(
+            sql`select 1 from contacts where id = ${id} and org_id = ${orgId}${lockClause}`,
+            "objects",
+          )
+        : table === "users"
+          ? await executor.execute(
+              sql`select 1 from users where id = ${id} and org_id = ${orgId}${lockClause}`,
+              "objects",
+            )
+          : table === "crm_sales_teams"
+            ? await executor.execute(
+                sql`select 1 from crm_sales_teams where id = ${id} and org_id = ${orgId} and is_active${lockClause}`,
+                "objects",
+              )
+            : await executor.execute(
+                sql`select 1 from crm_lead_sources where id = ${id} and org_id = ${orgId} and is_active${lockClause}`,
+                "objects",
+              );
+  return result.length === 1;
 }
 
-async function orgUuidExistsWith(executor: QueryExecutor, table: 'parties' | 'contacts' | 'users' | 'crm_sales_teams' | 'crm_lead_sources', id: string | null, orgId: string, lock = false, allowed?: ReadonlySet<string> | null): Promise<boolean> {
-  if (!id) return true
-  if (!isUuid(id)) return false
-  const lockClause = lock ? sql` for update` : sql``
-  const result = table === 'parties'
-    ? await executor.execute(sql`select 1 from parties where id = ${id} and org_id = ${orgId}${crmSharedScope(sql`subsidiary_id`,allowed)}${lockClause}`, 'objects')
-    : table === 'contacts'
-      ? await executor.execute(sql`select 1 from contacts where id = ${id} and org_id = ${orgId}${lockClause}`, 'objects')
-      : table === 'users'
-        ? await executor.execute(sql`select 1 from users where id = ${id} and org_id = ${orgId}${lockClause}`, 'objects')
-        : table === 'crm_sales_teams'
-          ? await executor.execute(sql`select 1 from crm_sales_teams where id = ${id} and org_id = ${orgId} and is_active${lockClause}`, 'objects')
-          : await executor.execute(sql`select 1 from crm_lead_sources where id = ${id} and org_id = ${orgId} and is_active${lockClause}`, 'objects')
-  return result.length === 1
-}
-
-async function orgUuidExists(table: 'parties' | 'contacts' | 'users' | 'crm_sales_teams' | 'crm_lead_sources', id: string | null, orgId: string): Promise<boolean> {
-  return orgUuidExistsWith(db, table, id, orgId)
+async function orgUuidExists(
+  table: "parties" | "contacts" | "users" | "crm_sales_teams" | "crm_lead_sources",
+  id: string | null,
+  orgId: string,
+): Promise<boolean> {
+  return orgUuidExistsWith(db, table, id, orgId);
 }
 
 export const GET = defineRoute({
-  permission: 'crm.opportunities.read',
-  feature: 'crm',
-  params: z.object({ "id": z.string() }),
+  permission: "crm.opportunities.read",
+  feature: "crm",
+  params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const params = Promise.resolve(routeParams);
-    const { id } = await params
-    const opportunity = isUuid(id) ? await loadOpportunity(id, gate.user.orgId, gate.allowedSubsidiaryIds) : null
-    return opportunity ? NextResponse.json(opportunity) : notFound("record")
-
+    const { id } = await params;
+    const opportunity = isUuid(id)
+      ? await loadOpportunity(id, gate.user.orgId, gate.allowedSubsidiaryIds)
+      : null;
+    return opportunity ? NextResponse.json(opportunity) : notFound("record");
   },
-})
+});
 
 export const PATCH = defineRoute({
-  permission: 'crm.opportunities.manage',
-  feature: 'crm',
-  params: z.object({ "id": z.string() }),
-  handler: async ({ request: req, authz: gate, params: routeParams }) => {
+  permission: "crm.opportunities.manage",
+  feature: "crm",
+  params: z.object({ id: z.string() }),
+  body: jsonObject,
+  handler: async ({ authz: gate, params: routeParams, body: rawBody }) => {
     const params = Promise.resolve(routeParams);
-    const { user } = gate
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
-    const existing = (await db.execute<LockedOpportunityRow>(sql`
+    const { user } = gate;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
+    const existing = await db.execute<LockedOpportunityRow>(
+      sql`
       select o.*, s.is_closed, s.is_won from crm_opportunities o
       join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
-      where o.id = ${id} and o.org_id = ${user.orgId}${crmOpportunityScope(gate.allowedSubsidiaryIds)}`, 'objects'))
-    let current = existing[0]
-    if (!current) return notFound("record")
-    const rawBody = await parseJsonBody(req, jsonObject);
-    if (!rawBody.ok) return rawBody.response;
+      where o.id = ${id} and o.org_id = ${user.orgId}${crmOpportunityScope(gate.allowedSubsidiaryIds)}`,
+      "objects",
+    );
+    let current = existing[0];
+    if (!current) return notFound("record");
     // Mandatory optimistic-concurrency evidence (same contract as document,
     // payment, prebill-line, capture, and custom-record edits): the drawer
     // always saves a full-replace payload (header scalars + lines + team), so
     // two tabs must 409 instead of silently replacing each other. Checked after
     // the existence gate so a missing token never leaks opportunity existence.
-    const expectedUpdatedAt = rawBody.data.expectedUpdatedAt;
+    const expectedUpdatedAt = rawBody.expectedUpdatedAt;
     if (!isDocumentRevisionToken(expectedUpdatedAt)) {
-      return NextResponse.json({ error: 'A current opportunity revision is required; reload the opportunity and try again' }, { status: 409 })
+      return NextResponse.json(
+        {
+          error: "A current opportunity revision is required; reload the opportunity and try again",
+        },
+        { status: 409 },
+      );
     }
-    const parsedBody = validateJsonBody(rawBody.data, requestBodySchema, { status: 422 });
+    const parsedBody = validateJsonBody(rawBody, requestBodySchema, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data
-    let partyId = body.partyId === undefined ? current.party_id : textOrNull(body.partyId)
-    let contactId = body.primaryContactId === undefined ? current.primary_contact_id : textOrNull(body.primaryContactId)
-    let ownerUserId = body.ownerUserId === undefined ? current.owner_user_id : textOrNull(body.ownerUserId)
-    let salesRepId = body.salesRepId===undefined?current.sales_rep_id??null:textOrNull(body.salesRepId)
-    let salesTeamId = body.salesTeamId === undefined ? current.sales_team_id : textOrNull(body.salesTeamId)
-    let leadSourceId = body.leadSourceId === undefined ? current.lead_source_id : textOrNull(body.leadSourceId)
-    if (!await orgUuidExistsWith(db, 'parties', partyId, user.orgId, false, gate.allowedSubsidiaryIds)) return NextResponse.json({ error: 'invalid account' }, { status: 422 })
-    if (!await orgUuidExists('contacts', contactId, user.orgId)) return NextResponse.json({ error: 'invalid contact' }, { status: 422 })
-    if (contactId && !(await db.execute(sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId} and org_id = ${user.orgId}`, 'objects'))[0]) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
-    if (!await orgUuidExists('users', ownerUserId, user.orgId)) return NextResponse.json({ error: 'invalid owner' }, { status: 422 })
-    if (!await orgUuidExists('crm_sales_teams', salesTeamId, user.orgId)) return NextResponse.json({ error: 'invalid sales team' }, { status: 422 })
-    if (!await orgUuidExists('crm_lead_sources', leadSourceId, user.orgId)) return NextResponse.json({ error: 'invalid lead source' }, { status: 422 })
+    const body = parsedBody.data;
+    let partyId = body.partyId === undefined ? current.party_id : textOrNull(body.partyId);
+    let contactId =
+      body.primaryContactId === undefined
+        ? current.primary_contact_id
+        : textOrNull(body.primaryContactId);
+    let ownerUserId =
+      body.ownerUserId === undefined ? current.owner_user_id : textOrNull(body.ownerUserId);
+    let salesRepId =
+      body.salesRepId === undefined ? (current.sales_rep_id ?? null) : textOrNull(body.salesRepId);
+    let salesTeamId =
+      body.salesTeamId === undefined ? current.sales_team_id : textOrNull(body.salesTeamId);
+    let leadSourceId =
+      body.leadSourceId === undefined ? current.lead_source_id : textOrNull(body.leadSourceId);
+    if (
+      !(await orgUuidExistsWith(
+        db,
+        "parties",
+        partyId,
+        user.orgId,
+        false,
+        gate.allowedSubsidiaryIds,
+      ))
+    )
+      return NextResponse.json({ error: "invalid account" }, { status: 422 });
+    if (!(await orgUuidExists("contacts", contactId, user.orgId)))
+      return NextResponse.json({ error: "invalid contact" }, { status: 422 });
+    if (
+      contactId &&
+      !(
+        await db.execute(
+          sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId} and org_id = ${user.orgId}`,
+          "objects",
+        )
+      )[0]
+    )
+      return NextResponse.json(
+        { error: "contact does not belong to the account" },
+        { status: 422 },
+      );
+    if (!(await orgUuidExists("users", ownerUserId, user.orgId)))
+      return NextResponse.json({ error: "invalid owner" }, { status: 422 });
+    if (!(await orgUuidExists("crm_sales_teams", salesTeamId, user.orgId)))
+      return NextResponse.json({ error: "invalid sales team" }, { status: 422 });
+    if (!(await orgUuidExists("crm_lead_sources", leadSourceId, user.orgId)))
+      return NextResponse.json({ error: "invalid lead source" }, { status: 422 });
 
-    let statusId = body.statusId === undefined ? current.status_id : textOrNull(body.statusId)
-    if (!statusId || !isUuid(statusId)) return NextResponse.json({ error: 'status is required' }, { status: 422 })
-    const status = (await db.execute(sql`
-      select * from crm_opportunity_statuses where id = ${statusId} and org_id = ${user.orgId} and is_active`, 'objects'))
-    const initialStatus = status[0]
-    if (!initialStatus) return NextResponse.json({ error: 'invalid status' }, { status: 422 })
-    let nextStatus = initialStatus
+    let statusId = body.statusId === undefined ? current.status_id : textOrNull(body.statusId);
+    if (!statusId || !isUuid(statusId))
+      return NextResponse.json({ error: "status is required" }, { status: 422 });
+    const status = await db.execute(
+      sql`
+      select * from crm_opportunity_statuses where id = ${statusId} and org_id = ${user.orgId} and is_active`,
+      "objects",
+    );
+    const initialStatus = status[0];
+    if (!initialStatus) return NextResponse.json({ error: "invalid status" }, { status: 422 });
+    let nextStatus = initialStatus;
     if (nextStatus.is_closed) {
-      const closeGate = await guardPermission('crm.opportunities.close')
-      if (closeGate instanceof NextResponse) return closeGate
+      const closeGate = await guardPermission("crm.opportunities.close");
+      if (closeGate instanceof NextResponse) return closeGate;
     }
-    let probability = body.probability === undefined
-      ? statusId !== current.status_id ? Number(nextStatus.probability) : Number(current.probability)
-      : Number(body.probability)
-    if (!Number.isInteger(probability) || probability < 0 || probability > 100) return NextResponse.json({ error: 'probability must be from 0 to 100' }, { status: 422 })
-    let category = body.forecastCategory ?? (statusId !== current.status_id ? nextStatus.default_forecast_category : current.forecast_category)
-    if (typeof category !== 'string' || !CATEGORIES.includes(category)) return NextResponse.json({ error: 'invalid forecast category' }, { status: 422 })
-    let title = body.title === undefined ? current.title : textOrNull(body.title)
-    if (!title) return NextResponse.json({ error: 'title is required' }, { status: 422 })
-    if (body.currency !== undefined && !(await isFeatureEnabled(user.orgId, 'multiCurrency'))) {
-      return notFound("record")
+    let probability =
+      body.probability === undefined
+        ? statusId !== current.status_id
+          ? Number(nextStatus.probability)
+          : Number(current.probability)
+        : Number(body.probability);
+    if (!Number.isInteger(probability) || probability < 0 || probability > 100)
+      return NextResponse.json({ error: "probability must be from 0 to 100" }, { status: 422 });
+    let category =
+      body.forecastCategory ??
+      (statusId !== current.status_id
+        ? nextStatus.default_forecast_category
+        : current.forecast_category);
+    if (typeof category !== "string" || !CATEGORIES.includes(category))
+      return NextResponse.json({ error: "invalid forecast category" }, { status: 422 });
+    let title = body.title === undefined ? current.title : textOrNull(body.title);
+    if (!title) return NextResponse.json({ error: "title is required" }, { status: 422 });
+    if (body.currency !== undefined && !(await isFeatureEnabled(user.orgId, "multiCurrency"))) {
+      return notFound("record");
     }
-    let currency = body.currency === undefined ? current.currency : String(body.currency).toUpperCase()
-    if (!(await db.execute(sql`select 1 from currencies where code = ${currency}`, 'objects'))[0]) return NextResponse.json({ error: 'invalid currency' }, { status: 422 })
-    let winLossReason = body.winLossReason === undefined ? current.win_loss_reason : textOrNull(body.winLossReason)
+    let currency =
+      body.currency === undefined ? current.currency : String(body.currency).toUpperCase();
+    if (!(await db.execute(sql`select 1 from currencies where code = ${currency}`, "objects"))[0])
+      return NextResponse.json({ error: "invalid currency" }, { status: 422 });
+    let winLossReason =
+      body.winLossReason === undefined ? current.win_loss_reason : textOrNull(body.winLossReason);
     // Stage policy is checked after the lines are parsed below: the gates read
     // the line count and the projected amount this save would produce, which do
     // not exist yet here.
     // The date column is a plain calendar date; refuse anything else here so a
     // Postgres cast failure can never escape the transaction as a 500.
-    const expectedCloseDate = body.expectedCloseDate === undefined ? undefined : textOrNull(body.expectedCloseDate)
-    if (body.expectedCloseDate != null && body.expectedCloseDate !== '' && !isIsoCalendarDate(expectedCloseDate)) {
-      return NextResponse.json({ error: 'expected close date must be a valid YYYY-MM-DD date' }, { status: 422 })
+    const expectedCloseDate =
+      body.expectedCloseDate === undefined ? undefined : textOrNull(body.expectedCloseDate);
+    if (
+      body.expectedCloseDate != null &&
+      body.expectedCloseDate !== "" &&
+      !isIsoCalendarDate(expectedCloseDate)
+    ) {
+      return NextResponse.json(
+        { error: "expected close date must be a valid YYYY-MM-DD date" },
+        { status: 422 },
+      );
     }
-    const lines = (body.lines)
-    let calculated: ReturnType<typeof computeOpportunityTotals> | null = null
-    let lineMathInputs: Parameters<typeof computeOpportunityTotals>[0] | null = null
+    const lines = body.lines;
+    let calculated: ReturnType<typeof computeOpportunityTotals> | null = null;
+    let lineMathInputs: Parameters<typeof computeOpportunityTotals>[0] | null = null;
     if (lines) {
-      if (!Array.isArray(lines)) return NextResponse.json({ error: 'lines must be an array' }, { status: 422 })
+      if (!Array.isArray(lines))
+        return NextResponse.json({ error: "lines must be an array" }, { status: 422 });
       try {
         lineMathInputs = lines.map((line) => {
-          const quantity = canonicalDecimal(line.quantity, 4)
-          if (quantity === null) throw new Error(moneyRefusal('line quantity', line.quantity, 'a quantity'))
-          const unitPrice = canonicalDecimal(line.unitPrice, 4)
-          if (unitPrice === null) throw new Error(moneyRefusal('line unit price', line.unitPrice))
+          const quantity = canonicalDecimal(line.quantity, 4);
+          if (quantity === null)
+            throw new Error(moneyRefusal("line quantity", line.quantity, "a quantity"));
+          const unitPrice = canonicalDecimal(line.unitPrice, 4);
+          if (unitPrice === null) throw new Error(moneyRefusal("line unit price", line.unitPrice));
           if (wholeDigits(quantity) > 15 || wholeDigits(unitPrice) > 15) {
-            throw new Error('line quantities and prices must fit the ledger (at most 15 whole digits)')
+            throw new Error(
+              "line quantities and prices must fit the ledger (at most 15 whole digits)",
+            );
           }
           // Cost is optional and absence is meaningful: null stores "not
           // costed", which reports no margin, as distinct from a zero cost,
           // which reports a 100% one. An empty string is what a cleared input
           // sends, so it reads as absence rather than as zero.
-          const rawUnitCost = line.unitCost
-          const unitCost = rawUnitCost == null || rawUnitCost === '' ? null : canonicalDecimal(rawUnitCost, 4)
-          if (rawUnitCost != null && rawUnitCost !== '' && unitCost === null) {
-            throw new Error(moneyRefusal('line unit cost', rawUnitCost))
+          const rawUnitCost = line.unitCost;
+          const unitCost =
+            rawUnitCost == null || rawUnitCost === "" ? null : canonicalDecimal(rawUnitCost, 4);
+          if (rawUnitCost != null && rawUnitCost !== "" && unitCost === null) {
+            throw new Error(moneyRefusal("line unit cost", rawUnitCost));
           }
           if (unitCost !== null && wholeDigits(unitCost) > 15) {
-            throw new Error('line costs must fit the ledger (at most 15 whole digits)')
+            throw new Error("line costs must fit the ledger (at most 15 whole digits)");
           }
           return {
             quantity,
             unitPrice: normalizeMoney(unitPrice),
             probability: line.probability == null ? null : Number(line.probability),
             unitCost: unitCost === null ? null : normalizeMoney(unitCost),
-          }
-        })
-        calculated = computeOpportunityTotals(lineMathInputs, probability)
+          };
+        });
+        calculated = computeOpportunityTotals(lineMathInputs, probability);
       } catch (error) {
-        return apiErrorResponse(error)
+        return apiErrorResponse(error);
       }
       for (const line of lines) {
-        if (!line.itemId || !isUuid(line.itemId) || !(await db.execute(sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active`, 'objects'))[0]) return NextResponse.json({ error: 'a valid item is required for every line' }, { status: 422 })
+        if (
+          !line.itemId ||
+          !isUuid(line.itemId) ||
+          !(
+            await db.execute(
+              sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active`,
+              "objects",
+            )
+          )[0]
+        )
+          return NextResponse.json(
+            { error: "a valid item is required for every line" },
+            { status: 422 },
+          );
       }
       // Stored inventory / assembly / kit lines stay. Turning Inventory off must
       // 404 a write that would persist a new one of those kinds.
-      if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
-        const stored = (await db.execute<{ item_id: string }>(sql`
+      if (!(await isFeatureEnabled(user.orgId, "inventory"))) {
+        const stored = await db.execute<{ item_id: string }>(
+          sql`
           select item_id from crm_opportunity_lines
-           where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`, 'objects'))
-        const storedIds = new Set(stored.map((row) => row.item_id))
+           where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`,
+          "objects",
+        );
+        const storedIds = new Set(stored.map((row) => row.item_id));
         for (const line of lines) {
-          if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue
-          const item = (await db.execute<{ kind: string }>(sql`
-            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`, 'objects'))
+          if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue;
+          const item = await db.execute<{ kind: string }>(
+            sql`
+            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`,
+            "objects",
+          );
           if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
-            return notFound("record")
+            return notFound("record");
           }
         }
       }
       // Stored equipment_charge lines stay. Turning Equipment off must
       // 404 a write that would persist a new one of those kinds.
-      if (!(await isFeatureEnabled(user.orgId, 'equipment'))) {
-        const stored = (await db.execute<{ item_id: string }>(sql`
+      if (!(await isFeatureEnabled(user.orgId, "equipment"))) {
+        const stored = await db.execute<{ item_id: string }>(
+          sql`
           select item_id from crm_opportunity_lines
-           where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`, 'objects'))
-        const storedIds = new Set(stored.map((row) => row.item_id))
+           where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`,
+          "objects",
+        );
+        const storedIds = new Set(stored.map((row) => row.item_id));
         for (const line of lines) {
-          if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue
-          const item = (await db.execute<{ kind: string }>(sql`
-            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`, 'objects'))
-          if (item[0] && item[0].kind === 'equipment_charge') {
-            return notFound("record")
+          if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue;
+          const item = await db.execute<{ kind: string }>(
+            sql`
+            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`,
+            "objects",
+          );
+          if (item[0] && item[0].kind === "equipment_charge") {
+            return notFound("record");
           }
         }
       }
@@ -382,327 +561,508 @@ export const PATCH = defineRoute({
     // Fast refusal on the unlocked snapshot, re-checked authoritatively inside
     // the write transaction below (same contract as every other preflight here).
     {
-      const policy = stagePolicyOf(nextStatus)
+      const policy = stagePolicyOf(nextStatus);
       const refusal = stageGates(policy)
         ? validateOpportunityStageTransition(
             {
-              lineCount: Array.isArray(lines) ? lines.length : await storedLineCount(db, id, user.orgId),
+              lineCount: Array.isArray(lines)
+                ? lines.length
+                : await storedLineCount(db, id, user.orgId),
               hasPrimaryContact: !!contactId,
-              projectedAmount: calculated ? calculated.projectedAmount : String(current.projected_amount),
+              projectedAmount: calculated
+                ? calculated.projectedAmount
+                : String(current.projected_amount),
               winLossReason,
             },
             policy,
           )
-        : null
-      if (refusal) return NextResponse.json({ error: STAGE_REFUSAL_MESSAGES[refusal], code: refusal }, { status: 422 })
+        : null;
+      if (refusal)
+        return NextResponse.json(
+          { error: STAGE_REFUSAL_MESSAGES[refusal], code: refusal },
+          { status: 422 },
+        );
     }
-    const team = body.team
-    const teamRows: Array<{ employeeId: string; contributionPercent: string; isPrimary?: boolean }> = []
+    const team = body.team;
+    const teamRows: Array<{
+      employeeId: string;
+      contributionPercent: string;
+      isPrimary?: boolean;
+    }> = [];
     if (team) {
-      if (!Array.isArray(team)) return NextResponse.json({ error: 'team must be an array' }, { status: 422 })
+      if (!Array.isArray(team))
+        return NextResponse.json({ error: "team must be an array" }, { status: 422 });
       for (const member of team) {
-        const contribution = canonicalDecimal(member.contributionPercent, 4)
+        const contribution = canonicalDecimal(member.contributionPercent, 4);
         if (contribution === null) {
-          return NextResponse.json({ error: moneyRefusal('sales-team contribution', member.contributionPercent, 'a percent') }, { status: 422 })
+          return NextResponse.json(
+            {
+              error: moneyRefusal(
+                "sales-team contribution",
+                member.contributionPercent,
+                "a percent",
+              ),
+            },
+            { status: 422 },
+          );
         }
-        if (wholeDigits(contribution) > 15) return NextResponse.json({ error: 'sales-team contributions must fit the ledger (at most 15 whole digits)' }, { status: 422 })
-        teamRows.push({ ...member, contributionPercent: normalizeMoney(contribution) })
+        if (wholeDigits(contribution) > 15)
+          return NextResponse.json(
+            { error: "sales-team contributions must fit the ledger (at most 15 whole digits)" },
+            { status: 422 },
+          );
+        teamRows.push({ ...member, contributionPercent: normalizeMoney(contribution) });
       }
-      try { validateContributionTotal(teamRows.map((member) => member.contributionPercent)) } catch (error) { return apiErrorResponse(error) }
-      if (teamRows.filter((member) => member.isPrimary).length !== 1) return NextResponse.json({ error: 'exactly one team member must be primary' }, { status: 422 })
-      for (const member of teamRows) if (!await orgUuidExists('parties', member.employeeId, user.orgId)) return NextResponse.json({ error: 'invalid sales team member' }, { status: 422 })
+      try {
+        validateContributionTotal(teamRows.map((member) => member.contributionPercent));
+      } catch (error) {
+        return apiErrorResponse(error);
+      }
+      if (teamRows.filter((member) => member.isPrimary).length !== 1)
+        return NextResponse.json(
+          { error: "exactly one team member must be primary" },
+          { status: 422 },
+        );
+      for (const member of teamRows)
+        if (!(await orgUuidExists("parties", member.employeeId, user.orgId)))
+          return NextResponse.json({ error: "invalid sales team member" }, { status: 422 });
     }
     const rangeMoney = (raw: unknown) => {
-      if (raw == null || raw === '') return null
-      const exact = canonicalDecimal(raw, 4)
-      if (exact === null) return 'unreadable'
-      if (compareDecimal(exact, '0') < 0) return 'invalid'
-      if (wholeDigits(exact) > 15) return 'too-wide'
-      return normalizeMoney(exact)
-    }
-    const rangeLow = body.rangeLow !== undefined ? rangeMoney(body.rangeLow) : undefined
-    const rangeHigh = body.rangeHigh !== undefined ? rangeMoney(body.rangeHigh) : undefined
-    if (rangeLow === 'unreadable') return NextResponse.json({ error: moneyRefusal('Range low', body.rangeLow) }, { status: 422 })
-    if (rangeHigh === 'unreadable') return NextResponse.json({ error: moneyRefusal('Range high', body.rangeHigh) }, { status: 422 })
-    if (rangeLow === 'invalid' || rangeHigh === 'invalid') return NextResponse.json({ error: 'range must be a non-negative amount' }, { status: 422 })
-    if (rangeLow === 'too-wide' || rangeHigh === 'too-wide') return NextResponse.json({ error: 'range must fit the ledger (at most 15 whole digits)' }, { status: 422 })
+      if (raw == null || raw === "") return null;
+      const exact = canonicalDecimal(raw, 4);
+      if (exact === null) return "unreadable";
+      if (compareDecimal(exact, "0") < 0) return "invalid";
+      if (wholeDigits(exact) > 15) return "too-wide";
+      return normalizeMoney(exact);
+    };
+    const rangeLow = body.rangeLow !== undefined ? rangeMoney(body.rangeLow) : undefined;
+    const rangeHigh = body.rangeHigh !== undefined ? rangeMoney(body.rangeHigh) : undefined;
+    if (rangeLow === "unreadable")
+      return NextResponse.json(
+        { error: moneyRefusal("Range low", body.rangeLow) },
+        { status: 422 },
+      );
+    if (rangeHigh === "unreadable")
+      return NextResponse.json(
+        { error: moneyRefusal("Range high", body.rangeHigh) },
+        { status: 422 },
+      );
+    if (rangeLow === "invalid" || rangeHigh === "invalid")
+      return NextResponse.json({ error: "range must be a non-negative amount" }, { status: 422 });
+    if (rangeLow === "too-wide" || rangeHigh === "too-wide")
+      return NextResponse.json(
+        { error: "range must fit the ledger (at most 15 whole digits)" },
+        { status: 422 },
+      );
 
     try {
       await db.transaction(async (tx) => {
-      // All values that default from the opportunity must come from the row
-      // locked by this write transaction.  The preflight snapshot above may have
-      // gone stale while validation was running; using it here would let a later
-      // save restore fields changed by an earlier concurrent save.
-      const lockedResult = (await tx.execute<LockedOpportunityRow>(sql`
+        // All values that default from the opportunity must come from the row
+        // locked by this write transaction.  The preflight snapshot above may have
+        // gone stale while validation was running; using it here would let a later
+        // save restore fields changed by an earlier concurrent save.
+        const lockedResult = await tx.execute<LockedOpportunityRow>(
+          sql`
         select o.*, ${documentRevisionCounterSql(sql`o.revision_seq`)} as revision,
                s.is_closed, s.is_won, s.probability as status_probability,
                s.default_forecast_category as status_default_forecast_category
           from crm_opportunities o
           join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
          where o.id = ${id} and o.org_id = ${user.orgId}${crmOpportunityScope(gate.allowedSubsidiaryIds)}
-         for update of o`, 'objects'))
-      current = lockedResult[0]
-      if (!current) throw new OpportunityDisappeared()
-      // Compared against the row locked by this write transaction, never the
-      // preflight snapshot (which may have gone stale during validation).
-      if (current.revision !== expectedUpdatedAt) {
-        throw new OpportunityRevisionError('This opportunity changed after you opened it; reload the opportunity and reapply your changes')
-      }
+         for update of o`,
+          "objects",
+        );
+        current = lockedResult[0];
+        if (!current) throw new OpportunityDisappeared();
+        // Compared against the row locked by this write transaction, never the
+        // preflight snapshot (which may have gone stale during validation).
+        if (current.revision !== expectedUpdatedAt) {
+          throw new OpportunityRevisionError(
+            "This opportunity changed after you opened it; reload the opportunity and reapply your changes",
+          );
+        }
 
-      partyId = body.partyId === undefined ? current.party_id : textOrNull(body.partyId)
-      contactId = body.primaryContactId === undefined ? current.primary_contact_id : textOrNull(body.primaryContactId)
-      ownerUserId = body.ownerUserId === undefined ? current.owner_user_id : textOrNull(body.ownerUserId)
-      salesRepId = body.salesRepId === undefined ? current.sales_rep_id ?? null : textOrNull(body.salesRepId)
-      salesTeamId = body.salesTeamId === undefined ? current.sales_team_id : textOrNull(body.salesTeamId)
-      leadSourceId = body.leadSourceId === undefined ? current.lead_source_id : textOrNull(body.leadSourceId)
-      statusId = body.statusId === undefined ? current.status_id : textOrNull(body.statusId)
-      // Every reference is checked again on the transaction connection after
-      // the opportunity lock.  The preflight checks intentionally remain for a
-      // fast response, but their unlocked snapshot may be stale by this point.
-      const lockedDb = tx as unknown as QueryExecutor
-      if (!await orgUuidExistsWith(lockedDb, 'parties', partyId, user.orgId, true, gate.allowedSubsidiaryIds)) {
-        throw new OpportunityValidationError('invalid account')
-      }
-      if (!await orgUuidExistsWith(lockedDb, 'contacts', contactId, user.orgId, true)) {
-        throw new OpportunityValidationError('invalid contact')
-      }
-      if (contactId && !(await tx.execute(sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId} and org_id = ${user.orgId} for update`, 'objects'))[0]) {
-        // The preflight contact check ran against an unlocked snapshot.  This
-        // check is against the account from the row we actually locked, so a
-        // concurrent party change fails closed before any write.
-        throw new OpportunityContactMismatch()
-      }
-      if (!await orgUuidExistsWith(lockedDb, 'users', ownerUserId, user.orgId, true)) {
-        throw new OpportunityValidationError('invalid owner')
-      }
-      if (!await orgUuidExistsWith(lockedDb, 'crm_sales_teams', salesTeamId, user.orgId, true)) {
-        throw new OpportunityValidationError('invalid sales team')
-      }
-      if (!await orgUuidExistsWith(lockedDb, 'crm_lead_sources', leadSourceId, user.orgId, true)) {
-        throw new OpportunityValidationError('invalid lead source')
-      }
+        partyId = body.partyId === undefined ? current.party_id : textOrNull(body.partyId);
+        contactId =
+          body.primaryContactId === undefined
+            ? current.primary_contact_id
+            : textOrNull(body.primaryContactId);
+        ownerUserId =
+          body.ownerUserId === undefined ? current.owner_user_id : textOrNull(body.ownerUserId);
+        salesRepId =
+          body.salesRepId === undefined
+            ? (current.sales_rep_id ?? null)
+            : textOrNull(body.salesRepId);
+        salesTeamId =
+          body.salesTeamId === undefined ? current.sales_team_id : textOrNull(body.salesTeamId);
+        leadSourceId =
+          body.leadSourceId === undefined ? current.lead_source_id : textOrNull(body.leadSourceId);
+        statusId = body.statusId === undefined ? current.status_id : textOrNull(body.statusId);
+        // Every reference is checked again on the transaction connection after
+        // the opportunity lock.  The preflight checks intentionally remain for a
+        // fast response, but their unlocked snapshot may be stale by this point.
+        const lockedDb = tx as unknown as QueryExecutor;
+        if (
+          !(await orgUuidExistsWith(
+            lockedDb,
+            "parties",
+            partyId,
+            user.orgId,
+            true,
+            gate.allowedSubsidiaryIds,
+          ))
+        ) {
+          throw new OpportunityValidationError("invalid account");
+        }
+        if (!(await orgUuidExistsWith(lockedDb, "contacts", contactId, user.orgId, true))) {
+          throw new OpportunityValidationError("invalid contact");
+        }
+        if (
+          contactId &&
+          !(
+            await tx.execute(
+              sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId} and org_id = ${user.orgId} for update`,
+              "objects",
+            )
+          )[0]
+        ) {
+          // The preflight contact check ran against an unlocked snapshot.  This
+          // check is against the account from the row we actually locked, so a
+          // concurrent party change fails closed before any write.
+          throw new OpportunityContactMismatch();
+        }
+        if (!(await orgUuidExistsWith(lockedDb, "users", ownerUserId, user.orgId, true))) {
+          throw new OpportunityValidationError("invalid owner");
+        }
+        if (
+          !(await orgUuidExistsWith(lockedDb, "crm_sales_teams", salesTeamId, user.orgId, true))
+        ) {
+          throw new OpportunityValidationError("invalid sales team");
+        }
+        if (
+          !(await orgUuidExistsWith(lockedDb, "crm_lead_sources", leadSourceId, user.orgId, true))
+        ) {
+          throw new OpportunityValidationError("invalid lead source");
+        }
 
-      if(salesTeamId && !(await tx.execute(sql`select 1 from crm_sales_teams where org_id=${user.orgId} and id=${salesTeamId} and is_active and subsidiary_id is not distinct from ${current.subsidiary_id??null} for share`, 'objects')).length) throw new OpportunityValidationError('Select an active sales team in the opportunity legal entity. Manage teams in Sales → Teams.')
-      if(salesRepId){const nativeEmployee=(await tx.execute(sql`select 1 from employee_roles e join parties p on p.org_id=e.org_id and p.id=e.party_id where e.org_id=${user.orgId} and e.party_id=${salesRepId} and e.is_active and e.is_sales_rep and p.is_active and p.subsidiary_id is not distinct from ${current.subsidiary_id??null} for share of e,p`, 'objects')).length;if(!nativeEmployee)throw new OpportunityValidationError('Select an active sales employee in the opportunity legal entity. Manage eligibility in Sales → Representatives.')}
-      // Re-read the selected status after the lock.  In particular, an
-      // explicitly submitted status may have been deactivated or moved to a
-      // different tenant since preflight; never use that stale row's lifecycle
-      // flags for a write.
-      const lockedStatusResult = await tx.execute(sql`
+        if (
+          salesTeamId &&
+          !(
+            await tx.execute(
+              sql`select 1 from crm_sales_teams where org_id=${user.orgId} and id=${salesTeamId} and is_active and subsidiary_id is not distinct from ${current.subsidiary_id ?? null} for share`,
+              "objects",
+            )
+          ).length
+        )
+          throw new OpportunityValidationError(
+            "Select an active sales team in the opportunity legal entity. Manage teams in Sales → Teams.",
+          );
+        if (salesRepId) {
+          const nativeEmployee = (
+            await tx.execute(
+              sql`select 1 from employee_roles e join parties p on p.org_id=e.org_id and p.id=e.party_id where e.org_id=${user.orgId} and e.party_id=${salesRepId} and e.is_active and e.is_sales_rep and p.is_active and p.subsidiary_id is not distinct from ${current.subsidiary_id ?? null} for share of e,p`,
+              "objects",
+            )
+          ).length;
+          if (!nativeEmployee)
+            throw new OpportunityValidationError(
+              "Select an active sales employee in the opportunity legal entity. Manage eligibility in Sales → Representatives.",
+            );
+        }
+        // Re-read the selected status after the lock.  In particular, an
+        // explicitly submitted status may have been deactivated or moved to a
+        // different tenant since preflight; never use that stale row's lifecycle
+        // flags for a write.
+        const lockedStatusResult = await tx.execute(
+          sql`
         select * from crm_opportunity_statuses
          where id = ${statusId} and org_id = ${user.orgId} and is_active
-         for update`, 'objects')
-      const lockedStatus = lockedStatusResult[0]
-      if (!lockedStatus) throw new OpportunityValidationError('invalid status')
-      nextStatus = lockedStatus
-      if (nextStatus.is_closed) {
-        const closeGate = await guardPermission('crm.opportunities.close')
-        if (closeGate instanceof NextResponse) throw new OpportunityPermissionDenied(closeGate)
-      }
-
-      probability = body.probability === undefined
-        ? statusId !== current.status_id ? Number(nextStatus.probability) : Number(current.probability)
-        : Number(body.probability)
-      category = body.forecastCategory ?? (statusId !== current.status_id ? nextStatus.default_forecast_category : current.forecast_category)
-      title = body.title === undefined ? current.title : textOrNull(body.title)
-      currency = body.currency === undefined ? current.currency : String(body.currency).toUpperCase()
-      winLossReason = body.winLossReason === undefined ? current.win_loss_reason : textOrNull(body.winLossReason)
-      if (!Number.isInteger(probability) || probability < 0 || probability > 100) {
-        throw new OpportunityValidationError('probability must be from 0 to 100')
-      }
-      if (typeof category !== 'string' || !CATEGORIES.includes(category)) throw new OpportunityValidationError('invalid forecast category')
-      if (!title) throw new OpportunityValidationError('title is required')
-      // Activation means "a real record, not a creation stub" — the drawer has
-      // no active toggle, so this computation is the only path to list
-      // visibility (a titled Closed-lost record saved without an
-      // account stayed inactive forever, invisible under Status=All while its
-      // drawer saved 200s). A titled opportunity activates with an account, on
-      // reaching a closed status (terminal records are complete), or while it
-      // is already active (reopening or unlinking the account must not vaporize
-      // a saved record from the list). The open-pipeline account check below
-      // still gates activation-with-account on a live account.
-      const willBeActive = body.isActive !== undefined
-        ? body.isActive === true
-        : (title !== 'New opportunity' && (!!partyId || nextStatus.is_closed || current.is_active))
-      if (partyId && willBeActive && !nextStatus.is_closed) {
-        // The account was locked above; a concurrent retirement cannot be
-        // missed or race this activation. Legacy work may still be closed.
-        const party = await tx.execute(sql`select is_active from parties where id=${partyId} and org_id=${user.orgId}`, 'objects')
-        if (!party[0]?.is_active) throw new OpportunityValidationError('an active account is required for open opportunities')
-      }
-      if (body.currency !== undefined && !(await isFeatureEnabled(user.orgId, 'multiCurrency'))) {
-        throw new OpportunityNotFound()
-      }
-      if (!(await tx.execute(sql`select 1 from currencies where code = ${currency}`, 'objects'))[0]) {
-        throw new OpportunityValidationError('invalid currency')
-      }
-      // Stage policy is enforced below, against the totals this write produces
-      // and the status row locked by this transaction.
-
-      // Custom values merge into the bag of the row locked above, so two saves
-      // of different keys cannot overwrite each other. PATCH values are
-      // partial: the effective bag is validated so a stored value satisfies
-      // an omitted required field.
-      let mergedCustom: Record<string, unknown> | undefined
-      if (body.custom !== undefined) {
-        const defs = await loadFieldDefs('crm_opportunities')
-        const unknownKey = unknownCustomFieldKey(defs, body.custom)
-        if (unknownKey) throw new OpportunityValidationError(`unknown custom field: ${unknownKey}`)
-        const existingCustom = current.custom ?? {}
-        const result = validateCustomValues(defs, { ...existingCustom, ...body.custom })
-        if (!result.ok) throw new OpportunityValidationError(Object.values(result.errors)[0]!)
-        // Reference values are uuid-shaped here but not yet proven to belong to
-        // this organization; supplied values only, so legacy bags cannot lock
-        // unrelated edits.
-        const suppliedCustom: Record<string, unknown> = {}
-        for (const key of Object.keys(body.custom)) {
-          if (result.cleaned[key] !== undefined) suppliedCustom[key] = result.cleaned[key]
+         for update`,
+          "objects",
+        );
+        const lockedStatus = lockedStatusResult[0];
+        if (!lockedStatus) throw new OpportunityValidationError("invalid status");
+        nextStatus = lockedStatus;
+        if (nextStatus.is_closed) {
+          const closeGate = await guardPermission("crm.opportunities.close");
+          if (closeGate instanceof NextResponse) throw new OpportunityPermissionDenied(closeGate);
         }
-        const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom)
-        if (unowned.length > 0) throw new OpportunityValidationError(`${unowned[0]!.label} not found in this organization`)
-        // Defined keys take the validated effective bag (a cleared value drops
-        // out); keys no definition names are preserved as stored.
-        mergedCustom = { ...existingCustom }
-        for (const def of defs) delete mergedCustom[def.key]
-        Object.assign(mergedCustom, result.cleaned)
-      }
 
-      // Item and team-member references are mutable too.  Validate them after
-      // locking and before the corresponding delete/insert pairs below.
-      // (The pre-lock block already rejected a non-array `lines`; re-check here
-      // so the narrowed element type survives into this closure.)
-      if (lines) {
-        if (!Array.isArray(lines)) throw new OpportunityValidationError('lines must be an array')
-        for (const line of lines) {
-          if (!line.itemId || !isUuid(line.itemId) || !(await tx.execute(sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active for update`, 'objects'))[0]) {
-            throw new OpportunityValidationError('a valid item is required for every line')
+        probability =
+          body.probability === undefined
+            ? statusId !== current.status_id
+              ? Number(nextStatus.probability)
+              : Number(current.probability)
+            : Number(body.probability);
+        category =
+          body.forecastCategory ??
+          (statusId !== current.status_id
+            ? nextStatus.default_forecast_category
+            : current.forecast_category);
+        title = body.title === undefined ? current.title : textOrNull(body.title);
+        currency =
+          body.currency === undefined ? current.currency : String(body.currency).toUpperCase();
+        winLossReason =
+          body.winLossReason === undefined
+            ? current.win_loss_reason
+            : textOrNull(body.winLossReason);
+        if (!Number.isInteger(probability) || probability < 0 || probability > 100) {
+          throw new OpportunityValidationError("probability must be from 0 to 100");
+        }
+        if (typeof category !== "string" || !CATEGORIES.includes(category))
+          throw new OpportunityValidationError("invalid forecast category");
+        if (!title) throw new OpportunityValidationError("title is required");
+        // Activation means "a real record, not a creation stub" — the drawer has
+        // no active toggle, so this computation is the only path to list
+        // visibility (a titled Closed-lost record saved without an
+        // account stayed inactive forever, invisible under Status=All while its
+        // drawer saved 200s). A titled opportunity activates with an account, on
+        // reaching a closed status (terminal records are complete), or while it
+        // is already active (reopening or unlinking the account must not vaporize
+        // a saved record from the list). The open-pipeline account check below
+        // still gates activation-with-account on a live account.
+        const willBeActive =
+          body.isActive !== undefined
+            ? body.isActive === true
+            : title !== "New opportunity" &&
+              (!!partyId || nextStatus.is_closed || current.is_active);
+        if (partyId && willBeActive && !nextStatus.is_closed) {
+          // The account was locked above; a concurrent retirement cannot be
+          // missed or race this activation. Legacy work may still be closed.
+          const party = await tx.execute(
+            sql`select is_active from parties where id=${partyId} and org_id=${user.orgId}`,
+            "objects",
+          );
+          if (!party[0]?.is_active)
+            throw new OpportunityValidationError(
+              "an active account is required for open opportunities",
+            );
+        }
+        if (body.currency !== undefined && !(await isFeatureEnabled(user.orgId, "multiCurrency"))) {
+          throw new OpportunityNotFound();
+        }
+        if (
+          !(await tx.execute(sql`select 1 from currencies where code = ${currency}`, "objects"))[0]
+        ) {
+          throw new OpportunityValidationError("invalid currency");
+        }
+        // Stage policy is enforced below, against the totals this write produces
+        // and the status row locked by this transaction.
+
+        // Custom values merge into the bag of the row locked above, so two saves
+        // of different keys cannot overwrite each other. PATCH values are
+        // partial: the effective bag is validated so a stored value satisfies
+        // an omitted required field.
+        let mergedCustom: Record<string, unknown> | undefined;
+        if (body.custom !== undefined) {
+          const defs = await loadFieldDefs("crm_opportunities");
+          const unknownKey = unknownCustomFieldKey(defs, body.custom);
+          if (unknownKey)
+            throw new OpportunityValidationError(`unknown custom field: ${unknownKey}`);
+          const existingCustom = current.custom ?? {};
+          const result = validateCustomValues(defs, { ...existingCustom, ...body.custom });
+          if (!result.ok) throw new OpportunityValidationError(Object.values(result.errors)[0]!);
+          // Reference values are uuid-shaped here but not yet proven to belong to
+          // this organization; supplied values only, so legacy bags cannot lock
+          // unrelated edits.
+          const suppliedCustom: Record<string, unknown> = {};
+          for (const key of Object.keys(body.custom)) {
+            if (result.cleaned[key] !== undefined) suppliedCustom[key] = result.cleaned[key];
           }
+          const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom);
+          if (unowned.length > 0)
+            throw new OpportunityValidationError(
+              `${unowned[0]!.label} not found in this organization`,
+            );
+          // Defined keys take the validated effective bag (a cleared value drops
+          // out); keys no definition names are preserved as stored.
+          mergedCustom = { ...existingCustom };
+          for (const def of defs) delete mergedCustom[def.key];
+          Object.assign(mergedCustom, result.cleaned);
         }
-        if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
-          const stored = await tx.execute<{ item_id: string }>(sql`
-            select item_id from crm_opportunity_lines
-             where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`, 'objects')
-          const storedIds = new Set(stored.map((row) => row.item_id))
+
+        // Item and team-member references are mutable too.  Validate them after
+        // locking and before the corresponding delete/insert pairs below.
+        // (The pre-lock block already rejected a non-array `lines`; re-check here
+        // so the narrowed element type survives into this closure.)
+        if (lines) {
+          if (!Array.isArray(lines)) throw new OpportunityValidationError("lines must be an array");
           for (const line of lines) {
-            if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue
-            const item = await tx.execute<{ kind: string }>(sql`
-              select kind from items where id = ${line.itemId} and org_id = ${user.orgId} for update`, 'objects')
-            if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) throw new OpportunityNotFound()
+            if (
+              !line.itemId ||
+              !isUuid(line.itemId) ||
+              !(
+                await tx.execute(
+                  sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active for update`,
+                  "objects",
+                )
+              )[0]
+            ) {
+              throw new OpportunityValidationError("a valid item is required for every line");
+            }
           }
-        }
-        if (!(await isFeatureEnabled(user.orgId, 'equipment'))) {
-          const stored = await tx.execute<{ item_id: string }>(sql`
+          if (!(await isFeatureEnabled(user.orgId, "inventory"))) {
+            const stored = await tx.execute<{ item_id: string }>(
+              sql`
             select item_id from crm_opportunity_lines
-             where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`, 'objects')
-          const storedIds = new Set(stored.map((row) => row.item_id))
-          for (const line of lines) {
-            if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue
-            const item = await tx.execute<{ kind: string }>(sql`
-              select kind from items where id = ${line.itemId} and org_id = ${user.orgId} for update`, 'objects')
-            if (item[0]?.kind === 'equipment_charge') throw new OpportunityNotFound()
+             where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`,
+              "objects",
+            );
+            const storedIds = new Set(stored.map((row) => row.item_id));
+            for (const line of lines) {
+              if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue;
+              const item = await tx.execute<{ kind: string }>(
+                sql`
+              select kind from items where id = ${line.itemId} and org_id = ${user.orgId} for update`,
+                "objects",
+              );
+              if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind))
+                throw new OpportunityNotFound();
+            }
+          }
+          if (!(await isFeatureEnabled(user.orgId, "equipment"))) {
+            const stored = await tx.execute<{ item_id: string }>(
+              sql`
+            select item_id from crm_opportunity_lines
+             where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`,
+              "objects",
+            );
+            const storedIds = new Set(stored.map((row) => row.item_id));
+            for (const line of lines) {
+              if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue;
+              const item = await tx.execute<{ kind: string }>(
+                sql`
+              select kind from items where id = ${line.itemId} and org_id = ${user.orgId} for update`,
+                "objects",
+              );
+              if (item[0]?.kind === "equipment_charge") throw new OpportunityNotFound();
+            }
           }
         }
-      }
-      if (team) {
-        for (const member of teamRows) {
-          if (!await orgUuidExistsWith(lockedDb, 'parties', member.employeeId, user.orgId, true)) {
-            throw new OpportunityValidationError('invalid sales team member')
+        if (team) {
+          for (const member of teamRows) {
+            if (
+              !(await orgUuidExistsWith(lockedDb, "parties", member.employeeId, user.orgId, true))
+            ) {
+              throw new OpportunityValidationError("invalid sales team member");
+            }
           }
         }
-      }
-      if (lineMathInputs) calculated = computeOpportunityTotals(lineMathInputs, probability)
+        if (lineMathInputs) calculated = computeOpportunityTotals(lineMathInputs, probability);
 
-      // The authoritative stage gate. It runs against the status row locked by
-      // this transaction and the totals this write would leave behind, so a
-      // concurrently reconfigured stage cannot be satisfied by a stale snapshot,
-      // and it runs before the first line write so a refusal writes nothing.
-      //
-      // Every writer reaches the opportunity through this route, which is the
-      // point: the pipeline board, the drawer, data import, user scripts and the
-      // assistant all fail closed here rather than each carrying its own copy of
-      // the rules.
-      {
-        const policy = stagePolicyOf(nextStatus)
-        const refusal = stageGates(policy)
-          ? validateOpportunityStageTransition(
-              {
-                lineCount: Array.isArray(lines) ? lines.length : await storedLineCount(lockedDb, id, user.orgId),
-                hasPrimaryContact: !!contactId,
-                projectedAmount: calculated ? calculated.projectedAmount : String(current.projected_amount),
-                winLossReason,
-              },
-              policy,
-            )
-          : null
-        if (refusal) throw new OpportunityStageRefusalError(refusal)
-      }
+        // The authoritative stage gate. It runs against the status row locked by
+        // this transaction and the totals this write would leave behind, so a
+        // concurrently reconfigured stage cannot be satisfied by a stale snapshot,
+        // and it runs before the first line write so a refusal writes nothing.
+        //
+        // Every writer reaches the opportunity through this route, which is the
+        // point: the pipeline board, the drawer, data import, user scripts and the
+        // assistant all fail closed here rather than each carrying its own copy of
+        // the rules.
+        {
+          const policy = stagePolicyOf(nextStatus);
+          const refusal = stageGates(policy)
+            ? validateOpportunityStageTransition(
+                {
+                  lineCount: Array.isArray(lines)
+                    ? lines.length
+                    : await storedLineCount(lockedDb, id, user.orgId),
+                  hasPrimaryContact: !!contactId,
+                  projectedAmount: calculated
+                    ? calculated.projectedAmount
+                    : String(current.projected_amount),
+                  winLossReason,
+                },
+                policy,
+              )
+            : null;
+          if (refusal) throw new OpportunityStageRefusalError(refusal);
+        }
 
-      if (Array.isArray(lines) && calculated) {
-        await tx.execute(sql`delete from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId}`)
-        for (let index = 0; index < lines.length; index++) {
-          const input = lines[index]!
-          const math = calculated.lines[index]!
-          // A line without its own probability inherits the header; store null so
-          // a later header change can re-weight it (a stored copy of the header
-          // rate would be indistinguishable from an explicit per-line override).
-          await tx.execute(sql`
+        if (Array.isArray(lines) && calculated) {
+          await tx.execute(
+            sql`delete from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId}`,
+          );
+          for (let index = 0; index < lines.length; index++) {
+            const input = lines[index]!;
+            const math = calculated.lines[index]!;
+            // A line without its own probability inherits the header; store null so
+            // a later header change can re-weight it (a stored copy of the header
+            // rate would be indistinguishable from an explicit per-line override).
+            await tx.execute(sql`
             insert into crm_opportunity_lines
               (org_id, opportunity_id, line_number, item_id, description, quantity, unit, unit_price,
                amount, probability, expected_amount, unit_cost, cost_amount, created_by, updated_by)
             values (${user.orgId}, ${id}, ${index + 1}, ${input.itemId ?? null}, ${textOrNull(input.description)},
                     ${math.quantity}, ${textOrNull(input.unit)}, ${math.unitPrice}, ${math.amount},
                     ${input.probability == null ? null : math.probability},
-                    ${math.expectedAmount}, ${math.unitCost}, ${math.costAmount}, ${user.id}, ${user.id})`)
+                    ${math.expectedAmount}, ${math.unitCost}, ${math.costAmount}, ${user.id}, ${user.id})`);
+          }
         }
-      }
-      if (teamRows.length) {
-        await tx.execute(sql`delete from crm_opportunity_team_members where opportunity_id = ${id} and org_id = ${user.orgId}`)
-        for (const member of teamRows) await tx.execute(sql`
+        if (teamRows.length) {
+          await tx.execute(
+            sql`delete from crm_opportunity_team_members where opportunity_id = ${id} and org_id = ${user.orgId}`,
+          );
+          for (const member of teamRows)
+            await tx.execute(sql`
           insert into crm_opportunity_team_members
             (org_id, opportunity_id, employee_id, contribution_percent, is_primary, created_by, updated_by)
-          values (${user.orgId}, ${id}, ${member.employeeId}, ${member.contributionPercent}, ${member.isPrimary === true}, ${user.id}, ${user.id})`)
-      }
-      const projected = calculated?.projectedAmount ?? current.projected_amount
-      let weighted = calculated?.weightedAmount ?? current.weighted_amount
-      if (!calculated && probability !== Number(current.probability)) {
-        // The header probability moved but the lines were not resent (or the
-        // move came from a status default). Weighted must still follow the
-        // stored line detail: per-line overrides keep their rate, inherited
-        // lines take the new header rate, and weighted_amount = Σ expected.
-        const stored = await tx.execute<{ id: string; amount: string | number; probability: number | null }>(sql`
+          values (${user.orgId}, ${id}, ${member.employeeId}, ${member.contributionPercent}, ${member.isPrimary === true}, ${user.id}, ${user.id})`);
+        }
+        const projected = calculated?.projectedAmount ?? current.projected_amount;
+        let weighted = calculated?.weightedAmount ?? current.weighted_amount;
+        if (!calculated && probability !== Number(current.probability)) {
+          // The header probability moved but the lines were not resent (or the
+          // move came from a status default). Weighted must still follow the
+          // stored line detail: per-line overrides keep their rate, inherited
+          // lines take the new header rate, and weighted_amount = Σ expected.
+          const stored = await tx.execute<{
+            id: string;
+            amount: string | number;
+            probability: number | null;
+          }>(
+            sql`
           select id, amount, probability from crm_opportunity_lines
            where opportunity_id = ${id} and org_id = ${user.orgId}
-           order by line_number for update`, 'objects')
-        if (stored.length) {
-          // Rows written before inherited lines were stored as null carry a copy
-          // of the then-current header rate; treat those as inherited too.
-          const previousProbability = Number(current.probability)
-          const inherited = stored.map((line) => line.probability == null || Number(line.probability) === previousProbability)
-          const recalculated = computeOpportunityTotals(
-            stored.map((line, index) => ({
-              quantity: '1',
-              unitPrice: normalizeMoney(String(line.amount)),
-              probability: inherited[index] ? null : Number(line.probability),
-            })),
-            probability,
-          )
-          for (let index = 0; index < stored.length; index++) {
-            if (!inherited[index]) continue
-            await tx.execute(sql`
+           order by line_number for update`,
+            "objects",
+          );
+          if (stored.length) {
+            // Rows written before inherited lines were stored as null carry a copy
+            // of the then-current header rate; treat those as inherited too.
+            const previousProbability = Number(current.probability);
+            const inherited = stored.map(
+              (line) =>
+                line.probability == null || Number(line.probability) === previousProbability,
+            );
+            const recalculated = computeOpportunityTotals(
+              stored.map((line, index) => ({
+                quantity: "1",
+                unitPrice: normalizeMoney(String(line.amount)),
+                probability: inherited[index] ? null : Number(line.probability),
+              })),
+              probability,
+            );
+            for (let index = 0; index < stored.length; index++) {
+              if (!inherited[index]) continue;
+              await tx.execute(sql`
               update crm_opportunity_lines
                  set probability = null, expected_amount = ${recalculated.lines[index]!.expectedAmount},
                      updated_at = now(), updated_by = ${user.id}
-               where id = ${stored[index]!.id} and org_id = ${user.orgId}`)
+               where id = ${stored[index]!.id} and org_id = ${user.orgId}`);
+            }
+            weighted = recalculated.weightedAmount;
+          } else {
+            weighted = computeOpportunityTotals(
+              [{ quantity: "1", unitPrice: String(current.projected_amount) }],
+              probability,
+            ).weightedAmount;
           }
-          weighted = recalculated.weightedAmount
-        } else {
-          weighted = computeOpportunityTotals([{ quantity: '1', unitPrice: String(current.projected_amount) }], probability).weightedAmount
         }
-      }
-      // Monotonic revision advance (same idiom as document and prebill-line
-      // writers): every committed update moves the token forward, so equal
-      // strings really do mean "nothing changed since you read it".
-      await tx.execute(sql`
+        // Monotonic revision advance (same idiom as document and prebill-line
+        // writers): every committed update moves the token forward, so equal
+        // strings really do mean "nothing changed since you read it".
+        await tx.execute(sql`
         update crm_opportunities set
           title = ${title}, party_id = ${partyId}, primary_contact_id = ${contactId}, owner_user_id = ${ownerUserId}, sales_rep_id=${salesRepId},
           sales_team_id = ${salesTeamId}, status_id = ${statusId}, lead_source_id = ${leadSourceId},
@@ -719,84 +1079,133 @@ export const PATCH = defineRoute({
           closed_at = case when ${nextStatus.is_closed} then coalesce(closed_at, now()) else null end,
           is_active = ${willBeActive},
           updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
-        where id = ${id} and org_id = ${user.orgId}`)
-      if (statusId !== current.status_id || probability !== Number(current.probability) || category !== current.forecast_category) {
-        await tx.execute(sql`
+        where id = ${id} and org_id = ${user.orgId}`);
+        if (
+          statusId !== current.status_id ||
+          probability !== Number(current.probability) ||
+          category !== current.forecast_category
+        ) {
+          await tx.execute(sql`
           insert into crm_opportunity_stage_events
             (org_id, opportunity_id, from_status_id, to_status_id, probability, forecast_category, reason, created_by, updated_by)
           values (${user.orgId}, ${id}, ${current.status_id}, ${statusId}, ${probability}, ${category},
-                  ${textOrNull(body.stageReason)}, ${user.id}, ${user.id})`)
-      }
-      if (partyId) {
-        const promotion = await promoteCrmAccount(tx, { orgId: user.orgId, partyId, actorId: user.id, toStage: nextStatus.is_won ? 'customer' : 'prospect', sourceKind: 'opportunity', sourceId: id, reason: textOrNull(body.stageReason) })
-        // This route is CRM-gated, so lifecycle bookkeeping must land; a won
-        // opportunity additionally requires the AR role for its new customer.
-        if (!promotion.lifecycleApplied) {
-          throw new Error('CRM lifecycle transition was not applied')
+                  ${textOrNull(body.stageReason)}, ${user.id}, ${user.id})`);
         }
-        if (nextStatus.is_won && !promotion.customerRoleActive) {
-          throw new Error('customer role was not established while closing the opportunity as won')
+        if (partyId) {
+          const promotion = await promoteCrmAccount(tx, {
+            orgId: user.orgId,
+            partyId,
+            actorId: user.id,
+            toStage: nextStatus.is_won ? "customer" : "prospect",
+            sourceKind: "opportunity",
+            sourceId: id,
+            reason: textOrNull(body.stageReason),
+          });
+          // This route is CRM-gated, so lifecycle bookkeeping must land; a won
+          // opportunity additionally requires the AR role for its new customer.
+          if (!promotion.lifecycleApplied) {
+            throw new Error("CRM lifecycle transition was not applied");
+          }
+          if (nextStatus.is_won && !promotion.customerRoleActive) {
+            throw new Error(
+              "customer role was not established while closing the opportunity as won",
+            );
+          }
         }
-      }
-      await tx.execute(sql`
+        await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${user.orgId}, 'crm_opportunities', ${id}, 'update', ${JSON.stringify({ before: current, requested: body })}::jsonb, ${user.id})`)
-      })
+        values (${user.orgId}, 'crm_opportunities', ${id}, 'update', ${JSON.stringify({ before: current, requested: body })}::jsonb, ${user.id})`);
+      });
     } catch (error) {
-      const cause=error instanceof Error?error.cause:null
-      if(cause&&typeof cause==='object'&&'code' in cause&&cause.code==='23514'&&'message' in cause&&/sales|reason for reopening this opportunity/i.test(String(cause.message)))return apiErrorResponse(new OpportunityValidationError(String(cause.message)),{safeStatus:422})
-      if (error instanceof OpportunityDisappeared) return notFound("record")
-      if (error instanceof OpportunityRevisionError) return apiErrorResponse(error, { safeStatus: 409 })
-      if (error instanceof OpportunityNotFound) return notFound("record")
-      if (error instanceof OpportunityContactMismatch) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
-      if (error instanceof OpportunityStageRefusalError) return apiErrorResponse(error, { safeStatus: 422, details: { code: error.refusal } })
-      if (error instanceof OpportunityValidationError) return apiErrorResponse(error, { safeStatus: 422 })
-      if (error instanceof OpportunityPermissionDenied) return error.response
-      throw error
+      const cause = error instanceof Error ? error.cause : null;
+      if (
+        cause &&
+        typeof cause === "object" &&
+        "code" in cause &&
+        cause.code === "23514" &&
+        "message" in cause &&
+        /sales|reason for reopening this opportunity/i.test(String(cause.message))
+      )
+        return apiErrorResponse(new OpportunityValidationError(String(cause.message)), {
+          safeStatus: 422,
+        });
+      if (error instanceof OpportunityDisappeared) return notFound("record");
+      if (error instanceof OpportunityRevisionError)
+        return apiErrorResponse(error, { safeStatus: 409 });
+      if (error instanceof OpportunityNotFound) return notFound("record");
+      if (error instanceof OpportunityContactMismatch)
+        return NextResponse.json(
+          { error: "contact does not belong to the account" },
+          { status: 422 },
+        );
+      if (error instanceof OpportunityStageRefusalError)
+        return apiErrorResponse(error, { safeStatus: 422, details: { code: error.refusal } });
+      if (error instanceof OpportunityValidationError)
+        return apiErrorResponse(error, { safeStatus: 422 });
+      if (error instanceof OpportunityPermissionDenied) return error.response;
+      throw error;
     }
-    return NextResponse.json(await loadOpportunity(id, user.orgId, gate.allowedSubsidiaryIds))
-
+    return NextResponse.json(await loadOpportunity(id, user.orgId, gate.allowedSubsidiaryIds));
   },
-})
+});
 
 export const DELETE = defineRoute({
-  permission: 'crm.opportunities.manage',
-  feature: 'crm',
-  params: z.object({ "id": z.string() }),
+  permission: "crm.opportunities.manage",
+  feature: "crm",
+  params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const params = Promise.resolve(routeParams);
-    const { user } = gate
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
+    const { user } = gate;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
     const outcome = await db.transaction(async (tx) => {
       // Lock the row inside the caller's entity scope first. The estimate route
       // takes the same lock before it links a quote, so the linked-document
       // check below cannot interleave with a quote that is being attached; an
       // out-of-scope row reads exactly like a missing one.
-      const locked = await tx.execute<Record<string, unknown>>(sql`
+      const locked = await tx.execute<Record<string, unknown>>(
+        sql`
         select o.* from crm_opportunities o
          where o.id = ${id} and o.org_id = ${user.orgId}${crmOpportunityScope(gate.allowedSubsidiaryIds)}
-         for update of o`, 'objects')
-      const current = locked[0]
-      if (!current) return 'missing' as const
-      const linked = await tx.execute(sql`select 1 from crm_opportunity_documents where opportunity_id = ${id} and org_id = ${user.orgId} limit 1`, 'objects')
-      if (linked[0]) return 'linked' as const
-      await tx.execute(sql`delete from crm_opportunity_team_members where opportunity_id = ${id} and org_id = ${user.orgId}`)
-      await tx.execute(sql`delete from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId}`)
-      await tx.execute(sql`delete from crm_opportunity_stage_events where opportunity_id = ${id} and org_id = ${user.orgId}`)
+         for update of o`,
+        "objects",
+      );
+      const current = locked[0];
+      if (!current) return "missing" as const;
+      const linked = await tx.execute(
+        sql`select 1 from crm_opportunity_documents where opportunity_id = ${id} and org_id = ${user.orgId} limit 1`,
+        "objects",
+      );
+      if (linked[0]) return "linked" as const;
+      await tx.execute(
+        sql`delete from crm_opportunity_team_members where opportunity_id = ${id} and org_id = ${user.orgId}`,
+      );
+      await tx.execute(
+        sql`delete from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId}`,
+      );
+      await tx.execute(
+        sql`delete from crm_opportunity_stage_events where opportunity_id = ${id} and org_id = ${user.orgId}`,
+      );
       // Activity links are polymorphic (no FK). A link left pointing at a deleted
       // subject would fail the every-relationship-visible rule and hide the
       // activity from every restricted reader forever.
-      await tx.execute(sql`delete from crm_activity_links where org_id = ${user.orgId} and subject_kind = 'opportunity' and subject_id = ${id}`)
-      await tx.execute(sql`delete from crm_opportunities where id = ${id} and org_id = ${user.orgId}`)
+      await tx.execute(
+        sql`delete from crm_activity_links where org_id = ${user.orgId} and subject_kind = 'opportunity' and subject_id = ${id}`,
+      );
+      await tx.execute(
+        sql`delete from crm_opportunities where id = ${id} and org_id = ${user.orgId}`,
+      );
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${user.orgId}, 'crm_opportunities', ${id}, 'delete', ${JSON.stringify({ before: current })}::jsonb, ${user.id})`)
-      return 'deleted' as const
-    })
-    if (outcome === 'missing') return notFound("record")
-    if (outcome === 'linked') return NextResponse.json({ error: 'An opportunity with linked sales documents cannot be deleted; close it instead' }, { status: 422 })
-    return NextResponse.json({ ok: true })
-
+        values (${user.orgId}, 'crm_opportunities', ${id}, 'delete', ${JSON.stringify({ before: current })}::jsonb, ${user.id})`);
+      return "deleted" as const;
+    });
+    if (outcome === "missing") return notFound("record");
+    if (outcome === "linked")
+      return NextResponse.json(
+        { error: "An opportunity with linked sales documents cannot be deleted; close it instead" },
+        { status: 422 },
+      );
+    return NextResponse.json({ ok: true });
   },
-})
+});
