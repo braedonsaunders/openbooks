@@ -97,7 +97,13 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ["mock:features", `export async function isFeatureEnabled() { return true }`],
+  [
+    "mock:features",
+    `export async function isFeatureEnabled() { return true }
+     export async function guardFeaturePermission() {
+       return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+     }`,
+  ],
   [
     "mock:subcontracts",
     `
@@ -134,14 +140,24 @@ const mockSources = new Map<string, string>([
       export async function voidVendorPayApplication() { throw new Error("unexpected voidVendorPayApplication") }
     `,
   ],
+  [
+    "mock:subcontracts-read",
+    `const state = globalThis[Symbol.for('openbooks.subcontracts-route-test')]
+     export async function readSubcontractActionProjectScope() {
+       return { found: true, subsidiaryId: state.subsidiaryId, projectId: 'project-1' }
+     }
+     export async function readSubcontractDetail() { throw new Error('unexpected readSubcontractDetail') }`,
+  ],
 ]);
 
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/platform/db", "mock:db"],
   ["@openbooks/engine/organization/scope", "mock:subsidiary-scope"],
   ["@openbooks/engine/projects/subcontracts", "mock:subcontracts"],
+  ["@openbooks/engine/projects/subcontracts-read", "mock:subcontracts-read"],
   ["@/lib/authz", "mock:authz"],
   ["@/lib/features", "mock:features"],
+  ["@/lib/feature-gates", "mock:features"],
 ]);
 
 const hooks = registerHooks({
