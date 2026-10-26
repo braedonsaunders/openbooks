@@ -1,15 +1,13 @@
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { notFound } from '@/lib/api/responses'
-import { NextResponse } from 'next/server'
-import { submitChecklistStepApproval } from '@openbooks/engine/hrm/processes'
-import { guardPermission } from '../../../../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../../../../lib/features'
-import { isUuid } from '../../../../../../../lib/list-params'
-import { processErrorResponse } from '../../../_lib'
-import { completeStepBody } from '../../../bodies'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
+import { submitChecklistStepApproval } from "@openbooks/engine/hrm/processes";
+import { guardPermission } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import { processErrorResponse } from "../../../_lib";
+import { completeStepBody } from "../../../bodies";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Complete one checklist step. Managers (hrm.process.manage) and the step's
@@ -20,22 +18,22 @@ export const runtime = 'nodejs'
  * endpoint, and the service's ownership check (not this gate) is what
  * refuses a stranger — a widened gate with an unchanged refusal.
  */
+async function authorizeChecklistActor() {
+  const processGate = await guardPermission("hrm.process.read");
+  if (!(processGate instanceof NextResponse)) return processGate;
+  return guardPermission("hrm.self.read");
+}
+
 export const POST = defineRoute({
-  public: 'session',
+  authorize: () => authorizeChecklistActor(),
+  feature: "hrm",
   params: z.object({ stepId: z.string().min(1) }),
   body: completeStepBody,
   invalidBodyStatus: 400,
-  handler: async ({ params: routeParams, body: body }) => {
-    const processGate = await guardPermission('hrm.process.read')
-    const gate =
-      processGate instanceof NextResponse ? await guardPermission('hrm.self.read') : processGate
-    if (gate instanceof NextResponse) return gate
-    if (!(await isFeatureEnabled(gate.user.orgId, 'hrm'))) {
-      return notFound('record')
-    }
-    const { stepId } = routeParams
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
+    const { stepId } = routeParams;
     if (!isUuid(stepId))
-      return NextResponse.json({ error: 'step id must be a uuid' }, { status: 400 })
+      return NextResponse.json({ error: "step id must be a uuid" }, { status: 400 });
 
     try {
       await submitChecklistStepApproval({
@@ -43,10 +41,10 @@ export const POST = defineRoute({
         actorId: gate.user.id,
         stepId,
         ...body,
-      })
-      return NextResponse.json({ ok: true })
+      });
+      return NextResponse.json({ ok: true });
     } catch (e) {
-      return processErrorResponse(e)
+      return processErrorResponse(e);
     }
   },
-})
+});
