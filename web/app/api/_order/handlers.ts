@@ -1,28 +1,43 @@
-import { documentRevisionCounterSql } from "@openbooks/engine/records/revision"
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { deleteDocument, DeleteError } from '@openbooks/engine/ledger/document-delete'
-import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
-import { guardFeaturePermission } from '../../../lib/feature-gates'
-import { can, guardSubsidiaryScope } from '../../../lib/authz'
-import { isUuid } from '../../../lib/list-params'
-import { assignOrderLineWarehouse, convertOrder, ConversionError } from '../../../lib/order-cycle'
-import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
-import { assignWarehouseBody, jsonObject, parseJsonBody } from '@/lib/api/json'
-import { unexpectedServerError } from '../../../lib/api/unexpected'
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
+import { NextResponse } from "next/server";
+import type { Authz } from "@/lib/authz";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { deleteDocument, DeleteError } from "@openbooks/engine/ledger/document-delete";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { can, guardSubsidiaryScope } from "../../../lib/authz";
+import { isUuid } from "../../../lib/list-params";
+import { assignOrderLineWarehouse, convertOrder, ConversionError } from "../../../lib/order-cycle";
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../lib/features";
+import { assignWarehouseBody, jsonObject, parseJsonBody } from "@/lib/api/json";
+import { unexpectedServerError } from "../../../lib/api/unexpected";
 import { notFound } from "@/lib/api/responses";
-import { applyOrderEdit, OrderEditError, STALE_REVISION, staleRevision, type OrderEditServices, type OrderPatchBody, type OrderHandlerConfig } from '../../../lib/order-draft-edit'
-import { computeOrderTotals, exactOrderMoney, loadOrder, orderTaxProfileMap } from './lib'
-import { persistLineTaxComponents } from '../../../lib/bills.ts'
-import { activeStockLocations, profiledItemIds, resolveLineStockLocation } from '../../../lib/stock-locations'
-import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
-import { promoteCrmAccount } from '@openbooks/engine/crm/crm'
-import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/module'
-import { issueSalesOrder, SalesOrderIssueError } from '@openbooks/engine/sales/sales-orders'
-import { DocumentVoidError, requestDocumentVoid } from '@openbooks/engine/ledger/document-void'
-import { QUOTE_SUBJECT_TABLE, voidSignatureRequestsForSubject } from '@openbooks/engine/billing/quote-to-cash'
-export type { OrderHandlerConfig } from '../../../lib/order-draft-edit'
+import {
+  applyOrderEdit,
+  OrderEditError,
+  STALE_REVISION,
+  staleRevision,
+  type OrderEditServices,
+  type OrderPatchBody,
+  type OrderHandlerConfig,
+} from "../../../lib/order-draft-edit";
+import { computeOrderTotals, exactOrderMoney, loadOrder, orderTaxProfileMap } from "./lib";
+import { persistLineTaxComponents } from "../../../lib/bills.ts";
+import {
+  activeStockLocations,
+  profiledItemIds,
+  resolveLineStockLocation,
+} from "../../../lib/stock-locations";
+import { segmentRegistry, validateExtraDims } from "../../../lib/segments";
+import { promoteCrmAccount } from "@openbooks/engine/crm/crm";
+import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
+import { issueSalesOrder, SalesOrderIssueError } from "@openbooks/engine/sales/sales-orders";
+import { DocumentVoidError, requestDocumentVoid } from "@openbooks/engine/ledger/document-void";
+import {
+  QUOTE_SUBJECT_TABLE,
+  voidSignatureRequestsForSubject,
+} from "@openbooks/engine/billing/quote-to-cash";
+export type { OrderHandlerConfig } from "../../../lib/order-draft-edit";
 
 export const orderEditServices: OrderEditServices = {
   platform: { db, withOrgTransaction, sql, documentRevisionCounterSql },
@@ -37,7 +52,7 @@ export const orderEditServices: OrderEditServices = {
   sales: { issueSalesOrder, SalesOrderIssueError },
   documentVoid: { DocumentVoidError, requestDocumentVoid },
   signing: { voidSignatureRequestsForSubject, QUOTE_SUBJECT_TABLE },
-}
+};
 
 /**
  * Shared GET / PATCH / convert handlers for the three order-cycle modules.
@@ -52,54 +67,64 @@ export const orderEditServices: OrderEditServices = {
 
 /** GET: full order payload (header + lines + links) scoped to the org. */
 export function makeGET(cfg: OrderHandlerConfig) {
-  return async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-    const gate = await guardFeaturePermission(cfg.readPerm, 'orders')
-    if (gate instanceof NextResponse) return gate
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
+  return async function GET(
+    _req: Request,
+    { params }: { params: Promise<{ id: string }> },
+    authorized: Authz,
+  ) {
+    const gate = authorized;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
     return withOrgTransaction(gate.user.orgId, async () => {
       // Draft writers lock this aggregate before replacing its header/lines.
       // Hold its ownership stable from authorization through payload loading;
       // a concurrent rehome must not disclose the new subsidiary's values.
-      const owned = (await db.execute<{ subsidiaryId: string | null }>(
-        sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${gate.user.orgId} for share`, 'objects',
-      ))
-      if (!owned[0]) return notFound("record")
-      const denied = guardSubsidiaryScope(gate, owned[0].subsidiaryId)
-      if (denied) return denied
-      const order = await loadOrder(id, gate.user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
-      if (!order) return notFound("record")
-      return NextResponse.json(order)
-    })
-  }
+      const owned = await db.execute<{ subsidiaryId: string | null }>(
+        sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${gate.user.orgId} for share`,
+        "objects",
+      );
+      if (!owned[0]) return notFound("record");
+      const denied = guardSubsidiaryScope(gate, owned[0].subsidiaryId);
+      if (denied) return denied;
+      const order = await loadOrder(id, gate.user.orgId, cfg.kind, gate.allowedSubsidiaryIds);
+      if (!order) return notFound("record");
+      return NextResponse.json(order);
+    });
+  };
 }
 
 /** Shared PATCH boundary for order edits. */
 export function makePATCH(cfg: OrderHandlerConfig) {
-  return async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-    const gate = await guardFeaturePermission(cfg.createPerm, 'orders')
-    if (gate instanceof NextResponse) return gate
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
-
-    const parsedBody = await parseJsonBody(req, jsonObject)
-    if (!parsedBody.ok) return parsedBody.response
+  return async function PATCH(
+    _req: Request,
+    { params }: { params: Promise<{ id: string }> },
+    authorized: Authz,
+    parsedBody: Record<string, unknown>,
+  ) {
+    const gate = authorized;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
     try {
-      return await applyOrderEdit({
-        orgId: gate.user.orgId,
-        userId: gate.user.id,
-        user: gate.user,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-        permissions: gate.permissions,
-        services: orderEditServices,
-      }, cfg, id, parsedBody.data as OrderPatchBody)
+      return await applyOrderEdit(
+        {
+          orgId: gate.user.orgId,
+          userId: gate.user.id,
+          user: gate.user,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+          permissions: gate.permissions,
+          services: orderEditServices,
+        },
+        cfg,
+        id,
+        parsedBody as OrderPatchBody,
+      );
     } catch (error) {
       if (error instanceof OrderEditError) {
-        return NextResponse.json(error.body, { status: error.status })
+        return NextResponse.json(error.body, { status: error.status });
       }
-      throw error
+      throw error;
     }
-  }
+  };
 }
 /**
  * DELETE: remove a non-posting order (doc/lines/links). deleteDocument throws
@@ -107,102 +132,117 @@ export function makePATCH(cfg: OrderHandlerConfig) {
  * to a posted doc).
  */
 export function makeDELETE(cfg: OrderHandlerConfig) {
-  return async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-    const gate = await guardFeaturePermission(cfg.createPerm, 'orders')
-    if (gate instanceof NextResponse) return gate
-    const { user } = gate
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
+  return async function DELETE(
+    req: Request,
+    { params }: { params: Promise<{ id: string }> },
+    authorized: Authz,
+  ) {
+    const gate = authorized;
+    const { user } = gate;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
     // A missing/malformed body just means no revision token was supplied;
     // the fence below answers that with the same reload-and-retry 409 as a
     // stale token, so legacy empty-body deletes fail closed uniformly.
-    const parsedBody = await parseJsonBody(req, jsonObject)
+    const parsedBody = await parseJsonBody(req, jsonObject);
     const expectedUpdatedAt = parsedBody.ok
       ? (parsedBody.data as { expectedUpdatedAt?: string }).expectedUpdatedAt
-      : undefined
+      : undefined;
     return withOrgTransaction(user.orgId, async () => {
       // Draft discard is another lifecycle mutation. Own the same aggregate
       // lock used by issue/void before deleteDocument reads draft status, so a
       // delete that waited behind issuance cannot remove the issued order.
-      const owned = (await db.execute<{ subsidiaryId: string | null; updated_at: string }>(sql`
+      const owned = await db.execute<{ subsidiaryId: string | null; updated_at: string }>(
+        sql`
         select subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
           from documents
          where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
          for update
-      `, 'objects'))
-      if (!owned[0]) return notFound("record")
-      const denied = guardSubsidiaryScope(gate, owned[0].subsidiaryId)
-      if (denied) return denied
+      `,
+        "objects",
+      );
+      if (!owned[0]) return notFound("record");
+      const denied = guardSubsidiaryScope(gate, owned[0].subsidiaryId);
+      if (denied) return denied;
       if (staleRevision(expectedUpdatedAt, owned[0].updated_at)) {
-        return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
+        return NextResponse.json({ error: STALE_REVISION }, { status: 409 });
       }
-      await deleteDocument(id, user.id, user.orgId, { allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
-      return NextResponse.json({ ok: true })
+      await deleteDocument(id, user.id, user.orgId, {
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      });
+      return NextResponse.json({ ok: true });
     }).catch((error: unknown) => {
       if (error instanceof ScopeNotFoundError) {
-        return notFound("record")
+        return notFound("record");
       }
       if (error instanceof DeleteError) {
-        return NextResponse.json({ error: error.message }, { status: 422 })
+        return NextResponse.json({ error: error.message }, { status: 422 });
       }
-      throw error
-    })
-  }
+      throw error;
+    });
+  };
 }
 
 /** POST convert: pull the order forward into `targetKind` via convertOrder(). */
 export function makeConvertPOST(cfg: OrderHandlerConfig) {
-  return async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-    const gate = await guardFeaturePermission(cfg.convertPerm ? cfg.readPerm : cfg.createPerm, 'orders')
-    if (gate instanceof NextResponse) return gate
-    const { user } = gate
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
-    const parsedBody = await parseJsonBody(req, jsonObject)
-    if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data as {
-      targetKind?: string
-      expectedUpdatedAt?: string
-      creditOverrideReason?: string
-    }
-    if (!body.targetKind) return NextResponse.json({ error: 'targetKind required' }, { status: 400 })
+  return async function POST(
+    _req: Request,
+    { params }: { params: Promise<{ id: string }> },
+    authorized: Authz,
+    parsedBody: Record<string, unknown>,
+  ) {
+    const gate = authorized;
+    const { user } = gate;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
+    const body = parsedBody as {
+      targetKind?: string;
+      expectedUpdatedAt?: string;
+      creditOverrideReason?: string;
+    };
+    if (!body.targetKind)
+      return NextResponse.json({ error: "targetKind required" }, { status: 400 });
     if (cfg.convertPerm) {
-      const required = cfg.convertPerm(body.targetKind)
-      if (!can(gate, required)) return NextResponse.json({ error: `missing permission: ${required}` }, { status: 403 })
+      const required = cfg.convertPerm(body.targetKind);
+      if (!can(gate, required))
+        return NextResponse.json({ error: `missing permission: ${required}` }, { status: 403 });
     }
 
     // Scope check: the source must be this kind, in the caller's org, and
     // inside the caller's subsidiary scope.
-    const owns = (await db.execute<{ subsidiaryId: string | null; updated_at: string }>(
-      sql`select subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`, 'objects',
-    ))
-    const source = owns[0]
-    if (!source) return notFound("record")
-    const denied = guardSubsidiaryScope(gate, source.subsidiaryId)
-    if (denied) return denied
+    const owns = await db.execute<{ subsidiaryId: string | null; updated_at: string }>(
+      sql`select subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+      "objects",
+    );
+    const source = owns[0];
+    if (!source) return notFound("record");
+    const denied = guardSubsidiaryScope(gate, source.subsidiaryId);
+    if (denied) return denied;
     // Fulfillment and receipt conversions move stock and post value-carrying
     // inventory journals when Inventory is enabled, so they take items.post
     // on top of the order permission — the same authority the inventory
     // movement API demands (INVENTORY_ACTION_PERMISSIONS). Without it an
     // ar.create/ap.create-only caller posts inventory movements through
     // these convert endpoints. Refused by name before anything converts.
-    if ((body.targetKind === 'sales_fulfillment' || body.targetKind === 'purchase_receipt')
-      && (await isFeatureEnabled(user.orgId, 'inventory'))
-      && !can(gate, 'items.post')) {
-      return NextResponse.json({ error: 'missing permission: items.post' }, { status: 403 })
+    if (
+      (body.targetKind === "sales_fulfillment" || body.targetKind === "purchase_receipt") &&
+      (await isFeatureEnabled(user.orgId, "inventory")) &&
+      !can(gate, "items.post")
+    ) {
+      return NextResponse.json({ error: "missing permission: items.post" }, { status: 403 });
     }
     // Fence the conversion on the caller's revision before creating the
     // downstream document from a possibly outdated source view.
     if (staleRevision(body.expectedUpdatedAt, source.updated_at)) {
-      return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
+      return NextResponse.json({ error: STALE_REVISION }, { status: 409 });
     }
 
     try {
       const res = await convertOrder(user.orgId, user.id, id, body.targetKind, {
         creditOverrideReason: body.creditOverrideReason,
         expectedUpdatedAt: body.expectedUpdatedAt,
-      })
-      return NextResponse.json(res)
+      });
+      return NextResponse.json(res);
     } catch (e) {
       if (e instanceof ConversionError) {
         return NextResponse.json(
@@ -212,17 +252,17 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
             ...(e.details !== undefined ? { details: e.details } : {}),
           },
           { status: e.status },
-        )
+        );
       }
       if (e instanceof SalesOrderIssueError) {
         return NextResponse.json(
           { error: e.message, code: e.code, credit: e.details },
           { status: e.status },
-        )
+        );
       }
-      return unexpectedServerError('orders/create', e)
+      return unexpectedServerError("orders/create", e);
     }
-  }
+  };
 }
 
 /**
@@ -234,32 +274,36 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
  * changes no posted amount — it only routes future shipments/receipts.
  */
 export function makeAssignWarehousePOST(cfg: OrderHandlerConfig) {
-  return async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-    const gate = await guardFeaturePermission(cfg.createPerm, 'orders')
-    if (gate instanceof NextResponse) return gate
-    const { user } = gate
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
-    if (cfg.kind !== 'sales_order' && cfg.kind !== 'purchase_order') {
-      return NextResponse.json({ error: 'warehouse assignment applies to sales and purchase orders only' }, { status: 422 })
+  return async function POST(
+    _req: Request,
+    { params }: { params: Promise<{ id: string }> },
+    authorized: Authz,
+    body: ReturnType<typeof assignWarehouseBody.parse>,
+  ) {
+    const gate = authorized;
+    const { user } = gate;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
+    if (cfg.kind !== "sales_order" && cfg.kind !== "purchase_order") {
+      return NextResponse.json(
+        { error: "warehouse assignment applies to sales and purchase orders only" },
+        { status: 422 },
+      );
     }
-    const parsedBody = await parseJsonBody(req, assignWarehouseBody)
-    if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data
-
     // Scope check: the order must be this kind, in the caller's org, and
     // inside the caller's subsidiary scope. The engine re-locks the
     // aggregate and re-checks the revision inside its transaction, so a
     // row that changes after this probe still cannot be assigned stale.
-    const owns = (await db.execute<{ subsidiaryId: string | null; updated_at: string }>(
-      sql`select subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`, 'objects',
-    ))
-    const source = owns[0]
-    if (!source) return notFound("record")
-    const denied = guardSubsidiaryScope(gate, source.subsidiaryId)
-    if (denied) return denied
+    const owns = await db.execute<{ subsidiaryId: string | null; updated_at: string }>(
+      sql`select subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+      "objects",
+    );
+    const source = owns[0];
+    if (!source) return notFound("record");
+    const denied = guardSubsidiaryScope(gate, source.subsidiaryId);
+    if (denied) return denied;
     if (staleRevision(body.expectedUpdatedAt, source.updated_at)) {
-      return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
+      return NextResponse.json({ error: STALE_REVISION }, { status: 409 });
     }
 
     try {
@@ -270,10 +314,10 @@ export function makeAssignWarehousePOST(cfg: OrderHandlerConfig) {
         kind: cfg.kind,
         lineId: body.lineId,
         stockLocationId: body.stockLocationId,
-        expectedUpdatedAt: body.expectedUpdatedAt ?? '',
-      })
-      const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
-      return NextResponse.json(order)
+        expectedUpdatedAt: body.expectedUpdatedAt ?? "",
+      });
+      const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds);
+      return NextResponse.json(order);
     } catch (e) {
       if (e instanceof ConversionError) {
         return NextResponse.json(
@@ -283,9 +327,9 @@ export function makeAssignWarehousePOST(cfg: OrderHandlerConfig) {
             ...(e.details !== undefined ? { details: e.details } : {}),
           },
           { status: e.status },
-        )
+        );
       }
-      return unexpectedServerError('orders/assign-warehouse', e)
+      return unexpectedServerError("orders/assign-warehouse", e);
     }
-  }
+  };
 }
