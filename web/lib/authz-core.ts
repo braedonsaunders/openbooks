@@ -1,5 +1,6 @@
 import { actorPrincipal } from "@openbooks/engine/organization/actor-permissions";
 import "server-only";
+import { cache } from "react";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "@openbooks/engine/platform/database";
 import { denyInactiveExtensionPermissions, extensionPermissionAvailability } from "@openbooks/engine/organization/authority";
@@ -53,6 +54,15 @@ export async function resolveUserAuthz(user: SessionUser, runner: SqlExecutor = 
  * callers must treat null as holding no permission.
  */
 export async function resolveAuthzByUserId(orgId: string, userId: string, runner: SqlExecutor = db): Promise<Authz | null> {
+  // List sections, drawers and actions of one server render each re-resolve
+  // the viewer; they share one snapshot per render, like getAuthz. A caller's
+  // transaction runner always resolves on its own client.
+  return runner === db ? renderAuthzByUserId(orgId, userId) : authzByUserId(orgId, userId, runner);
+}
+
+const renderAuthzByUserId = cache((orgId: string, userId: string) => authzByUserId(orgId, userId, db));
+
+async function authzByUserId(orgId: string, userId: string, runner: SqlExecutor): Promise<Authz | null> {
   const row=await actorPrincipal(runner,orgId,userId);
   if (!row?.isActive) return null;
   return resolveUserAuthz({
