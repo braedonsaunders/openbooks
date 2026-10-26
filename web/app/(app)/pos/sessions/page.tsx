@@ -6,7 +6,7 @@ import { fromUnits } from '@openbooks/engine/money/money'
 import { listSessions, listUsableRegisters, type SessionListRow } from '@openbooks/engine/pos'
 import { ListPageLayout } from '@/components/page-layout'
 import { ListFilterSelect } from '@/components/list-filter-select'
-import { RegisteredListTable } from '@/components/registered-list-table'
+import { PagedTable } from '@/components/paged-table'
 import { PosSessionHost, SessionOpenLink } from '@/components/pos/session-history'
 import { requirePermission } from '@/lib/authz'
 import { requireFeatureEnabled } from '@/lib/feature-gates'
@@ -70,14 +70,15 @@ export default async function PosSessionsPage({ searchParams }: { searchParams: 
         />
       )}
     >
-      <RegisteredListTable
+      <PagedTable
+        prepared
         source="pos_sessions"
         rows={list.rows}
         rowKey={(row) => row.id}
         empty={t('history.empty')}
         basePath={BASE_PATH}
         currentParams={sp}
-        state={{ total: list.total, page, perPage }}
+        serverWindow={{ total: list.total, page, perPage }}
         searchable={false}
         toolbarAfter={(
           <div className="flex flex-wrap items-center gap-3">

@@ -171,10 +171,11 @@ test('session history reads one scoped, counted window with validated filters', 
   const page = await PosSessionsPage(sessionsSearch({ register: REGISTER, status: 'closed', page: '2', perPage: '10' }))
   const list = globalThis.__posCalls.find((call) => call.fn === 'listSessions')
   assert.deepEqual(list?.args, [ORG, { registerId: REGISTER, status: 'closed', limit: 10, offset: 10 }, scope])
-  const [table] = byName(page, 'RegisteredListTable')
+  const [table] = byName(page, 'PagedTable')
   assert.ok(table)
   assert.equal(table.props.source, 'pos_sessions')
-  assert.deepEqual(table.props.state, { total: 31, page: 2, perPage: 10 })
+  assert.equal(table.props.prepared, true)
+  assert.deepEqual(table.props.serverWindow, { total: 31, page: 2, perPage: 10 })
   assert.equal(byName(page, 'PosSessionHost').length, 1)
   const columns = table.props.columns as Array<{ key: string; cell: (row: unknown) => ReactNode }>
   const row = globalThis.__posSessions.rows[0]
