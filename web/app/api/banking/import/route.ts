@@ -55,37 +55,39 @@ interface ImportBody {
 
 const CANONICAL_BASE64 = /^(?:[a-zA-Z0-9+/]{4})*(?:[a-zA-Z0-9+/]{2}==|[a-zA-Z0-9+/]{3}=)?$/;
 
-const routeBodySchema = z.object({
-  accountId: uuidString().optional(),
-  source: z.enum(["ofx", "csv", "camt053", "bai2", "mt940"]).optional(),
-  text: z.string().optional(),
-  sourceBytesBase64: z.string().nullable().optional(),
-  filename: z.string().nullable().optional(),
-  contentType: z.string().nullable().optional(),
-  mapping: z
-    .object({
-      date: z.number().int().nonnegative(),
-      amount: z.number().int().nonnegative(),
-      description: z.number().int().nonnegative(),
-      counterpartyRef: z.number().int().nonnegative().optional(),
-      bankTransactionId: z.number().int().nonnegative().optional(),
-      debitAmount: z.number().int().nonnegative().optional(),
-    })
-    .optional(),
-  mode: z
-    .enum(["decode", "columns", "preview", "import"], {
-      error: "mode must be decode, columns, preview or import",
-    })
-    .optional(),
-  statementDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .nullable()
-    .optional(),
-  openingBalance: z.string().nullable().optional(),
-  closingBalance: z.string().nullable().optional(),
-  includePossibleDuplicates: z.boolean().optional(),
-});
+const routeBodySchema = z
+  .object({
+    accountId: uuidString().optional(),
+    source: z.enum(["ofx", "csv", "camt053", "bai2", "mt940"]).optional(),
+    text: z.string().optional(),
+    sourceBytesBase64: z.string().nullable().optional(),
+    filename: z.string().nullable().optional(),
+    contentType: z.string().nullable().optional(),
+    mapping: z
+      .object({
+        date: z.number().int().nonnegative(),
+        amount: z.number().int().nonnegative(),
+        description: z.number().int().nonnegative(),
+        counterpartyRef: z.number().int().nonnegative().optional(),
+        bankTransactionId: z.number().int().nonnegative().optional(),
+        debitAmount: z.number().int().nonnegative().optional(),
+      })
+      .optional(),
+    mode: z
+      .enum(["decode", "columns", "preview", "import"], {
+        error: "mode must be decode, columns, preview or import",
+      })
+      .optional(),
+    statementDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable()
+      .optional(),
+    openingBalance: z.string().nullable().optional(),
+    closingBalance: z.string().nullable().optional(),
+    includePossibleDuplicates: z.boolean().optional(),
+  })
+  .optional();
 
 /** Decode browser-upload evidence without accepting Node's permissive base64 aliases. */
 function uploadedSourceBytes(value: unknown): Buffer | null | "invalid" {
@@ -113,6 +115,9 @@ export const POST = defineRoute({
   body: routeBodySchema,
   maxBodyBytes: 10 * 1024 * 1024,
   handler: async ({ authz: routeAuthz, body: routeBody }) => {
+    if (routeBody === undefined) {
+      return NextResponse.json({ error: "invalid request body" }, { status: 400 });
+    }
     const gate = routeAuthz;
     const { user } = gate;
     const body = routeBody as ImportBody;
