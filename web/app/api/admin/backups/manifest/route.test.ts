@@ -78,6 +78,12 @@ registerHooks({
     if (specifier === "../../../../../../lib/list-params") {
       return nextResolve(listParamsUrl, context);
     }
+    if (
+      specifier.endsWith("/platform/db.ts") &&
+      context.parentURL?.includes("/engine/src/backup/")
+    ) {
+      return { url: "mock:db", shortCircuit: true };
+    }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);
@@ -92,9 +98,7 @@ registerHooks({
 });
 
 const routeUrl = "../[id]/manifest/route.ts?backup-manifest";
-const { GET } = (await import(routeUrl)) as typeof import(
-  "../[id]/manifest/route.ts"
-);
+const { GET } = (await import(routeUrl)) as typeof import("../[id]/manifest/route.ts");
 function reset(run: Record<string, unknown> | null): void {
   routeState.run = run;
   routeState.queries = 0;
@@ -153,7 +157,9 @@ test("manifest downloads use a distinct JSON sidecar filename", async () => {
 test("manifest waits for disclosure evidence before returning the response body", async () => {
   reset(completedRun());
   let releaseAudit!: () => void;
-  routeState.auditGate = new Promise<void>((resolve) => { releaseAudit = resolve; });
+  routeState.auditGate = new Promise<void>((resolve) => {
+    releaseAudit = resolve;
+  });
   const { req, ctx } = getRequest(RUN_ID);
   let settled = false;
   const responsePromise = GET(req, ctx).then((response) => {
@@ -162,8 +168,16 @@ test("manifest waits for disclosure evidence before returning the response body"
   });
   try {
     await new Promise<void>((resolve) => setImmediate(resolve));
-    assert.equal(routeState.audits.length, 1, "the disclosure event is attempted before the handler resolves");
-    assert.equal(settled, false, "the manifest must not be disclosed while its evidence write is pending");
+    assert.equal(
+      routeState.audits.length,
+      1,
+      "the disclosure event is attempted before the handler resolves",
+    );
+    assert.equal(
+      settled,
+      false,
+      "the manifest must not be disclosed while its evidence write is pending",
+    );
   } finally {
     releaseAudit();
   }
