@@ -21,16 +21,33 @@ integration tests remain required at the combined-tree gate.
 
 ## Document application boundary
 
-Engine `records/document-edit-policy` owns revision and correction refusal
-policy. `ledger/document-input` owns input types; `ledger/document-service` owns
-explicit-organization reads and control-account dependencies. Callers import
-these owners directly. The web editor owns web draft/edit orchestration and
-has no forwarding exports for the extracted engine services.
+The engine owns document editing. `records/document-edit-policy` owns revision
+and correction refusal policy, `ledger/document-input` owns input types and
+`ledger/document-service` owns explicit-organization reads and control-account
+dependencies. The shared edit core in `ledger/document-write` writes headers and
+lines, validates custom fields, keeps allocation lineage, records the
+transaction audit and runs record flows.
 
-The application adapter still explicitly composes web correction editing and
-feature checks. This is a remaining dependency, not a claim that the entire
-application layer is independent of web. Moving that editor requires its own
-controlled change with custom-field, allocation, audit and flow evidence.
+| Operation | Engine owner | Adapters |
+| --- | --- | --- |
+| Create, edit and delete a document from a full body, with the submit/post hand-off | `ledger/document-editing` | REST records, MCP, assistant and apps through `web/lib/api/writers.ts` |
+| Drawer edit under the locked scope recheck; line item-kind feature gate | `ledger/document-editing` | Drawer create and edit routes |
+| Posted-document correction and replacement draft flow dispatch | `ledger/document-correction-editing` | Drawer correct route; application command behind REST, MCP and the assistant |
+| Expense report edit, correction draft and correction unit | `ledger/expense-editing`, `ledger/document-correction-editing` | Expense routes |
+| Posted-correction consequence preview | `ledger/posted-correction-preview` | Document drawer |
+
+Editing commands take the organization and actor explicitly, run in the
+engine's tenant transaction (joining the caller's when one is open) and read
+feature switches from the stored organization features. They return typed
+results and raise typed refusals (`DocumentEditingRefusal`, `DocumentEditError`)
+that adapters map to their transport without changing status, message or
+details. Adapters keep authentication, permission checks and request parsing;
+the engine rechecks scope, permissions and feature state where it already did.
+
+Order drafts keep their dedicated editor in `web/lib/order-draft-edit.ts`; its
+line selection, pricing basis and scoped option reads are web-owned services.
+Imports write through the shared edit core directly. The simulator creates and
+posts its documents through engine services and edits no drafts.
 
 ## Enforced boundaries
 
