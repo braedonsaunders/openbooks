@@ -1,31 +1,36 @@
 import { notFound } from "@/lib/api/responses";
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { defineRoute } from "@/lib/api/route";
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/platform/db'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
+import { db } from "@openbooks/engine/platform/db";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import {
   insertEmailLog,
   markEmailFailed,
   markEmailSent,
   markEmailUncertain,
   resolveOrgEmailTransportDetailed,
-} from '@openbooks/engine/delivery/email-config/module'
-import { deriveEmailDeliveryKey, documentEmail, isValidEmailAddress, sendVia, emailDeliveryBlockedMessage } from '@openbooks/emails'
-import { can, subsidiaryScopeAllows } from '../../../../../../lib/authz'
-import { isUuid } from '../../../../../../lib/list-params'
-import { parseReportQuery } from '../../../../../../lib/report-filters'
-import { resolvePeriod } from '../../../../../../lib/periods'
-import { resolveReport, type ReportKind } from '../../../../../../lib/report-run'
-import { exportDataToPdf, orgBranding, resolveLayout, type Translator } from '../../../../../../lib/report-pdf'
-import { safeName } from '../../../../../../lib/export'
-import { pickStatementEmail } from '../../../../../../lib/statement-batch'
+} from "@openbooks/engine/delivery/email-config/module";
+import {
+  deriveEmailDeliveryKey,
+  documentEmail,
+  isValidEmailAddress,
+  sendVia,
+  emailDeliveryBlockedMessage,
+} from "@openbooks/emails";
+import { can, subsidiaryScopeAllows } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import { parseReportQuery } from "@/lib/report-filters";
+import { resolvePeriod } from "@/lib/periods";
+import { resolveReport, type ReportKind } from "@/lib/report-run";
+import { exportDataToPdf, orgBranding, resolveLayout, type Translator } from "@/lib/report-pdf";
+import { safeName } from "@/lib/export";
+import { pickStatementEmail } from "@/lib/statement-batch";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Party statement delivery (AR/AP sides of /reports/statements/[partyId]).
@@ -40,35 +45,61 @@ export const runtime = 'nodejs'
  * fails closed before any render work.
  */
 
-type Side = 'ar' | 'ap'
-const statementBody = z.object({
-  side: z.enum(['ar', 'ap']).optional(),
-  to: z.string().optional(),
-  message: z.string().optional(),
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-}).strict()
+type Side = "ar" | "ap";
+const statementBody = z
+  .object({
+    side: z.enum(["ar", "ap"]).optional(),
+    to: z.string().optional(),
+    message: z.string().optional(),
+    from: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    toDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+  })
+  .strict();
 
 function sideOf(req: Request, body?: { side?: unknown }): Side {
-  const raw = typeof body?.side === 'string' ? body.side : new URL(req.url).searchParams.get('side')
-  return raw === 'ap' ? 'ap' : 'ar'
+  const raw =
+    typeof body?.side === "string" ? body.side : new URL(req.url).searchParams.get("side");
+  return raw === "ap" ? "ap" : "ar";
 }
 
 async function loadParty(orgId: string, id: string) {
-  const rows = await db.execute<{ id: string; display_name: string | null; email: string | null; subsidiary_id: string | null }>(sql`
+  const rows = await db.execute<{
+    id: string;
+    display_name: string | null;
+    email: string | null;
+    subsidiary_id: string | null;
+  }>(
+    sql`
     select id, display_name, email, subsidiary_id from parties where id = ${id} and org_id = ${orgId} limit 1
-  `, 'objects')
-  return rows[0] ?? null
+  `,
+    "objects",
+  );
+  return rows[0] ?? null;
 }
 
-async function statementRecipient(orgId: string, party: { id: string; email: string | null }): Promise<string | null> {
+async function statementRecipient(
+  orgId: string,
+  party: { id: string; email: string | null },
+): Promise<string | null> {
   const contacts = await db.execute<{
-    role: string | null; email: string | null; isPrimary: boolean; isActive: boolean
-  }>(sql`
+    role: string | null;
+    email: string | null;
+    isPrimary: boolean;
+    isActive: boolean;
+  }>(
+    sql`
     select role, email, is_primary as "isPrimary", is_active as "isActive"
       from contacts where org_id = ${orgId} and party_id = ${party.id}
-  `, 'objects')
-  return pickStatementEmail(contacts, party.email)
+  `,
+    "objects",
+  );
+  return pickStatementEmail(contacts, party.email);
 }
 
 /**
@@ -77,135 +108,178 @@ async function statementRecipient(orgId: string, party: { id: string; email: str
  * a missing one, so neither the GET prefill nor the POST send discloses or
  * delivers another subsidiary's contact.
  */
-function partyInScope(allowedSubsidiaryIds: Set<string> | null, party: { subsidiary_id: string | null }): boolean {
-  return subsidiaryScopeAllows(allowedSubsidiaryIds, party.subsidiary_id, { orgWideNull: true })
+function partyInScope(
+  allowedSubsidiaryIds: Set<string> | null,
+  party: { subsidiary_id: string | null },
+): boolean {
+  return subsidiaryScopeAllows(allowedSubsidiaryIds, party.subsidiary_id, { orgWideNull: true });
 }
 
 /** GET — default recipient to prefill the send dialog. */
 export const GET = defineRoute({
-  public: 'session',
+  public: "session",
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params }) => {
-  const { id } = params
-  const side = sideOf(req)
-  const permission = side === 'ap' ? 'ap.read' : 'ar.read'
-  if (!can(gate, permission)) return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
-  if (!isUuid(id)) return notFound("record")
-  const party = await loadParty(gate.user.orgId, id)
-  if (!party || !partyInScope(gate.allowedSubsidiaryIds, party)) {
-    return notFound("record")
-  }
-  return NextResponse.json({ to: await statementRecipient(gate.user.orgId, party), partyName: party.display_name })
+    const { id } = params;
+    const side = sideOf(req);
+    const permission = side === "ap" ? "ap.read" : "ar.read";
+    if (!can(gate, permission))
+      return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 });
+    if (!isUuid(id)) return notFound("record");
+    const party = await loadParty(gate.user.orgId, id);
+    if (!party || !partyInScope(gate.allowedSubsidiaryIds, party)) {
+      return notFound("record");
+    }
+    return NextResponse.json({
+      to: await statementRecipient(gate.user.orgId, party),
+      partyName: party.display_name,
+    });
   },
-})
+});
 
 /** POST — render the party-statement PDF and email it to the party. */
 export const POST = defineRoute({
-  public: 'session',
+  public: "session",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz: gate, params }) => {
-  const { id } = params
-  const parsedBody = await parseJsonBody(req, statementBody)
-  if (!parsedBody.ok) return parsedBody.response
-  const body = parsedBody.data as { to?: string; message?: string; side?: string; from?: string; toDate?: string }
-  const side = sideOf(req, body)
-  const sendPermission = side === 'ap' ? 'ap.create' : 'ar.create'
-  if (!can(gate, sendPermission)) return NextResponse.json({ error: `missing permission: ${sendPermission}` }, { status: 403 })
-  // Rendering the statement runs the report engine, which requires
-  // reports.read (requireReportAuthz): a create-only sender would otherwise
-  // reach it and answer a generic 422 'Report access denied'. Require the
-  // full set at the boundary, by name.
-  if (!can(gate, 'reports.read')) {
-    return NextResponse.json({ error: 'missing permission: reports.read' }, { status: 403 })
-  }
-  if (!isUuid(id)) return notFound("record")
-  const party = await loadParty(gate.user.orgId, id)
-  if (!party || !partyInScope(gate.allowedSubsidiaryIds, party)) {
-    return notFound("record")
-  }
+  body: statementBody,
+  handler: async ({ request: req, authz: gate, params, body: input }) => {
+    const { id } = params;
+    const body = input as {
+      to?: string;
+      message?: string;
+      side?: string;
+      from?: string;
+      toDate?: string;
+    };
+    const side = sideOf(req, body);
+    const sendPermission = side === "ap" ? "ap.create" : "ar.create";
+    if (!can(gate, sendPermission))
+      return NextResponse.json({ error: `missing permission: ${sendPermission}` }, { status: 403 });
+    // Rendering the statement runs the report engine, which requires
+    // reports.read (requireReportAuthz): a create-only sender would otherwise
+    // reach it and answer a generic 422 'Report access denied'. Require the
+    // full set at the boundary, by name.
+    if (!can(gate, "reports.read")) {
+      return NextResponse.json({ error: "missing permission: reports.read" }, { status: 403 });
+    }
+    if (!isUuid(id)) return notFound("record");
+    const party = await loadParty(gate.user.orgId, id);
+    if (!party || !partyInScope(gate.allowedSubsidiaryIds, party)) {
+      return notFound("record");
+    }
 
-  const requestedTo = typeof body.to === 'string' ? body.to.trim() : ''
-  if (requestedTo !== '' && !isValidEmailAddress(requestedTo)) {
-    return NextResponse.json({ error: 'invalid recipient email address' }, { status: 400 })
-  }
-  const to = requestedTo || await statementRecipient(gate.user.orgId, party) || ''
-  if (!to) {
-    return NextResponse.json({ error: 'no recipient email — add a billing, statement, primary contact, or party email first' }, { status: 422 })
-  }
+    const requestedTo = typeof body.to === "string" ? body.to.trim() : "";
+    if (requestedTo !== "" && !isValidEmailAddress(requestedTo)) {
+      return NextResponse.json({ error: "invalid recipient email address" }, { status: 400 });
+    }
+    const to = requestedTo || (await statementRecipient(gate.user.orgId, party)) || "";
+    if (!to) {
+      return NextResponse.json(
+        {
+          error:
+            "no recipient email — add a billing, statement, primary contact, or party email first",
+        },
+        { status: 422 },
+      );
+    }
 
-  const delivery = await resolveOrgEmailTransportDetailed(gate.user.orgId)
-  if (delivery.state !== 'ready') {
-    return NextResponse.json({ error: emailDeliveryBlockedMessage(delivery) }, { status: 422 })
-  }
-  const transport = delivery.transport
+    const delivery = await resolveOrgEmailTransportDetailed(gate.user.orgId);
+    if (delivery.state !== "ready") {
+      return NextResponse.json({ error: emailDeliveryBlockedMessage(delivery) }, { status: 422 });
+    }
+    const transport = delivery.transport;
 
-  const t = (await getTranslations('reports')) as unknown as Translator
-  const stamp = await businessToday(gate.user.orgId)
-  const reportParams = new URLSearchParams({ party: id, side })
-  const fromDate = body.from || body.toDate
-  if (typeof fromDate === 'string' && fromDate) reportParams.set('from', fromDate)
-  if (typeof body.toDate === 'string' && body.toDate) reportParams.set('to', body.toDate)
-  const query = parseReportQuery(reportParams)
-  const period = await resolvePeriod(query.period, { customFrom: query.from, customTo: query.to })
-  let pdf: Buffer
-  let orgName = 'OpenBooks'
-  try {
-    const resolved = await resolveReport('partner-statement' as ReportKind, reportParams, {
-      orgId: gate.user.orgId, t, period, query,
-    })
-    if (resolved.render !== 'data') throw new Error('statement failed')
-    const branding = await orgBranding(gate.user.orgId)
-    orgName = branding.orgName || orgName
-    const { page, showSummary } = resolveLayout(null)
-    pdf = Buffer.from(await exportDataToPdf(resolved.data, branding, page, {
-      showSummary,
-      generatedAt: new Date(`${stamp}T00:00:00Z`),
-    }))
-  } catch (e) {
-    return apiErrorResponse(e)
-  }
+    const t = (await getTranslations("reports")) as unknown as Translator;
+    const stamp = await businessToday(gate.user.orgId);
+    const reportParams = new URLSearchParams({ party: id, side });
+    const fromDate = body.from || body.toDate;
+    if (typeof fromDate === "string" && fromDate) reportParams.set("from", fromDate);
+    if (typeof body.toDate === "string" && body.toDate) reportParams.set("to", body.toDate);
+    const query = parseReportQuery(reportParams);
+    const period = await resolvePeriod(query.period, {
+      customFrom: query.from,
+      customTo: query.to,
+    });
+    let pdf: Buffer;
+    let orgName = "OpenBooks";
+    try {
+      const resolved = await resolveReport("partner-statement" as ReportKind, reportParams, {
+        orgId: gate.user.orgId,
+        t,
+        period,
+        query,
+      });
+      if (resolved.render !== "data") throw new Error("statement failed");
+      const branding = await orgBranding(gate.user.orgId);
+      orgName = branding.orgName || orgName;
+      const { page, showSummary } = resolveLayout(null);
+      pdf = Buffer.from(
+        await exportDataToPdf(resolved.data, branding, page, {
+          showSummary,
+          generatedAt: new Date(`${stamp}T00:00:00Z`),
+        }),
+      );
+    } catch (e) {
+      return apiErrorResponse(e);
+    }
 
-  const partyName = party.display_name?.trim() || undefined
-  const attachmentName = `${safeName(`statement-${party.display_name ?? 'party'}-${period.to}`)}.pdf`
-  const email = documentEmail({
-    orgName,
-    docTitle: 'Statement',
-    reference: `as of ${period.to}`,
-    partyName,
-    message: typeof body.message === 'string' ? body.message : undefined,
-    attachmentName,
-  })
-  const logId = await insertEmailLog({
-    orgId: gate.user.orgId,
-    recipients: [to],
-    subject: email.subject,
-    status: 'queued',
-    categoryKey: 'statement',
-    meta: { partyId: id, side },
-    actor: { kind: 'user', userId: gate.user.id },
-  })
-  let uncertaintyRecorded = false
-  try {
-    const outcome = await sendVia(transport, {
-      to,
+    const partyName = party.display_name?.trim() || undefined;
+    const attachmentName = `${safeName(`statement-${party.display_name ?? "party"}-${period.to}`)}.pdf`;
+    const email = documentEmail({
+      orgName,
+      docTitle: "Statement",
+      reference: `as of ${period.to}`,
+      partyName,
+      message: typeof body.message === "string" ? body.message : undefined,
+      attachmentName,
+    });
+    const logId = await insertEmailLog({
+      orgId: gate.user.orgId,
+      recipients: [to],
       subject: email.subject,
-      html: email.html,
-      text: email.text,
-      attachments: [{ filename: attachmentName, content: pdf.toString('base64'), contentType: 'application/pdf' }],
-    }, { deliveryKey: deriveEmailDeliveryKey({ orgId: gate.user.orgId, scope: `direct:${logId}`, to }) })
-    if (outcome.kind === 'sent') {
-      await markEmailSent(gate.user.orgId, logId, outcome.providerMessageId)
-    } else {
-      uncertaintyRecorded = true
-      await markEmailUncertain(gate.user.orgId, logId, outcome.reason)
-      throw new Error(outcome.reason)
+      status: "queued",
+      categoryKey: "statement",
+      meta: { partyId: id, side },
+      actor: { kind: "user", userId: gate.user.id },
+    });
+    let uncertaintyRecorded = false;
+    try {
+      const outcome = await sendVia(
+        transport,
+        {
+          to,
+          subject: email.subject,
+          html: email.html,
+          text: email.text,
+          attachments: [
+            {
+              filename: attachmentName,
+              content: pdf.toString("base64"),
+              contentType: "application/pdf",
+            },
+          ],
+        },
+        {
+          deliveryKey: deriveEmailDeliveryKey({
+            orgId: gate.user.orgId,
+            scope: `direct:${logId}`,
+            to,
+          }),
+        },
+      );
+      if (outcome.kind === "sent") {
+        await markEmailSent(gate.user.orgId, logId, outcome.providerMessageId);
+      } else {
+        uncertaintyRecorded = true;
+        await markEmailUncertain(gate.user.orgId, logId, outcome.reason);
+        throw new Error(outcome.reason);
+      }
+    } catch (e) {
+      if (!uncertaintyRecorded) {
+        await markEmailFailed(gate.user.orgId, logId, e instanceof Error ? e.message : String(e));
+      }
+      return apiErrorResponse(e);
     }
-  } catch (e) {
-    if (!uncertaintyRecorded) {
-      await markEmailFailed(gate.user.orgId, logId, e instanceof Error ? e.message : String(e))
-    }
-    return apiErrorResponse(e)
-  }
-  return NextResponse.json({ ok: true, to })
+    return NextResponse.json({ ok: true, to });
   },
-})
+});
