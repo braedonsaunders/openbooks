@@ -1177,6 +1177,25 @@ const EMPTY_METRICS: DashboardMetrics = {
 /** The metrics a tile that reads no server figures receives: every field empty. */
 export const EMPTY_DASHBOARD_METRICS: DashboardMetrics = EMPTY_METRICS
 
+/**
+ * Figures that answer for the viewer's own work queue (approvals awaiting
+ * them, their drafts, their findings and inbox): a tile reading any of these
+ * is read live on every visit, never from a kept projection, so acting on an
+ * item is reflected the next time the dashboard opens.
+ */
+const LIVE_METRIC_FIELDS: ReadonlySet<keyof DashboardMetrics> = new Set<keyof DashboardMetrics>([
+  'pendingApprovals', 'pendingApprovalList', 'myApprovalList', 'draftDocuments',
+  'agentFindingsOpen', 'agentFindingsProposals', 'agentFindingsLastRun',
+  'inboxTasksTop', 'inboxApprovalsTop', 'inboxCount', 'payTile', 'balances', 'whosOut',
+  'upcoming', 'celebrations', 'announcements', 'teamSteps', 'teamNudges', 'teamHeadcount',
+  'teamQuals', 'adminAttention', 'workflowErrors', 'adminCalendar',
+])
+
+/** Whether a tile's figures must be read live rather than from a kept projection. */
+export function widgetReadsLiveMetrics(widgetId: string): boolean {
+  return (WIDGET_METRIC_FIELDS[widgetId] ?? []).some((field) => LIVE_METRIC_FIELDS.has(field))
+}
+
 /** Whether a tile renders server-read figures at all; tiles that fetch their own data do not. */
 export function widgetReadsMetrics(widgetId: string): boolean {
   return (WIDGET_METRIC_FIELDS[widgetId]?.length ?? 0) > 0

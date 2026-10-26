@@ -12,7 +12,10 @@ import { WIDGETS, isSpotlightWidget } from './_widget-registry'
 import { AnalyticsWidgetPreview, WidgetCard } from './_widget-views'
 import { WidgetSkeleton } from './_widget-tiles'
 import type { AllowedWidgetIds } from './widget-features'
-import { EMPTY_DASHBOARD_METRICS, loadDashboardMetrics, pruneDashboardMetrics, widgetReadsMetrics } from './_metrics'
+import { EMPTY_DASHBOARD_METRICS, pruneDashboardMetrics, widgetReadsMetrics } from './_metrics'
+import { dashboardGroupProjection } from './_projection'
+import { ProjectionFrame } from './_projection-frame'
+import type { LatestProjection } from '@/lib/analytics/latest-projection'
 import type { DashboardMetrics } from './_metrics'
 import { CardTile, type CardTileData } from '../insights/CardTile'
 import type { InsightQuery, VizSettings, VizType } from '@openbooks/analytics'
@@ -105,17 +108,32 @@ function metricGroups(ids: readonly string[]): string[][] {
   return [...groups.values()]
 }
 
-async function MeteredWidget({ widgetId, metrics }: { widgetId: string; metrics: Promise<DashboardMetrics> }) {
+async function MeteredWidget({
+  widgetId,
+  group,
+  projection,
+}: {
+  widgetId: string
+  group: readonly string[]
+  projection: Promise<LatestProjection<DashboardMetrics>>
+}) {
+  const { data, observedAt, refreshing } = await projection
   // Each widget card is a client component: hand it only the metric fields
   // it renders, never the whole org-wide metrics object.
-  return <WidgetCard widgetId={widgetId} data={pruneDashboardMetrics(await metrics, [widgetId])} />
+  return (
+    <ProjectionFrame group={group} observedAt={observedAt} refreshing={refreshing}>
+      <WidgetCard widgetId={widgetId} data={pruneDashboardMetrics(data, [widgetId])} />
+    </ProjectionFrame>
+  )
 }
 
 /**
  * Registry tile nodes that stream independently. Every group's read starts
  * now, and each tile renders as soon as its own group settles, so one slow
- * reader never holds the whole dashboard. Tiles that read no server metrics
- * (spotlights fetch their own projection) render at once.
+ * reader never holds the whole dashboard. A group answers from its latest
+ * projection when one is kept, so a repeat visit renders at once. Tiles that
+ * read no server metrics (spotlights fetch their own projection) render at
+ * once.
  */
 function streamedWidgetNodes(authz: Authz, ids: readonly string[], locale: string): Record<string, ReactNode> {
   const nodes: Record<string, ReactNode> = {}
@@ -124,14 +142,14 @@ function streamedWidgetNodes(authz: Authz, ids: readonly string[], locale: strin
     if (!widgetReadsMetrics(id)) nodes[id] = <WidgetCard key={id} widgetId={id} data={EMPTY_DASHBOARD_METRICS} />
   }
   for (const group of metricGroups(metered)) {
-    const metrics = loadDashboardMetrics(authz, group, undefined, locale)
+    const projection = dashboardGroupProjection(authz, group, locale)
     // The tile awaiting this read reports its failure; this only keeps an
     // early rejection from surfacing as unhandled before that tile renders.
-    metrics.catch(() => undefined)
+    projection.catch(() => undefined)
     for (const id of group) {
       nodes[id] = (
         <Suspense key={id} fallback={<WidgetSkeleton />}>
-          <MeteredWidget widgetId={id} metrics={metrics} />
+          <MeteredWidget widgetId={id} group={group} projection={projection} />
         </Suspense>
       )
     }

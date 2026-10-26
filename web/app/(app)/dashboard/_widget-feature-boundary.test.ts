@@ -27,8 +27,13 @@ registerHooks({
         export async function loadDashboardLayout(){return {layout:{widgets:[{id:'resourcing-pulse',x:0,y:0,w:3,h:2},{id:'kpi-journal-lines',x:3,y:0,w:3,h:2}]},role:'reader',hiddenQuickActionIds:[]}}
         export async function resolveDashboardDefault(){return {sourceKey:'reader'}}`)
     }
-    if (s === './_metrics' && (c.parentURL?.endsWith('/_edit-canvas.tsx') || c.parentURL?.endsWith('/dashboard/actions.ts'))) {
+    if (s === './_metrics' && c.parentURL?.endsWith('/dashboard/actions.ts')) {
       return wrap('web/app/(app)/dashboard/_metrics.ts', `export async function loadDashboardMetrics(authz,ids){globalThis.__dashboardFeatureBoundary.metrics.push(ids);return {}}`)
+    }
+    // The canvas reads tile figures through their kept projection; the stub
+    // records which widget groups it was asked to read.
+    if (s === './_projection' && c.parentURL?.endsWith('/_edit-canvas.tsx')) {
+      return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export async function dashboardGroupProjection(authz,ids){globalThis.__dashboardFeatureBoundary.metrics.push([...ids]);return {data:{},observedAt:new Date(0).toISOString(),refreshing:false}}`) }
     }
     if (s === '@openbooks/engine/platform/db' && c.parentURL?.endsWith('/dashboard/actions.ts')) {
       return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export const db={async transaction(fn){return fn({async execute(query, mode){ const inMode = (result) => (mode === 'objects' ? result.rows : result);globalThis.__dashboardFeatureBoundary.writes.push(query);return inMode({rows:[]})}})}}`) }
