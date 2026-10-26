@@ -1,16 +1,13 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { parseJsonBody } from "../../../../../lib/api/json";
-import { defineRoute } from "../../../../../lib/api/route";
-import { isUuid } from "../../../../../lib/list-params";
+import { defineRoute } from "@/lib/api/route";
+import { isUuid } from "@/lib/list-params";
 import {
   DriverAdminError,
   deleteDriverValue,
   updateDriverValue,
 } from "@openbooks/engine/allocations/driver-admin";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -33,18 +30,23 @@ export const PATCH = defineRoute({
   permission: "allocations.manage",
   feature: "allocations",
   scope: "unrestricted",
-  params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz: gate, params }) => {
-  const { id } = params;
-  if (!isUuid(id)) return notFound("record");
-  const parsedBody = await parseJsonBody(req, valuePatchSchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    const value = await updateDriverValue(gate.user.orgId, gate.user.id, id, parsedBody.data);
-    return NextResponse.json({ value });
-  } catch (error) {
-    return toResponse(error);
-  }
+  params: z.object({ id: z.string().refine((value) => isUuid(value)) }),
+  invalidParamsNotFound: "record",
+  body: valuePatchSchema,
+  opaque: {
+    effectiveTo: "The update service validates an optional end date against the stored value.",
+    value: "The update service accepts value-only corrections for an existing driver value.",
+    note: "Notes may be cleared independently from a value correction.",
+    expectedUpdatedAt: "The update service uses an optional revision token for concurrency checks.",
+  },
+  handler: async ({ authz: gate, params, body }) => {
+    const { id } = params;
+    try {
+      const value = await updateDriverValue(gate.user.orgId, gate.user.id, id, body);
+      return NextResponse.json({ value });
+    } catch (error) {
+      return toResponse(error);
+    }
   },
 });
 
@@ -52,15 +54,15 @@ export const DELETE = defineRoute({
   permission: "allocations.manage",
   feature: "allocations",
   scope: "unrestricted",
-  params: z.object({ id: z.string() }),
+  params: z.object({ id: z.string().refine((value) => isUuid(value)) }),
+  invalidParamsNotFound: "record",
   handler: async ({ authz: gate, params }) => {
-  const { id } = params;
-  if (!isUuid(id)) return notFound("record");
-  try {
-    await deleteDriverValue(gate.user.orgId, gate.user.id, id);
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    return toResponse(error);
-  }
+    const { id } = params;
+    try {
+      await deleteDriverValue(gate.user.orgId, gate.user.id, id);
+      return NextResponse.json({ ok: true });
+    } catch (error) {
+      return toResponse(error);
+    }
   },
 });

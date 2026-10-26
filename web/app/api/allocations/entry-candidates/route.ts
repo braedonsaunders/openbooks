@@ -1,41 +1,50 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
-import { NextResponse } from 'next/server'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { listEntryRulesInEffect, matchLine, selectRule } from '@openbooks/engine/allocations/match'
-import type { LineCoordinate, RuleInEffect } from '@openbooks/engine/allocations/types'
-import { resolveAccountGroups } from '@openbooks/engine/records/account-groups'
-import { allocationRuleScopeVisible } from '../../../../lib/allocations-scope'
-import { isFeatureEnabled } from '../../../../lib/features'
-import { isUuid } from '../../../../lib/list-params'
+import { NextResponse } from "next/server";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { listEntryRulesInEffect, matchLine, selectRule } from "@openbooks/engine/allocations/match";
+import type { LineCoordinate, RuleInEffect } from "@openbooks/engine/allocations/types";
+import { resolveAccountGroups } from "@openbooks/engine/records/account-groups";
+import { allocationRuleScopeVisible } from "../../../../lib/allocations-scope";
+import { isFeatureEnabled } from "../../../../lib/features";
+import { isUuid } from "../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
+export const runtime = "nodejs";
 
-export const runtime = 'nodejs'
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-const APPLY_POLICIES = ['automatic', 'suggest', 'manual'] as const
-type ApplyPolicyParam = (typeof APPLY_POLICIES)[number]
-const UUID_PARAMS = ['accountId', 'departmentId', 'locationId', 'classId', 'projectId', 'subsidiaryId'] as const
-type UuidParam = (typeof UUID_PARAMS)[number]
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const APPLY_POLICIES = ["automatic", "suggest", "manual"] as const;
+type ApplyPolicyParam = (typeof APPLY_POLICIES)[number];
+const UUID_PARAMS = [
+  "accountId",
+  "departmentId",
+  "locationId",
+  "classId",
+  "projectId",
+  "subsidiaryId",
+] as const;
+type UuidParam = (typeof UUID_PARAMS)[number];
 
 function refused(): NextResponse {
   // Feature-off and out-of-scope read the same: the entry UI hides, and the
   // server refuses regardless of UI (design §5 invariant 6).
-  return notFound("record")
+  return notFound("record");
 }
 
 function invalid(error: string): NextResponse {
-  return NextResponse.json({ error }, { status: 400 })
+  return NextResponse.json({ error }, { status: 400 });
 }
 
-function toCandidate(candidate: RuleInEffect, recommended: boolean): {
-  ruleId: string
-  ruleKey: string
-  ruleName: string
-  applyPolicy: string
-  versionId: string
-  recommended: boolean
+function toCandidate(
+  candidate: RuleInEffect,
+  recommended: boolean,
+): {
+  ruleId: string;
+  ruleKey: string;
+  ruleName: string;
+  applyPolicy: string;
+  versionId: string;
+  recommended: boolean;
 } {
   return {
     ruleId: candidate.rule.id,
@@ -44,7 +53,7 @@ function toCandidate(candidate: RuleInEffect, recommended: boolean): {
     applyPolicy: candidate.version.applyPolicy,
     versionId: candidate.version.id,
     recommended,
-  }
+  };
 }
 
 /**
@@ -65,48 +74,57 @@ function toCandidate(candidate: RuleInEffect, recommended: boolean): {
  * consulting the feature gates, so editors for out-of-domain kinds never
  * 404; kinds with candidates still refuse when entry is off.
  */
-async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null): Promise<NextResponse> {
+async function legacyGET(
+  request: Request,
+  ctx: { params: Promise<unknown> },
+  injectedGate?: Authz | null,
+): Promise<NextResponse> {
   const gate = injectedGate as Authz;
-  const { user } = gate
+  const { user } = gate;
 
-  const query = new URL(request.url).searchParams
+  const query = new URL(request.url).searchParams;
   const param = (name: string): string | undefined => {
-    const raw = query.get(name)?.trim() ?? ''
-    return raw === '' ? undefined : raw
-  }
+    const raw = query.get(name)?.trim() ?? "";
+    return raw === "" ? undefined : raw;
+  };
 
-  const documentKind = param('documentKind')
+  const documentKind = param("documentKind");
   // The default document date is the org's business day, never the UTC day
   // (which is tomorrow in the evening for the Americas).
-  const rawDate = param('documentDate') ?? (await businessToday(user.orgId))
-  if (!DATE_RE.test(rawDate)) return invalid('invalid_documentDate')
-  const documentDate = rawDate
+  const rawDate = param("documentDate") ?? (await businessToday(user.orgId));
+  if (!DATE_RE.test(rawDate)) return invalid("invalid_documentDate");
+  const documentDate = rawDate;
 
-  const ids = {} as Record<UuidParam, string | undefined>
+  const ids = {} as Record<UuidParam, string | undefined>;
   for (const name of UUID_PARAMS) {
-    const value = param(name)
-    if (value === undefined) continue
-    if (!isUuid(value)) return invalid(`invalid_${name}`)
-    ids[name] = value
+    const value = param(name);
+    if (value === undefined) continue;
+    if (!isUuid(value)) return invalid(`invalid_${name}`);
+    ids[name] = value;
   }
 
-  const rawPolicy = param('policy')
+  const rawPolicy = param("policy");
   if (rawPolicy !== undefined && !(APPLY_POLICIES as readonly string[]).includes(rawPolicy)) {
-    return invalid('invalid_policy')
+    return invalid("invalid_policy");
   }
-  const policy = rawPolicy as ApplyPolicyParam | undefined
+  const policy = rawPolicy as ApplyPolicyParam | undefined;
 
-  const allowed = gate.allowedSubsidiaryIds
+  const allowed = gate.allowedSubsidiaryIds;
   if (ids.subsidiaryId !== undefined && allowed !== null && !allowed.has(ids.subsidiaryId)) {
-    return refused()
+    return refused();
   }
 
-  const inEffect = await listEntryRulesInEffect({ orgId: user.orgId, mode: 'entry', asOf: documentDate })
+  const inEffect = await listEntryRulesInEffect({
+    orgId: user.orgId,
+    mode: "entry",
+    asOf: documentDate,
+  });
   // Rule-scope visibility (same logic the configuration writes enforce): a
   // restricted caller only sees rules touching their own subsidiaries, and
   // never an org-wide rule — including this unfiltered enumeration.
-  const inPolicy = (policy === undefined ? inEffect : inEffect.filter((c) => c.version.applyPolicy === policy))
-    .filter((c) => allocationRuleScopeVisible(allowed, c))
+  const inPolicy = (
+    policy === undefined ? inEffect : inEffect.filter((c) => c.version.applyPolicy === policy)
+  ).filter((c) => allocationRuleScopeVisible(allowed, c));
 
   // A kind no entry rule covers has no candidates whatever the gate says:
   // answer the empty set instead of refusing, so draft editors for
@@ -117,41 +135,41 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
     documentKind !== undefined &&
     inPolicy.length > 0 &&
     !inPolicy.some((candidate) => {
-      const kinds = candidate.version.documentKinds
-      return !kinds || kinds.length === 0 || kinds.includes(documentKind)
+      const kinds = candidate.version.documentKinds;
+      return !kinds || kinds.length === 0 || kinds.includes(documentKind);
     })
   ) {
-    return NextResponse.json({ rules: [] })
+    return NextResponse.json({ rules: [] });
   }
 
-  if (!(await isFeatureEnabled(user.orgId, 'allocations'))) return refused()
-  if (!(await isFeatureEnabled(user.orgId, 'allocationsAtEntry'))) return refused()
+  if (!(await isFeatureEnabled(user.orgId, "allocations"))) return refused();
+  if (!(await isFeatureEnabled(user.orgId, "allocationsAtEntry"))) return refused();
 
   if (ids.accountId === undefined) {
-    return NextResponse.json({ rules: inPolicy.map((candidate) => toCandidate(candidate, false)) })
+    return NextResponse.json({ rules: inPolicy.map((candidate) => toCandidate(candidate, false)) });
   }
 
   // Account-group scopes resolve against the pool primitive
   // (engine/src/records/account-groups.ts); preload every dimension the candidates
   // name so the matcher's synchronous resolver never sees a miss.
-  const dimensions = new Set<string>()
+  const dimensions = new Set<string>();
   for (const candidate of inPolicy) {
-    const scope = candidate.version.accountScope
-    if (scope.kind === 'account_group') dimensions.add(scope.dimension)
+    const scope = candidate.version.accountScope;
+    if (scope.kind === "account_group") dimensions.add(scope.dimension);
   }
-  const membersByDimension = new Map<string, Map<string, Set<string>>>()
+  const membersByDimension = new Map<string, Map<string, Set<string>>>();
   for (const dimension of dimensions) {
-    const resolved = await resolveAccountGroups(dimension, user.orgId)
-    const byKey = new Map<string, Set<string>>()
+    const resolved = await resolveAccountGroups(dimension, user.orgId);
+    const byKey = new Map<string, Set<string>>();
     for (const [accountId, ref] of resolved.byAccount) {
-      const members = byKey.get(ref.key) ?? new Set<string>()
-      members.add(accountId)
-      byKey.set(ref.key, members)
+      const members = byKey.get(ref.key) ?? new Set<string>();
+      members.add(accountId);
+      byKey.set(ref.key, members);
     }
-    membersByDimension.set(dimension, byKey)
+    membersByDimension.set(dimension, byKey);
   }
   const resolveAccountGroup = (dimension: string, groupKey: string): Set<string> =>
-    membersByDimension.get(dimension)?.get(groupKey) ?? new Set<string>()
+    membersByDimension.get(dimension)?.get(groupKey) ?? new Set<string>();
 
   const line: LineCoordinate = {
     documentKind: documentKind ?? null,
@@ -161,33 +179,47 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
     locationId: ids.locationId ?? null,
     classId: ids.classId ?? null,
     projectId: ids.projectId ?? null,
-    amount: '0',
-  }
+    amount: "0",
+  };
 
   // Same precedence as selectRule (specificity, sort_order, key) so the
   // picker's order always agrees with the engine's winner.
   const matched = inPolicy
-    .map((candidate) => ({ candidate, result: matchLine(candidate.version, line, resolveAccountGroup) }))
+    .map((candidate) => ({
+      candidate,
+      result: matchLine(candidate.version, line, resolveAccountGroup),
+    }))
     .filter((entry) => entry.result.matched)
     .sort((a, b) => {
-      if (a.result.specificity !== b.result.specificity) return b.result.specificity - a.result.specificity
+      if (a.result.specificity !== b.result.specificity)
+        return b.result.specificity - a.result.specificity;
       if (a.candidate.rule.sortOrder !== b.candidate.rule.sortOrder) {
-        return a.candidate.rule.sortOrder - b.candidate.rule.sortOrder
+        return a.candidate.rule.sortOrder - b.candidate.rule.sortOrder;
       }
-      return a.candidate.rule.key < b.candidate.rule.key ? -1 : a.candidate.rule.key > b.candidate.rule.key ? 1 : 0
-    })
+      return a.candidate.rule.key < b.candidate.rule.key
+        ? -1
+        : a.candidate.rule.key > b.candidate.rule.key
+          ? 1
+          : 0;
+    });
   const winner = selectRule(
     matched.map((entry) => entry.candidate),
     line,
     { resolveAccountGroup },
-  )
+  );
   return NextResponse.json({
-    rules: matched.map((entry) => toCandidate(entry.candidate, winner !== null && entry.candidate.rule.key === winner.rule.key)),
-  })
+    rules: matched.map((entry) =>
+      toCandidate(entry.candidate, winner !== null && entry.candidate.rule.key === winner.rule.key),
+    ),
+  });
 }
 
 export const GET = defineRoute({
-  permission: 'allocations.read', feature: { none: "This route is governed by its permission and service authorization." },
+  permission: "allocations.read",
+  feature: {
+    none: "The route checks the allocation switches after confirming an entry rule applies.",
+  },
 
-  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+  handler: ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params) }, authz),
 });
