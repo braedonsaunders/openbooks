@@ -169,7 +169,14 @@ export async function projectProfitability(
     expenses: string;
     hours: string;
   }>(sql`
-    with pl as (
+    -- One pass over the period's P&L lines, per project. Lines carry their
+    -- entry's posting date, so the date range also bounds the line index.
+    -- Lines with no project assignment would be invisible to a per-project
+    -- read, so report totals would under-read the P&L; they total under the
+    -- Unassigned row instead. A project-dim filter empties that leg on its
+    -- own (null never equals the filter); customer/search scoping is applied
+    -- in JS below because those filters only touch the projects side.
+    with activity as materialized (
       select l.project_id,
              coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0) as revenue,
              coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0) as cogs,
@@ -179,40 +186,21 @@ export async function projectProfitability(
           and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
           and ${excludePeriodEndJournals(sql`e.origin`)}
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
-       where l.project_id is not null
-         and l.org_id = ${orgId}
+       where l.org_id = ${orgId}
+         and l.posting_date >= ${from} and l.posting_date <= ${to}
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
          and ${dimWhere(opts.dims)}
        group by l.project_id
     ),
+    pl as (select * from activity where project_id is not null),
+    un as (select revenue, cogs, expenses from activity where project_id is null),
     hrs as (
       select project_id, coalesce(sum(hours), 0) as hours
         from time_entries
        where org_id = ${orgId} and project_id is not null and status = 'approved'
          and worked_on >= ${from} and worked_on <= ${to}
        group by project_id
-    ),
-    -- P&L lines with no project assignment are invisible to the
-    -- per-project aggregate above, so report totals silently under-read the
-    -- P&L. Aggregate them under the Unassigned sentinel row instead. A
-    -- project-dim filter empties this leg on its own (null never equals the
-    -- filter); customer/search scoping is applied in JS below because those
-    -- filters only touch the projects side.
-    un as (
-      select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0) as revenue,
-             coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0) as cogs,
-             coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0) as expenses
-        from journal_lines l
-        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
-          and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
-          and ${excludePeriodEndJournals(sql`e.origin`)}
-        join accounts a on a.id = l.account_id and a.org_id = l.org_id
-       where l.project_id is null
-         and l.org_id = ${orgId}
-         and e.posting_date >= ${from} and e.posting_date <= ${to}
-         and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
-         and ${dimWhere(opts.dims)}
     )
     select s.__functional_currency_count, s.id, s.name, s.customer_id, s.customer, s.status,
            s.project_type, s.revenue, s.cogs, s.expenses, s.hours
