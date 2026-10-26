@@ -8,6 +8,7 @@ import { ANALYTICS_CONFIG } from '../../../lib/analytics/config-spec'
 import { normalizeCashHorizonWeeks, normalizeMoneyValue, withoutWeekEntries } from '../../../lib/cash/core'
 import { arPosition } from '../../../lib/cash/ar-position'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { NOT_FORECAST_ROWS } from './cockpit/not-forecast'
 
 /**
  * The AR cockpit, split into a loader and a spec.
@@ -76,6 +77,20 @@ export async function loadArCockpit(): Promise<ArCockpitData> {
       daysOverdue: e.daysOverdue,
       method: e.method,
     })),
+    // The panel names the first rows and counts the rest. Shipping the whole
+    // past-horizon book put tens of thousands of receivables in the page.
+    notForecast: {
+      horizonDays: position.notForecast.horizonDays,
+      count: position.notForecast.count,
+      total: position.notForecast.total,
+      entries: position.notForecast.entries.slice(0, NOT_FORECAST_ROWS).map((e) => ({
+        id: e.id,
+        partyName: e.partyName,
+        docNumber: e.docNumber,
+        daysOverdue: e.daysOverdue,
+        amount: e.amount,
+      })),
+    },
   }
 
 

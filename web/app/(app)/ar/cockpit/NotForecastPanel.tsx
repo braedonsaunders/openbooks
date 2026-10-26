@@ -5,9 +5,7 @@ import { ShieldAlert } from "lucide-react";
 
 import { useMoney } from "@/components/money-provider";
 import { CockpitPanel } from "../../../../components/cockpit/ui";
-import type { ArPosition } from "../../../../lib/cash/ar-position";
-
-const ROWS = 8;
+import type { NotForecastSummary } from "./not-forecast";
 
 /**
  * Receivables past the collectability horizon. They are not projected as
@@ -15,11 +13,11 @@ const ROWS = 8;
  * instead of inflating the cash-in forecast. Renders nothing when none are
  * excluded.
  */
-export function NotForecastPanel({ notForecast }: { notForecast: ArPosition["notForecast"] }) {
+export function NotForecastPanel({ notForecast }: { notForecast: NotForecastSummary }) {
   const t = useTranslations("ar.cockpit.notForecast");
   const { money } = useMoney();
   if (notForecast.count === 0) return null;
-  const shown = notForecast.entries.slice(0, ROWS);
+  const shown = notForecast.entries;
   return (
     <CockpitPanel
       title={t("title", { days: notForecast.horizonDays })}
@@ -42,8 +40,8 @@ export function NotForecastPanel({ notForecast }: { notForecast: ArPosition["not
           </li>
         ))}
       </ul>
-      {notForecast.entries.length > ROWS ? (
-        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t("more", { count: notForecast.entries.length - ROWS })}</p>
+      {notForecast.count > shown.length ? (
+        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t("more", { count: notForecast.count - shown.length })}</p>
       ) : null}
     </CockpitPanel>
   );

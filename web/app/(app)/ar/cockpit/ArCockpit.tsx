@@ -21,13 +21,14 @@ import {
 
 import type { ArPosition } from "../../../../lib/cash/ar-position";
 import type { WorklistEntry } from "./CollectionsWorklist";
+import type { NotForecastSummary } from "./not-forecast";
 
 /**
  * The cockpit's view of the position: the worklist arrives already projected to
  * the columns it renders, so the fields the list never shows do not cross the
  * wire.
  */
-type ArCockpitData = Omit<ArPosition, "worklist"> & { worklist: WorklistEntry[] };
+type ArCockpitData = Omit<ArPosition, "worklist" | "notForecast"> & { worklist: WorklistEntry[]; notForecast: NotForecastSummary };
 import {
   StatTile,
   CockpitPanel,
