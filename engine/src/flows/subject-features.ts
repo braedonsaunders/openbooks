@@ -9,15 +9,18 @@ import { DOCUMENT_FLOW_KINDS } from "./subject-profiles.ts";
  * only be authored over a subject whose owning features are all enabled for
  * the organization; parent and prerequisite switches close over the
  * requirement graph through `featureEnabled`, so only the owning leaf is
- * named here. An empty list declares a core subject that is available
- * whenever Flows itself is on.
+ * named here. An entry that is itself a list names alternatives: any one of
+ * them enabled satisfies it, for a subject several modules share. An empty
+ * list declares a core subject that is available whenever Flows itself is on.
  *
  * Document kinds derive their gate from the document-kind feature registry
  * (DOC_KIND_FEATURE). Every other subject kind is classified explicitly
  * below; a registered kind with no classification is refused rather than
  * defaulted, and a registry test keeps the classification complete.
  */
-const SUBJECT_KIND_FEATURES: Readonly<Record<string, readonly string[]>> = {
+type FeatureRequirement = string | readonly string[];
+
+const SUBJECT_KIND_FEATURES: Readonly<Record<string, readonly FeatureRequirement[]>> = {
   // Order-cycle documents are produced only by converting an order: a sales
   // fulfillment ships a sales order, and a purchase receipt brings stock in
   // against a purchase order.
@@ -65,7 +68,8 @@ const SUBJECT_KIND_FEATURES: Readonly<Record<string, readonly string[]>> = {
   compliance_certificate: ["subcontractorCompliance"],
   compliance_waiver: ["subcontractorCompliance"],
   service_visit_completion: ["serviceDispatch"],
-  schedule_board: ["hrmShiftPlanning"],
+  // Shift scheduling and project scheduling both publish schedule boards.
+  schedule_board: [["hrmShiftPlanning", "projectScheduling"]],
   schedule_distribution: ["hrmShiftPlanning"],
   schedule_entry_request: ["hrmShiftPlanning"],
   schedule_publication: ["hrmShiftPlanning"],
@@ -100,17 +104,29 @@ export function classifiedFlowSubjectKinds(): readonly string[] {
  * The feature keys a subject kind requires, or null when the kind has no
  * classification (an unknown kind is never available).
  */
-export function flowSubjectFeatureKeys(subjectKind: string): readonly string[] | null {
+function flowSubjectRequirements(subjectKind: string): readonly FeatureRequirement[] | null {
   if (Object.hasOwn(SUBJECT_KIND_FEATURES, subjectKind)) return SUBJECT_KIND_FEATURES[subjectKind]!;
   if (!DOCUMENT_FLOW_KINDS.includes(subjectKind)) return null;
   const feature = DOC_KIND_FEATURE[subjectKind];
   return feature ? [feature] : [];
 }
 
+/** Every feature key a subject kind's requirements name, alternatives included. */
+export function flowSubjectFeatureKeys(subjectKind: string): readonly string[] | null {
+  return flowSubjectRequirements(subjectKind)?.flat() ?? null;
+}
+
 /** Pure availability check against an already-resolved feature state. */
 export function flowSubjectAvailable(state: FeatureState, subjectKind: string): boolean {
-  const keys = flowSubjectFeatureKeys(subjectKind);
-  return keys !== null && keys.every((key) => featureEnabled(state, key));
+  const requirements = flowSubjectRequirements(subjectKind);
+  return (
+    requirements !== null &&
+    requirements.every((requirement) =>
+      typeof requirement === "string"
+        ? featureEnabled(state, requirement)
+        : requirement.some((key) => featureEnabled(state, key)),
+    )
+  );
 }
 
 /** A flow cannot be authored over a subject whose owning feature is switched off. */
@@ -139,10 +155,17 @@ export async function assertFlowSubjectFeaturesEnabled(
   orgId: string,
   subjectKind: string,
 ): Promise<void> {
-  const keys = flowSubjectFeatureKeys(subjectKind);
-  if (keys === null) throw new FlowSubjectFeatureDisabledError(subjectKind, null);
-  for (const key of keys) {
-    if (!(await lockAndCheckOrgFeature(runner, orgId, key)))
-      throw new FlowSubjectFeatureDisabledError(subjectKind, key);
+  const requirements = flowSubjectRequirements(subjectKind);
+  if (requirements === null) throw new FlowSubjectFeatureDisabledError(subjectKind, null);
+  for (const requirement of requirements) {
+    const alternatives = typeof requirement === "string" ? [requirement] : requirement;
+    let enabled = false;
+    for (const key of alternatives) {
+      if (await lockAndCheckOrgFeature(runner, orgId, key)) {
+        enabled = true;
+        break;
+      }
+    }
+    if (!enabled) throw new FlowSubjectFeatureDisabledError(subjectKind, alternatives[0] ?? null);
   }
 }

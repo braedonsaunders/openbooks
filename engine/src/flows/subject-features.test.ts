@@ -70,6 +70,19 @@ test("a child switch never makes a subject available while its parent is off", (
   );
 });
 
+test("a subject shared by modules is available when any of them is on", () => {
+  const projectOnly = { projects: true, projectScheduling: true, hrm: false };
+  assert.equal(flowSubjectAvailable(projectOnly, "schedule_board"), true);
+  assert.equal(flowSubjectAvailable(projectOnly, "schedule_publication"), false);
+  assert.equal(
+    flowSubjectAvailable(
+      { projects: false, projectScheduling: true, hrm: false },
+      "schedule_board",
+    ),
+    false,
+  );
+});
+
 test("order-cycle documents follow the order features that produce them", () => {
   assert.equal(flowSubjectAvailable({ orders: false }, "sales_fulfillment"), false);
   assert.equal(flowSubjectAvailable({ orders: true }, "sales_fulfillment"), true);
