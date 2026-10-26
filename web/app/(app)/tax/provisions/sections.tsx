@@ -1,4 +1,4 @@
-import { RegisteredListTable } from '../../../../components/registered-list-table'
+import { PagedTable } from '../../../../components/paged-table'
 import { Badge } from '@openbooks/ui'
 import Link from 'next/link'
 
@@ -35,7 +35,9 @@ export function ProvisionRunsTable({
   rows: ProvisionRunListRow[]
 }) {
   return (
-    <RegisteredListTable
+    <PagedTable
+      prepared
+      searchable
       source="tax_provisions"
       rows={rows}
       rowKey={(row) => row.id}
