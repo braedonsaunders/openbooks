@@ -4,18 +4,29 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/testing/fixtures";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+} from "@openbooks/engine/testing/fixtures";
 import { loadDocumentInventoryLines } from "@openbooks/engine/testing/inventory/document-lines";
 
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __inventoryDefaultEntityAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if ((specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) ||
-        (specifier === "./authz" && context.parentURL?.endsWith("/lib/feature-gates.ts"))) {
-      return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
-        "export async function guardPermission(){return {user:globalThis.__inventoryDefaultEntityAudit.user,allowedSubsidiaryIds:null}};export function can(){return true}",
-      ) };
+    if (
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/api/inventory/")) ||
+      (specifier === "./authz" && context.parentURL?.endsWith("/lib/feature-gates.ts"))
+    ) {
+      return {
+        shortCircuit: true,
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            "export async function guardPermission(){return {user:globalThis.__inventoryDefaultEntityAudit.user,allowedSubsidiaryIds:null}};export function can(){return true}",
+          ),
+      };
     }
     return next(specifier, context);
   },
@@ -32,48 +43,87 @@ test("unscoped receipts, counts, and document lines book to the root entity", as
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     state.user = { orgId: org.orgId, id: actor };
-    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`);
+    await db.execute(
+      sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`,
+    );
     // A younger root with an older child: oldest-created is NOT the root.
     const elderId = randomUUID();
     await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
       values(${elderId},${org.orgId},${org.subsidiaryId},'Elder child','CAD','CA')`);
-    await db.execute(sql`update subsidiaries set created_at='2020-01-01T00:00:00Z' where org_id=${org.orgId} and id=${elderId}`);
+    await db.execute(
+      sql`update subsidiaries set created_at='2020-01-01T00:00:00Z' where org_id=${org.orgId} and id=${elderId}`,
+    );
     // The warehouse admits the root only: a path resolving any other entity
     // trips the ownership check instead of posting elsewhere.
     await db.execute(sql`update locations set subsidiary_id=${org.subsidiaryId}, subsidiary_include_children=false
       where org_id=${org.orgId} and id=${org.locationId}`);
-    const oldest = (await db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id=${org.orgId} order by created_at,id limit 1`, "objects"))[0]!.id;
+    const oldest = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from subsidiaries where org_id=${org.orgId} order by created_at,id limit 1`,
+        "objects",
+      )
+    )[0]!.id;
     assert.equal(oldest, elderId, "fixture must make a non-root entity the oldest");
 
     // Path 1: the actions route posts an unscoped receipt.
     const { POST: postAction } = await import("./route.ts");
-    const receipt = await postAction(new Request("http://audit.local/api/inventory/actions", {
-      method: "POST",
-      body: JSON.stringify({
-        action: "receive", idempotencyKey: randomUUID(), itemId: org.items.fifo,
-        stockLocationId: org.stockLocationId, date: org.date,
-        quantity: "5", unitCost: "10", offsetAccountId: org.accounts.clearing,
+    const receipt = await postAction(
+      new Request("http://audit.local/api/inventory/actions", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "receive",
+          idempotencyKey: randomUUID(),
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          date: org.date,
+          quantity: "5",
+          unitCost: "10",
+          offsetAccountId: org.accounts.clearing,
+        }),
       }),
-    }));
+    );
     assert.equal(receipt.status, 200, JSON.stringify(await receipt.clone().json()));
-    const movement = (await db.execute<{ subsidiary_id: string }>(sql`
-      select subsidiary_id::text as subsidiary_id from inventory_movements where org_id=${org.orgId}`, "objects"))[0]!;
-    assert.equal(movement.subsidiary_id, org.subsidiaryId, "unscoped receipt books to the root, not the oldest entity");
+    const movement = (
+      await db.execute<{ subsidiary_id: string }>(
+        sql`
+      select subsidiary_id::text as subsidiary_id from inventory_movements where org_id=${org.orgId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(
+      movement.subsidiary_id,
+      org.subsidiaryId,
+      "unscoped receipt books to the root, not the oldest entity",
+    );
 
     // Path 2: the counts route creates an unscoped count.
     const { POST: postCount } = await import("../counts/route.ts");
-    const count = await postCount(new Request("http://audit.local/api/inventory/counts", {
-      method: "POST",
-      body: JSON.stringify({
-        action: "create", idempotencyKey: randomUUID(), locationId: org.locationId,
-        date: org.date, lines: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
+    const count = await postCount(
+      new Request("http://audit.local/api/inventory/counts", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "create",
+          idempotencyKey: randomUUID(),
+          locationId: org.locationId,
+          date: org.date,
+          lines: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
+        }),
       }),
-    }));
+    );
     assert.equal(count.status, 200, JSON.stringify(await count.clone().json()));
-    const header = (await db.execute<{ subsidiary_id: string }>(sql`
-      select subsidiary_id::text as subsidiary_id from stock_counts where org_id=${org.orgId}`, "objects"))[0]!;
-    assert.equal(header.subsidiary_id, org.subsidiaryId, "unscoped count books to the root, not the oldest entity");
+    const header = (
+      await db.execute<{ subsidiary_id: string }>(
+        sql`
+      select subsidiary_id::text as subsidiary_id from stock_counts where org_id=${org.orgId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(
+      header.subsidiary_id,
+      org.subsidiaryId,
+      "unscoped count books to the root, not the oldest entity",
+    );
 
     // Path 3: document lines resolve an unscoped document to the same root.
     const documentId = randomUUID();
@@ -86,5 +136,7 @@ test("unscoped receipts, counts, and document lines book to the root entity", as
     // the ownership check above.
     const lines = await loadDocumentInventoryLines(db, org.orgId, documentId);
     assert.equal(lines.length, 1, "all three paths book to the same root entity");
-  } finally { await dropScratchOrg(org.orgId); }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
 });
