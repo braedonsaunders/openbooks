@@ -1,4 +1,4 @@
-import { RegisteredListTable } from '../../../../components/registered-list-table'
+import { PagedTable } from '../../../../components/paged-table'
 import { Badge } from '@openbooks/ui'
 import { SortTh } from '../../../../components/sortable-th'
 import {
@@ -59,7 +59,9 @@ export function AdminUsersTable({
 }) {
   const sortProps = { basePath, currentParams, sort, dir }
   return (
-    <RegisteredListTable
+    <PagedTable
+      prepared
+      serverWindow
       source="admin_users"
       rows={users}
       rowKey={(u) => u.id}

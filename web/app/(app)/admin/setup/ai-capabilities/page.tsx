@@ -10,7 +10,7 @@ import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { loadAiLedger } from '../../../../../lib/hrm/ai-rails'
 import { parseListParams, pickString } from '../../../../../lib/list-params'
 import { ModuleHomeTabs } from '../../../../../components/module-home/tabs'
-import { ServerPagedTable } from '../../../../../components/server-paged-table'
+import { PagedTable } from '../../../../../components/paged-table'
 import { ListFilterSelect } from '../../../../../components/list-filter-select'
 import { AiGovernanceSection } from '../../ai/AiGovernanceSection'
 
@@ -40,10 +40,10 @@ export default async function AssistantActionSetup({ searchParams }: {
     const exportParams = new URLSearchParams({ format: 'csv', page: String(params.page), perPage: String(params.perPage) })
     if (capabilityKey) exportParams.set('capabilityKey', capabilityKey)
     if (outcome) exportParams.set('outcome', outcome)
-    return <ServerPagedTable source="assistant_activity" rows={result.decisions} rowKey={(row) => row.id}
-      basePath={BASE} currentParams={{ ...sp, tab: 'activity' }} total={result.total} page={params.page} perPage={params.perPage}
+    return <PagedTable source="assistant_activity" rows={result.decisions} rowKey={(row) => row.id}
+      basePath={BASE} currentParams={{ ...sp, tab: 'activity' }} serverWindow={{ total: result.total, page: params.page, perPage: params.perPage }}
       empty={t('activityEmpty')}
-      toolbar={<>
+      toolbarAfter={<>
         <ListFilterSelect basePath={BASE} currentParams={{ ...sp, tab: 'activity' }} paramKey="capabilityKey"
           label={t('columns.capability')} allLabel={t('all')}
           options={[...AI_CAPABILITIES.values()].map((cap) => ({ value: cap.key, label: cap.name }))} />

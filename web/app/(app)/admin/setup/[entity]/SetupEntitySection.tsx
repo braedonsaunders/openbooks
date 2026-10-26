@@ -8,7 +8,7 @@ import { minorToMajor } from '../../../../../lib/setup/money-fields'
 import { db } from '@openbooks/engine/platform/db'
 import { Badge } from '@openbooks/ui'
 import { requireBandsReadScope } from '@openbooks/engine/hrm/compensation'
-import { RegisteredListTable } from '../../../../../components/registered-list-table'
+import { PagedTable } from '../../../../../components/paged-table'
 import { ShowInactivesToggle } from '../../../../../components/show-inactives-toggle'
 import { ListFilterSelect } from '../../../../../components/list-filter-select'
 import { SearchInput } from '../../../../../components/search-input'
@@ -557,13 +557,14 @@ export async function SetupEntitySection({
       </div>
 
       <div className={contained ? 'min-h-0 flex-1 overflow-hidden' : undefined}>
-        <RegisteredListTable<Record<string, unknown>>
+        <PagedTable<Record<string, unknown>>
+          prepared
           source="setup_configuration_records"
           contained={contained}
           rows={rows}
           rowKey={(row) => String(row[idColumn])}
           empty={t('empty')}
-          state={{ total, page: list.page, perPage: list.perPage }}
+          serverWindow={{ total, page: list.page, perPage: list.perPage }}
           basePath={basePath}
           currentParams={sp}
           pageParamKey={pageParam}
