@@ -352,12 +352,11 @@ const hooks = registerHooks({
       ['@openbooks/engine/documents/write', 'mock:write'],
       ['../bills.ts', 'mock:documents'],
       ['./resource-core', 'mock:resource-core'],
-      ['../../../../lib/authz', 'mock:authz'],
       ['@/lib/authz', 'mock:authz'],
-      ['../../../../lib/application/context', 'mock:db'],
-      ['../../../../lib/application/idempotency', 'mock:db'],
-      ['../../../../lib/data-io/resources', 'mock:resources'],
-      ['../../../../lib/data-io/parse', 'mock:parse'],
+      ['@/lib/application/context', 'mock:db'],
+      ['@/lib/application/idempotency', 'mock:db'],
+      ['@/lib/data-io/resources', 'mock:resources'],
+      ['@/lib/data-io/parse', 'mock:parse'],
     ]).get(specifier)
     if (mockUrl) return { url: mockUrl, shortCircuit: true }
     return nextResolve(specifier, context)

@@ -47,7 +47,13 @@ const mockSources = new Map<string, string>([
   ],
   [
     'mock:feature-gate',
-    `export async function guardProjectSchedulingFeature() { return null }`,
+    `
+      const state = globalThis[Symbol.for('openbooks.project-schedule-route-test')]
+      export async function guardFeaturePermission() {
+        if (!state.authz) return new Response(null, { status: 403 })
+        return state.authz
+      }
+    `,
   ],
   [
     'mock:db',
@@ -106,13 +112,15 @@ const mockSources = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'next/server') return { url: 'mock:next-server', shortCircuit: true }
-    // The route factory resolves its session gate lazily through the
-    // @/lib/authz alias at request time, so the hook must cover that alias
-    // in addition to the route's relative import.
-    if ((specifier === '../../../lib/authz' && (context.parentURL ?? '').includes('/api/project-schedule/')) ||
-      (specifier === '@/lib/authz' && (context.parentURL ?? '').includes('/lib/api/route'))) return { url: 'mock:authz', shortCircuit: true }
-    if (specifier === '../../../lib/projects-gate') return { url: 'mock:feature-gate', shortCircuit: true }
-    if (specifier === '../../../lib/project-schedule') return { url: 'mock:schedule', shortCircuit: true }
+    // The route factory resolves its permission-and-feature gate lazily
+    // through @/lib/feature-gates at request time, so the hook stays
+    // registered for every request.
+    const parent = context.parentURL ?? ''
+    if (specifier === '@/lib/authz' && (parent.includes('/api/project-schedule/') || parent.includes('/lib/api/route'))) {
+      return { url: 'mock:authz', shortCircuit: true }
+    }
+    if (specifier === '@/lib/feature-gates') return { url: 'mock:feature-gate', shortCircuit: true }
+    if (specifier === '@/lib/project-schedule') return { url: 'mock:schedule', shortCircuit: true }
     if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
     if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
     return nextResolve(specifier, context)
