@@ -1,44 +1,46 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
-import { NextResponse } from 'next/server'
-import { z } from 'zod';
-import { fieldClockOwnerKey } from "../../../../lib/field-clock-owner";
-import { isUuid } from '../../../../lib/list-params'
-import { myClockDay, resolveOwnParty } from '@openbooks/engine/hrm/field-time/reads'
-import { recordClockEvent, replayClockEvents, type RecordClockInput } from '@openbooks/engine/hrm/field-time/clock'
-import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { fieldClockOwnerKey } from "@/lib/field-clock-owner";
+import { isUuid } from "@/lib/list-params";
+import { myClockDay, resolveOwnParty } from "@openbooks/engine/hrm/field-time/reads";
+import {
+  recordClockEvent,
+  replayClockEvents,
+  type RecordClockInput,
+} from "@openbooks/engine/hrm/field-time/clock";
+import { FieldTimeError } from "@openbooks/engine/hrm/field-time/errors";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 function fieldTime(error: unknown): NextResponse | Promise<NextResponse> {
   if (error instanceof FieldTimeError) {
     // A reused offline id with a different payload is a client conflict,
     // not a validation failure.
-    if (error.code === 'client_event_conflict') return apiErrorResponse(error, { safeStatus: 409 })
-    return apiErrorResponse(error, { safeStatus: 422 })
+    if (error.code === "client_event_conflict") return apiErrorResponse(error, { safeStatus: 409 });
+    return apiErrorResponse(error, { safeStatus: 422 });
   }
-  throw error
+  throw error;
 }
 
 const geoSchema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   accuracyM: z.number().min(0).nullable().optional(),
-})
+});
 
-const SINGLE_NEEDS = 'The clock event needs kind, occurredAt and clientEventId'
+const SINGLE_NEEDS = "The clock event needs kind, occurredAt and clientEventId";
 
 const ownerSchema = z
   .string({ error: "Open the clock page again before recording or replaying events" })
-  .regex(
-    /^[a-f0-9]{64}$/,
-    "Open the clock page again before recording or replaying events",
-  );
+  .regex(/^[a-f0-9]{64}$/, "Open the clock page again before recording or replaying events");
 const eventSchema = z.object({
   ownerKey: ownerSchema,
-  kind: z.enum(['clock_in', 'clock_out', 'break_start', 'break_end', 'switch'], { error: SINGLE_NEEDS }),
+  kind: z.enum(["clock_in", "clock_out", "break_start", "break_end", "switch"], {
+    error: SINGLE_NEEDS,
+  }),
   occurredAt: z.string({ error: SINGLE_NEEDS }).min(1, SINGLE_NEEDS),
   deviceId: z.string().max(120).nullable().optional(),
   projectId: z.string().nullable().optional(),
@@ -47,10 +49,10 @@ const eventSchema = z.object({
   geo: geoSchema.nullable().optional(),
   photoFileId: z.string().nullable().optional(),
   clientEventId: z.string({ error: SINGLE_NEEDS }).min(1, SINGLE_NEEDS),
-})
+});
 
-const REPLAY_NEEDS = 'Each replayed event needs kind, occurredAt and clientEventId'
-const REPLAY_CAP = 'Replay batches hold at most 200 events'
+const REPLAY_NEEDS = "Each replayed event needs kind, occurredAt and clientEventId";
+const REPLAY_CAP = "Replay batches hold at most 200 events";
 
 /**
  * One body, two shapes: a single event, or { events: [...] } from the
@@ -60,18 +62,23 @@ const REPLAY_CAP = 'Replay batches hold at most 200 events'
 const clockBody = z.union([
   z.object({
     ownerKey: ownerSchema,
-    events: z.array(eventSchema, { error: REPLAY_NEEDS }).max(200, REPLAY_CAP) }),
+    events: z.array(eventSchema, { error: REPLAY_NEEDS }).max(200, REPLAY_CAP),
+  }),
   eventSchema,
-])
+]);
 
 /** GET → own clock status, today's pairs, and the offline replay hint. */
-async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+async function legacyGET(
+  request: Request,
+  ctx: { params: Promise<unknown> },
+  injectedGate?: Authz | null,
+) {
   const gate = injectedGate as Authz;
   try {
-    const day = await myClockDay(gate.user.orgId, gate.user.id)
-    return NextResponse.json(day)
+    const day = await myClockDay(gate.user.orgId, gate.user.id);
+    return NextResponse.json(day);
   } catch (error) {
-    return fieldTime(error)
+    return fieldTime(error);
   }
 }
 
@@ -80,14 +87,10 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
  * queue. Replay returns per-event results — one bad event never sinks
  * the rest, and a replayed id returns the original recording.
  */
-async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+async function legacyPOST(body: z.output<typeof clockBody>, injectedGate?: Authz | null) {
   const gate = injectedGate as Authz;
-  const { user } = gate
-  const orgId = user.orgId
-
-  const parsedBody = await parseJsonBody(req, clockBody, { status: 422 });
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data
+  const { user } = gate;
+  const orgId = user.orgId;
   try {
     // The clock is self: the worker always resolves from the login,
     // never from client input — another worker's party id reads as
@@ -96,26 +99,25 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
 
     const ownerKey = fieldClockOwnerKey(orgId, user.id, employeePartyId);
     const events = "events" in body ? body.events : [body];
-    if (
-      body.ownerKey !== ownerKey ||
-      events.some((event) => event.ownerKey !== ownerKey)
-    ) {
+    if (body.ownerKey !== ownerKey || events.some((event) => event.ownerKey !== ownerKey)) {
       throw new FieldTimeError(
         "clock_owner_changed",
         "These events belong to a different clock login. Sign in as the original employee to replay them; the pending events have been retained.",
       );
     }
 
-    if ('events' in body) {
-      const inputs: RecordClockInput[] = body.events.map((event) => toInput(orgId, user.id, employeePartyId, event))
-      const results = await replayClockEvents(inputs)
-      return NextResponse.json({ results })
+    if ("events" in body) {
+      const inputs: RecordClockInput[] = body.events.map((event) =>
+        toInput(orgId, user.id, employeePartyId, event),
+      );
+      const results = await replayClockEvents(inputs);
+      return NextResponse.json({ results });
     }
 
-    const result = await recordClockEvent(toInput(orgId, user.id, employeePartyId, body))
-    return NextResponse.json(result)
+    const result = await recordClockEvent(toInput(orgId, user.id, employeePartyId, body));
+    return NextResponse.json(result);
   } catch (error) {
-    return fieldTime(error)
+    return fieldTime(error);
   }
 }
 
@@ -126,16 +128,22 @@ function toInput(
   event: z.infer<typeof eventSchema>,
 ): RecordClockInput {
   for (const [key, value] of [
-    ['projectId', event.projectId],
-    ['projectTaskId', event.projectTaskId],
-    ['photoFileId', event.photoFileId],
+    ["projectId", event.projectId],
+    ["projectTaskId", event.projectTaskId],
+    ["photoFileId", event.photoFileId],
   ] as const) {
-    if (value != null && value !== '' && !isUuid(value)) {
-      throw new FieldTimeError('invalid_ref', `The clock event's ${key} is not a valid id — pick it from the picker and retry`)
+    if (value != null && value !== "" && !isUuid(value)) {
+      throw new FieldTimeError(
+        "invalid_ref",
+        `The clock event's ${key} is not a valid id — pick it from the picker and retry`,
+      );
     }
   }
   if (!isUuid(event.clientEventId)) {
-    throw new FieldTimeError('invalid_client_event', 'The clock event carries no offline id — retry with a client-generated UUID so replay stays idempotent')
+    throw new FieldTimeError(
+      "invalid_client_event",
+      "The clock event carries no offline id — retry with a client-generated UUID so replay stays idempotent",
+    );
   }
   return {
     orgId,
@@ -144,24 +152,28 @@ function toInput(
     kind: event.kind,
     occurredAt: event.occurredAt,
     deviceId: event.deviceId ?? null,
-    source: 'mobile',
+    source: "mobile",
     projectId: event.projectId ?? null,
     projectTaskId: event.projectTaskId ?? null,
     costCodeRef: event.costCodeRef?.trim() ? event.costCodeRef.trim() : null,
     geo: event.geo ?? null,
     photoFileId: event.photoFileId ?? null,
     clientEventId: event.clientEventId,
-  }
+  };
 }
 
 export const GET = defineRoute({
-  permission: 'time.clock', feature: 'fieldTime',
+  permission: "time.clock",
+  feature: "fieldTime",
 
-  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+  handler: ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params) }, authz),
 });
 
 export const POST = defineRoute({
-  permission: 'time.clock', feature: 'fieldTime',
-
-  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+  permission: "time.clock",
+  feature: "fieldTime",
+  body: clockBody,
+  invalidBodyStatus: 422,
+  handler: ({ body, authz }) => legacyPOST(body, authz),
 });

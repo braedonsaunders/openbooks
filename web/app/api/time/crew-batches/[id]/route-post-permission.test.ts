@@ -1,22 +1,22 @@
-import assert from 'node:assert/strict'
-import { stubModules } from '../../../../../testing/stub-modules'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { stubModules } from "../../../../../testing/stub-modules";
+import test from "node:test";
 
 // Posting a crew batch creates approved charge documents and writes ledger
 // entries. A caller therefore needs both time management and ledger posting
 // authority before the route commits the batch.
 interface CrewState {
-  allowPost: boolean
-  postBatchCalls: number
-  postedDocuments: string[]
+  allowPost: boolean;
+  postBatchCalls: number;
+  postedDocuments: string[];
 }
 
-const stateKey = Symbol.for('openbooks.crew-batch-post-test')
-const crewState: CrewState = { allowPost: true, postBatchCalls: 0, postedDocuments: [] }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = crewState
+const stateKey = Symbol.for("openbooks.crew-batch-post-test");
+const crewState: CrewState = { allowPost: true, postBatchCalls: 0, postedDocuments: [] };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = crewState;
 
-const BATCH_ID = '00000000-0000-4000-8000-00000000d001'
-const CHARGE_ID = '00000000-0000-4000-8000-00000000d002'
+const BATCH_ID = "00000000-0000-4000-8000-00000000d001";
+const CHARGE_ID = "00000000-0000-4000-8000-00000000d002";
 
 stubModules({
   navigation: false,
@@ -25,8 +25,13 @@ stubModules({
   features: false,
   extra: {
     "@/lib/authz": `
+      const state = globalThis[Symbol.for('openbooks.crew-batch-post-test')]
       export async function getAuthz() {
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+      }
+      export function can(authz, perm) {
+        if (perm === 'gl.post') return state.allowPost
+        return true
       }
       export function guardPermission() { return null }
       export function guardRootSubsidiaryScope() { return null }
@@ -41,7 +46,7 @@ stubModules({
         return true
       }
     `,
-    "../../../../../lib/feature-gates": `
+    "@/lib/feature-gates": `
       const state = globalThis[Symbol.for('openbooks.crew-batch-post-test')]
       export async function guardFeaturePermission() {
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
@@ -73,41 +78,41 @@ stubModules({
       export async function getBatchDetail() { return { id: '${BATCH_ID}' } }
     `,
   },
-})
+});
 
-const routeUrl = './route.ts?crew-batch-post-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?crew-batch-post-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function postBatchAction(): Promise<Response> {
   return POST(
     new Request(`http://openbooks.test/api/time/crew-batches/${BATCH_ID}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'post' }),
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "post" }),
     }),
     { params: Promise.resolve({ id: BATCH_ID }) },
-  )
+  );
 }
 
 function reset(allowPost: boolean): void {
-  crewState.allowPost = allowPost
-  crewState.postBatchCalls = 0
-  crewState.postedDocuments = []
+  crewState.allowPost = allowPost;
+  crewState.postBatchCalls = 0;
+  crewState.postedDocuments = [];
 }
 
-test('post without gl.post is refused by name before anything commits', async () => {
-  reset(false)
-  const response = await postBatchAction()
-  assert.equal(response.status, 403)
-  assert.deepEqual(await response.json(), { error: 'missing permission: gl.post' })
-  assert.equal(crewState.postBatchCalls, 0)
-  assert.deepEqual(crewState.postedDocuments, [])
-})
+test("post without gl.post is refused by name before anything commits", async () => {
+  reset(false);
+  const response = await postBatchAction();
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "missing permission: gl.post" });
+  assert.equal(crewState.postBatchCalls, 0);
+  assert.deepEqual(crewState.postedDocuments, []);
+});
 
-test('post with gl.post creates and posts the charges as before', async () => {
-  reset(true)
-  const response = await postBatchAction()
-  assert.equal(response.status, 200)
-  assert.equal(crewState.postBatchCalls, 1)
-  assert.deepEqual(crewState.postedDocuments, [CHARGE_ID])
-})
+test("post with gl.post creates and posts the charges as before", async () => {
+  reset(true);
+  const response = await postBatchAction();
+  assert.equal(response.status, 200);
+  assert.equal(crewState.postBatchCalls, 1);
+  assert.deepEqual(crewState.postedDocuments, [CHARGE_ID]);
+});

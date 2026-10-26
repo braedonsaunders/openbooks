@@ -1,18 +1,22 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { guardUnrestrictedScope } from '../../../../lib/authz'
-import { validateFieldTimeSettings } from '@openbooks/engine/hrm/field-time/settings'
-import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
-import { fieldTimeSettingsBody, normalizeFieldTimeSettingsBody } from '../../../../lib/field-time/settings-body'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import {
+  readFieldTimeSettingsValue,
+  saveFieldTimeSettings,
+  validateFieldTimeSettings,
+} from "@openbooks/engine/hrm/field-time/settings";
+import { FieldTimeError } from "@openbooks/engine/hrm/field-time/errors";
+import {
+  fieldTimeSettingsBody,
+  normalizeFieldTimeSettingsBody,
+} from "@/lib/field-time/settings-body";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 function bad(error: string, status = 422) {
-  return NextResponse.json({ error }, { status })
+  return NextResponse.json({ error }, { status });
 }
 
 /**
@@ -29,57 +33,43 @@ function bad(error: string, status = 422) {
  * rules are operational policy disclosing no per-subsidiary material, and
  * foremen need them to enter time.
  */
-async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
-  const gate = injectedGate as Authz;
-  const row = (await db.execute<{ settings: unknown }>(sql`
-    select settings->'fieldTime' as settings from orgs where id = ${gate.user.orgId}`, 'objects'))[0]
-  return NextResponse.json({ settings: row?.settings ?? null })
+async function legacyGET(gate: Authz) {
+  return NextResponse.json({ settings: await readFieldTimeSettingsValue(gate.user.orgId) });
 }
 
-async function legacyPUT(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+async function legacyPUT(
+  body: z.output<typeof fieldTimeSettingsBody>,
+  injectedGate?: Authz | null,
+) {
   const gate = injectedGate as Authz;
-  const { user } = gate
-  const scopeDenied = guardUnrestrictedScope(gate)
-  if (scopeDenied) return scopeDenied
-
-  const parsedBody = await parseJsonBody(req, fieldTimeSettingsBody);
-  if (!parsedBody.ok) return parsedBody.response;
+  const { user } = gate;
   try {
     // validateFieldTimeSettings refuses missing or undeclared rules by
     // name before anything is stored — the settings write and the
     // service reads agree on exactly this shape. Explicit nulls arrive
     // normalized to absent (see settings-body), so a cleared rule gets
     // the same named refusal as a never-set one.
-    const settings = validateFieldTimeSettings(normalizeFieldTimeSettingsBody(parsedBody.data))
-    const moved = (await db.execute<never>(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{fieldTime}', ${JSON.stringify({
-           roundingIncrement: settings.rounding.incrementMinutes,
-           roundingMode: settings.rounding.mode,
-           unpaidBreakMinutes: settings.unpaidBreakMinutes,
-           autoCloseHours: settings.autoCloseHours,
-           signatureRequired: settings.signatureRequired,
-           equipmentToleranceHours: settings.equipmentToleranceHours,
-           photoRequired: settings.photoRequired,
-         })}::jsonb),
-             updated_at = now()
-       where id = ${user.orgId}`)).rowCount ?? 0
-    if (moved !== 1) return bad('The organization is unknown — reload and retry')
-    return NextResponse.json({ ok: true })
+    const settings = validateFieldTimeSettings(normalizeFieldTimeSettingsBody(body));
+    const moved = await saveFieldTimeSettings(user.orgId, settings);
+    if (!moved) return bad("The organization is unknown — reload and retry");
+    return NextResponse.json({ ok: true });
   } catch (error) {
-    if (error instanceof FieldTimeError) return bad(error.message)
-    throw error
+    if (error instanceof FieldTimeError) return bad(error.message);
+    throw error;
   }
 }
 
 export const GET = defineRoute({
-  permission: 'time.manage', feature: 'fieldTime',
+  permission: "time.manage",
+  feature: "fieldTime",
 
-  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+  handler: ({ authz }) => legacyGET(authz),
 });
 
 export const PUT = defineRoute({
-  permission: 'time.manage', feature: 'fieldTime',
-
-  handler: ({ request, params, authz }) => legacyPUT(request, { params: Promise.resolve(params) }, authz),
+  permission: "time.manage",
+  feature: "fieldTime",
+  scope: "unrestricted",
+  body: fieldTimeSettingsBody,
+  handler: ({ body, authz }) => legacyPUT(body, authz),
 });
