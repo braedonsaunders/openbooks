@@ -4,15 +4,13 @@ import test from "node:test";
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
-const {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 import type { ScratchOrg } from "@openbooks/engine/testing/fixtures";
 const { convertOrder } = await import("./order-cycle.ts");
 const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
-const { loadTaxProfileConfig, persistLineTaxComponents } = await import("@openbooks/engine/tax/persist");
+const { loadTaxProfileConfig, persistLineTaxComponents } =
+  await import("@openbooks/engine/tax/persist");
 const { computeLineTaxes } = await import("@openbooks/engine/tax/tax");
 
 async function seedOrderWithoutLineAccount(
@@ -43,7 +41,9 @@ async function seedOrderWithoutLineAccount(
       ${actorId}, ${actorId}
     )
   `);
-  const line = (await db.execute<{ id: string }>(sql`
+  const line = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into document_lines
       (org_id, document_id, line_number, item_id, account_id, quantity,
        quantity_billed, quantity_fulfilled, unit_price, amount,
@@ -52,8 +52,14 @@ async function seedOrderWithoutLineAccount(
       ${org.orgId}, ${id}, 1, ${itemId}, null, '10',
       '0', '0', '100', '1000', '1000', '100', ${taxCodeId}, 'Marketplace A', ${actorId}, ${actorId}
     )
-    returning id`, "objects"))[0]!;
-  const tax = computeLineTaxes('1000', await loadTaxProfileConfig(org.orgId, { taxCodeId, taxGroupId: null }, org.date));
+    returning id`,
+      "objects",
+    )
+  )[0]!;
+  const tax = computeLineTaxes(
+    "1000",
+    await loadTaxProfileConfig(org.orgId, { taxCodeId, taxGroupId: null }, org.date),
+  );
   await persistLineTaxComponents(org.orgId, line.id, tax.components, actorId);
   await db.execute(sql`
     update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
@@ -68,114 +74,186 @@ async function seedOrderWithoutLineAccount(
  * has no resolvable account"). The convert must carry item income accounts
  * onto lines that have none, and the converted invoice must post end to end.
  */
-test("sales-order conversion preserves income accounts and marketplace tax evidence", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Order Converter", "admin"));
-    const soId = await withBypassContext(async () => {
-      await db.execute(sql`update items set income_account_id = ${org.accounts.revenue}, recognition_rule_id = null, deferred_account_id = null where id = ${org.items.service} and org_id = ${org.orgId}`);
-      return seedOrderWithoutLineAccount(org, actorId, org.items.service, "SO-INC-1");
-    });
+test(
+  "sales-order conversion preserves income accounts and marketplace tax evidence",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actorId = await withBypassContext(() =>
+        createScratchUser(org.orgId, "Order Converter", "admin"),
+      );
+      const soId = await withBypassContext(async () => {
+        await db.execute(
+          sql`update items set income_account_id = ${org.accounts.revenue}, recognition_rule_id = null, deferred_account_id = null where id = ${org.items.service} and org_id = ${org.orgId}`,
+        );
+        return seedOrderWithoutLineAccount(org, actorId, org.items.service, "SO-INC-1");
+      });
 
-    const converted = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
-    const lines = await withBypassContext(() => db.execute<{ account_id: string | null; marketplace_facilitator: string | null }>(sql`
-      select account_id, marketplace_facilitator from document_lines where org_id = ${org.orgId} and document_id = ${converted.id} order by line_number`, "objects"));
-    assert.equal(lines.length, 1);
-    assert.equal(lines[0]!.account_id, org.accounts.revenue);
-    assert.equal(lines[0]!.marketplace_facilitator, 'Marketplace A');
-    const evidence = await withBypassContext(() => db.execute<{ collected_by: string; facilitator_name: string; tax_amount: string }>(sql`
+      const converted = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
+      const lines = await withBypassContext(() =>
+        db.execute<{ account_id: string | null; marketplace_facilitator: string | null }>(
+          sql`
+      select account_id, marketplace_facilitator from document_lines where org_id = ${org.orgId} and document_id = ${converted.id} order by line_number`,
+          "objects",
+        ),
+      );
+      assert.equal(lines.length, 1);
+      assert.equal(lines[0]!.account_id, org.accounts.revenue);
+      assert.equal(lines[0]!.marketplace_facilitator, "Marketplace A");
+      const evidence = await withBypassContext(() =>
+        db.execute<{ collected_by: string; facilitator_name: string; tax_amount: string }>(
+          sql`
       select c.collected_by, c.facilitator_name, c.tax_amount::text from document_line_tax_components c
       join document_lines l on l.org_id = c.org_id and l.id = c.document_line_id
-      where l.org_id = ${org.orgId} and l.document_id = ${converted.id}`, "objects"));
-    assert.deepEqual(evidence, [{ collected_by: 'marketplace', facilitator_name: 'Marketplace A', tax_amount: '100.0000' }]);
+      where l.org_id = ${org.orgId} and l.document_id = ${converted.id}`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(evidence, [
+        { collected_by: "marketplace", facilitator_name: "Marketplace A", tax_amount: "100.0000" },
+      ]);
 
-    await withBypassContext(async () => {
-      await db.execute(sql`update documents set status = 'approved' where id = ${converted.id} and org_id = ${org.orgId}`);
-      await postDocument(converted.id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
-    });
-    const status = (await withBypassContext(() => db.execute<{ status: string }>(sql`select status from documents where id = ${converted.id}`, "objects")))[0]!.status;
-    assert.equal(status, "posted");
-    const taxLiability = (await withBypassContext(() => db.execute<{ n: number }>(sql`
+      await withBypassContext(async () => {
+        await db.execute(
+          sql`update documents set status = 'approved' where id = ${converted.id} and org_id = ${org.orgId}`,
+        );
+        await postDocument(converted.id, {
+          control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+        });
+      });
+      const status = (
+        await withBypassContext(() =>
+          db.execute<{ status: string }>(
+            sql`select status from documents where id = ${converted.id}`,
+            "objects",
+          ),
+        )
+      )[0]!.status;
+      assert.equal(status, "posted");
+      const taxLiability = (
+        await withBypassContext(() =>
+          db.execute<{ n: number }>(
+            sql`
       select count(*)::int as n from journal_lines l join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
-      where e.org_id = ${org.orgId} and e.source_document_id = ${converted.id} and l.account_id = ${org.accounts.taxOutput}`, "objects")))[0]!.n;
-    assert.equal(taxLiability, 0, 'marketplace tax must remain outside the merchant tax liability');
-  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
-});
-
+      where e.org_id = ${org.orgId} and e.source_document_id = ${converted.id} and l.account_id = ${org.accounts.taxOutput}`,
+            "objects",
+          ),
+        )
+      )[0]!.n;
+      assert.equal(
+        taxLiability,
+        0,
+        "marketplace tax must remain outside the merchant tax liability",
+      );
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 const consolidatedRows = [
-  { label: "order draft currency", register: async () => {
-        // createOrderDraft must refuse when the org base currency is missing instead
-        // of inventing CAD — the same rule the canonical order create enforces, so a
-        // draft can never silently book foreign-currency intent as domestic.
-        const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
-        const { createOrderDraft, OrderDraftError } = await import("./order-cycle.ts");
+  {
+    label: "order draft currency",
+    register: async () => {
+      // createOrderDraft must refuse when the org base currency is missing instead
+      // of inventing CAD — the same rule the canonical order create enforces, so a
+      // draft can never silently book foreign-currency intent as domestic.
+      const { sql } = await import("drizzle-orm");
+      const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+      const { createScratchOrg, createScratchUser, dropScratchOrg } =
+        await import("@openbooks/engine/testing/fixtures");
+      const { createOrderDraft, OrderDraftError } = await import("./order-cycle.ts");
 
+      test("createOrderDraft refuses when the org base currency is missing", async () => {
+        const org = await withBypassContext(() => createScratchOrg());
+        try {
+          const actor = await withBypassContext(() =>
+            createScratchUser(org.orgId, "Drafter", "order_drafter"),
+          );
+          // base_currency is NOT NULL, so an unconfigured org carries the empty
+          // string — the same falsy "missing" state the canonical create refuses.
+          await withBypassContext(() =>
+            db.execute(sql`update orgs set base_currency = '' where id = ${org.orgId}`),
+          );
+          await assert.rejects(
+            () =>
+              withBypassContext(() =>
+                createOrderDraft(org.orgId, actor, "purchase_order", randomUUID(), null),
+              ),
+            (error: unknown) => {
+              assert.ok(error instanceof OrderDraftError);
+              assert.match(error.message, /no base currency configured/);
+              assert.match(error.message, /set one before creating orders/);
+              return true;
+            },
+          );
+          const count = (
+            await withBypassContext(() =>
+              db.execute<{ n: string }>(
+                sql`
+              select count(*) as n from documents where org_id = ${org.orgId} and kind = 'purchase_order'`,
+                "objects",
+              ),
+            )
+          )[0]!.n;
+          assert.equal(Number(count), 0);
+        } finally {
+          await withBypassContext(() => dropScratchOrg(org.orgId));
+        }
+      });
 
-        test("createOrderDraft refuses when the org base currency is missing", async () => {
-          const org = await withBypassContext(() => createScratchOrg());
-          try {
-            const actor = await withBypassContext(() => createScratchUser(org.orgId, "Drafter", "order_drafter"));
-            // base_currency is NOT NULL, so an unconfigured org carries the empty
-            // string — the same falsy "missing" state the canonical create refuses.
-            await withBypassContext(() => db.execute(sql`update orgs set base_currency = '' where id = ${org.orgId}`));
-            await assert.rejects(
-              () => withBypassContext(() => createOrderDraft(org.orgId, actor, "purchase_order", randomUUID(), null)),
-              (error: unknown) => {
-                assert.ok(error instanceof OrderDraftError);
-                assert.match(error.message, /no base currency configured/);
-                assert.match(error.message, /set one before creating orders/);
-                return true;
-              },
-            );
-            const count = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-              select count(*) as n from documents where org_id = ${org.orgId} and kind = 'purchase_order'`, "objects")))[0]!.n;
-            assert.equal(Number(count), 0);
-          } finally {
-            await withBypassContext(() => dropScratchOrg(org.orgId));
-          }
-        });
+      test("createOrderDraft mints the draft in the org base currency", async () => {
+        const org = await withBypassContext(() => createScratchOrg());
+        try {
+          const actor = await withBypassContext(() =>
+            createScratchUser(org.orgId, "Drafter", "order_drafter"),
+          );
+          const draft = await withBypassContext(() =>
+            createOrderDraft(org.orgId, actor, "purchase_order", randomUUID(), null),
+          );
+          const row = (
+            await withBypassContext(() =>
+              db.execute<{ currency: string }>(
+                sql`
+              select currency from documents where id = ${draft.id} and org_id = ${org.orgId}`,
+                "objects",
+              ),
+            )
+          )[0]!;
+          assert.equal(row.currency, "CAD");
+        } finally {
+          await withBypassContext(() => dropScratchOrg(org.orgId));
+        }
+      });
+    },
+  },
+  {
+    label: "order billed unwind",
+    register: async () => {
+      const { sql } = await import("drizzle-orm");
+      const { db, withBypassContext, withOrgContext } =
+        await import("@openbooks/engine/platform/db");
+      const { createScratchOrg, createScratchUser, dropScratchOrg } =
+        await import("@openbooks/engine/testing/fixtures");
 
-        test("createOrderDraft mints the draft in the org base currency", async () => {
-          const org = await withBypassContext(() => createScratchOrg());
-          try {
-            const actor = await withBypassContext(() => createScratchUser(org.orgId, "Drafter", "order_drafter"));
-            const draft = await withBypassContext(() => createOrderDraft(org.orgId, actor, "purchase_order", randomUUID(), null));
-            const row = (await withBypassContext(() => db.execute<{ currency: string }>(sql`
-              select currency from documents where id = ${draft.id} and org_id = ${org.orgId}`, "objects")))[0]!;
-            assert.equal(row.currency, "CAD");
-          } finally {
-            await withBypassContext(() => dropScratchOrg(org.orgId));
-          }
-        });
-  } },
-  { label: "order billed unwind", register: async () => {
-        const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-        const {
-          createScratchOrg,
-          createScratchUser,
-          dropScratchOrg,
-        } = await import("@openbooks/engine/testing/fixtures");
+      const { convertOrder } = await import("./order-cycle.ts");
+      const { requestDocumentVoid } = await import("@openbooks/engine/ledger/document-void");
+      const { deleteDocument } = await import("@openbooks/engine/ledger/document-delete");
+      const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
+      const { materializeCapture } = await import("@openbooks/engine/payables/ap-capture-service");
 
-        const { convertOrder } = await import("./order-cycle.ts");
-        const { requestDocumentVoid } = await import("@openbooks/engine/ledger/document-void");
-        const { deleteDocument } = await import("@openbooks/engine/ledger/document-delete");
-        const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
-        const { materializeCapture } = await import("@openbooks/engine/payables/ap-capture-service");
-
-        async function seedOrder(
-          org: ScratchOrg,
-          actorId: string,
-          kind: "quote" | "sales_order",
-          number: string,
-          quantity = "10",
-        ): Promise<string> {
-          const id = randomUUID();
-          const amount = String(Number(quantity) * 100);
-          await withBypassContext(() => (db.execute(sql`
+      async function seedOrder(
+        org: ScratchOrg,
+        actorId: string,
+        kind: "quote" | "sales_order",
+        number: string,
+        quantity = "10",
+      ): Promise<string> {
+        const id = randomUUID();
+        const amount = String(Number(quantity) * 100);
+        await withBypassContext(() =>
+          db.execute(sql`
             insert into documents
               (id, org_id, kind, document_number, party_id, subsidiary_id,
                document_date, currency, status, subtotal, tax_total, total,
@@ -185,8 +263,10 @@ const consolidatedRows = [
               ${org.subsidiaryId}, ${org.date}, 'CAD', 'draft', ${amount}, '0', ${amount},
               ${actorId}, ${actorId}
             )
-          `)));
-          await withBypassContext(() => (db.execute(sql`
+          `),
+        );
+        await withBypassContext(() =>
+          db.execute(sql`
             insert into document_lines
               (org_id, document_id, line_number, account_id, quantity,
                quantity_billed, quantity_fulfilled, unit_price, amount,
@@ -195,81 +275,125 @@ const consolidatedRows = [
               ${org.orgId}, ${id}, 1, ${org.accounts.revenue}, ${quantity},
               '0', '0', '100', ${amount}, ${amount}, '0', ${actorId}, ${actorId}
             )
-          `)));
-          await withBypassContext(() => (db.execute(sql`
+          `),
+        );
+        await withBypassContext(() =>
+          db.execute(sql`
             update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
              where id = ${id} and org_id = ${org.orgId}
-          `)));
-          return id;
-        }
+          `),
+        );
+        return id;
+      }
 
-        // Seeding helpers run under withBypassContext at their call sites: importing
-        // ./order-cycle.ts pulls in the web request-org resolver, which denies every
-        // unscoped query under pooled RLS (bare setup dies with 42501). convertOrder
-        // and requestDocumentVoid scope their own transactions internally and run
-        // bare; the remaining engine calls (post, delete, materialize) rely on ambient
-        // scope like the sibling order-convert-income suite, so they run under bypass.
-        // Reads run in the scratch org's scope.
-        async function billedOf(orgId: string, documentId: string): Promise<string> {
-          return withOrgContext(orgId, async () => {
-            const r = (await db.execute<{ quantity_billed: string }>(sql`
+      // Seeding helpers run under withBypassContext at their call sites: importing
+      // ./order-cycle.ts pulls in the web request-org resolver, which denies every
+      // unscoped query under pooled RLS (bare setup dies with 42501). convertOrder
+      // and requestDocumentVoid scope their own transactions internally and run
+      // bare; the remaining engine calls (post, delete, materialize) rely on ambient
+      // scope like the sibling order-convert-income suite, so they run under bypass.
+      // Reads run in the scratch org's scope.
+      async function billedOf(orgId: string, documentId: string): Promise<string> {
+        return withOrgContext(orgId, async () => {
+          const r = await db.execute<{ quantity_billed: string }>(
+            sql`
               select quantity_billed::text from document_lines
                where org_id = ${orgId} and document_id = ${documentId}
-               order by line_number limit 1`, "objects"));
-            return r[0]!.quantity_billed;
-          });
-        }
+               order by line_number limit 1`,
+            "objects",
+          );
+          return r[0]!.quantity_billed;
+        });
+      }
 
-        async function approveAndPostInvoice(org: ScratchOrg, actorId: string, invoiceId: string): Promise<void> {
-          await withBypassContext(async () => {
-            await db.execute(sql`update documents set status = 'approved' where id = ${invoiceId} and org_id = ${org.orgId}`);
-            await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+      async function approveAndPostInvoice(
+        org: ScratchOrg,
+        actorId: string,
+        invoiceId: string,
+      ): Promise<void> {
+        await withBypassContext(async () => {
+          await db.execute(
+            sql`update documents set status = 'approved' where id = ${invoiceId} and org_id = ${org.orgId}`,
+          );
+          await postDocument(invoiceId, {
+            control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
           });
-        }
+        });
+      }
 
-        test("voiding a converted invoice restores the sales order billed quantity", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+      test(
+        "voiding a converted invoice restores the sales order billed quantity",
+        { skip: !process.env.OPENBOOKS_DB_URL },
+        async () => {
           const org = await withBypassContext(() => createScratchOrg());
           try {
-            const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Billed Unwind", "admin"));
-            const soId = await withBypassContext(() => seedOrder(org, actorId, "sales_order", "SO-BILLED-VOID-1"));
+            const actorId = await withBypassContext(() =>
+              createScratchUser(org.orgId, "Billed Unwind", "admin"),
+            );
+            const soId = await withBypassContext(() =>
+              seedOrder(org, actorId, "sales_order", "SO-BILLED-VOID-1"),
+            );
             const converted = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
             assert.equal(await billedOf(org.orgId, soId), "10.00000000");
             await approveAndPostInvoice(org, actorId, converted.id);
             const voided = await requestDocumentVoid({
-              documentId: converted.id, orgId: org.orgId, actorId,
-              reason: "Void a mistakenly converted invoice", reversalDate: org.date, source: "api",
+              documentId: converted.id,
+              orgId: org.orgId,
+              actorId,
+              reason: "Void a mistakenly converted invoice",
+              reversalDate: org.date,
+              source: "api",
             });
             assert.equal(voided.status, "voided");
             assert.equal(await billedOf(org.orgId, soId), "0.00000000");
             const again = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
             assert.ok(again.id);
-          } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
-        });
+          } finally {
+            await withBypassContext(() => dropScratchOrg(org.orgId));
+          }
+        },
+      );
 
-        test("deleting a draft converted invoice restores the sales order billed quantity", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+      test(
+        "deleting a draft converted invoice restores the sales order billed quantity",
+        { skip: !process.env.OPENBOOKS_DB_URL },
+        async () => {
           const org = await withBypassContext(() => createScratchOrg());
           try {
-            const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Billed Unwind", "admin"));
-            const soId = await withBypassContext(() => seedOrder(org, actorId, "sales_order", "SO-BILLED-DELETE-1"));
+            const actorId = await withBypassContext(() =>
+              createScratchUser(org.orgId, "Billed Unwind", "admin"),
+            );
+            const soId = await withBypassContext(() =>
+              seedOrder(org, actorId, "sales_order", "SO-BILLED-DELETE-1"),
+            );
             const converted = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
             assert.equal(await billedOf(org.orgId, soId), "10.00000000");
-            await withBypassContext(() => deleteDocument(converted.id, actorId, org.orgId, { reason: "Discard a mistakenly converted draft", allowedSubsidiaryIds: null }));
+            await withBypassContext(() =>
+              deleteDocument(converted.id, actorId, org.orgId, {
+                reason: "Discard a mistakenly converted draft",
+                allowedSubsidiaryIds: null,
+              }),
+            );
             assert.equal(await billedOf(org.orgId, soId), "0.00000000");
             const again = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
             assert.ok(again.id);
-          } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
-        });
+          } finally {
+            await withBypassContext(() => dropScratchOrg(org.orgId));
+          }
+        },
+      );
 
-        async function seedServicePO(
-          org: ScratchOrg,
-          actorId: string,
-          number: string,
-          quantity = "10",
-        ): Promise<{ poId: string; lineId: string }> {
-          const amount = String(Number(quantity) * 100);
-          const poId = randomUUID();
-          const lineId = randomUUID();
-          await withBypassContext(() => (db.execute(sql`
+      async function seedServicePO(
+        org: ScratchOrg,
+        actorId: string,
+        number: string,
+        quantity = "10",
+      ): Promise<{ poId: string; lineId: string }> {
+        const amount = String(Number(quantity) * 100);
+        const poId = randomUUID();
+        const lineId = randomUUID();
+        await withBypassContext(() =>
+          db.execute(sql`
             insert into documents
               (id, org_id, kind, document_number, party_id, subsidiary_id,
                document_date, currency, status, subtotal, tax_total, total,
@@ -279,8 +403,10 @@ const consolidatedRows = [
               ${org.subsidiaryId}, ${org.date}, 'CAD', 'draft', ${amount}, '0', ${amount},
               ${actorId}, ${actorId}
             )
-          `)));
-          await withBypassContext(() => (db.execute(sql`
+          `),
+        );
+        await withBypassContext(() =>
+          db.execute(sql`
             insert into document_lines
               (id, org_id, document_id, line_number, account_id, quantity,
                quantity_billed, quantity_fulfilled, unit_price, amount,
@@ -289,54 +415,64 @@ const consolidatedRows = [
               ${lineId}, ${org.orgId}, ${poId}, 1, ${org.accounts.adjustment}, ${quantity},
               '0', '0', '100', ${amount}, ${amount}, '0', ${actorId}, ${actorId}
             )
-          `)));
-          await withBypassContext(() => (db.execute(sql`
+          `),
+        );
+        await withBypassContext(() =>
+          db.execute(sql`
             update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
              where id = ${poId} and org_id = ${org.orgId}
-          `)));
-          await withBypassContext(() => (db.execute(sql`
+          `),
+        );
+        await withBypassContext(() =>
+          db.execute(sql`
             insert into vendor_roles (org_id, party_id, created_by, updated_by)
             values (${org.orgId}, ${org.vendorId}, ${actorId}, ${actorId})
-          `)));
-          return { poId, lineId };
-        }
+          `),
+        );
+        return { poId, lineId };
+      }
 
-        async function seedCaptureItem(
-          org: ScratchOrg,
-          actorId: string,
-          input: {
-            kind: "vendor_bill" | "vendor_credit";
-            poId: string;
-            poLineId: string;
-            quantity: string;
-            invoiceNumber: string;
-          },
-        ): Promise<string> {
-          const amount = String(Number(input.quantity) * 100);
-          const folderId = randomUUID();
-          await withBypassContext(() => (db.execute(sql`
+      async function seedCaptureItem(
+        org: ScratchOrg,
+        actorId: string,
+        input: {
+          kind: "vendor_bill" | "vendor_credit";
+          poId: string;
+          poLineId: string;
+          quantity: string;
+          invoiceNumber: string;
+        },
+      ): Promise<string> {
+        const amount = String(Number(input.quantity) * 100);
+        const folderId = randomUUID();
+        await withBypassContext(() =>
+          db.execute(sql`
             insert into folders (id, org_id, name, created_by, updated_by)
             values (${folderId}, ${org.orgId}, 'AP capture', ${actorId}, ${actorId})
-          `)));
-          const fileId = randomUUID();
-          await withBypassContext(() => (db.execute(sql`
+          `),
+        );
+        const fileId = randomUUID();
+        await withBypassContext(() =>
+          db.execute(sql`
             insert into files (id, org_id, folder_id, name, content_type, size_bytes, created_by, updated_by)
             values (${fileId}, ${org.orgId}, ${folderId}, 'capture.pdf', 'application/pdf', 10, ${actorId}, ${actorId})
-          `)));
-          const itemId = randomUUID();
-          const normalized = {
-            vendorName: "Acme Vendor",
-            vendorTaxId: null,
-            invoiceNumber: input.invoiceNumber,
-            invoiceDate: org.date,
-            dueDate: null,
-            purchaseOrderNumber: null,
-            currency: "CAD",
-            subtotal: amount,
-            taxTotal: "0",
-            total: amount,
-            memo: null,
-            lines: [{
+          `),
+        );
+        const itemId = randomUUID();
+        const normalized = {
+          vendorName: "Acme Vendor",
+          vendorTaxId: null,
+          invoiceNumber: input.invoiceNumber,
+          invoiceDate: org.date,
+          dueDate: null,
+          purchaseOrderNumber: null,
+          currency: "CAD",
+          subtotal: amount,
+          taxTotal: "0",
+          total: amount,
+          memo: null,
+          lines: [
+            {
               description: "Services",
               productCode: null,
               quantity: input.quantity,
@@ -348,102 +484,224 @@ const consolidatedRows = [
               itemId: null,
               purchaseOrderLineId: input.poLineId,
               confidence: null,
-            }],
-          };
-          await withBypassContext(() => (db.execute(sql`
+            },
+          ],
+        };
+        await withBypassContext(() =>
+          db.execute(sql`
             insert into ap_capture_items
               (id, org_id, file_id, status, original_filename, content_hash, document_kind,
                normalized, vendor_candidate_id, purchase_order_id, created_by, updated_by)
             values (${itemId}, ${org.orgId}, ${fileId}, 'ready', 'capture.pdf',
               ${randomUUID().replace(/-/g, "")}, ${input.kind}, ${JSON.stringify(normalized)}::jsonb,
               ${org.vendorId}, ${input.poId}, ${actorId}, ${actorId})
-          `)));
-          return itemId;
-        }
+          `),
+        );
+        return itemId;
+      }
 
-        async function approveAndPostBill(org: ScratchOrg, billId: string): Promise<void> {
-          await withBypassContext(async () => {
-            await db.execute(sql`update documents set status = 'approved' where id = ${billId} and org_id = ${org.orgId}`);
-            await postDocument(billId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+      async function approveAndPostBill(org: ScratchOrg, billId: string): Promise<void> {
+        await withBypassContext(async () => {
+          await db.execute(
+            sql`update documents set status = 'approved' where id = ${billId} and org_id = ${org.orgId}`,
+          );
+          await postDocument(billId, {
+            control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
           });
-        }
+        });
+      }
 
-        test("voiding a converted sales order restores the quote billed quantity", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+      test(
+        "voiding a converted sales order restores the quote billed quantity",
+        { skip: !process.env.OPENBOOKS_DB_URL },
+        async () => {
           const org = await withBypassContext(() => createScratchOrg());
           try {
-            const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Billed Unwind", "admin"));
-            const quoteId = await withBypassContext(() => seedOrder(org, actorId, "quote", "QUOTE-BILLED-VOID-1", "5"));
+            const actorId = await withBypassContext(() =>
+              createScratchUser(org.orgId, "Billed Unwind", "admin"),
+            );
+            const quoteId = await withBypassContext(() =>
+              seedOrder(org, actorId, "quote", "QUOTE-BILLED-VOID-1", "5"),
+            );
             const converted = await convertOrder(org.orgId, actorId, quoteId, "sales_order");
             assert.equal(await billedOf(org.orgId, quoteId), "5.00000000");
             const voided = await requestDocumentVoid({
-              documentId: converted.id, orgId: org.orgId, actorId,
-              reason: "Cancel a mistakenly converted order", reversalDate: org.date, source: "api",
+              documentId: converted.id,
+              orgId: org.orgId,
+              actorId,
+              reason: "Cancel a mistakenly converted order",
+              reversalDate: org.date,
+              source: "api",
             });
             assert.equal(voided.status, "voided");
             assert.equal(await billedOf(org.orgId, quoteId), "0.00000000");
-          } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
-        });
+          } finally {
+            await withBypassContext(() => dropScratchOrg(org.orgId));
+          }
+        },
+      );
 
-        test("deleting a draft captured bill restores the purchase order billed quantity", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+      test(
+        "deleting a draft captured bill restores the purchase order billed quantity",
+        { skip: !process.env.OPENBOOKS_DB_URL },
+        async () => {
           const org = await withBypassContext(() => createScratchOrg());
           try {
-            const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Billed Unwind", "admin"));
-            const { poId, lineId } = await withBypassContext(() => seedServicePO(org, actorId, "PO-BILLED-DELETE-1"));
-            const itemId = await withBypassContext(() => seedCaptureItem(org, actorId, {
-              kind: "vendor_bill", poId, poLineId: lineId, quantity: "10", invoiceNumber: "AP-DELETE-1",
-            }));
-            const materialized = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: itemId, actorId, allowedSubsidiaryIds: null }));
+            const actorId = await withBypassContext(() =>
+              createScratchUser(org.orgId, "Billed Unwind", "admin"),
+            );
+            const { poId, lineId } = await withBypassContext(() =>
+              seedServicePO(org, actorId, "PO-BILLED-DELETE-1"),
+            );
+            const itemId = await withBypassContext(() =>
+              seedCaptureItem(org, actorId, {
+                kind: "vendor_bill",
+                poId,
+                poLineId: lineId,
+                quantity: "10",
+                invoiceNumber: "AP-DELETE-1",
+              }),
+            );
+            const materialized = await withBypassContext(() =>
+              materializeCapture({
+                orgId: org.orgId,
+                captureItemId: itemId,
+                actorId,
+                allowedSubsidiaryIds: null,
+              }),
+            );
             assert.equal(await billedOf(org.orgId, poId), "10.00000000");
-            await withBypassContext(() => deleteDocument(materialized.documentId, actorId, org.orgId, { reason: "Discard a mistakenly captured draft", allowedSubsidiaryIds: null }));
+            await withBypassContext(() =>
+              deleteDocument(materialized.documentId, actorId, org.orgId, {
+                reason: "Discard a mistakenly captured draft",
+                allowedSubsidiaryIds: null,
+              }),
+            );
             assert.equal(await billedOf(org.orgId, poId), "0.00000000");
-            const released = await withOrgContext(org.orgId, async () => (await db.execute<{ status: string; document_id: string | null }>(sql`
-              select status, document_id from ap_capture_items where id = ${itemId} and org_id = ${org.orgId}`, "objects"))[0]!);
+            const released = await withOrgContext(
+              org.orgId,
+              async () =>
+                (
+                  await db.execute<{ status: string; document_id: string | null }>(
+                    sql`
+              select status, document_id from ap_capture_items where id = ${itemId} and org_id = ${org.orgId}`,
+                    "objects",
+                  )
+                )[0]!,
+            );
             assert.equal(released.status, "needs_review");
             assert.equal(released.document_id, null);
             const again = await convertOrder(org.orgId, actorId, poId, "vendor_bill");
             assert.ok(again.id, "the received remainder is billable again");
-          } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
-        });
+          } finally {
+            await withBypassContext(() => dropScratchOrg(org.orgId));
+          }
+        },
+      );
 
-        test("voiding a captured bill restores the purchase order billed quantity", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+      test(
+        "voiding a captured bill restores the purchase order billed quantity",
+        { skip: !process.env.OPENBOOKS_DB_URL },
+        async () => {
           const org = await withBypassContext(() => createScratchOrg());
           try {
-            const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Billed Unwind", "admin"));
-            const { poId, lineId } = await withBypassContext(() => seedServicePO(org, actorId, "PO-BILLED-VOID-1"));
-            const itemId = await withBypassContext(() => seedCaptureItem(org, actorId, {
-              kind: "vendor_bill", poId, poLineId: lineId, quantity: "10", invoiceNumber: "AP-VOID-1",
-            }));
-            const materialized = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: itemId, actorId, allowedSubsidiaryIds: null }));
+            const actorId = await withBypassContext(() =>
+              createScratchUser(org.orgId, "Billed Unwind", "admin"),
+            );
+            const { poId, lineId } = await withBypassContext(() =>
+              seedServicePO(org, actorId, "PO-BILLED-VOID-1"),
+            );
+            const itemId = await withBypassContext(() =>
+              seedCaptureItem(org, actorId, {
+                kind: "vendor_bill",
+                poId,
+                poLineId: lineId,
+                quantity: "10",
+                invoiceNumber: "AP-VOID-1",
+              }),
+            );
+            const materialized = await withBypassContext(() =>
+              materializeCapture({
+                orgId: org.orgId,
+                captureItemId: itemId,
+                actorId,
+                allowedSubsidiaryIds: null,
+              }),
+            );
             await approveAndPostBill(org, materialized.documentId);
             const voided = await requestDocumentVoid({
-              documentId: materialized.documentId, orgId: org.orgId, actorId,
-              reason: "Void a mistakenly captured bill", reversalDate: org.date, source: "api",
+              documentId: materialized.documentId,
+              orgId: org.orgId,
+              actorId,
+              reason: "Void a mistakenly captured bill",
+              reversalDate: org.date,
+              source: "api",
             });
             assert.equal(voided.status, "voided");
             assert.equal(await billedOf(org.orgId, poId), "0.00000000");
-          } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
-        });
+          } finally {
+            await withBypassContext(() => dropScratchOrg(org.orgId));
+          }
+        },
+      );
 
-        test("voiding a captured vendor credit re-consumes the purchase order billed quantity", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+      test(
+        "voiding a captured vendor credit re-consumes the purchase order billed quantity",
+        { skip: !process.env.OPENBOOKS_DB_URL },
+        async () => {
           const org = await withBypassContext(() => createScratchOrg());
           try {
-            const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Billed Unwind", "admin"));
-            const { poId, lineId: poLineId } = await withBypassContext(() => seedServicePO(org, actorId, "PO-BILLED-CREDIT-1"));
-            const billItem = await withBypassContext(() => seedCaptureItem(org, actorId, {
-              kind: "vendor_bill", poId, poLineId, quantity: "10", invoiceNumber: "AP-CREDIT-BILL-1",
-            }));
-            const bill = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: billItem, actorId, allowedSubsidiaryIds: null }));
+            const actorId = await withBypassContext(() =>
+              createScratchUser(org.orgId, "Billed Unwind", "admin"),
+            );
+            const { poId, lineId: poLineId } = await withBypassContext(() =>
+              seedServicePO(org, actorId, "PO-BILLED-CREDIT-1"),
+            );
+            const billItem = await withBypassContext(() =>
+              seedCaptureItem(org, actorId, {
+                kind: "vendor_bill",
+                poId,
+                poLineId,
+                quantity: "10",
+                invoiceNumber: "AP-CREDIT-BILL-1",
+              }),
+            );
+            const bill = await withBypassContext(() =>
+              materializeCapture({
+                orgId: org.orgId,
+                captureItemId: billItem,
+                actorId,
+                allowedSubsidiaryIds: null,
+              }),
+            );
             await approveAndPostBill(org, bill.documentId);
             assert.equal(await billedOf(org.orgId, poId), "10.00000000");
-            const creditItem = await withBypassContext(() => seedCaptureItem(org, actorId, {
-              kind: "vendor_credit", poId, poLineId, quantity: "4", invoiceNumber: "AP-CREDIT-1",
-            }));
-            const credit = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: creditItem, actorId, allowedSubsidiaryIds: null }));
+            const creditItem = await withBypassContext(() =>
+              seedCaptureItem(org, actorId, {
+                kind: "vendor_credit",
+                poId,
+                poLineId,
+                quantity: "4",
+                invoiceNumber: "AP-CREDIT-1",
+              }),
+            );
+            const credit = await withBypassContext(() =>
+              materializeCapture({
+                orgId: org.orgId,
+                captureItemId: creditItem,
+                actorId,
+                allowedSubsidiaryIds: null,
+              }),
+            );
             assert.equal(await billedOf(org.orgId, poId), "6.00000000");
             await approveAndPostBill(org, credit.documentId);
             const voided = await requestDocumentVoid({
-              documentId: credit.documentId, orgId: org.orgId, actorId,
-              reason: "Void a mistakenly captured credit", reversalDate: org.date, source: "api",
+              documentId: credit.documentId,
+              orgId: org.orgId,
+              actorId,
+              reason: "Void a mistakenly captured credit",
+              reversalDate: org.date,
+              source: "api",
             });
             assert.equal(voided.status, "voided");
             assert.equal(await billedOf(org.orgId, poId), "10.00000000");
@@ -452,63 +710,73 @@ const consolidatedRows = [
               convertOrder(org.orgId, actorId, poId, "vendor_bill"),
               /fully converted|do not cover|already/,
             );
-          } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
-        });
-  } },
-  { label: "order convert release concurrency", register: async () => {
-        const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-        const {
-          createScratchOrg,
-          createScratchUser,
-          dropScratchOrg,
-        } = await import("@openbooks/engine/testing/fixtures");
-
-        const { convertOrder } = await import("./order-cycle.ts");
-        const { deleteDocument } = await import("@openbooks/engine/ledger/document-delete");
-
-        // F26: conversion vs draft-child deletion must take source-order locks in the
-        // same header-before-lines order. convertOrder (web/lib/order-cycle.ts,
-        // source header FOR UPDATE then source lines FOR UPDATE OF dl) is
-        // header-first; releaseConvertedOrderQuantities must match it.
-        //
-        // Evidence shape, stated honestly: the converter side below replays
-        // convertOrder's exact lock-acquisition order (same tables, same predicates,
-        // same FOR UPDATE forms) rather than the full conversion, because a real
-        // conversion cannot be paused between its header lock and its line locks —
-        // and pausing there is precisely what stages the cycle. The deleter side is
-        // the unmodified production path: real deleteDocument into the real
-        // releaseConvertedOrderQuantities. The probe waits until the deleter is
-        // observably blocked on the converter-held header (pg_blocking_pids — not a
-        // sleep) and only then attempts the source line locks. Inverted order
-        // deadlocks here with SQLSTATE 40P01; canonical order serializes. The real
-        // convertOrder is exercised after the race for both safe outcomes: a
-        // successful re-conversion of the released remainder, then an explicitly
-        // classified no-remainder refusal on the second attempt.
-
-        const PROBE_ROLLBACK = "F26-PROBE-ROLLBACK";
-
-        function describeRejection(error: unknown): string {
-          const parts: string[] = [];
-          let cur = error as { code?: unknown; message?: unknown; cause?: unknown } | null;
-          const seen = new Set<unknown>();
-          while (cur && (typeof cur === "object" || typeof cur === "function") && !seen.has(cur) && parts.length < 6) {
-            seen.add(cur);
-            parts.push(`[${String(cur.code ?? "?")}] ${String(cur.message ?? cur)}`);
-            cur = (cur.cause ?? null) as typeof cur;
+          } finally {
+            await withBypassContext(() => dropScratchOrg(org.orgId));
           }
-          if (parts.length === 0) parts.push(String(error));
-          return parts.join(" <- ");
-        }
+        },
+      );
+    },
+  },
+  {
+    label: "order convert release concurrency",
+    register: async () => {
+      const { sql } = await import("drizzle-orm");
+      const { db, withBypassContext, withOrgContext } =
+        await import("@openbooks/engine/platform/db");
+      const { createScratchOrg, createScratchUser, dropScratchOrg } =
+        await import("@openbooks/engine/testing/fixtures");
 
-        function isDeadlock(error: unknown): boolean {
-          return /40P01|deadlock detected/i.test(describeRejection(error));
-        }
+      const { convertOrder } = await import("./order-cycle.ts");
+      const { deleteDocument } = await import("@openbooks/engine/ledger/document-delete");
 
-        async function seedOrder(org: ScratchOrg, actorId: string, number: string): Promise<string> {
-          return withBypassContext(async () => {
-           const id = randomUUID();
-           const document = await db.execute<{ id: string }>(sql`
+      // F26: conversion vs draft-child deletion must take source-order locks in the
+      // same header-before-lines order. convertOrder (web/lib/order-cycle.ts,
+      // source header FOR UPDATE then source lines FOR UPDATE OF dl) is
+      // header-first; releaseConvertedOrderQuantities must match it.
+      //
+      // Evidence shape, stated honestly: the converter side below replays
+      // convertOrder's exact lock-acquisition order (same tables, same predicates,
+      // same FOR UPDATE forms) rather than the full conversion, because a real
+      // conversion cannot be paused between its header lock and its line locks —
+      // and pausing there is precisely what stages the cycle. The deleter side is
+      // the unmodified production path: real deleteDocument into the real
+      // releaseConvertedOrderQuantities. The probe waits until the deleter is
+      // observably blocked on the converter-held header (pg_blocking_pids — not a
+      // sleep) and only then attempts the source line locks. Inverted order
+      // deadlocks here with SQLSTATE 40P01; canonical order serializes. The real
+      // convertOrder is exercised after the race for both safe outcomes: a
+      // successful re-conversion of the released remainder, then an explicitly
+      // classified no-remainder refusal on the second attempt.
+
+      const PROBE_ROLLBACK = "F26-PROBE-ROLLBACK";
+
+      function describeRejection(error: unknown): string {
+        const parts: string[] = [];
+        let cur = error as { code?: unknown; message?: unknown; cause?: unknown } | null;
+        const seen = new Set<unknown>();
+        while (
+          cur &&
+          (typeof cur === "object" || typeof cur === "function") &&
+          !seen.has(cur) &&
+          parts.length < 6
+        ) {
+          seen.add(cur);
+          parts.push(`[${String(cur.code ?? "?")}] ${String(cur.message ?? cur)}`);
+          cur = (cur.cause ?? null) as typeof cur;
+        }
+        if (parts.length === 0) parts.push(String(error));
+        return parts.join(" <- ");
+      }
+
+      function isDeadlock(error: unknown): boolean {
+        return /40P01|deadlock detected/i.test(describeRejection(error));
+      }
+
+      async function seedOrder(org: ScratchOrg, actorId: string, number: string): Promise<string> {
+        return withBypassContext(async () => {
+          const id = randomUUID();
+          const document = await db.execute<{ id: string }>(
+            sql`
             insert into documents
               (id, org_id, kind, document_number, party_id, subsidiary_id,
                document_date, currency, status, subtotal, tax_total, total,
@@ -518,9 +786,16 @@ const consolidatedRows = [
               ${org.subsidiaryId}, ${org.date}, 'CAD', 'draft', '1000', '0', '1000',
               ${actorId}, ${actorId}
             ) returning id
-          `, "objects");
-          assert.deepEqual(document.map(row => row.id), [id], "concurrent conversion source order is stored");
-          const line = await db.execute<{ document_id: string }>(sql`
+          `,
+            "objects",
+          );
+          assert.deepEqual(
+            document.map((row) => row.id),
+            [id],
+            "concurrent conversion source order is stored",
+          );
+          const line = await db.execute<{ document_id: string }>(
+            sql`
             insert into document_lines
               (org_id, document_id, line_number, account_id, quantity,
                quantity_billed, quantity_fulfilled, unit_price, amount,
@@ -529,41 +804,66 @@ const consolidatedRows = [
               ${org.orgId}, ${id}, 1, ${org.accounts.revenue}, '10',
               '0', '0', '100', '1000', '1000', '0', ${actorId}, ${actorId}
             ) returning document_id
-          `, "objects");
-          assert.deepEqual(line.map(row => row.document_id), [id], "concurrent conversion source line is stored");
-          const approved = await db.execute<{ id: string }>(sql`
+          `,
+            "objects",
+          );
+          assert.deepEqual(
+            line.map((row) => row.document_id),
+            [id],
+            "concurrent conversion source line is stored",
+          );
+          const approved = await db.execute<{ id: string }>(
+            sql`
             update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
              where id = ${id} and org_id = ${org.orgId}
             returning id
-          `, "objects");
-          assert.deepEqual(approved.map(row => row.id), [id], "concurrent conversion source order is approved");
-           return id;
-          });
-        }
+          `,
+            "objects",
+          );
+          assert.deepEqual(
+            approved.map((row) => row.id),
+            [id],
+            "concurrent conversion source order is approved",
+          );
+          return id;
+        });
+      }
 
-        async function billedOf(orgId: string, documentId: string): Promise<string> {
-          return withOrgContext(orgId, async () => {
-            const r = (await db.execute<{ quantity_billed: string }>(sql`
+      async function billedOf(orgId: string, documentId: string): Promise<string> {
+        return withOrgContext(orgId, async () => {
+          const r = await db.execute<{ quantity_billed: string }>(
+            sql`
               select quantity_billed::text from document_lines
                where org_id = ${orgId} and document_id = ${documentId}
-               order by line_number limit 1`, "objects"));
-            return r[0]!.quantity_billed;
-          });
-        }
+               order by line_number limit 1`,
+            "objects",
+          );
+          return r[0]!.quantity_billed;
+        });
+      }
 
-        test("conversion and draft-child deletion serialize on source-order locks (no 40P01)", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+      test(
+        "conversion and draft-child deletion serialize on source-order locks (no 40P01)",
+        { skip: !process.env.OPENBOOKS_DB_URL },
+        async () => {
           const org = await withBypassContext(() => createScratchOrg());
           try {
-            const actorId = await withBypassContext(() => createScratchUser(org.orgId, "F26 Concurrency", "admin"));
+            const actorId = await withBypassContext(() =>
+              createScratchUser(org.orgId, "F26 Concurrency", "admin"),
+            );
             const tag = randomUUID().slice(0, 8);
             const soId = await withBypassContext(() => seedOrder(org, actorId, `SO-F26-${tag}`));
             const converted = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
             assert.equal(await billedOf(org.orgId, soId), "10.00000000");
 
             let releaseHeaderHeld!: () => void;
-            const headerHeld = new Promise<void>((resolve) => { releaseHeaderHeld = resolve; });
+            const headerHeld = new Promise<void>((resolve) => {
+              releaseHeaderHeld = resolve;
+            });
             let releaseLines!: () => void;
-            const linesGate = new Promise<void>((resolve) => { releaseLines = resolve; });
+            const linesGate = new Promise<void>((resolve) => {
+              releaseLines = resolve;
+            });
             let converterPid = 0;
 
             // Converter lock probe: takes the source header lock first, exactly as
@@ -571,52 +871,82 @@ const consolidatedRows = [
             // FOR UPDATE OF dl), then waits for the deleter to be observably
             // blocked before touching the source lines. Rolls itself back with a
             // sentinel once the line locks are taken.
-            const converter = withBypassContext(() => db.transaction(async (tx) => {
-              try {
-                await tx.execute(sql`set local lock_timeout = '15s'`);
-                converterPid = (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
-                await tx.execute(sql`
+            const converter = withBypassContext(() =>
+              db.transaction(async (tx) => {
+                try {
+                  await tx.execute(sql`set local lock_timeout = '15s'`);
+                  converterPid = (
+                    await tx.execute<{ pid: number }>(
+                      sql`select pg_backend_pid() as pid`,
+                      "objects",
+                    )
+                  )[0]!.pid;
+                  await tx.execute(sql`
                   select id from documents where id = ${soId} and org_id = ${org.orgId} for update
                 `);
-                releaseHeaderHeld();
-                await linesGate;
-                await tx.execute(sql`
+                  releaseHeaderHeld();
+                  await linesGate;
+                  await tx.execute(sql`
                   select dl.id from document_lines dl
                    where dl.document_id = ${soId} and dl.org_id = ${org.orgId}
                    order by dl.line_number
                    for update of dl
                 `);
-              } finally {
-                // Never leave the probe parked on the gate holding the source
-                // header, whatever fails above.
-                try { releaseLines(); } catch { /* gate already released */ }
-              }
-              throw new Error(PROBE_ROLLBACK);
-            }));
+                } finally {
+                  // Never leave the probe parked on the gate holding the source
+                  // header, whatever fails above.
+                  try {
+                    releaseLines();
+                  } catch {
+                    /* gate already released */
+                  }
+                }
+                throw new Error(PROBE_ROLLBACK);
+              }),
+            );
             // Attach a settlement handler promptly so a probe failure before the
             // race below can never surface as an unhandled rejection.
-            void converter.then(() => {}, () => {});
+            void converter.then(
+              () => {},
+              () => {},
+            );
             let releaser: Promise<{ documentId: string }> | null = null;
             try {
               await Promise.race([
                 headerHeld,
                 converter.then(
-                  () => { throw new Error("converter probe exited before holding the source header"); },
-                  (err) => { throw new Error(`converter probe failed before holding the source header: ${describeRejection(err)}`); },
+                  () => {
+                    throw new Error("converter probe exited before holding the source header");
+                  },
+                  (err) => {
+                    throw new Error(
+                      `converter probe failed before holding the source header: ${describeRejection(err)}`,
+                    );
+                  },
                 ),
-                new Promise((_, reject) => setTimeout(
-                  () => reject(new Error("timed out waiting for the converter to hold the source header")),
-                  15_000,
-                )),
+                new Promise((_, reject) =>
+                  setTimeout(
+                    () =>
+                      reject(
+                        new Error("timed out waiting for the converter to hold the source header"),
+                      ),
+                    15_000,
+                  ),
+                ),
               ]);
               // The REAL production delete path (deleteDocument ->
               // releaseConvertedOrderQuantities) starts only after the converter
               // holds the source header.
-              releaser = withBypassContext(() => deleteDocument(converted.id, actorId, org.orgId, {
-                reason: `F26 concurrency probe ${tag}`,
-                allowedSubsidiaryIds: null,
-              }));
-              void releaser.then(() => {}, () => {});
+              releaser = withBypassContext(() =>
+                deleteDocument(converted.id, actorId, org.orgId, {
+                  reason: `F26 concurrency probe ${tag}`,
+                  allowedSubsidiaryIds: null,
+                }),
+              );
+              void releaser.then(
+                () => {},
+                () => {},
+              );
 
               // Blocking probe: wait until a live backend is blocked BY the
               // converter. The converter holds only the source header at this
@@ -626,19 +956,33 @@ const consolidatedRows = [
               try {
                 const deadline = Date.now() + 15_000;
                 while (Date.now() < deadline) {
-                  const found = (await db.execute<{ pid: number }>(sql`
+                  const found = (
+                    await db.execute<{ pid: number }>(
+                      sql`
                     select pid from pg_stat_activity
                      where datname = current_database()
                        and state = 'active'
                        and pid <> pg_backend_pid()
                        and ${converterPid} = any(pg_blocking_pids(pid))
                      limit 1
-                  `, "objects"))[0];
-                  if (found) { blockedObserved = true; break; }
-                  if ((await Promise.race([
-                    releaser.then(() => "done" as const, () => "done" as const),
-                    new Promise((resolve) => setTimeout(() => resolve("wait" as const), 25)),
-                  ])) === "done") break;
+                  `,
+                      "objects",
+                    )
+                  )[0];
+                  if (found) {
+                    blockedObserved = true;
+                    break;
+                  }
+                  if (
+                    (await Promise.race([
+                      releaser.then(
+                        () => "done" as const,
+                        () => "done" as const,
+                      ),
+                      new Promise((resolve) => setTimeout(() => resolve("wait" as const), 25)),
+                    ])) === "done"
+                  )
+                    break;
                   await new Promise((resolve) => setTimeout(resolve, 25));
                 }
               } finally {
@@ -647,24 +991,38 @@ const consolidatedRows = [
                 // Never leave it parked on the gate holding the source header.
                 releaseLines();
               }
-              assert.ok(blockedObserved, "deleter must queue on the converter-held source header before lines are attempted");
+              assert.ok(
+                blockedObserved,
+                "deleter must queue on the converter-held source header before lines are attempted",
+              );
 
-              const [converterOutcome, releaserOutcome] = await Promise.allSettled([converter, releaser]);
+              const [converterOutcome, releaserOutcome] = await Promise.allSettled([
+                converter,
+                releaser,
+              ]);
               const problems: string[] = [];
               if (converterOutcome.status === "rejected" && isDeadlock(converterOutcome.reason)) {
-                problems.push(`converter deadlocked: ${describeRejection(converterOutcome.reason)}`);
+                problems.push(
+                  `converter deadlocked: ${describeRejection(converterOutcome.reason)}`,
+                );
               }
               if (releaserOutcome.status === "rejected" && isDeadlock(releaserOutcome.reason)) {
                 problems.push(`deleter deadlocked: ${describeRejection(releaserOutcome.reason)}`);
               }
-              assert.deepEqual(problems, [], "conversion vs draft deletion must serialize without a 40P01 deadlock");
+              assert.deepEqual(
+                problems,
+                [],
+                "conversion vs draft deletion must serialize without a 40P01 deadlock",
+              );
               assert.equal(
                 converterOutcome.status,
                 "rejected",
                 "converter probe must roll itself back after taking the line locks",
               );
               assert.match(
-                String((converterOutcome as PromiseRejectedResult).reason?.message ?? converterOutcome),
+                String(
+                  (converterOutcome as PromiseRejectedResult).reason?.message ?? converterOutcome,
+                ),
                 new RegExp(PROBE_ROLLBACK),
                 "converter probe must end in its sentinel rollback, not a lock error",
               );
@@ -672,7 +1030,9 @@ const consolidatedRows = [
                 releaserOutcome.status,
                 "fulfilled",
                 `deleter must complete once the converter releases the header; got: ${
-                  releaserOutcome.status === "rejected" ? describeRejection(releaserOutcome.reason) : "fulfilled"
+                  releaserOutcome.status === "rejected"
+                    ? describeRejection(releaserOutcome.reason)
+                    : "fulfilled"
                 }`,
               );
               assert.equal(await billedOf(org.orgId, soId), "0.00000000");
@@ -690,37 +1050,58 @@ const consolidatedRows = [
               // Settle both tenants before the scratch org is dropped: no open
               // transaction may still hold source locks when cleanup runs, on any
               // path including timeouts and assertion failures.
-              try { releaseLines(); } catch { /* gate already released */ }
+              try {
+                releaseLines();
+              } catch {
+                /* gate already released */
+              }
               await Promise.allSettled([converter, releaser ?? Promise.resolve()]);
             }
-          } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
-        });
-  } },
+          } finally {
+            await withBypassContext(() => dropScratchOrg(org.orgId));
+          }
+        },
+      );
+    },
+  },
 ] as const;
 
-for(const row of consolidatedRows) await row.register();
-
+for (const row of consolidatedRows) await row.register();
 
 const orderLifecycleCases = [
-  { label: "order read scope", register: async () => {
-        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
-        const { randomUUID } = await import('node:crypto');
-        const { registerHooks } = await import('node:module');
-        const test = (await import('node:test')).default;
-        const { setTimeout: delay } = await import('node:timers/promises');
-        const { sql } = await import('drizzle-orm');
-        const { db, withBypassContext, withOrg, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/platform/db');
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures');
-        type Authz = import('./authz').Authz;
-        const state: { gate: Authz | null; pause: (() => Promise<void>) | null } = { gate: null, pause: null }
-        Object.assign(globalThis, { __orderScopeRead: state })
-        const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
-        const orderLib = new URL('../app/api/_order/lib.ts', import.meta.url).href
-        registerHooks({ resolve(specifier, context, next) {
-          if (specifier === './authz' && context.parentURL?.endsWith('/lib/feature-gates.ts')) {
-            return virtual('export async function guardPermission(){ return globalThis.__orderScopeRead.gate }')
+  {
+    label: "order read scope",
+    register: async () => {
+      const assert: typeof import("node:assert/strict") = (await import("node:assert/strict"))
+        .default;
+      const { randomUUID } = await import("node:crypto");
+      const { registerHooks } = await import("node:module");
+      const test = (await import("node:test")).default;
+      const { setTimeout: delay } = await import("node:timers/promises");
+      const { sql } = await import("drizzle-orm");
+      const { db, withBypassContext, withOrg, withOrgContext, withOrgTransaction } =
+        await import("@openbooks/engine/platform/db");
+      const { createScratchOrg, createScratchUser, dropScratchOrg } =
+        await import("@openbooks/engine/testing/fixtures");
+      type SessionUser = import("./auth").SessionUser;
+      const state: { user: SessionUser | null; pause: (() => Promise<void>) | null } = {
+        user: null,
+        pause: null,
+      };
+      Object.assign(globalThis, { __orderScopeRead: state });
+      const virtual = (source: string) => ({
+        shortCircuit: true as const,
+        url: "data:text/javascript," + encodeURIComponent(source),
+      });
+      const orderLib = new URL("../app/api/_order/lib.ts", import.meta.url).href;
+      registerHooks({
+        resolve(specifier, context, next) {
+          if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
+            return virtual(
+              "export async function currentUser(){ return globalThis.__orderScopeRead.user }",
+            );
           }
-          if (specifier === './lib' && context.parentURL?.endsWith('/api/_order/handlers.ts')) {
+          if (specifier === "./lib" && context.parentURL?.endsWith("/api/_order/handlers.ts")) {
             return virtual(`export * from ${JSON.stringify(orderLib)};
               import {loadOrder as nativeLoad} from ${JSON.stringify(orderLib)};
               export async function loadOrder(...args) {
@@ -728,99 +1109,183 @@ const orderLifecycleCases = [
                 globalThis.__orderScopeRead.pause = null;
                 if (pause) await pause();
                 return nativeLoad(...args);
-              }`)
+              }`);
           }
-          return next(specifier, context)
-        } })
-        const { makeGET } = await import('../app/api/_order/handlers')
+          return next(specifier, context);
+        },
+      });
+      const orderRoutes = {
+        quote: await import("../app/api/estimates/[id]/route"),
+        sales_order: await import("../app/api/sales-orders/[id]/route"),
+        purchase_order: await import("../app/api/purchase-orders/[id]/route"),
+      };
 
-        function deferred<T>() {
-          let resolve!: (value: T) => void
-          const promise = new Promise<T>(done => { resolve = done })
-          return { promise, resolve }
-        }
+      function deferred<T>() {
+        let resolve!: (value: T) => void;
+        const promise = new Promise<T>((done) => {
+          resolve = done;
+        });
+        return { promise, resolve };
+      }
 
-        for (const kind of ['quote', 'sales_order', 'purchase_order'] as const) {
-          test(`${kind} read never discloses another subsidiary after a concurrent draft rehome`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-            const org = await withBypassContext(() => (createScratchOrg()))
+      for (const kind of ["quote", "sales_order", "purchase_order"] as const) {
+        test(
+          `${kind} read never discloses another subsidiary after a concurrent draft rehome`,
+          { skip: !process.env.OPENBOOKS_DB_URL },
+          async () => {
+            const org = await withBypassContext(() => createScratchOrg());
             try {
               // Seed writes run under bypass: the handlers import trips the
               // process-wide request-org resolver, so ambient writes are RLS-enforced.
               const seed = await withBypassContext(async () => {
-                const actorId = (await seedFlowActors(org.orgId)).adminId
-                const other = randomUUID()
-                const orderId = randomUUID()
+                // A reader confined to the original subsidiary, resolved by the
+                // route from its role exactly as a signed-in request would be.
+                const actorId = await createScratchUser(
+                  org.orgId,
+                  "Scoped order reader",
+                  "order_scope_reader",
+                );
+                const scoped = await db.execute(
+                  sql`update app_roles
+                  set permissions='["estimates.read","ar.read","purchase_orders.read"]'::jsonb,
+                      subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
+                  where org_id=${org.orgId} and key='order_scope_reader' returning key`,
+                  "objects",
+                );
+                assert.equal(scoped.length, 1);
+                const other = randomUUID();
+                const orderId = randomUUID();
                 await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
-                  coalesce(settings->'features','{}'::jsonb)||'{"orders":true,"multiSubsidiary":true}'::jsonb) where id=${org.orgId}`)
+                  coalesce(settings->'features','{}'::jsonb)||'{"orders":true,"multiSubsidiary":true}'::jsonb) where id=${org.orgId}`);
                 await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-                  values(${other},${org.orgId},${org.subsidiaryId},'Private subsidiary','CAD','CA')`)
+                  values(${other},${org.orgId},${org.subsidiaryId},'Private subsidiary','CAD','CA')`);
                 await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,party_id,subsidiary_id,currency,status,subtotal,tax_total,total,memo,created_by)
-                  values(${orderId},${org.orgId},${kind},'SCOPE-READ',${org.date},${kind === 'purchase_order' ? org.vendorId : org.customerId},${org.subsidiaryId},'CAD','draft',10,0,10,'Visible original',${actorId})`)
+                  values(${orderId},${org.orgId},${kind},'SCOPE-READ',${org.date},${kind === "purchase_order" ? org.vendorId : org.customerId},${org.subsidiaryId},'CAD','draft',10,0,10,'Visible original',${actorId})`);
                 await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,description,quantity,unit_price,amount)
-                  values(${org.orgId},${orderId},1,${org.accounts.revenue},'Visible original line',1,10,10)`)
-                return { actorId, other, orderId }
-              })
-              const { actorId, other, orderId } = seed
-              state.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(['ar.read']),
-                allowedSubsidiaryIds: new Set([org.subsidiaryId]) } as Authz
-              const get = makeGET({ kind, readPerm: kind === 'purchase_order' ? 'purchase_orders.read' : 'ar.read', createPerm: kind === 'purchase_order' ? 'purchase_orders.create' : 'ar.create' })
+                  values(${org.orgId},${orderId},1,${org.accounts.revenue},'Visible original line',1,10,10)`);
+                return { actorId, other, orderId };
+              });
+              const { actorId, other, orderId } = seed;
+              state.user = {
+                id: actorId,
+                orgId: org.orgId,
+                name: "Scoped order reader",
+                email: "scoped-reader@scratch.test",
+                roles: [],
+                isSuperAdmin: false,
+                envKind: "production",
+                productionOrgId: org.orgId,
+                homeOrgId: org.orgId,
+                homeUserId: actorId,
+              };
+              const { GET } = orderRoutes[kind];
               // The call under test runs org-scoped; ambient reads are RLS-enforced
               // after the handlers import tripped the request-org resolver.
-              const request = () => withOrgContext(org.orgId, () => get(new Request('http://audit.local/orders/' + orderId), { params: Promise.resolve({ id: orderId }) }))
-              assert.equal((await request()).status, 200, 'the original order is visible before the race')
-              const paused = deferred<void>()
-              const resume = deferred<void>()
-              state.pause = async () => { paused.resolve(); await resume.promise }
-              const reading = request()
-              const readOutcome = reading.then(value => ({ value }), error => ({ error }))
-              let writing: Promise<void> | undefined
-              let writerOutcome: Promise<unknown> | undefined
-              let writerDone = false
+              const request = () =>
+                withOrgContext(org.orgId, () =>
+                  GET(new Request("http://audit.local/orders/" + orderId), {
+                    params: Promise.resolve({ id: orderId }),
+                  }),
+                );
+              assert.equal(
+                (await request()).status,
+                200,
+                "the original order is visible before the race",
+              );
+              const paused = deferred<void>();
+              const resume = deferred<void>();
+              state.pause = async () => {
+                paused.resolve();
+                await resume.promise;
+              };
+              const reading = request();
+              const readOutcome = reading.then(
+                (value) => ({ value }),
+                (error) => ({ error }),
+              );
+              let writing: Promise<void> | undefined;
+              let writerOutcome: Promise<unknown> | undefined;
+              let writerDone = false;
               try {
-                await paused.promise
-                const writerPid = deferred<number>()
+                await paused.promise;
+                const writerPid = deferred<number>();
                 writing = withOrgTransaction(org.orgId, async () => {
-                  const pid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid
-                  writerPid.resolve(pid)
-                  await withOrg(org.orgId, () => db.execute(sql`update documents set subsidiary_id=${other},memo='Private B-only terms',updated_at=now()
-                    where id=${orderId} and org_id=${org.orgId}`))
-                  await withOrg(org.orgId, () => db.execute(sql`update document_lines set description='Private B-only line'
-                    where document_id=${orderId} and org_id=${org.orgId}`))
-                }).finally(() => { writerDone = true })
-                writerOutcome = writing.then(() => null, error => { writerPid.resolve(-1); return error })
-                const pid = await writerPid.promise
-                assert.notEqual(pid, -1, 'writer must acquire a connection')
+                  const pid = (
+                    await db.execute<{ pid: number }>(
+                      sql`select pg_backend_pid() as pid`,
+                      "objects",
+                    )
+                  )[0]!.pid;
+                  writerPid.resolve(pid);
+                  await withOrg(org.orgId, () =>
+                    db.execute(sql`update documents set subsidiary_id=${other},memo='Private B-only terms',updated_at=now()
+                    where id=${orderId} and org_id=${org.orgId}`),
+                  );
+                  await withOrg(org.orgId, () =>
+                    db.execute(sql`update document_lines set description='Private B-only line'
+                    where document_id=${orderId} and org_id=${org.orgId}`),
+                  );
+                }).finally(() => {
+                  writerDone = true;
+                });
+                writerOutcome = writing.then(
+                  () => null,
+                  (error) => {
+                    writerPid.resolve(-1);
+                    return error;
+                  },
+                );
+                const pid = await writerPid.promise;
+                assert.notEqual(pid, -1, "writer must acquire a connection");
                 // Both serialization outcomes are valid: a protected read holds up the
                 // writer; an unprotected read lets it commit before loading its payload.
-                let observed = false
+                let observed = false;
                 for (let i = 0; i < 100; i++) {
-                  const blockers = (await db.execute<{ n: number }>(sql`select cardinality(pg_blocking_pids(${pid})) as n`, "objects"))[0]!.n
-                  if (writerDone || blockers > 0) { observed = true; break }
-                  await delay(20)
+                  const blockers = (
+                    await db.execute<{ n: number }>(
+                      sql`select cardinality(pg_blocking_pids(${pid})) as n`,
+                      "objects",
+                    )
+                  )[0]!.n;
+                  if (writerDone || blockers > 0) {
+                    observed = true;
+                    break;
+                  }
+                  await delay(20);
                 }
-                assert.ok(observed, 'writer must either commit or visibly wait behind the read')
+                assert.ok(observed, "writer must either commit or visibly wait behind the read");
               } finally {
-                resume.resolve()
-                await Promise.all([readOutcome, writerOutcome])
+                resume.resolve();
+                await Promise.all([readOutcome, writerOutcome]);
               }
-              assert.equal(await writerOutcome, null)
-              const outcome = await readOutcome
-              assert.ok('value' in outcome, 'native GET should return a response')
+              assert.equal(await writerOutcome, null);
+              const outcome = await readOutcome;
+              assert.ok("value" in outcome, "native GET should return a response");
               if (outcome.value.status === 200) {
-                const payload = await outcome.value.json()
-                assert.equal(payload.doc.subsidiary_id, org.subsidiaryId, 'a scoped reader must never receive the rehomed private header')
-                assert.equal(payload.doc.memo, 'Visible original')
-                assert.equal(payload.lines[0].description, 'Visible original line')
-              } else assert.equal(outcome.value.status, 404)
-              assert.equal((await request()).status, 404, 'the moved record is unavailable on subsequent reads')
+                const payload = await outcome.value.json();
+                assert.equal(
+                  payload.doc.subsidiary_id,
+                  org.subsidiaryId,
+                  "a scoped reader must never receive the rehomed private header",
+                );
+                assert.equal(payload.doc.memo, "Visible original");
+                assert.equal(payload.lines[0].description, "Visible original line");
+              } else assert.equal(outcome.value.status, 404);
+              assert.equal(
+                (await request()).status,
+                404,
+                "the moved record is unavailable on subsequent reads",
+              );
             } finally {
-              state.gate = null
-              state.pause = null
-              await dropScratchOrg(org.orgId)
+              state.user = null;
+              state.pause = null;
+              await dropScratchOrg(org.orgId);
             }
-          })
-        }
-  } },
+          },
+        );
+      }
+    },
+  },
 ] as const;
 
 for (const row of orderLifecycleCases) await row.register();

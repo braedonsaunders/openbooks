@@ -1,8 +1,9 @@
-import { documentRevisionCounterSql } from '@openbooks/engine/records/revision';
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import type { SessionUser } from "../../../lib/auth";
 import { sql } from "drizzle-orm";
 
 // Live-Postgres regression: document_lines.unit_price is numeric(28,8), so a
@@ -14,51 +15,43 @@ import { sql } from "drizzle-orm";
 // ('Order lines contain an invalid quantity or amount') instead of round-
 // tripping. Input validation must accept the column's own scale.
 
-const stateKey = Symbol.for("openbooks.order-line-scale-test");
-interface GateState {
-  authz: {
-    user: { orgId: string; id: string };
-    allowedSubsidiaryIds: null;
-  } | null;
-}
-const gateState: GateState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = gateState;
-
-const mockFeatureGates = `
-  const state = globalThis[Symbol.for('openbooks.order-line-scale-test')]
-  export async function guardFeaturePermission() {
-    if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
-  }
-`;
-
-const hooks = registerHooks({
+// The real route resolves the caller from the session exactly as in
+// production: the test supplies only the signed-in identity, and the user's
+// roles grant its permissions and subsidiary scope.
+const session: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __orderLineScaleSession: session });
+registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (
-      specifier === "../../../lib/feature-gates" &&
-      context.parentURL?.includes("/api/_order/handlers")
-    ) {
-      return { url: "mock:order-line-scale-feature-gates", shortCircuit: true };
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__orderLineScaleSession.user}",
+      };
     }
     return nextResolve(specifier, context);
   },
-  load(url, context, nextLoad) {
-    if (url === "mock:order-line-scale-feature-gates") {
-      return { format: "module", source: mockFeatureGates, shortCircuit: true };
-    }
-    return nextLoad(url, context);
-  },
 });
 
-const { makePATCH } = await import("./handlers.ts");
-hooks.deregister();
+function signIn(orgId: string, userId: string): void {
+  session.user = {
+    id: userId,
+    orgId,
+    name: "Order editor",
+    email: "order-editor@scratch.test",
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: orgId,
+    homeOrgId: orgId,
+    homeUserId: userId,
+  };
+}
+
+const { PATCH } = await import("../estimates/[id]/route.ts");
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures",
-);
-
-const PATCH = makePATCH({ kind: "quote", readPerm: "ar.read", createPerm: "ar.create" });
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 interface Fixture {
   orgId: string;
@@ -91,52 +84,66 @@ async function patchLines(
   fixture: Fixture,
   lines: Array<Record<string, unknown>>,
 ): Promise<Response> {
-  gateState.authz = {
-    user: { orgId: fixture.orgId, id: fixture.actorId },
-    allowedSubsidiaryIds: null,
-  };
+  signIn(fixture.orgId, fixture.actorId);
   // Handler calls and verification reads run in the scratch org's scope,
   // mirroring a production request.
-  const revision = await withOrgContext(fixture.orgId, async () =>
-    (await db.execute<{ revision: string }>(sql`
+  const revision = await withOrgContext(
+    fixture.orgId,
+    async () =>
+      (
+        await db.execute<{ revision: string }>(
+          sql`
       select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-        from documents where id = ${fixture.orderId}`, "objects"))[0]!.revision);
-  return withOrgContext(fixture.orgId, () => PATCH(
-    new Request(`http://openbooks.test/api/quotes/${fixture.orderId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ expectedUpdatedAt: revision, lines }),
-    }) as never,
-    { params: Promise.resolve({ id: fixture.orderId }) } as never,
-  )) as unknown as Response;
+        from documents where id = ${fixture.orderId}`,
+          "objects",
+        )
+      )[0]!.revision,
+  );
+  return withOrgContext(fixture.orgId, () =>
+    PATCH(
+      new Request(`http://openbooks.test/api/quotes/${fixture.orderId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ expectedUpdatedAt: revision, lines }),
+      }) as never,
+      { params: Promise.resolve({ id: fixture.orderId }) } as never,
+    ),
+  ) as unknown as Response;
 }
 
-test(
-  "order PATCH round-trips a stored 8dp unit price",
-  async () => {
-    const fixture = await seedDraftQuote("Q-SCALE-1");
-    try {
-      const first = await patchLines(fixture, [
-        { accountId: fixture.revenueId, quantity: "2", unitPrice: "200.00" },
-      ]);
-      assert.equal(first.status, 200);
-      const stored = await withOrgContext(fixture.orgId, async () =>
-        (await db.execute<{ quantity: string; unit_price: string }>(sql`
+test("order PATCH round-trips a stored 8dp unit price", async () => {
+  const fixture = await seedDraftQuote("Q-SCALE-1");
+  try {
+    const first = await patchLines(fixture, [
+      { accountId: fixture.revenueId, quantity: "2", unitPrice: "200.00" },
+    ]);
+    assert.equal(first.status, 200);
+    const stored = await withOrgContext(
+      fixture.orgId,
+      async () =>
+        (
+          await db.execute<{ quantity: string; unit_price: string }>(
+            sql`
           select quantity::text, unit_price::text from document_lines
-           where document_id = ${fixture.orderId}`, "objects"))[0]!);
-      // Premise: storage pads to the column scale.
-      assert.equal(stored.unit_price, "200.00000000");
-      // The drawer sends back exactly what it read; that must save.
-      const second = await patchLines(fixture, [
-        { accountId: fixture.revenueId, quantity: stored.quantity, unitPrice: stored.unit_price },
-      ]);
-      assert.equal(second.status, 200);
-      const body = (await second.json()) as { doc: { subtotal: string; tax_total: string; total: string } };
-      assert.equal(body.doc.subtotal, "400.0000");
-      assert.equal(body.doc.tax_total, "0.0000");
-      assert.equal(body.doc.total, "400.0000");
-    } finally {
-      await dropScratchOrg(fixture.orgId);
-    }
-  },
-);
+           where document_id = ${fixture.orderId}`,
+            "objects",
+          )
+        )[0]!,
+    );
+    // Premise: storage pads to the column scale.
+    assert.equal(stored.unit_price, "200.00000000");
+    // The drawer sends back exactly what it read; that must save.
+    const second = await patchLines(fixture, [
+      { accountId: fixture.revenueId, quantity: stored.quantity, unitPrice: stored.unit_price },
+    ]);
+    assert.equal(second.status, 200);
+    const body = (await second.json()) as {
+      doc: { subtotal: string; tax_total: string; total: string };
+    };
+    assert.equal(body.doc.subtotal, "400.0000");
+    assert.equal(body.doc.tax_total, "0.0000");
+    assert.equal(body.doc.total, "400.0000");
+  } finally {
+    await dropScratchOrg(fixture.orgId);
+  }
+});

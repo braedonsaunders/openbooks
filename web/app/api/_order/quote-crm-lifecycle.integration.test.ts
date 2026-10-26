@@ -2,109 +2,99 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import type { SessionUser } from "../../../lib/auth";
 import { sql } from "drizzle-orm";
 import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
 
-const stateKey = Symbol.for("openbooks.quote-crm-lifecycle-test");
-interface GateState {
-  authz: {
-    user: { orgId: string; id: string };
-    allowedSubsidiaryIds: null;
-  } | null;
-}
-const gateState: GateState = { authz: null };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = gateState;
-
-const mockFeatureGates = `
-  const state = globalThis[Symbol.for('openbooks.quote-crm-lifecycle-test')]
-  export async function guardFeaturePermission() {
-    if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
-  }
-`;
-
-const hooks = registerHooks({
+// The real route resolves the caller from the session exactly as in
+// production: the test supplies only the signed-in identity, and the user's
+// roles grant its permissions and subsidiary scope.
+const session: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __quoteCrmLifecycleSession: session });
+registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (
-      specifier === "../../../lib/feature-gates" &&
-      context.parentURL?.includes("/api/_order/handlers")
-    ) {
-      return { url: "mock:quote-crm-lifecycle-feature-gates", shortCircuit: true };
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__quoteCrmLifecycleSession.user}",
+      };
     }
     return nextResolve(specifier, context);
   },
-  load(url, context, nextLoad) {
-    if (url === "mock:quote-crm-lifecycle-feature-gates") {
-      return { format: "module", source: mockFeatureGates, shortCircuit: true };
-    }
-    return nextLoad(url, context);
-  },
 });
 
-const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/platform/db"
-);
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-const { ensureCrmDefaults, promoteCrmAccount } = await import(
-  "@openbooks/engine/crm/crm"
-);
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { ensureCrmDefaults, promoteCrmAccount } = await import("@openbooks/engine/crm/crm");
 const { createOrder } = await import("./create.ts");
-const { makePATCH, orderEditServices } = await import("./handlers.ts");
+const { orderEditServices } = await import("./handlers.ts");
+const { PATCH } = await import("../estimates/[id]/route.ts");
 const { applyOrderEdit, OrderEditError } = await import("../../../lib/order-draft-edit.ts");
 const { CrmLifecycleRefusalError } = await import("@openbooks/engine/crm/crm");
 const { convertOrder } = await import("../../../lib/order-cycle.ts");
 const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
-const { createPaymentDocument, updateDraftPayment } = await import(
-  "@openbooks/engine/payments/payment-documents"
-);
-const { postPaymentWithApplications } = await import(
-  "@openbooks/engine/payments/payment-posting"
-);
-hooks.deregister();
+const { createPaymentDocument, updateDraftPayment } =
+  await import("@openbooks/engine/payments/payment-documents");
+const { postPaymentWithApplications } = await import("@openbooks/engine/payments/payment-posting");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 async function enableCrm(orgId: string): Promise<void> {
   await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = settings || ${JSON.stringify({ features: { crm: true } })}::jsonb where id = ${orgId}`),
+    db.execute(
+      sql`update orgs set settings = settings || ${JSON.stringify({ features: { crm: true } })}::jsonb where id = ${orgId}`,
+    ),
   );
   await withBypassContext(() => ensureCrmDefaults(orgId));
 }
 
 async function seedParty(orgId: string, name: string): Promise<string> {
-  return (await withBypassContext(() =>
-      db.execute<{ id: string }>(sql`
+  return (
+    await withBypassContext(() =>
+      db.execute<{ id: string }>(
+        sql`
         insert into parties (org_id, kind, display_name, is_active)
-        values (${orgId}, 'company', ${name}, true) returning id`, "objects"),
-    ))[0]!.id;
+        values (${orgId}, 'company', ${name}, true) returning id`,
+        "objects",
+      ),
+    )
+  )[0]!.id;
 }
 
 async function profileStage(orgId: string, partyId: string): Promise<string | null> {
   const rows = await withBypassContext(() =>
-      db.execute<{ lifecycle_stage: string }>(sql`
+    db.execute<{ lifecycle_stage: string }>(
+      sql`
         select lifecycle_stage from crm_account_profiles
-         where org_id = ${orgId} and party_id = ${partyId}`, "objects"),
-    );
+         where org_id = ${orgId} and party_id = ${partyId}`,
+      "objects",
+    ),
+  );
   return rows[0]?.lifecycle_stage ?? null;
 }
 
 async function roleActive(orgId: string, partyId: string): Promise<boolean> {
   const rows = await withBypassContext(() =>
-      db.execute(sql`
+    db.execute(
+      sql`
         select 1 from customer_roles
-         where org_id = ${orgId} and party_id = ${partyId} and is_active`, "objects"),
-    );
+         where org_id = ${orgId} and party_id = ${partyId} and is_active`,
+      "objects",
+    ),
+  );
   return rows.length > 0;
 }
 
 async function openBalance(orgId: string, partyId: string): Promise<string> {
   const rows = await withBypassContext(() =>
-      db.execute<{ balance: string }>(sql`
+    db.execute<{ balance: string }>(
+      sql`
         select coalesce(sum(open_balance), 0)::text as balance from documents
-         where org_id = ${orgId} and party_id = ${partyId} and status = 'posted'`, "objects"),
-    );
+         where org_id = ${orgId} and party_id = ${partyId} and status = 'posted'`,
+      "objects",
+    ),
+  );
   return rows[0]!.balance;
 }
 
@@ -182,7 +172,9 @@ async function approveAndPostInvoice(
   control: { ar: string; ap: string; bank: string },
 ): Promise<string> {
   return withBypassContext(async () => {
-    await db.execute(sql`update documents set status = 'approved' where id = ${invoiceId} and org_id = ${orgId}`);
+    await db.execute(
+      sql`update documents set status = 'approved' where id = ${invoiceId} and org_id = ${orgId}`,
+    );
     return postDocument(invoiceId, { control });
   });
 }
@@ -199,8 +191,13 @@ async function payInvoiceInFull(
   amount: string,
 ): Promise<void> {
   await withBypassContext(async () => {
-    const line = (await db.execute<{ id: string }>(sql`
-        select id from journal_lines where entry_id = ${entryId} and is_open_item`, "objects"))[0]!.id;
+    const line = (
+      await db.execute<{ id: string }>(
+        sql`
+        select id from journal_lines where entry_id = ${entryId} and is_open_item`,
+        "objects",
+      )
+    )[0]!.id;
     const payment = await createPaymentDocument({
       allowedSubsidiaryIds: null,
       orgId,
@@ -239,94 +236,155 @@ async function payInvoiceInFull(
   });
 }
 
-test("an estimate for a customer with an open balance saves and leaves the stage", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    await enableCrm(org.orgId);
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Estimator", "admin"));
-    const customer = await seedParty(org.orgId, "Established Customer");
-    await withBypassContext(() =>
-      promoteCrmAccount(db, {
-        orgId: org.orgId,
-        partyId: customer,
+test(
+  "an estimate for a customer with an open balance saves and leaves the stage",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await enableCrm(org.orgId);
+      const actorId = await withBypassContext(() =>
+        createScratchUser(org.orgId, "Estimator", "admin"),
+      );
+      const customer = await seedParty(org.orgId, "Established Customer");
+      await withBypassContext(() =>
+        promoteCrmAccount(db, {
+          orgId: org.orgId,
+          partyId: customer,
+          actorId,
+          toStage: "customer",
+          sourceKind: "sales_order",
+        }),
+      );
+      assert.equal(await profileStage(org.orgId, customer), "customer");
+      const soId = await seedApprovedSalesOrder(
+        org.orgId,
         actorId,
-        toStage: "customer",
-        sourceKind: "sales_order",
-      }),
-    );
-    assert.equal(await profileStage(org.orgId, customer), "customer");
-    const soId = await seedApprovedSalesOrder(
-      org.orgId, actorId, customer, org.subsidiaryId, org.date, org.accounts.revenue, "SO-CRM-1",
-    );
-    const invoice = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
-    await approveAndPostInvoice(org.orgId, actorId, invoice.id, {
-      ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank,
-    });
-    assert.notEqual(
-      await openBalance(org.orgId, customer), "0",
-      "the seed must leave an open balance, or the demotion guard would have nothing to refuse",
-    );
+        customer,
+        org.subsidiaryId,
+        org.date,
+        org.accounts.revenue,
+        "SO-CRM-1",
+      );
+      const invoice = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
+      await approveAndPostInvoice(org.orgId, actorId, invoice.id, {
+        ar: org.accounts.ar,
+        ap: org.accounts.ap,
+        bank: org.accounts.bank,
+      });
+      assert.notEqual(
+        await openBalance(org.orgId, customer),
+        "0",
+        "the seed must leave an open balance, or the demotion guard would have nothing to refuse",
+      );
 
-    const res = await postQuote(org.orgId, actorId, customer, org.date, org.items.service);
-    if (res.status !== 201) assert.fail(`estimating an established customer must save, got: ${await res.text()}`);
-    assert.equal(await profileStage(org.orgId, customer), "customer", "quoting must never move a customer backwards");
-    assert.equal(await roleActive(org.orgId, customer), true, "quoting must keep the customer role active");
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+      const res = await postQuote(org.orgId, actorId, customer, org.date, org.items.service);
+      if (res.status !== 201)
+        assert.fail(`estimating an established customer must save, got: ${await res.text()}`);
+      assert.equal(
+        await profileStage(org.orgId, customer),
+        "customer",
+        "quoting must never move a customer backwards",
+      );
+      assert.equal(
+        await roleActive(org.orgId, customer),
+        true,
+        "quoting must keep the customer role active",
+      );
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("an estimate for a fully paid customer saves and leaves the stage", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    await enableCrm(org.orgId);
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Estimator", "admin"));
-    const customer = await seedParty(org.orgId, "Fully Paid Customer");
-    await withBypassContext(() =>
-      promoteCrmAccount(db, {
-        orgId: org.orgId,
-        partyId: customer,
+test(
+  "an estimate for a fully paid customer saves and leaves the stage",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await enableCrm(org.orgId);
+      const actorId = await withBypassContext(() =>
+        createScratchUser(org.orgId, "Estimator", "admin"),
+      );
+      const customer = await seedParty(org.orgId, "Fully Paid Customer");
+      await withBypassContext(() =>
+        promoteCrmAccount(db, {
+          orgId: org.orgId,
+          partyId: customer,
+          actorId,
+          toStage: "customer",
+          sourceKind: "sales_order",
+        }),
+      );
+      assert.equal(await profileStage(org.orgId, customer), "customer");
+      const soId = await seedApprovedSalesOrder(
+        org.orgId,
         actorId,
-        toStage: "customer",
-        sourceKind: "sales_order",
-      }),
-    );
-    assert.equal(await profileStage(org.orgId, customer), "customer");
-    const soId = await seedApprovedSalesOrder(
-      org.orgId, actorId, customer, org.subsidiaryId, org.date, org.accounts.revenue, "SO-CRM-3",
-    );
-    const invoice = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
-    const entryId = await approveAndPostInvoice(org.orgId, actorId, invoice.id, {
-      ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank,
-    });
-    await payInvoiceInFull(
-      org.orgId, actorId, customer, org.subsidiaryId, org.date, org.accounts.bank, entryId, "100",
-    );
-    assert.equal(
-      await openBalance(org.orgId, customer), "0.0000",
-      "the seed must leave zero open balance with posted history",
-    );
+        customer,
+        org.subsidiaryId,
+        org.date,
+        org.accounts.revenue,
+        "SO-CRM-3",
+      );
+      const invoice = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
+      const entryId = await approveAndPostInvoice(org.orgId, actorId, invoice.id, {
+        ar: org.accounts.ar,
+        ap: org.accounts.ap,
+        bank: org.accounts.bank,
+      });
+      await payInvoiceInFull(
+        org.orgId,
+        actorId,
+        customer,
+        org.subsidiaryId,
+        org.date,
+        org.accounts.bank,
+        entryId,
+        "100",
+      );
+      assert.equal(
+        await openBalance(org.orgId, customer),
+        "0.0000",
+        "the seed must leave zero open balance with posted history",
+      );
 
-    const res = await postQuote(org.orgId, actorId, customer, org.date, org.items.service);
-    if (res.status !== 201) assert.fail(`estimating a fully paid customer must save, got: ${await res.text()}`);
-    assert.equal(await profileStage(org.orgId, customer), "customer", "quoting must never move a customer backwards");
-    assert.equal(await roleActive(org.orgId, customer), true, "quoting must keep the customer role active");
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+      const res = await postQuote(org.orgId, actorId, customer, org.date, org.items.service);
+      if (res.status !== 201)
+        assert.fail(`estimating a fully paid customer must save, got: ${await res.text()}`);
+      assert.equal(
+        await profileStage(org.orgId, customer),
+        "customer",
+        "quoting must never move a customer backwards",
+      );
+      assert.equal(
+        await roleActive(org.orgId, customer),
+        true,
+        "quoting must keep the customer role active",
+      );
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("an estimate for a lead advances the lifecycle to prospect", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     await enableCrm(org.orgId);
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Estimator", "admin"));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Estimator", "admin"),
+    );
     const lead = await seedParty(org.orgId, "New Lead");
     assert.equal(await profileStage(org.orgId, lead), null);
 
     const res = await postQuote(org.orgId, actorId, lead, org.date, org.items.service);
     if (res.status !== 201) assert.fail(`estimating a lead must save, got: ${await res.text()}`);
-    assert.equal(await profileStage(org.orgId, lead), "prospect", "quoting a lead advances it to prospect");
+    assert.equal(
+      await profileStage(org.orgId, lead),
+      "prospect",
+      "quoting a lead advances it to prospect",
+    );
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -337,17 +395,25 @@ test("a lifecycle refusal on edit answers 422 with its message", { skip: !DB }, 
   const org = await withBypassContext(() => createScratchOrg());
   try {
     await enableCrm(org.orgId);
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Estimator", "admin"));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Estimator", "admin"),
+    );
     const lead = await seedParty(org.orgId, "New Lead");
     const created = await postQuote(org.orgId, actorId, lead, org.date, org.items.service);
-    if (created.status !== 201) assert.fail(`seed estimate must save, got: ${await created.text()}`);
+    if (created.status !== 201)
+      assert.fail(`seed estimate must save, got: ${await created.text()}`);
     const quoteId = ((await created.json()) as { doc: { id: string } }).doc.id;
     const revision = await withOrgContext(
       org.orgId,
       async () =>
-        (await db.execute<{ revision: string }>(sql`
+        (
+          await db.execute<{ revision: string }>(
+            sql`
             select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-              from documents where id = ${quoteId}`, "objects"))[0]!.revision,
+              from documents where id = ${quoteId}`,
+            "objects",
+          )
+        )[0]!.revision,
     );
     const other = await seedParty(org.orgId, "Other Company");
     const services = {
@@ -358,41 +424,43 @@ test("a lifecycle refusal on edit answers 422 with its message", { skip: !DB }, 
         },
       },
     };
-    const error = await withOrgContext(
-      org.orgId,
-      () =>
-        applyOrderEdit(
-          {
-            orgId: org.orgId,
-            userId: actorId,
-            user: { orgId: org.orgId, id: actorId } as never,
-            allowedSubsidiaryIds: null,
-            permissions: new Set<string>(),
-            services,
-          },
-          { kind: "quote", createPerm: "ar.create", readPerm: "ar.read" },
-          quoteId,
-          { expectedUpdatedAt: revision, partyId: other } as never,
-        ).then(
-          () => null,
-          (cause) => cause,
-        ),
+    const error = await withOrgContext(org.orgId, () =>
+      applyOrderEdit(
+        {
+          orgId: org.orgId,
+          userId: actorId,
+          user: { orgId: org.orgId, id: actorId } as never,
+          allowedSubsidiaryIds: null,
+          permissions: new Set<string>(),
+          services,
+        },
+        { kind: "quote", createPerm: "ar.create", readPerm: "ar.read" },
+        quoteId,
+        { expectedUpdatedAt: revision, partyId: other } as never,
+      ).then(
+        () => null,
+        (cause) => cause,
+      ),
     );
     assert.ok(error instanceof OrderEditError, `expected an OrderEditError, got ${String(error)}`);
     assert.equal(error.status, 422);
-    assert.match(String((error.body as { error?: unknown })?.error ?? ""), /cannot demote this customer/);
+    assert.match(
+      String((error.body as { error?: unknown })?.error ?? ""),
+      /cannot demote this customer/,
+    );
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
 test("repointing an estimate at a customer with an open balance saves", { skip: !DB }, async () => {
-  const PATCH = makePATCH({ kind: "quote", createPerm: "ar.create", readPerm: "ar.read" });
   const org = await withBypassContext(() => createScratchOrg());
-  gateState.authz = null;
+  session.user = null;
   try {
     await enableCrm(org.orgId);
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Estimator", "admin"));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Estimator", "admin"),
+    );
     const customer = await seedParty(org.orgId, "Established Customer");
     await withBypassContext(() =>
       promoteCrmAccount(db, {
@@ -404,41 +472,68 @@ test("repointing an estimate at a customer with an open balance saves", { skip: 
       }),
     );
     const soId = await seedApprovedSalesOrder(
-      org.orgId, actorId, customer, org.subsidiaryId, org.date, org.accounts.revenue, "SO-CRM-2",
+      org.orgId,
+      actorId,
+      customer,
+      org.subsidiaryId,
+      org.date,
+      org.accounts.revenue,
+      "SO-CRM-2",
     );
     const invoice = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
     await approveAndPostInvoice(org.orgId, actorId, invoice.id, {
-      ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank,
+      ar: org.accounts.ar,
+      ap: org.accounts.ap,
+      bank: org.accounts.bank,
     });
     assert.notEqual(await openBalance(org.orgId, customer), "0");
 
     const lead = await seedParty(org.orgId, "New Lead");
     const created = await postQuote(org.orgId, actorId, lead, org.date, org.items.service);
-    if (created.status !== 201) assert.fail(`seed estimate must save, got: ${await created.text()}`);
-    const quoteId = (await created.json() as { doc: { id: string } }).doc.id;
+    if (created.status !== 201)
+      assert.fail(`seed estimate must save, got: ${await created.text()}`);
+    const quoteId = ((await created.json()) as { doc: { id: string } }).doc.id;
 
-    gateState.authz = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: null };
-    const revision = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ revision: string }>(sql`
-        select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-          from documents where id = ${quoteId}`, "objects"))[0]!.revision);
-    const res = await withOrgContext(
+    session.user = {
+      id: actorId,
+      orgId: org.orgId,
+      name: "Estimator",
+      email: "estimator@scratch.test",
+      roles: [],
+      isSuperAdmin: false,
+      envKind: "production",
+      productionOrgId: org.orgId,
+      homeOrgId: org.orgId,
+      homeUserId: actorId,
+    };
+    const revision = await withOrgContext(
       org.orgId,
       async () =>
-        PATCH(
-          new Request(`http://openbooks.test/api/estimates/${quoteId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ expectedUpdatedAt: revision, partyId: customer }),
-          }) as never,
-          { params: Promise.resolve({ id: quoteId }) } as never,
-        ) as unknown as Response,
+        (
+          await db.execute<{ revision: string }>(
+            sql`
+        select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
+          from documents where id = ${quoteId}`,
+            "objects",
+          )
+        )[0]!.revision,
     );
-    if (res.status !== 200) assert.fail(`repointing at the customer must save, got: ${await res.text()}`);
+    const res = await withOrgContext(org.orgId, async () =>
+      PATCH(
+        new Request(`http://openbooks.test/api/estimates/${quoteId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ expectedUpdatedAt: revision, partyId: customer }),
+        }),
+        { params: Promise.resolve({ id: quoteId }) },
+      ),
+    );
+    if (res.status !== 200)
+      assert.fail(`repointing at the customer must save, got: ${await res.text()}`);
     assert.equal(await profileStage(org.orgId, customer), "customer");
     assert.equal(await roleActive(org.orgId, customer), true);
   } finally {
-    gateState.authz = null;
+    session.user = null;
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });

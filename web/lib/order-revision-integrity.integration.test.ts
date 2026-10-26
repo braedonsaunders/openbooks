@@ -3,100 +3,256 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import type { SessionUser } from "./auth";
-import { stubModules } from '../testing/stub-modules.ts'
+import { stubModules } from "../testing/stub-modules.ts";
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __orderRevisionUser: state });
 stubModules({ intl: true, navigation: false, authz: false, features: false });
 
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__orderRevisionUser.user}" };
-  return next(specifier,context);
-}});
-const { db, withBypassContext, withOrg, withOrgContext } = await import("@openbooks/engine/platform/db");
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__orderRevisionUser.user}",
+      };
+    return next(specifier, context);
+  },
+});
+const { db, withBypassContext, withOrg, withOrgContext } =
+  await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
-const { makeGET, makePATCH, makeDELETE, makeConvertPOST } = await import("../app/api/_order/handlers");
-const request = (method: string, body?: unknown) => new Request("http://audit.local/api/sales-orders", { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-
-for (const operation of ["read", "edit", "issue", "delete", "void", "conversion race", "current issue", "current void", "current conversion", "truncated token"] as const) {
-  test(`order revision contract: ${operation}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await withBypassContext(() => createScratchOrg());
-    let release = () => {};
-    let edit: Promise<unknown> | undefined;
-    let command: Promise<Response> | undefined;
-    try {
-      const actor = await withBypassContext(() => createScratchUser(org.orgId, "Order reviewer", "reviewer"));
-      await withBypassContext(() => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`));
-      state.user = { id: actor,orgId:org.orgId,name:"Order reviewer",email:"order@scratch.test",roles:[],isSuperAdmin:false,envKind:"production",productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:actor };
-      const id = randomUUID();
-      const kind = operation.includes("conversion") ? "quote" as const : "sales_order" as const;
-      await withBypassContext(() => db.execute(sql`insert into documents (id,org_id,kind,document_number,document_date,currency,party_id,subsidiary_id,created_by)
-        values (${id},${org.orgId},${kind},${`ORDER-${id}`},${org.date},'CAD',${org.customerId},${org.subsidiaryId},${actor})`));
-      await withBypassContext(() => db.execute(sql`insert into document_lines (org_id,document_id,line_number,account_id,quantity,unit_price,amount)
-        values (${org.orgId},${id},1,${org.accounts.revenue},'1','100','100')`));
-      if (operation.endsWith("void") || operation.includes("conversion")) await withBypassContext(() => db.execute(sql`update documents set status='approved' where id=${id}`));
-      await withBypassContext(() => db.execute(sql`update documents set updated_at=date_trunc('second',now()+interval '1 day')+interval '123450 microseconds' where id=${id}`));
-      const token = (await withOrgContext(org.orgId, () => db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${id}`, "objects")))[0]!.revision;
-      const cfg = { kind, readPerm: "ar.read", createPerm: "ar.create" };
-      const params = { params: Promise.resolve({ id }) };
-      await withOrgContext(org.orgId, async () => {
-        if (operation === "read") {
-          const response = await makeGET(cfg)(request("GET"), params);
-          assert.equal(response.status,200);
-          assert.equal((await response.json()).doc.updated_at, token);
-          return;
-        }
-        if (operation.startsWith("current")) {
-          const response = operation === "current conversion"
-            ? await makeConvertPOST(cfg)(request("POST", { targetKind: "sales_order", expectedUpdatedAt: token }), params)
-            : await makePATCH(cfg)(request("PATCH", { expectedUpdatedAt: token,
-                ...(operation === "current issue" ? { status: "approved" }
-                  : { status: "voided", reason: "Cancel reviewed order", reversalDate: org.date }) }), params);
-          const payload = await response.json();
-          assert.equal(response.status, 200, JSON.stringify(payload));
-          const resultId = operation === "current conversion" ? payload.id : id;
-          const result = (await db.execute<{ status: string }>(sql`select status from documents where id=${resultId}`, "objects"))[0];
-          assert.equal(result?.status, operation === "current void" ? "voided" : "approved");
-          return;
-        }
-        if (operation === "truncated token") {
-          // Counter tokens have no lossy rendering; a non-canonical token
-          // must still fail closed before any write.
-          const response = await makePATCH(cfg)(request("PATCH", { status: "approved", expectedUpdatedAt: `${token}.0` }), params);
-          assert.equal(response.status, 409);
-          assert.equal((await db.execute<{ status: string }>(sql`select status from documents where id=${id}`, "objects"))[0]!.status, "draft");
-          return;
-        }
-        let response: Response;
-        if (operation === "conversion race") {
-          let ready!: () => void, pid = 0;
-          const staged = new Promise<void>(resolve => { ready = resolve; });
-          const hold = new Promise<void>(resolve => { release = resolve; });
-          edit = withOrg(org.orgId, async () => {
-            pid = (await db.execute<{ pid:number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
-            await db.execute(sql`update documents set memo='Concurrent edit',updated_at=updated_at+interval '1 second' where id=${id}`);
-            ready(); await hold;
-          });
-          await Promise.race([staged,edit]);
-          command = makeConvertPOST(cfg)(request("POST",{targetKind:"sales_order",expectedUpdatedAt:token}),params);
-          let settled = false, blocked = false;
-          void command.then(() => { settled=true; },()=>{settled=true;});
-          const deadline=Date.now()+10_000;
-          while (!settled && Date.now()<deadline) {
-            blocked=(await db.execute<{blocked:boolean}>(sql`select exists(select 1 from pg_stat_activity where datname=current_database() and ${pid}=any(pg_blocking_pids(pid))) as blocked`, "objects"))[0]!.blocked;
-            if (blocked) break;
-            await new Promise(resolve=>setTimeout(resolve,10));
-          }
-          assert.ok(blocked,"conversion must wait for its source lock");
-          release(); await edit; response=await command;
-        } else {
-          await db.execute(sql`update documents set memo='Unreviewed edit',updated_at=updated_at+interval '1 microsecond' where id=${id}`);
-          response = operation === "delete" ? await makeDELETE(cfg)(request("DELETE",{expectedUpdatedAt:token}),params)
-            : await makePATCH(cfg)(request("PATCH",{expectedUpdatedAt:token,...(operation === "edit" ? {memo:"Stale edit"} : operation === "issue" ? {status:"approved"} : {status:"voided",reason:"Cancel reviewed order",reversalDate:org.date})}),params);
-        }
-        assert.equal(response.status,409,JSON.stringify(await response.json()));
-        assert.equal((await db.execute<{count:number}>(sql`select count(*)::int as count from documents where org_id=${org.orgId}`, "objects"))[0]!.count,1);
-      });
-    } finally { release(); await Promise.allSettled([edit,command]); state.user=null; await dropScratchOrg(org.orgId); }
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const salesOrderRoute = await import("../app/api/sales-orders/[id]/route");
+const { POST: convertQuote } = await import("../app/api/estimates/[id]/convert/route");
+const request = (method: string, body?: unknown) =>
+  new Request("http://audit.local/api/sales-orders", {
+    method,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+
+for (const operation of [
+  "read",
+  "edit",
+  "issue",
+  "delete",
+  "void",
+  "conversion race",
+  "current issue",
+  "current void",
+  "current conversion",
+  "truncated token",
+] as const) {
+  test(
+    `order revision contract: ${operation}`,
+    { skip: !process.env.OPENBOOKS_DB_URL },
+    async () => {
+      const org = await withBypassContext(() => createScratchOrg());
+      let release = () => {};
+      let edit: Promise<unknown> | undefined;
+      let command: Promise<Response> | undefined;
+      try {
+        const actor = await withBypassContext(() =>
+          createScratchUser(org.orgId, "Order reviewer", "reviewer"),
+        );
+        await withBypassContext(() =>
+          db.execute(
+            sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`,
+          ),
+        );
+        state.user = {
+          id: actor,
+          orgId: org.orgId,
+          name: "Order reviewer",
+          email: "order@scratch.test",
+          roles: [],
+          isSuperAdmin: false,
+          envKind: "production",
+          productionOrgId: org.orgId,
+          homeOrgId: org.orgId,
+          homeUserId: actor,
+        };
+        const id = randomUUID();
+        const kind = operation.includes("conversion")
+          ? ("quote" as const)
+          : ("sales_order" as const);
+        await withBypassContext(() =>
+          db.execute(sql`insert into documents (id,org_id,kind,document_number,document_date,currency,party_id,subsidiary_id,created_by)
+        values (${id},${org.orgId},${kind},${`ORDER-${id}`},${org.date},'CAD',${org.customerId},${org.subsidiaryId},${actor})`),
+        );
+        await withBypassContext(() =>
+          db.execute(sql`insert into document_lines (org_id,document_id,line_number,account_id,quantity,unit_price,amount)
+        values (${org.orgId},${id},1,${org.accounts.revenue},'1','100','100')`),
+        );
+        if (operation.endsWith("void") || operation.includes("conversion"))
+          await withBypassContext(() =>
+            db.execute(sql`update documents set status='approved' where id=${id}`),
+          );
+        await withBypassContext(() =>
+          db.execute(
+            sql`update documents set updated_at=date_trunc('second',now()+interval '1 day')+interval '123450 microseconds' where id=${id}`,
+          ),
+        );
+        const token = (
+          await withOrgContext(org.orgId, () =>
+            db.execute<{ revision: string }>(
+              sql`select (revision_seq)::text as revision from documents where id=${id}`,
+              "objects",
+            ),
+          )
+        )[0]!.revision;
+        const params = { params: Promise.resolve({ id }) };
+        await withOrgContext(org.orgId, async () => {
+          if (operation === "read") {
+            const response = await salesOrderRoute.GET(request("GET"), params);
+            assert.equal(response.status, 200);
+            assert.equal((await response.json()).doc.updated_at, token);
+            return;
+          }
+          if (operation.startsWith("current")) {
+            const response =
+              operation === "current conversion"
+                ? await convertQuote(
+                    request("POST", { targetKind: "sales_order", expectedUpdatedAt: token }),
+                    params,
+                  )
+                : await salesOrderRoute.PATCH(
+                    request("PATCH", {
+                      expectedUpdatedAt: token,
+                      ...(operation === "current issue"
+                        ? { status: "approved" }
+                        : {
+                            status: "voided",
+                            reason: "Cancel reviewed order",
+                            reversalDate: org.date,
+                          }),
+                    }),
+                    params,
+                  );
+            const payload = await response.json();
+            assert.equal(response.status, 200, JSON.stringify(payload));
+            const resultId = operation === "current conversion" ? payload.id : id;
+            const result = (
+              await db.execute<{ status: string }>(
+                sql`select status from documents where id=${resultId}`,
+                "objects",
+              )
+            )[0];
+            assert.equal(result?.status, operation === "current void" ? "voided" : "approved");
+            return;
+          }
+          if (operation === "truncated token") {
+            // Counter tokens have no lossy rendering; a non-canonical token
+            // must still fail closed before any write.
+            const response = await salesOrderRoute.PATCH(
+              request("PATCH", { status: "approved", expectedUpdatedAt: `${token}.0` }),
+              params,
+            );
+            assert.equal(response.status, 409);
+            assert.equal(
+              (
+                await db.execute<{ status: string }>(
+                  sql`select status from documents where id=${id}`,
+                  "objects",
+                )
+              )[0]!.status,
+              "draft",
+            );
+            return;
+          }
+          let response: Response;
+          if (operation === "conversion race") {
+            let ready!: () => void,
+              pid = 0;
+            const staged = new Promise<void>((resolve) => {
+              ready = resolve;
+            });
+            const hold = new Promise<void>((resolve) => {
+              release = resolve;
+            });
+            edit = withOrg(org.orgId, async () => {
+              pid = (
+                await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects")
+              )[0]!.pid;
+              await db.execute(
+                sql`update documents set memo='Concurrent edit',updated_at=updated_at+interval '1 second' where id=${id}`,
+              );
+              ready();
+              await hold;
+            });
+            await Promise.race([staged, edit]);
+            command = convertQuote(
+              request("POST", { targetKind: "sales_order", expectedUpdatedAt: token }),
+              params,
+            );
+            let settled = false,
+              blocked = false;
+            void command.then(
+              () => {
+                settled = true;
+              },
+              () => {
+                settled = true;
+              },
+            );
+            const deadline = Date.now() + 10_000;
+            while (!settled && Date.now() < deadline) {
+              blocked = (
+                await db.execute<{ blocked: boolean }>(
+                  sql`select exists(select 1 from pg_stat_activity where datname=current_database() and ${pid}=any(pg_blocking_pids(pid))) as blocked`,
+                  "objects",
+                )
+              )[0]!.blocked;
+              if (blocked) break;
+              await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+            assert.ok(blocked, "conversion must wait for its source lock");
+            release();
+            await edit;
+            response = await command;
+          } else {
+            await db.execute(
+              sql`update documents set memo='Unreviewed edit',updated_at=updated_at+interval '1 microsecond' where id=${id}`,
+            );
+            response =
+              operation === "delete"
+                ? await salesOrderRoute.DELETE(
+                    request("DELETE", { expectedUpdatedAt: token }),
+                    params,
+                  )
+                : await salesOrderRoute.PATCH(
+                    request("PATCH", {
+                      expectedUpdatedAt: token,
+                      ...(operation === "edit"
+                        ? { memo: "Stale edit" }
+                        : operation === "issue"
+                          ? { status: "approved" }
+                          : {
+                              status: "voided",
+                              reason: "Cancel reviewed order",
+                              reversalDate: org.date,
+                            }),
+                    }),
+                    params,
+                  );
+          }
+          assert.equal(response.status, 409, JSON.stringify(await response.json()));
+          assert.equal(
+            (
+              await db.execute<{ count: number }>(
+                sql`select count(*)::int as count from documents where org_id=${org.orgId}`,
+                "objects",
+              )
+            )[0]!.count,
+            1,
+          );
+        });
+      } finally {
+        release();
+        await Promise.allSettled([edit, command]);
+        state.user = null;
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
 }

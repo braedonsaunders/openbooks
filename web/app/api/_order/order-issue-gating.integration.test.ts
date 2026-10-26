@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import type { SessionUser } from "../../../lib/auth";
 import { sql } from "drizzle-orm";
 
 // Estimate Issue must emit the native submit event and consult the Flow gate
@@ -12,51 +13,43 @@ import { sql } from "drizzle-orm";
 // (pending approval with a run and a gate), while no applicable flow issues
 // straight through. Approvals are optional Flows — never a second engine.
 
-const stateKey = Symbol.for("openbooks.order-issue-gating-test");
-interface GateState {
-  authz: {
-    user: { orgId: string; id: string };
-    allowedSubsidiaryIds: null;
-  } | null;
-}
-const gateState: GateState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = gateState;
-
-const mockFeatureGates = `
-  const state = globalThis[Symbol.for('openbooks.order-issue-gating-test')]
-  export async function guardFeaturePermission() {
-    if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
-  }
-`;
-
-const hooks = registerHooks({
+// The real route resolves the caller from the session exactly as in
+// production: the test supplies only the signed-in identity, and the user's
+// roles grant its permissions and subsidiary scope.
+const session: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __orderIssueGatingSession: session });
+registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (
-      specifier === "../../../lib/feature-gates" &&
-      context.parentURL?.includes("/api/_order/handlers")
-    ) {
-      return { url: "mock:order-issue-gating-feature-gates", shortCircuit: true };
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__orderIssueGatingSession.user}",
+      };
     }
     return nextResolve(specifier, context);
   },
-  load(url, context, nextLoad) {
-    if (url === "mock:order-issue-gating-feature-gates") {
-      return { format: "module", source: mockFeatureGates, shortCircuit: true };
-    }
-    return nextLoad(url, context);
-  },
 });
 
-const { makePATCH } = await import("./handlers.ts");
-hooks.deregister();
+function signIn(orgId: string, userId: string): void {
+  session.user = {
+    id: userId,
+    orgId,
+    name: "Order editor",
+    email: "order-editor@scratch.test",
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: orgId,
+    homeOrgId: orgId,
+    homeUserId: userId,
+  };
+}
+
+const { PATCH } = await import("../estimates/[id]/route.ts");
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedApprovalFlow, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-
-const PATCH = makePATCH({ kind: "quote", readPerm: "ar.read", createPerm: "ar.create" });
+const { createScratchOrg, dropScratchOrg, seedApprovalFlow, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 interface Fixture {
   orgId: string;
@@ -79,7 +72,12 @@ async function seedDraftQuote(tag: string, total: string): Promise<Fixture> {
         ${org.subsidiaryId}, 'CAD', 'draft', ${total}, 0, ${total}, 'Gating terms', ${actors.submitterId}
       )
     `);
-    return { orgId: org.orgId, actorId: actors.submitterId, approverId: actors.approver1Id, orderId };
+    return {
+      orgId: org.orgId,
+      actorId: actors.submitterId,
+      approverId: actors.approver1Id,
+      orderId,
+    };
   });
 }
 
@@ -95,14 +93,19 @@ async function seedThresholdFlow(orgId: string, approverId: string): Promise<voi
 }
 
 async function issueRequest(fixture: Fixture): Promise<Request> {
-  gateState.authz = {
-    user: { orgId: fixture.orgId, id: fixture.actorId },
-    allowedSubsidiaryIds: null,
-  };
-  const revision = await withOrgContext(fixture.orgId, async () =>
-    (await db.execute<{ revision: string }>(sql`
+  signIn(fixture.orgId, fixture.actorId);
+  const revision = await withOrgContext(
+    fixture.orgId,
+    async () =>
+      (
+        await db.execute<{ revision: string }>(
+          sql`
       select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-        from documents where id = ${fixture.orderId}`, "objects"))[0]!.revision);
+        from documents where id = ${fixture.orderId}`,
+          "objects",
+        )
+      )[0]!.revision,
+  );
   return new Request(`http://openbooks.test/api/quotes/${fixture.orderId}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
@@ -111,24 +114,40 @@ async function issueRequest(fixture: Fixture): Promise<Request> {
 }
 
 async function docStatus(orgId: string, orderId: string): Promise<string> {
-  const rows = await withOrgContext(orgId, async () =>
-    await db.execute<{ status: string }>(sql`
-      select status from documents where id = ${orderId}`, "objects"));
+  const rows = await withOrgContext(
+    orgId,
+    async () =>
+      await db.execute<{ status: string }>(
+        sql`
+      select status from documents where id = ${orderId}`,
+        "objects",
+      ),
+  );
   return rows[0]!.status;
 }
 
 async function runCount(orgId: string, orderId: string): Promise<number> {
-  const rows = await withBypassContext(async () =>
-    await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from flow_runs where org_id = ${orgId} and subject_id = ${orderId}`, "objects"));
+  const rows = await withBypassContext(
+    async () =>
+      await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from flow_runs where org_id = ${orgId} and subject_id = ${orderId}`,
+        "objects",
+      ),
+  );
   return rows[0]!.n;
 }
 
 async function pendingGateCount(orgId: string, orderId: string): Promise<number> {
-  const rows = await withBypassContext(async () =>
-    await db.execute<{ n: number }>(sql`
+  const rows = await withBypassContext(
+    async () =>
+      await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from flow_gates
-       where org_id = ${orgId} and subject_id = ${orderId} and status = 'pending'`, "objects"));
+       where org_id = ${orgId} and subject_id = ${orderId} and status = 'pending'`,
+        "objects",
+      ),
+  );
   return rows[0]!.n;
 }
 
@@ -136,15 +155,29 @@ test("issuing an estimate over the flow threshold gates with a run and a gate", 
   const fixture = await seedDraftQuote("EST-OVER", "15540.00");
   try {
     await seedThresholdFlow(fixture.orgId, fixture.approverId);
-    const response = await withOrgContext(fixture.orgId, async () => PATCH(await issueRequest(fixture), {
-      params: Promise.resolve({ id: fixture.orderId }),
-    }));
-    assert.equal(response.status, 202, `gated issue must answer 202: ${JSON.stringify(await response.json())}`);
+    const response = await withOrgContext(fixture.orgId, async () =>
+      PATCH(await issueRequest(fixture), {
+        params: Promise.resolve({ id: fixture.orderId }),
+      }),
+    );
+    assert.equal(
+      response.status,
+      202,
+      `gated issue must answer 202: ${JSON.stringify(await response.json())}`,
+    );
     assert.equal(await docStatus(fixture.orgId, fixture.orderId), "pending_approval");
-    assert.equal(await runCount(fixture.orgId, fixture.orderId), 1, "one flow run records the gating");
-    assert.equal(await pendingGateCount(fixture.orgId, fixture.orderId), 1, "one pending gate holds the estimate");
+    assert.equal(
+      await runCount(fixture.orgId, fixture.orderId),
+      1,
+      "one flow run records the gating",
+    );
+    assert.equal(
+      await pendingGateCount(fixture.orgId, fixture.orderId),
+      1,
+      "one pending gate holds the estimate",
+    );
   } finally {
-    gateState.authz = null;
+    session.user = null;
     await dropScratchOrg(fixture.orgId);
   }
 });
@@ -153,14 +186,24 @@ test("issuing an estimate under the flow threshold issues directly", async () =>
   const fixture = await seedDraftQuote("EST-UNDER", "100.00");
   try {
     await seedThresholdFlow(fixture.orgId, fixture.approverId);
-    const response = await withOrgContext(fixture.orgId, async () => PATCH(await issueRequest(fixture), {
-      params: Promise.resolve({ id: fixture.orderId }),
-    }));
-    assert.equal(response.status, 200, `ungated issue must answer 200: ${JSON.stringify(await response.json())}`);
+    const response = await withOrgContext(fixture.orgId, async () =>
+      PATCH(await issueRequest(fixture), {
+        params: Promise.resolve({ id: fixture.orderId }),
+      }),
+    );
+    assert.equal(
+      response.status,
+      200,
+      `ungated issue must answer 200: ${JSON.stringify(await response.json())}`,
+    );
     assert.equal(await docStatus(fixture.orgId, fixture.orderId), "approved");
-    assert.equal(await runCount(fixture.orgId, fixture.orderId), 0, "an unmet condition creates no run");
+    assert.equal(
+      await runCount(fixture.orgId, fixture.orderId),
+      0,
+      "an unmet condition creates no run",
+    );
   } finally {
-    gateState.authz = null;
+    session.user = null;
     await dropScratchOrg(fixture.orgId);
   }
 });
@@ -168,14 +211,20 @@ test("issuing an estimate under the flow threshold issues directly", async () =>
 test("issuing an estimate with no flow issues directly", async () => {
   const fixture = await seedDraftQuote("EST-NOFLOW", "15540.00");
   try {
-    const response = await withOrgContext(fixture.orgId, async () => PATCH(await issueRequest(fixture), {
-      params: Promise.resolve({ id: fixture.orderId }),
-    }));
-    assert.equal(response.status, 200, `flow-less issue must answer 200: ${JSON.stringify(await response.json())}`);
+    const response = await withOrgContext(fixture.orgId, async () =>
+      PATCH(await issueRequest(fixture), {
+        params: Promise.resolve({ id: fixture.orderId }),
+      }),
+    );
+    assert.equal(
+      response.status,
+      200,
+      `flow-less issue must answer 200: ${JSON.stringify(await response.json())}`,
+    );
     assert.equal(await docStatus(fixture.orgId, fixture.orderId), "approved");
     assert.equal(await runCount(fixture.orgId, fixture.orderId), 0, "no flow means no runs");
   } finally {
-    gateState.authz = null;
+    session.user = null;
     await dropScratchOrg(fixture.orgId);
   }
 });
