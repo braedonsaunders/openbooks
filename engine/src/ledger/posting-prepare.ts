@@ -15,8 +15,7 @@ import { assertReceiptFundingPosting } from "../payments-core/receipt-funding.ts
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
 import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../projects/billing-source-integrity.ts";
-import { PayrollError as PayrollRemittanceError } from "../payroll/error.ts";
-import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
+import { PayrollError as PayrollRemittanceError } from "../money/payroll-error.ts";
 import { isZero, toUnits } from "../money/money.ts";
 import { parseMoney, sumMoney } from "../money/brands.ts";
 import { postingLineHooks } from "../journal/posting-line-contributors.ts";
@@ -344,7 +343,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   // like the generated-billing guard above. Non-remittance documents return
   // from the check itself.
   try {
-    await assertPayrollRemittanceBillCurrent(doc.orgId, documentId, db);
+    await postingPreconditionHooks.require("payroll").assertRemittanceBillCurrent(doc.orgId, documentId, db);
     try { await assertWithholdingRemittanceCurrent(db, doc.orgId, documentId, { document: doc, lines }); await assertWithholdingDepositCurrent(db, doc.orgId, documentId, { document: doc, lines }); }
     catch (error) { if (error instanceof ContractorWithholdingError) throw new PostingError(error.remedy ? `${error.message} ${error.remedy}` : error.message); throw error; }
   } catch (error) {

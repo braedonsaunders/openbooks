@@ -70,6 +70,29 @@ export interface PostingPreconditions {
       },
     ): Promise<{ customerRoleActive: boolean }>;
   };
+  payroll: {
+    /**
+     * Refuses, with a PayrollError, a remittance bill that no longer matches
+     * the committed payroll it consumed. Other documents return.
+     */
+    assertRemittanceBillCurrent(
+      orgId: string,
+      documentId: string,
+      executor: SqlExecutor,
+    ): Promise<void>;
+    /**
+     * Refuses, with a DocumentEditError, an edit that changes a remittance
+     * bill's stamped lines, currency or subsidiary. True for a remittance
+     * bill, whose stored lines the editor keeps.
+     */
+    assertRemittanceBillEdit(
+      executor: SqlExecutor,
+      orgId: string,
+      documentId: string,
+      preparedLines: unknown[] | null,
+      patch: { currency?: string | undefined; subsidiaryId?: string | null | undefined },
+    ): Promise<boolean>;
+  };
 }
 
 export const postingPreconditionHooks =

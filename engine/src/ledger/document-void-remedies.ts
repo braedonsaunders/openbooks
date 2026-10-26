@@ -3,8 +3,7 @@ import { db, type SqlExecutor } from "../platform/db.ts";
 import { assertBillingReleasable, BillingReleaseRefusedError } from "./billing-provenance.ts";
 import { projectRetainageHeldSql } from "../projects/construction-billing.ts";
 import { add, cmp, neg } from "../money/money.ts";
-import { releaseLeavePayrollInputs } from "../payroll/leave-payroll-inputs.ts";
-import { releaseAllowancePayrollInputs } from "../payroll/allowance-payroll-inputs.ts";
+import { voidRemedyHooks } from "../journal/void-remedy-contributors.ts";
 import { DocumentVoidError } from "./document-void-shared.ts";
 
 /**
@@ -304,8 +303,7 @@ export async function releaseVoidedPayRun(
     );
   }
 
-  await releaseLeavePayrollInputs(tx, { orgId, runDocumentId: documentId });
-  await releaseAllowancePayrollInputs(tx, { orgId, runDocumentId: documentId });
+  await voidRemedyHooks.require("payroll").releaseRunInputs(tx, { orgId, runDocumentId: documentId });
 
   const run = await tx.execute<{ document_id: string }>(
     sql`

@@ -40,7 +40,7 @@ import {
 } from "../records/transaction-audit.ts";
 import { consolidationSourceRefusal } from "../records/consolidation-source-policy.ts";
 
-import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
+import { postingPreconditionHooks } from "../journal/posting-preconditions.ts";
 import { enqueuePostingEffects } from "./posting-effects.ts";
 import { redeemCashSaleTenders, TenderRefusal } from "../sales/document-tenders.ts";
 import { enqueueProviderCommitTx, PROVIDER_COMMIT_KINDS } from "../tax/provider-commit.ts";
@@ -160,7 +160,7 @@ async function assertSourcesCurrent(tx: PostingTx, prepared: PreparedPosting): P
     throw error;
   }
   if (doc.kind === "vendor_bill" || doc.kind === "vendor_credit") {
-    await assertPayrollRemittanceBillCurrent(doc.orgId, documentId, tx);
+    await postingPreconditionHooks.require("payroll").assertRemittanceBillCurrent(doc.orgId, documentId, tx);
   }
   try {
     await assertWithholdingRemittanceCurrent(tx, doc.orgId, documentId, {

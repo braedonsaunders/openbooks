@@ -9,7 +9,7 @@ import {
   assertGeneratedBillingEdit,
   BillingSourceIntegrityError,
 } from "../projects/billing-source-integrity.ts";
-import { assertRemittanceBillEdit, RemittanceSourceIntegrityError } from "../payroll/remittance.ts";
+import { postingPreconditionHooks } from "../journal/posting-preconditions.ts";
 import { cmp } from "../money/money.ts";
 import { checkProjectsWriteEnabled } from "../organization/feature-state.ts";
 import { extraDimsSubsidiaryError, segmentRegistry } from "../organization/segments.ts";
@@ -300,21 +300,17 @@ export async function applySourceIntegrityGuards(
       );
     throw error;
   }
-  try {
-    // A remittance bill is generated from its source entity whole: its
-    // lines, header currency, and subsidiary are stamped at creation.
-    // Any of the three changing refuses by name with the regenerate
-    // remedy — including a header-only save that leaves the lines alone.
-    const remittance = await assertRemittanceBillEdit(tx, orgId, id, preparedLines, {
+  // A remittance bill is generated from its source entity whole: its
+  // lines, header currency, and subsidiary are stamped at creation.
+  // Any of the three changing refuses by name with the regenerate
+  // remedy — including a header-only save that leaves the lines alone.
+  const remittance = await postingPreconditionHooks
+    .require("payroll")
+    .assertRemittanceBillEdit(tx, orgId, id, preparedLines, {
       currency,
       subsidiaryId: body.subsidiaryId,
     });
-    if (remittance) preparedLines = null;
-  } catch (error) {
-    if (error instanceof RemittanceSourceIntegrityError)
-      throw new DocumentEditError(422, error.message);
-    throw error;
-  }
+  if (remittance) preparedLines = null;
   return preparedLines;
 }
 

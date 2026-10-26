@@ -28,6 +28,13 @@ export interface VoidRemedyContributors {
       input: { reversalEntryId: string | null; reason: string },
     ): Promise<unknown>;
   };
+  payroll: {
+    /** Returns the leave and allowance inputs a voided pay run consumed to the next run. */
+    releaseRunInputs(
+      executor: SqlExecutor,
+      input: { orgId: string; runDocumentId: string },
+    ): Promise<void>;
+  };
 }
 
 export const voidRemedyHooks = postingContributorRegistry<VoidRemedyContributors>("void remedy");
