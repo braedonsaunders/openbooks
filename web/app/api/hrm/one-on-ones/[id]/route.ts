@@ -17,8 +17,7 @@ export const runtime = "nodejs";
 
 async function gated(orgId: string): Promise<boolean> {
   return (
-    (await isFeatureEnabled(orgId, "hrm")) &&
-    (await isFeatureEnabled(orgId, "hrmPerformance"))
+    (await isFeatureEnabled(orgId, "hrm")) && (await isFeatureEnabled(orgId, "hrmPerformance"))
   );
 }
 
@@ -29,11 +28,9 @@ async function gated(orgId: string): Promise<boolean> {
  */
 export const GET = defineRoute({
   public: "session",
+  feature: "hrmPerformance",
   params: z.object({ id: z.string().min(1) }),
-  handler: async ({ request: _req, authz: authz, params: routeParams }) => {
-    if (!(await gated(authz.user.orgId))) {
-      return notFound("record");
-    }
+  handler: async ({ authz: authz, params: routeParams }) => {
     const { id } = routeParams;
     try {
       const one = await getOneOnOne({
@@ -52,11 +49,7 @@ export const PATCH = defineRoute({
   public: "session",
   params: z.object({ id: z.string().min(1) }),
   body: patchOneOnOneBody,
-  handler: async ({
-    authz: authz,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: authz, params: routeParams, body: body }) => {
     if (!(await gated(authz.user.orgId))) {
       return notFound("record");
     }
