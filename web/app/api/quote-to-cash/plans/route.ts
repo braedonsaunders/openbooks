@@ -1,8 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "@openbooks/engine/platform/database";
+import { listActiveSubscriptionPlans } from "@openbooks/engine/billing/quote-to-cash-read";
 
 export const runtime = "nodejs";
 
@@ -16,21 +15,7 @@ export const GET = defineRoute({
   feature: "quoteToCash",
   handler: async ({ authz }) => {
     try {
-      const plans = await withOrgContext(authz.user.orgId, () =>
-        db.execute<{
-          id: string;
-          name: string;
-          amount: string;
-          currency: string | null;
-          interval: string;
-          interval_count: number;
-        }>(sql`
-          select id, name, amount::text as amount, currency_code as currency,
-                 interval, interval_count
-            from subscription_plans
-           where org_id = ${authz.user.orgId} and is_active
-           order by name`, "objects"),
-      );
+      const plans = await listActiveSubscriptionPlans(authz.user.orgId);
       return NextResponse.json({ plans });
     } catch (e) {
       return apiErrorResponse(e);
