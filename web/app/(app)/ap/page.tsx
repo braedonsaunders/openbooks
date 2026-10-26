@@ -1,6 +1,8 @@
 import { getTranslations } from "next-intl/server";
 import { ModuleView } from "../../../components/viewspec/module-view";
-import { loadApCockpit, apCockpitSpec } from "./view";
+import { apCockpitSpec } from "./view";
+import { PageProjectionStatus } from "@/components/page-projection-status";
+import { projectedPage, projectedPageParams } from "@/lib/page-projection";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,18 @@ export default async function AP({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
-  const data = await loadApCockpit();
-  return <ModuleView spec={apCockpitSpec(data)} data={data} searchParams={sp} trusted />;
+  // The cockpit answers from its latest projection; a projection that may
+  // be out of date is labelled with when it was calculated and rebuilt.
+  const { data, observedAt, refreshing } = await projectedPage("ap", sp);
+  return (
+    <>
+      <ModuleView spec={apCockpitSpec(data)} data={data} searchParams={sp} trusted />
+      <PageProjectionStatus
+        page="ap"
+        params={projectedPageParams("ap", sp)}
+        observedAt={observedAt}
+        refreshing={refreshing}
+      />
+    </>
+  );
 }

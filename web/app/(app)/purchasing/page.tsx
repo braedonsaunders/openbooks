@@ -1,6 +1,8 @@
 import { getTranslations } from "next-intl/server";
 import { ModuleView } from "../../../components/viewspec/module-view";
-import { loadPurchasing, purchasingSpec } from "./view";
+import { purchasingSpec } from "./view";
+import { PageProjectionStatus } from "@/components/page-projection-status";
+import { projectedPage, projectedPageParams } from "@/lib/page-projection";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +25,18 @@ export default async function PurchasingHomePage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const spec = await searchParams;
-  const data = await loadPurchasing(spec);
-  return <ModuleView spec={purchasingSpec(data)} data={data} searchParams={spec} trusted />;
+  // The cockpit answers from its latest projection; a projection that may
+  // be out of date is labelled with when it was calculated and rebuilt.
+  const { data, observedAt, refreshing } = await projectedPage("purchasing", spec);
+  return (
+    <>
+      <ModuleView spec={purchasingSpec(data)} data={data} searchParams={spec} trusted />
+      <PageProjectionStatus
+        page="purchasing"
+        params={projectedPageParams("purchasing", spec)}
+        observedAt={observedAt}
+        refreshing={refreshing}
+      />
+    </>
+  );
 }

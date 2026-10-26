@@ -1,6 +1,8 @@
 import { getTranslations } from "next-intl/server";
 import { ModuleView } from "../../../../components/viewspec/module-view";
-import { loadBankingCash, bankingCashSpec } from "./view";
+import { bankingCashSpec } from "./view";
+import { PageProjectionStatus } from "@/components/page-projection-status";
+import { projectedPage, projectedPageParams } from "@/lib/page-projection";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,18 @@ export default async function BankingCashPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
-  const data = await loadBankingCash(sp);
-  return <ModuleView spec={bankingCashSpec(data)} data={data} searchParams={sp} trusted />;
+  // The cockpit answers from its latest projection; a projection that may
+  // be out of date is labelled with when it was calculated and rebuilt.
+  const { data, observedAt, refreshing } = await projectedPage("banking-cash", sp);
+  return (
+    <>
+      <ModuleView spec={bankingCashSpec(data)} data={data} searchParams={sp} trusted />
+      <PageProjectionStatus
+        page="banking-cash"
+        params={projectedPageParams("banking-cash", sp)}
+        observedAt={observedAt}
+        refreshing={refreshing}
+      />
+    </>
+  );
 }

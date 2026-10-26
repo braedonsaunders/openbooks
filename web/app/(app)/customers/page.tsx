@@ -1,6 +1,8 @@
 import { getTranslations } from "next-intl/server";
 import { ModuleView } from "../../../components/viewspec/module-view";
-import { loadCustomers, customersSpec } from "./view";
+import { customersSpec } from "./view";
+import { PageProjectionStatus } from "@/components/page-projection-status";
+import { projectedPage, projectedPageParams } from "@/lib/page-projection";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +25,18 @@ export default async function CustomersHomePage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
-  const data = await loadCustomers(sp);
-  return <ModuleView spec={customersSpec(data)} data={data} searchParams={sp} trusted />;
+  // The cockpit answers from its latest projection; a projection that may
+  // be out of date is labelled with when it was calculated and rebuilt.
+  const { data, observedAt, refreshing } = await projectedPage("customers", sp);
+  return (
+    <>
+      <ModuleView spec={customersSpec(data)} data={data} searchParams={sp} trusted />
+      <PageProjectionStatus
+        page="customers"
+        params={projectedPageParams("customers", sp)}
+        observedAt={observedAt}
+        refreshing={refreshing}
+      />
+    </>
+  );
 }
