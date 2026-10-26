@@ -476,7 +476,9 @@ async function main(): Promise<void> {
         allowedSubsidiaryIds: new Set([world.subsidiaryId]),
         documentDate: date, subsidiaryId: world.subsidiaryId, currency, fxRate,
       });
-      await updateDraftPayment(doc.id, { allocations, bankAccountId: world.accounts.bank! }, admin, orgId);
+      await updateDraftPayment(doc.id, { allocations, bankAccountId: world.accounts.bank! }, admin, orgId, {
+        allowedSubsidiaryIds: new Set([world.subsidiaryId]),
+      });
       await approvePayment(doc.id, admin, orgId);
       await postPaymentWithApplications(doc.id, undefined, admin);
     };
