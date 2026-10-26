@@ -142,6 +142,7 @@ import {
 } from "../hrm/flow-releases.ts";
 import { releaseResourcingRequestApproval } from "../resourcing/flow-release.ts";
 import { releaseWorkOrderApproval } from "../manufacturing/flow-release.ts";
+import { installPostingContributors } from "./posting-contributors.ts";
 
 /**
  * Composition root: the one place that wires engine
@@ -151,7 +152,8 @@ import { releaseWorkOrderApproval } from "../manufacturing/flow-release.ts";
  * createScriptJournal; instead the process installs the ledger's writer
  * here and the __journal_create host call invokes it inline, in the same
  * ambient transaction. The engine-owned approval-release handlers register
- * on this same root, as does the document-effects port.
+ * on this same root, as do the document-effects port and the domain posting
+ * contributors the ledger resolves when it posts, edits or voids.
  *
  * Idempotent: re-registering the same writer is a no-op. Call it from every
  * process that can post, run scripts or run flows — web/instrumentation,
@@ -161,6 +163,7 @@ import { releaseWorkOrderApproval } from "../manufacturing/flow-release.ts";
  * check:test-mock-surface).
  */
 export function installEngineSeams(): void {
+  installPostingContributors();
   registerFlowApprovalReleaseHandler("crew_time_batch", async ({ subjectId, outcome, comment, approvalRunId, ctx }) => {
     if (!ctx.userId || !approvalRunId) throw new Error("Crew batch decisions require their native Flow gate and acting user.");
     const allowedSubsidiaryIds = await actorAllowedSubsidiaryIds(db, ctx.orgId, ctx.userId);

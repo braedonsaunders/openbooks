@@ -105,14 +105,32 @@ async function productionScratchPool(): Promise<ScratchOrgPool<ScratchOrg>> {
   return pool;
 }
 
+/**
+ * Postings in a fixture organization resolve the domain posting hooks, so
+ * every fixture installs them. Loaded on first use, inside the test, so a
+ * test's module mocks are registered before the domain modules load.
+ */
+async function installFixturePostingContributors(): Promise<void> {
+  const { installPostingContributors } = await import("../composition/posting-contributors.ts");
+  installPostingContributors();
+}
+
 /** A company consumed by native retirement cannot be a reusable pool slot. */
 export async function createRetirementFixtureOrg(): Promise<ScratchOrg> {
   await assertFixtureDatabase();
-  return bootstrapScratchOrg();
+  const org = await bootstrapScratchOrg();
+  await installFixturePostingContributors();
+  return org;
 }
 
 /** Create a pooled lease in CI, or a standalone fixture when pooling is disabled. */
 export async function createScratchOrg(): Promise<ScratchOrg> {
+  const org = await leaseScratchOrg();
+  await installFixturePostingContributors();
+  return org;
+}
+
+async function leaseScratchOrg(): Promise<ScratchOrg> {
   if (fixtureOwnerPort()) {
     const response = await fixtureOwnerRequest<{ org: ScratchOrg }>({ op: "lease" });
     outstandingFixtureOwnerLeases.add(response.org.orgId);

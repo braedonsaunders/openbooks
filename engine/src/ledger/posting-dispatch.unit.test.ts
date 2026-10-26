@@ -5,9 +5,14 @@ import type { SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { postingEffectSubsidiaryId, runPostDocumentEffects } from "./posting-dispatch.ts";
 import { PostingEffectsTerminalFailureError, type PostingEffectsRow } from "./posting-effects.ts";
+import { installPostingContributors } from "../composition/posting-contributors.ts";
+import { PostingContributorMissingError } from "../journal/posting-contributors.ts";
+import { postingEffectHooks } from "../journal/posting-effect-contributors.ts";
 
 const claimed: PostingEffectsRow = { id: "claim", org_id: "org", document_id: "doc", kind: "journal", entry_id: "entry", posting_date: "2026-09-20", actor_id: null, attempt_count: 1, lease_token: "lease" };
 const posted = { id: "doc", orgId: "org", status: "posted", kind: "journal", documentDate: "2026-09-20", postedEntryId: "entry" };
+
+test.before(installPostingContributors);
 
 function reads(t: TestContext, results: unknown[][]) {
   let count = 0;
@@ -88,5 +93,33 @@ test("a posted vendor bill without its entry refuses before inventory receipts",
   });
   await assert.rejects(runPostDocumentEffects("doc", "draft", { suppressAutomation: true }), /BILL-17.*no posted journal entry.*inventory receipts cannot run/);
   assert.equal(claimReads, 2, "both claim lookup paths establish that no durable claim exists");
+  done();
+});
+
+/** Install every effect hook except one domain's, restoring the full set after the test. */
+function withoutEffectHook(t: TestContext, domain: string) {
+  const kept = postingEffectHooks.installed().filter((name) => name !== domain);
+  const hooks = kept.map((name) => [name, postingEffectHooks.require(name)] as const);
+  postingEffectHooks.clear();
+  t.after(installPostingContributors);
+  for (const [name, hook] of hooks) postingEffectHooks.register(name, hook);
+}
+
+test("a posted entry refuses its effects when the asset hook is not installed", async t => {
+  withoutEffectHook(t, "assets");
+  const done = reads(t, [[posted]]);
+  await assert.rejects(
+    runPostDocumentEffects("doc", "draft", { alreadyClaimed: claimed, suppressAutomation: true }),
+    (error: unknown) => error instanceof PostingContributorMissingError && error.kind === "effect" && error.domain === "assets" && /installPostingContributors\(\)/.test(error.message),
+  );
+  done();
+});
+
+test("a posting that reaches no asset hook dispatches without the asset contributor", async t => {
+  withoutEffectHook(t, "assets");
+  const done = reads(t, [[{ ...posted, postedEntryId: null }], [], [{ id: "org", name: "Organization", baseCurrency: "USD" }]]);
+  // No durable claim row: the dispatch runs on the document alone.
+  t.mock.method(db, "execute", async (_query: unknown, mode?: string) => (mode === "objects" ? [] : { rows: [] }));
+  await runPostDocumentEffects("doc", "draft", { suppressAutomation: true });
   done();
 });

@@ -165,6 +165,7 @@
       "description": "Composition root: installs the runtime seams (script journal writer first) that lower modules cannot import without cycling.",
       "dependsOn": [
         "allocations",
+        "assets",
         "banking",
         "billing",
         "chart",
@@ -442,7 +443,6 @@
       "dependsOn": [
         "allocations",
         "amortization",
-        "assets",
         "compliance",
         "contractor-withholding",
         "crm",
