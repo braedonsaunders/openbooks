@@ -1,51 +1,65 @@
-import { yearEndFiling } from '@openbooks/engine/payroll/filing-registry'
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json"
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { PayrollPackError } from '@openbooks/engine/payroll/packs'
-import { PayrollError } from '@openbooks/engine/payroll/error'
-import { orgYearEndFilings } from '@openbooks/engine/payroll/yearend'
-import {
-  filingLifecycle,
-  recordFilingIssue,
-} from '@openbooks/engine/payroll/yearend-amendments'
-import { payrollYearRefusal } from '../../../../../lib/payroll-year'
+import { yearEndFiling } from "@openbooks/engine/payroll/filing-registry";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { PayrollPackError } from "@openbooks/engine/payroll/packs";
+import { PayrollError } from "@openbooks/engine/payroll/error";
+import { orgYearEndFilings } from "@openbooks/engine/payroll/yearend";
+import { filingLifecycle, recordFilingIssue } from "@openbooks/engine/payroll/yearend-amendments";
+import { payrollYearRefusal } from "../../../../../lib/payroll-year";
 import {
   FilingScopeDenied,
   guardPayrollFilingData,
   guardPayrollFilingRowIds,
-} from '../../subsidiary-scope'
+} from "../../subsidiary-scope";
 
 const filingIssueInput = z.object({
   country: z.string().regex(/^[A-Z]{2}$/),
   filing: z.string().trim().min(1),
-  year: z.unknown().superRefine((raw, ctx) => {
-    const refusal = payrollYearRefusal(raw)
-    if (refusal !== null) ctx.addIssue({ code: 'custom', message: refusal })
-  }).transform(Number),
+  year: z
+    .unknown()
+    .superRefine((raw, ctx) => {
+      const refusal = payrollYearRefusal(raw);
+      if (refusal !== null) ctx.addIssue({ code: "custom", message: refusal });
+    })
+    .transform(Number),
   note: z.string().trim().max(2000).optional(),
-})
+});
 // Filing declarations own row-id grammars (for example, T4 includes employee,
 // province, and account). The shared subsidiary guard validates every row
 // against that declaration before the issue service writes anything.
-const correctionRows = z.array(z.string().min(1)).min(1)
-const requestBodySchema = z.discriminatedUnion('revision', [
-  filingIssueInput.extend({ revision: z.literal('original'), rowIds: z.array(z.string().min(1)).optional(),
-    params:z.record(z.string().min(1).max(64),z.string().max(610000)).refine(value=>Object.keys(value).length<=8
-      &&Object.values(value).reduce((size,text)=>size+text.length,0)<=610000,'filing selection is too large').optional() }),
-  filingIssueInput.extend({ revision: z.literal('amended'), confirmedAmendment: z.literal(true), rowIds: correctionRows }),
+const correctionRows = z.array(z.string().min(1)).min(1);
+const requestBodySchema = z.discriminatedUnion("revision", [
   filingIssueInput.extend({
-    revision: z.literal('cancelled'), confirmedCancellation: z.literal(true, { error: 'cancellation must be explicitly confirmed' }), rowIds: correctionRows,
-    reason: z.string().trim().min(1, 'a nonblank cancellation reason is required').max(2000),
+    revision: z.literal("original"),
+    rowIds: z.array(z.string().min(1)).optional(),
+    params: z
+      .record(z.string().min(1).max(64), z.string().max(610000))
+      .refine(
+        (value) =>
+          Object.keys(value).length <= 8 &&
+          Object.values(value).reduce((size, text) => size + text.length, 0) <= 610000,
+        "filing selection is too large",
+      )
+      .optional(),
   }),
-])
+  filingIssueInput.extend({
+    revision: z.literal("amended"),
+    confirmedAmendment: z.literal(true),
+    rowIds: correctionRows,
+  }),
+  filingIssueInput.extend({
+    revision: z.literal("cancelled"),
+    confirmedCancellation: z.literal(true, { error: "cancellation must be explicitly confirmed" }),
+    rowIds: correctionRows,
+    reason: z.string().trim().min(1, "a nonblank cancellation reason is required").max(2000),
+  }),
+]);
 
-
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * The AMENDED / CANCELLED filing lifecycle for one pack-declared filing.
@@ -65,46 +79,62 @@ export const dynamic = 'force-dynamic'
  * with a statutory consequence, so it takes payroll.run.
  */
 export const GET = defineRoute({
-  permission: 'payroll.read',
-  feature: 'payroll',
+  permission: "payroll.read",
+  feature: "payroll",
   handler: async ({ request: req, authz: gate }) => {
-    const url = new URL(req.url)
-    const yearRaw = url.searchParams.get('year')
-    const yearRefusal = payrollYearRefusal(yearRaw)
+    const url = new URL(req.url);
+    const yearRaw = url.searchParams.get("year");
+    const yearRefusal = payrollYearRefusal(yearRaw);
     if (yearRefusal !== null) {
-      return NextResponse.json({ error: yearRefusal }, { status: 422 })
+      return NextResponse.json({ error: yearRefusal }, { status: 422 });
     }
-    const year = Number(yearRaw)
-    const country = url.searchParams.get('country') ?? ''
-    const filing = url.searchParams.get('filing') ?? ''
-    const rows = await db.execute<{ rowId: string }>(sql`
+    const year = Number(yearRaw);
+    const country = url.searchParams.get("country") ?? "";
+    const filing = url.searchParams.get("filing") ?? "";
+    const rows = await db.execute<{ rowId: string }>(
+      sql`
       select distinct ss.row_id as "rowId"
         from payroll_filing_submissions s
         join payroll_filing_submission_slips ss
           on ss.submission_id = s.id and ss.org_id = s.org_id
        where s.org_id = ${gate.user.orgId}
          and s.country = ${country} and s.filing_key = ${filing} and s.tax_year = ${year}
-    `, 'objects')
-    const denied = await guardPayrollFilingRowIds(gate, country, filing, rows.map((row) => row.rowId), year)
-    if (denied) return denied
+    `,
+      "objects",
+    );
+    const denied = await guardPayrollFilingRowIds(
+      gate,
+      country,
+      filing,
+      rows.map((row) => row.rowId),
+      year,
+    );
+    if (denied) return denied;
     // The CURRENT population is guarded on every read, not just when nothing
     // was ever filed: the lifecycle below returns every newly unfiled row's
     // label, id and status, so guarding only stored rows would show a
     // restricted reader the new slip identities of entities outside their
     // scope. Deny-by-default, like the year-end page itself.
-    const section = (await orgYearEndFilings(gate.user.orgId, year))
-      .find((candidate) => candidate.country === country && candidate.key === filing)
+    const section = (await orgYearEndFilings(gate.user.orgId, year)).find(
+      (candidate) => candidate.country === country && candidate.key === filing,
+    );
     if (section) {
-      const populationDenied = await guardPayrollFilingData(gate, country, filing, section.data, year)
-      if (populationDenied) return populationDenied
+      const populationDenied = await guardPayrollFilingData(
+        gate,
+        country,
+        filing,
+        section.data,
+        year,
+      );
+      if (populationDenied) return populationDenied;
     }
     // The in-service authorization: the lifecycle authorizes the ids it
     // actually returns, inside its own build — a row committed after the
     // pre-guard above is denied here, before the response renders it.
     const authorizeRowIds = async (rowIds: readonly string[]): Promise<void> => {
-      const denied = await guardPayrollFilingRowIds(gate, country, filing, [...rowIds], year)
-      if (denied) throw new FilingScopeDenied(denied)
-    }
+      const denied = await guardPayrollFilingRowIds(gate, country, filing, [...rowIds], year);
+      if (denied) throw new FilingScopeDenied(denied);
+    };
     try {
       const lifecycle = await filingLifecycle(
         gate.user.orgId,
@@ -113,7 +143,7 @@ export const GET = defineRoute({
         year,
         gate.allowedSubsidiaryIds ?? undefined,
         authorizeRowIds,
-      )
+      );
       return NextResponse.json({
         ...lifecycle,
         // The reported SNAPSHOT never leaves the server: it carries keyed
@@ -135,60 +165,68 @@ export const GET = defineRoute({
             revision: slip.revision,
           })),
         })),
-      })
+      });
     } catch (e) {
-      if (e instanceof FilingScopeDenied) return e.response
-      if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 })
-      if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
-      throw e
+      if (e instanceof FilingScopeDenied) return e.response;
+      if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 });
+      if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 });
+      throw e;
     }
-
   },
-})
+});
 
 export const POST = defineRoute({
-  permission: 'payroll.run',
-  feature: 'payroll',
-  handler: async ({ request: req, authz: gate }) => {
-    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 })
-    if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data
-    const year = body.year
-    const revision = body.revision
-    const { country, filing } = body
+  permission: "payroll.run",
+  feature: "payroll",
+  body: requestBodySchema,
+  invalidBodyStatus: 422,
+  handler: async ({ authz: gate, body }) => {
+    const year = body.year;
+    const revision = body.revision;
+    const { country, filing } = body;
     // Ordinary originals authorize their complete population. A pack-owned exact
     // source selection authorizes those selected event rows here and again inside
     // the native issue transaction; caller rowIds cannot narrow either path.
-    if (revision === 'original') {
-      let declared:ReturnType<typeof yearEndFiling>
-      try{declared=yearEndFiling(country,filing)}
-      catch(error){return apiErrorResponse(error,{...(error instanceof PayrollPackError?{safeStatus:404}:{})})}
-      if(declared.originalIssueRowIds){
-        try{
-          const selected=await declared.originalIssueRowIds(body.params??{},gate.user.orgId)
-          const denied=await guardPayrollFilingRowIds(gate,country,filing,[...selected],year)
-          if(denied)return denied
-        }catch(error){return apiErrorResponse(error,{...(error instanceof PayrollError?{safeStatus:422}:{})})}
-      }else{
-        const section=(await orgYearEndFilings(gate.user.orgId,year))
-          .find(candidate=>candidate.country===country&&candidate.key===filing)
-        if(section){
-          const denied=await guardPayrollFilingData(gate,country,filing,section.data,year)
-          if(denied)return denied
+    if (revision === "original") {
+      let declared: ReturnType<typeof yearEndFiling>;
+      try {
+        declared = yearEndFiling(country, filing);
+      } catch (error) {
+        return apiErrorResponse(error, {
+          ...(error instanceof PayrollPackError ? { safeStatus: 404 } : {}),
+        });
+      }
+      if (declared.originalIssueRowIds) {
+        try {
+          const selected = await declared.originalIssueRowIds(body.params ?? {}, gate.user.orgId);
+          const denied = await guardPayrollFilingRowIds(gate, country, filing, [...selected], year);
+          if (denied) return denied;
+        } catch (error) {
+          return apiErrorResponse(error, {
+            ...(error instanceof PayrollError ? { safeStatus: 422 } : {}),
+          });
+        }
+      } else {
+        const section = (await orgYearEndFilings(gate.user.orgId, year)).find(
+          (candidate) => candidate.country === country && candidate.key === filing,
+        );
+        if (section) {
+          const denied = await guardPayrollFilingData(gate, country, filing, section.data, year);
+          if (denied) return denied;
         }
       }
     } else {
-      const denied = await guardPayrollFilingRowIds(gate, country, filing, body.rowIds, year)
-      if (denied) return denied
+      const denied = await guardPayrollFilingRowIds(gate, country, filing, body.rowIds, year);
+      if (denied) return denied;
     }
     // The in-service authorization: the issue authorizes the ids it actually
     // persists, inside its own transaction — a row committed after the
     // pre-guard above is denied here, before the file, the slips, or the
     // submission exist. The denial carries the guard's own response.
     const authorizeRowIds = async (rowIds: readonly string[]): Promise<void> => {
-      const denied = await guardPayrollFilingRowIds(gate, country, filing, [...rowIds], year)
-      if (denied) throw new FilingScopeDenied(denied)
-    }
+      const denied = await guardPayrollFilingRowIds(gate, country, filing, [...rowIds], year);
+      if (denied) throw new FilingScopeDenied(denied);
+    };
     try {
       const issueInput = {
         orgId: gate.user.orgId,
@@ -197,17 +235,17 @@ export const POST = defineRoute({
         filingKey: filing,
         taxYear: year,
         revision,
-        ...(body.revision==='original'?{params:body.params}:{}),
-        rowIds: body.revision === 'original' ? body.rowIds : body.rowIds,
+        ...(body.revision === "original" ? { params: body.params } : {}),
+        rowIds: body.revision === "original" ? body.rowIds : body.rowIds,
         scope: gate.allowedSubsidiaryIds ?? undefined,
         authorizeRowIds,
         // A cancellation's explanation is its audit evidence. Keep it in the
         // existing filing note column so history readers show the same reason
         // that was confirmed at the destructive boundary.
-        note: revision === 'cancelled' ? body.reason : body.note?.trim() || null,
-        ...(revision === 'cancelled' ? { reason: body.reason } : {}),
-      }
-      const result = await recordFilingIssue(issueInput)
+        note: revision === "cancelled" ? body.reason : body.note?.trim() || null,
+        ...(revision === "cancelled" ? { reason: body.reason } : {}),
+      };
+      const result = await recordFilingIssue(issueInput);
       return NextResponse.json({
         submission: {
           id: result.submission.id,
@@ -220,13 +258,12 @@ export const POST = defineRoute({
         // Why no file accompanies the issue, in the pack's own words. An issue
         // with no artifact is legitimate — but never silent.
         fileRefusal: result.fileRefusal,
-      })
+      });
     } catch (e) {
-      if (e instanceof FilingScopeDenied) return e.response
-      if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 })
-      if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
-      throw e
+      if (e instanceof FilingScopeDenied) return e.response;
+      if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 });
+      if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 });
+      throw e;
     }
-
   },
-})
+});

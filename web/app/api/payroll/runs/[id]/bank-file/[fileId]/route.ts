@@ -1,19 +1,17 @@
-import { defineRoute } from '@/lib/api/route'
-import { z } from 'zod'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { fileContentDisposition } from '@/lib/export'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { releasePayRunBankFile } from '@openbooks/engine/payroll/bank-file-artifact'
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { fileContentDisposition } from "@/lib/export";
+import { payrollBankFileDocumentScope } from "@openbooks/engine/payroll/run-document-reads";
+import { releasePayRunBankFile } from "@openbooks/engine/payroll/bank-file-artifact";
 import { PayrollError } from "@openbooks/engine/payroll/error";
-import { guardSubsidiaryScope } from '../../../../../../../lib/authz'
-import { isUuid } from '../../../../../../../lib/list-params'
+import { guardSubsidiaryScope } from "../../../../../../../lib/authz";
+import { isUuid } from "../../../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * Release one artifact's bytes.
@@ -35,52 +33,50 @@ export const dynamic = 'force-dynamic'
  * cannot be recorded does not happen.
  */
 export const POST = defineRoute({
-  permission: 'payroll.run',
-  feature: 'payroll',
-  params: z.object({ "id": z.string(), "fileId": z.string() }),
+  permission: "payroll.run",
+  feature: "payroll",
+  params: z.object({ id: z.string(), fileId: z.string() }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const params = Promise.resolve(routeParams);
-    const { id, fileId } = await params
+    const { id, fileId } = await params;
     if (!isUuid(id) || !isUuid(fileId)) {
-      return notFound("record")
+      return notFound("record");
     }
 
     // The artifact must belong to the run in the URL: an id alone must not be a
     // capability to read any org's payroll file through any run's path.
-    const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
-      select d.subsidiary_id as "subsidiaryId"
-        from pay_run_bank_files f
-        join pay_runs r on r.document_id = f.pay_run_document_id and r.org_id = f.org_id
-        join documents d on d.id = r.document_id and d.org_id = r.org_id
-       where f.org_id = ${gate.user.orgId} and f.id = ${fileId} and f.pay_run_document_id = ${id}
-    `, 'objects'))
-    if (!owned[0]) return notFound("record")
-    const denied = guardSubsidiaryScope(gate, owned[0].subsidiaryId)
-    if (denied) return denied
+    const owned = await payrollBankFileDocumentScope(gate.user.orgId, id, fileId);
+    if (!owned) return notFound("record");
+    const denied = guardSubsidiaryScope(gate, owned.subsidiaryId);
+    if (denied) return denied;
 
     try {
-      const released = await releasePayRunBankFile(gate.user.orgId, fileId, gate.user.id, gate.allowedSubsidiaryIds)
+      const released = await releasePayRunBankFile(
+        gate.user.orgId,
+        fileId,
+        gate.user.id,
+        gate.allowedSubsidiaryIds,
+      );
       return new NextResponse(new Uint8Array(released.bytes), {
         headers: {
-          'Content-Type': released.contentType,
-          'Content-Disposition': fileContentDisposition('attachment', released.filename),
-          'Content-Length': String(released.bytes.length),
+          "Content-Type": released.contentType,
+          "Content-Disposition": fileContentDisposition("attachment", released.filename),
+          "Content-Length": String(released.bytes.length),
           // Never cached, never stored by an intermediary: these are live
           // payment instructions, and the release count must stay truthful.
-          'Cache-Control': 'no-store, no-cache, must-revalidate, private',
-          'X-Payroll-Bank-File-Sha256': released.artifact.contentHash,
-          'X-Payroll-Bank-File-Number': released.artifact.fileNumber,
-          'X-Payroll-Bank-File-Release': String(released.artifact.releaseCount),
+          "Cache-Control": "no-store, no-cache, must-revalidate, private",
+          "X-Payroll-Bank-File-Sha256": released.artifact.contentHash,
+          "X-Payroll-Bank-File-Number": released.artifact.fileNumber,
+          "X-Payroll-Bank-File-Release": String(released.artifact.releaseCount),
         },
-      })
+      });
     } catch (error) {
       if (error instanceof PayrollError) {
-        const refusal = await apiErrorResponse(error, { safeStatus: 409 })
-        refusal.headers.set('Cache-Control', 'no-store')
-        return refusal
+        const refusal = await apiErrorResponse(error, { safeStatus: 409 });
+        refusal.headers.set("Cache-Control", "no-store");
+        return refusal;
       }
-      throw error
+      throw error;
     }
-
   },
-})
+});

@@ -1,106 +1,30 @@
-import { uuidId } from "@/lib/api/json-schema"
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json"
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { uuidId } from "@/lib/api/json-schema";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
 import { PayrollError } from "@openbooks/engine/payroll/error";
 import {
   comparablePayRuns,
   comparableSlots,
+  listParallelRunScope,
   parallelComparisons,
+  parallelRunInputsInScope,
   parallelTolerances,
   priorRegisters,
   runParallelComparison,
   suggestedPayRunForRegister,
-} from '@openbooks/engine/payroll/parallel-run-store'
-import { isUuid } from '../../../../lib/list-params'
-import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
+} from "@openbooks/engine/payroll/parallel-run-store";
+import { isUuid } from "../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.strictObject({
   registerId: uuidId,
   payRunDocumentId: uuidId,
-})
+});
 
-
-
-export const dynamic = 'force-dynamic'
-export const runtime = 'nodejs'
-
-type ScopeRow = { id: string }
-
-/** A prior register's legal-entity boundary is each employee stub. */
-async function visibleRegisterIds(orgId: string, allowed: ReadonlySet<string> | null): Promise<Set<string> | null> {
-  if (allowed === null) return null
-  const ids = [...allowed]
-  if (ids.length === 0) return new Set()
-  const outside = ids.length
-    ? sql`and (p.id is null or p.subsidiary_id is null or not (p.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])))`
-    : sql`and true`
-  const rows = await db.execute<ScopeRow>(sql`
-    select r.id
-      from payroll_prior_registers r
-     where r.org_id = ${orgId}
-       and not exists (
-         select 1
-           from payroll_prior_stubs s
-           left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
-          where s.org_id = r.org_id and s.register_id = r.id ${outside})`, 'objects')
-  return new Set(rows.map((row) => row.id))
-}
-
-async function visibleRunIds(orgId: string, allowed: ReadonlySet<string> | null): Promise<Set<string> | null> {
-  if (allowed === null) return null
-  const rows = await db.execute<ScopeRow>(sql`
-    select r.document_id as id
-      from pay_runs r
-      join documents d on d.id = r.document_id and d.org_id = r.org_id
-     where r.org_id = ${orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}`, 'objects')
-  return new Set(rows.map((row) => row.id))
-}
-
-async function scopeComparisonIds(
-  orgId: string,
-  allowed: ReadonlySet<string> | null,
-  registerIds: Set<string> | null,
-  runIds: Set<string> | null,
-): Promise<Set<string> | null> {
-  if (allowed === null) return null
-  const registers = registerIds ? [...registerIds] : []
-  const runs = runIds ? [...runIds] : []
-  if (registers.length === 0 || runs.length === 0) return new Set()
-  const rows = await db.execute<ScopeRow>(sql`
-    select c.id
-      from payroll_parallel_comparisons c
-     where c.org_id = ${orgId}
-       and c.register_id = any(${`{${registers.join(',')}}`}::uuid[])
-       and c.pay_run_document_id = any(${`{${runs.join(',')}}`}::uuid[])
-       and not exists (
-         select 1
-           from payroll_parallel_findings f
-           left join parties p on p.id = f.employee_party_id and p.org_id = f.org_id
-          where f.org_id = c.org_id and f.comparison_id = c.id
-            and (p.id is null or p.subsidiary_id is null
-              or not (p.subsidiary_id = any(${`{${[...allowed].join(',')}}`}::uuid[]))))`, 'objects')
-  return new Set(rows.map((row) => row.id))
-}
-
-async function assertComparisonInputsInScope(
-  orgId: string,
-  allowed: ReadonlySet<string> | null,
-  registerId: string,
-  payRunDocumentId: string,
-): Promise<NextResponse | null> {
-  if (allowed === null) return null
-  const registers = await visibleRegisterIds(orgId, allowed)
-  if (!registers?.has(registerId)) return notFound("record")
-  const runs = await visibleRunIds(orgId, allowed)
-  if (!runs?.has(payRunDocumentId)) return notFound("record")
-  return null
-}
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 /**
  * Parallel run: prior-provider reconciliation.
@@ -116,20 +40,17 @@ async function assertComparisonInputsInScope(
  */
 
 export const GET = defineRoute({
-  permission: 'payroll.read',
-  feature: 'payroll',
+  permission: "payroll.read",
+  feature: "payroll",
   handler: async ({ request: req, authz: gate }) => {
-    const orgId = gate.user.orgId
-    const params = new URL(req.url).searchParams
-    const registerId = params.get('registerId')
+    const orgId = gate.user.orgId;
+    const params = new URL(req.url).searchParams;
+    const registerId = params.get("registerId");
 
-    const [registerIds, runIds] = await Promise.all([
-      visibleRegisterIds(orgId, gate.allowedSubsidiaryIds),
-      visibleRunIds(orgId, gate.allowedSubsidiaryIds),
-    ])
-    const comparisonIds = await scopeComparisonIds(
-      orgId, gate.allowedSubsidiaryIds, registerIds, runIds,
-    )
+    const { registerIds, runIds, comparisonIds } = await listParallelRunScope(
+      orgId,
+      gate.allowedSubsidiaryIds,
+    );
 
     const [registers, runs, comparisons, tolerances, slots] = await Promise.all([
       priorRegisters(orgId),
@@ -139,46 +60,49 @@ export const GET = defineRoute({
       }),
       parallelTolerances(orgId),
       comparableSlots(orgId),
-    ])
+    ]);
 
     const suggestedRun =
-      registerId && isUuid(registerId) ? await suggestedPayRunForRegister(orgId, registerId) : null
-    const visibleSuggested = suggestedRun
-      && (runIds === null || runIds.has(suggestedRun))
-      && (registerIds === null || registerIds.has(registerId ?? ''))
-      ? suggestedRun
-      : null
+      registerId && isUuid(registerId) ? await suggestedPayRunForRegister(orgId, registerId) : null;
+    const visibleSuggested =
+      suggestedRun &&
+      (runIds === null || runIds.has(suggestedRun)) &&
+      (registerIds === null || registerIds.has(registerId ?? ""))
+        ? suggestedRun
+        : null;
 
     return NextResponse.json({
-      registers: registerIds === null ? registers : registers.filter((row) => registerIds.has(row.id)),
+      registers:
+        registerIds === null ? registers : registers.filter((row) => registerIds.has(row.id)),
       runs: runIds === null ? runs : runs.filter((row) => runIds.has(row.documentId)),
-      comparisons: comparisonIds === null ? comparisons : comparisons.filter((row) => comparisonIds.has(row.id)),
+      comparisons:
+        comparisonIds === null
+          ? comparisons
+          : comparisons.filter((row) => comparisonIds.has(row.id)),
       tolerances,
       slots: slots.map((slot) => ({
-        fieldKey: slot.fieldKey, kind: slot.kind, slot: slot.slot, label: slot.label,
+        fieldKey: slot.fieldKey,
+        kind: slot.kind,
+        slot: slot.slot,
+        label: slot.label,
       })),
       suggestedRun: visibleSuggested,
-    })
-
+    });
   },
-})
+});
 
 export const POST = defineRoute({
-  permission: 'payroll.manage',
-  feature: 'payroll',
-  handler: async ({ request: req, authz: gate }) => {
-
-    const parsedBody = await parseJsonBody(req, requestBodySchema)
-    if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data
-
-    const denied = await assertComparisonInputsInScope(
+  permission: "payroll.manage",
+  feature: "payroll",
+  body: requestBodySchema,
+  handler: async ({ authz: gate, body }) => {
+    const inScope = await parallelRunInputsInScope(
       gate.user.orgId,
       gate.allowedSubsidiaryIds,
       body.registerId,
       body.payRunDocumentId,
-    )
-    if (denied) return denied
+    );
+    if (!inScope) return notFound("record");
 
     try {
       const { comparisonId, comparison } = await runParallelComparison({
@@ -187,18 +111,17 @@ export const POST = defineRoute({
         registerId: body.registerId,
         payRunDocumentId: body.payRunDocumentId,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      })
+      });
       // The result is returned in full, including `blockedReason` and the
       // tolerances in force. A caller that only reads `status` still cannot
       // mistake "nothing to compare" for "no differences" — they are different
       // values of the same field.
-      return NextResponse.json({ comparisonId, comparison })
+      return NextResponse.json({ comparisonId, comparison });
     } catch (error) {
       if (error instanceof PayrollError) {
-        return apiErrorResponse(error, { safeStatus: 422 })
+        return apiErrorResponse(error, { safeStatus: 422 });
       }
-      throw error
+      throw error;
     }
-
   },
-})
+});

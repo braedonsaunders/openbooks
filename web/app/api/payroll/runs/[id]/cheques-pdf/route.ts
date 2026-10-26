@@ -1,23 +1,21 @@
-import { defineRoute } from '@/lib/api/route'
-import { z } from 'zod'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { PayrollError } from "@openbooks/engine/payroll/error";
-import { ScopeNotFoundError } from '@openbooks/engine/organization/scope';
-import { PdfTemplateValidationError } from '@openbooks/pdf';
-import { guardSubsidiaryScope } from '../../../../../../lib/authz'
-import { db } from '@openbooks/engine/platform/db'
-import { sql } from 'drizzle-orm'
-import { isUuid } from '../../../../../../lib/list-params'
-import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
-import { mergedRunChequesPdf } from '../../../../../../lib/payroll-outputs'
-import { pdfResponse, safeName } from '../../../../../../lib/export'
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { PdfTemplateValidationError } from "@openbooks/pdf";
+import { guardSubsidiaryScope } from "../../../../../../lib/authz";
+import { payrollRunDocumentScope } from "@openbooks/engine/payroll/run-document-reads";
+import { isUuid } from "../../../../../../lib/list-params";
+import { rendererUnavailableResponse } from "../../../../../../lib/api/pdf-renderer";
+import { mergedRunChequesPdf } from "../../../../../../lib/payroll-outputs";
+import { pdfResponse, safeName } from "../../../../../../lib/export";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * POST — the run's cheque batch as one printable PDF.
@@ -29,35 +27,38 @@ export const dynamic = 'force-dynamic'
  * because it produces negotiable instruments.
  */
 export const POST = defineRoute({
-  permission: 'payroll.run',
-  feature: 'payroll',
-  params: z.object({ "id": z.string() }),
+  permission: "payroll.run",
+  feature: "payroll",
+  params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const params = Promise.resolve(routeParams);
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
-    const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
-      select d.subsidiary_id as "subsidiaryId"
-        from pay_runs r
-        join documents d on d.id = r.document_id and d.org_id = r.org_id
-       where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`, 'objects'))[0]
-    if (!owned) return notFound("record")
-    const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
-    if (denied) return denied
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
+    const owned = await payrollRunDocumentScope(gate.user.orgId, id);
+    if (!owned) return notFound("record");
+    const denied = guardSubsidiaryScope(gate, owned.subsidiaryId);
+    if (denied) return denied;
     try {
-      const merged = await mergedRunChequesPdf(gate.user.orgId, id, gate.user.id, gate.allowedSubsidiaryIds)
-      if (!merged) return NextResponse.json({ error: 'no cheques to print' }, { status: 404 })
-      const stamp = await businessToday(gate.user.orgId)
-      return pdfResponse(Buffer.from(merged.pdf), safeName(`Pay-cheques-${id.slice(0, 8)}-${stamp}`))
+      const merged = await mergedRunChequesPdf(
+        gate.user.orgId,
+        id,
+        gate.user.id,
+        gate.allowedSubsidiaryIds,
+      );
+      if (!merged) return NextResponse.json({ error: "no cheques to print" }, { status: 404 });
+      const stamp = await businessToday(gate.user.orgId);
+      return pdfResponse(
+        Buffer.from(merged.pdf),
+        safeName(`Pay-cheques-${id.slice(0, 8)}-${stamp}`),
+      );
     } catch (error) {
-      if (error instanceof ScopeNotFoundError) return notFound('record')
+      if (error instanceof ScopeNotFoundError) return notFound("record");
       if (error instanceof PayrollError || error instanceof PdfTemplateValidationError) {
-        return apiErrorResponse(error, { safeStatus: 409 })
+        return apiErrorResponse(error, { safeStatus: 409 });
       }
-      const rendererRefusal = rendererUnavailableResponse(error)
-      if (rendererRefusal) return rendererRefusal
-      throw error
+      const rendererRefusal = rendererUnavailableResponse(error);
+      if (rendererRefusal) return rendererRefusal;
+      throw error;
     }
-
   },
-})
+});

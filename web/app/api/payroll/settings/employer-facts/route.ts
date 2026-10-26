@@ -1,7 +1,6 @@
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json"
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
@@ -9,7 +8,10 @@ import { installedPayrollCountries } from "@openbooks/engine/payroll/readiness";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { employerFactsFor } from "@openbooks/engine/payroll/employer-facts";
 import { listFilingAccounts } from "@openbooks/engine/payroll/filing";
-import { listPayrollEmployerFacts, upsertPayrollEmployerFact } from "@openbooks/engine/payroll/employer-fact-store";
+import {
+  listPayrollEmployerFacts,
+  upsertPayrollEmployerFact,
+} from "@openbooks/engine/payroll/employer-fact-store";
 import { PayrollPackError, payrollPack } from "@openbooks/engine/payroll/packs";
 import { guardRootSubsidiaryScope } from "../../../../../lib/authz";
 import { isUuid } from "../../../../../lib/list-params";
@@ -18,14 +20,27 @@ import { guardPayrollFilingAccounts } from "../../subsidiary-scope";
 const requestBodySchema = z.strictObject({
   country: z.string().trim().min(2).max(3),
   factKey: z.string().trim().min(1).max(120),
-  effectiveFrom: z.string().refine(isIsoCalendarDate, 'effectiveFrom must be a real calendar date (YYYY-MM-DD)'),
-  effectiveThrough: z.string().refine(isIsoCalendarDate, 'effectiveThrough must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
-  filingAccountId: z.string().refine(isUuid, { error: 'filingAccountId must be a valid payroll filing account id' }).nullable().optional(),
-  subsidiaryId: z.string().refine(isUuid, { error: 'subsidiaryId must be a valid legal entity id' }).nullable().optional(),
-  value: z.string().trim().min(1, 'value is required').max(500),
-  changeReason: z.string().trim().min(1, 'changeReason is required').max(2000),
-})
-
+  effectiveFrom: z
+    .string()
+    .refine(isIsoCalendarDate, "effectiveFrom must be a real calendar date (YYYY-MM-DD)"),
+  effectiveThrough: z
+    .string()
+    .refine(isIsoCalendarDate, "effectiveThrough must be a real calendar date (YYYY-MM-DD)")
+    .nullable()
+    .optional(),
+  filingAccountId: z
+    .string()
+    .refine(isUuid, { error: "filingAccountId must be a valid payroll filing account id" })
+    .nullable()
+    .optional(),
+  subsidiaryId: z
+    .string()
+    .refine(isUuid, { error: "subsidiaryId must be a valid legal entity id" })
+    .nullable()
+    .optional(),
+  value: z.string().trim().min(1, "value is required").max(500),
+  changeReason: z.string().trim().min(1, "changeReason is required").max(2000),
+});
 
 export const dynamic = "force-dynamic";
 
@@ -37,12 +52,18 @@ export const GET = defineRoute({
     if (scopeDenied) return scopeDenied;
     const orgId = gate.user.orgId;
     const [org, subsidiaries, allAccounts] = await Promise.all([
-      db.execute<{ payroll: Record<string, unknown> | null }>(sql`
-        select settings->'payroll' as payroll from orgs where id = ${orgId}`, "objects"),
-      db.execute<{ id: string; name: string; country: string | null }>(sql`
+      db.execute<{ payroll: Record<string, unknown> | null }>(
+        sql`
+        select settings->'payroll' as payroll from orgs where id = ${orgId}`,
+        "objects",
+      ),
+      db.execute<{ id: string; name: string; country: string | null }>(
+        sql`
         select id, name, country from subsidiaries
          where org_id = ${orgId} and is_active and not is_elimination
-         order by name, id`, "objects"),
+         order by name, id`,
+        "objects",
+      ),
       listFilingAccounts(orgId),
     ]);
     const installed = await installedPayrollCountries(orgId, org[0]?.payroll ?? {});
@@ -51,34 +72,42 @@ export const GET = defineRoute({
       return facts.length === 0 ? [] : [{ country, facts }];
     });
     const rows = await listPayrollEmployerFacts(orgId);
-    const accountPrograms = new Set(packs.flatMap(({ country, facts }) => facts
-      .filter((fact) => fact.scope === "filing_account")
-      .map((fact) => `${country}\u001f${fact.filingProgramType}`)));
-    const candidates = allAccounts.filter((account) => account.isActive
-      && accountPrograms.has(`${account.country}\u001f${account.programType}`));
-    const filingAccounts = (await Promise.all(candidates.map(async (account) => ({
-      account,
-      denied: await guardPayrollFilingAccounts(gate, [account.id]),
-    })))).filter(({ denied }) => !denied).map(({ account }) => account);
+    const accountPrograms = new Set(
+      packs.flatMap(({ country, facts }) =>
+        facts
+          .filter((fact) => fact.scope === "filing_account")
+          .map((fact) => `${country}\u001f${fact.filingProgramType}`),
+      ),
+    );
+    const candidates = allAccounts.filter(
+      (account) =>
+        account.isActive && accountPrograms.has(`${account.country}\u001f${account.programType}`),
+    );
+    const filingAccounts = (
+      await Promise.all(
+        candidates.map(async (account) => ({
+          account,
+          denied: await guardPayrollFilingAccounts(gate, [account.id]),
+        })),
+      )
+    )
+      .filter(({ denied }) => !denied)
+      .map(({ account }) => account);
     return NextResponse.json({
       packs,
       rows: rows.filter((row) => installed.includes(row.country)),
       subsidiaries,
       filingAccounts,
     });
-
   },
-})
+});
 
 export const PUT = defineRoute({
   permission: "payroll.manage",
   feature: "payroll",
-  handler: async ({ request: req, authz: gate }) => {
-    const scopeDenied = await guardRootSubsidiaryScope(gate);
-    if (scopeDenied) return scopeDenied;
-    const parsed = await parseJsonBody(req, requestBodySchema);
-    if (!parsed.ok) return parsed.response;
-    const body = parsed.data;
+  scope: "root",
+  body: requestBodySchema,
+  handler: async ({ authz: gate, body }) => {
     const country = body.country;
     const factKey = body.factKey;
     const subsidiaryId = body.subsidiaryId ?? null;
@@ -88,14 +117,27 @@ export const PUT = defineRoute({
     const value = body.value;
     const changeReason = body.changeReason;
     if (!country || !factKey || !effectiveFrom || !value || !changeReason) {
-      return NextResponse.json({ error: "country, factKey, effectiveFrom, value, and changeReason are required" }, { status: 422 });
+      return NextResponse.json(
+        { error: "country, factKey, effectiveFrom, value, and changeReason are required" },
+        { status: 422 },
+      );
     }
     try {
       const pack = payrollPack(country);
-      const settings = await db.execute<{ payroll: Record<string, unknown> | null }>(sql`
-        select settings->'payroll' as payroll from orgs where id = ${gate.user.orgId}`, "objects");
-      if (!(await installedPayrollCountries(gate.user.orgId, settings[0]?.payroll ?? {})).includes(country)) {
-        return NextResponse.json({ error: `payroll pack ${country} is not installed for this organization` }, { status: 422 });
+      const settings = await db.execute<{ payroll: Record<string, unknown> | null }>(
+        sql`
+        select settings->'payroll' as payroll from orgs where id = ${gate.user.orgId}`,
+        "objects",
+      );
+      if (
+        !(await installedPayrollCountries(gate.user.orgId, settings[0]?.payroll ?? {})).includes(
+          country,
+        )
+      ) {
+        return NextResponse.json(
+          { error: `payroll pack ${country} is not installed for this organization` },
+          { status: 422 },
+        );
       }
       const declaration = pack.employerFacts.find((fact) => fact.key === factKey);
       if (!declaration) {
@@ -103,22 +145,34 @@ export const PUT = defineRoute({
       }
       if (declaration.scope === "filing_account") {
         if (!filingAccountId || subsidiaryId || !isUuid(filingAccountId)) {
-          return NextResponse.json({ error: "select exactly one filing account for this employer fact" }, { status: 422 });
+          return NextResponse.json(
+            { error: "select exactly one filing account for this employer fact" },
+            { status: 422 },
+          );
         }
         const denied = await guardPayrollFilingAccounts(gate, [filingAccountId]);
         if (denied) return denied;
       } else {
         if (!subsidiaryId || filingAccountId) {
-          return NextResponse.json({ error: "select exactly one legal employer for this employer fact" }, { status: 422 });
+          return NextResponse.json(
+            { error: "select exactly one legal employer for this employer fact" },
+            { status: 422 },
+          );
         }
         if (!isUuid(subsidiaryId)) {
           return NextResponse.json({ error: "invalid legal-employer subsidiary" }, { status: 422 });
         }
-        const owned = await db.execute<{ country: string | null }>(sql`
+        const owned = await db.execute<{ country: string | null }>(
+          sql`
           select country from subsidiaries where org_id = ${gate.user.orgId}
-           and id = ${subsidiaryId} and is_active and not is_elimination`, "objects");
+           and id = ${subsidiaryId} and is_active and not is_elimination`,
+          "objects",
+        );
         if (!owned[0] || owned[0].country !== country) {
-          return NextResponse.json({ error: "legal employer subsidiary is not available for this payroll country" }, { status: 422 });
+          return NextResponse.json(
+            { error: "legal employer subsidiary is not available for this payroll country" },
+            { status: 422 },
+          );
         }
       }
       const saved = await upsertPayrollEmployerFact({
@@ -140,6 +194,5 @@ export const PUT = defineRoute({
       }
       throw error;
     }
-
   },
-})
+});

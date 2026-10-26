@@ -1,9 +1,9 @@
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { exactMoney, parseJsonBody } from "@/lib/api/json"
-import { NextResponse } from 'next/server'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { exactMoney } from "@/lib/api/json";
+import { NextResponse } from "next/server";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { PayrollError } from "@openbooks/engine/payroll/error";
 import {
   assertTaxYear,
@@ -12,25 +12,35 @@ import {
   employerLevyOpeningsForYear,
   saveEmployerLevyOpening,
   type EmployerLevyOpeningWrite,
-} from '@openbooks/engine/payroll/opening-balances'
-import { guardUnrestrictedScope } from '../../../../../lib/authz'
+} from "@openbooks/engine/payroll/opening-balances";
+import { guardUnrestrictedScope } from "../../../../../lib/authz";
 
 const requestBodySchema = z.strictObject({
-  taxYear: z.union([
-    z.number().int(),
-    z.string().regex(/^\d{4}$/, 'taxYear must be a four-digit year').transform(Number),
-  ]).pipe(z.number().int()),
-  rows: z.array(z.strictObject({
-    country: z.string().trim().min(2).max(3),
-    levyKey: z.string().trim().min(1).max(120),
-    region: z.string().trim().max(80).nullable().optional(),
-    baseYtd: exactMoney('baseYtd must be an exact decimal string with at most four decimal places'),
-  })).max(500),
-})
+  taxYear: z
+    .union([
+      z.number().int(),
+      z
+        .string()
+        .regex(/^\d{4}$/, "taxYear must be a four-digit year")
+        .transform(Number),
+    ])
+    .pipe(z.number().int()),
+  rows: z
+    .array(
+      z.strictObject({
+        country: z.string().trim().min(2).max(3),
+        levyKey: z.string().trim().min(1).max(120),
+        region: z.string().trim().max(80).nullable().optional(),
+        baseYtd: exactMoney(
+          "baseYtd must be an exact decimal string with at most four decimal places",
+        ),
+      }),
+    )
+    .max(500),
+});
 
-
-export const dynamic = 'force-dynamic'
-export const runtime = 'nodejs'
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 /**
  * Employer-side mid-year adoption carry-in: the base the employer earned
@@ -47,22 +57,24 @@ export const runtime = 'nodejs'
  */
 
 async function parseYear(orgId: string, raw: string | null): Promise<number> {
-  if (!raw) return Number((await businessToday(orgId)).slice(0, 4))
-  const year = Number(raw)
-  return Number.isInteger(year) ? year : Number((await businessToday(orgId)).slice(0, 4))
+  if (!raw) return Number((await businessToday(orgId)).slice(0, 4));
+  const year = Number(raw);
+  return Number.isInteger(year) ? year : Number((await businessToday(orgId)).slice(0, 4));
 }
 
 export const GET = defineRoute({
-  permission: 'payroll.read',
-  feature: 'payroll',
+  permission: "payroll.read",
+  feature: "payroll",
   handler: async ({ request: req, authz: gate }) => {
-    const scopeDenied = guardUnrestrictedScope(gate)
-    if (scopeDenied) return scopeDenied
-    let year: number
+    const scopeDenied = guardUnrestrictedScope(gate);
+    if (scopeDenied) return scopeDenied;
+    let year: number;
     try {
-      year = assertTaxYear(await parseYear(gate.user.orgId, new URL(req.url).searchParams.get('year')))
+      year = assertTaxYear(
+        await parseYear(gate.user.orgId, new URL(req.url).searchParams.get("year")),
+      );
     } catch (error) {
-      return apiErrorResponse(error, { safeStatus: 422 })
+      return apiErrorResponse(error, { safeStatus: 422 });
     }
     // Employer carry-ins are organization-wide facts, so only unrestricted
     // callers reach the unscoped reader.
@@ -70,29 +82,24 @@ export const GET = defineRoute({
       year,
       levies: await declaredEmployerLevyFields(year),
       rows: await employerLevyOpeningsForYear(gate.user.orgId, year),
-    })
-
+    });
   },
-})
+});
 
 export const POST = defineRoute({
-  permission: 'payroll.manage',
-  feature: 'payroll',
-  handler: async ({ request: req, authz: gate }) => {
-    const scopeDenied = guardUnrestrictedScope(gate)
-    if (scopeDenied) return scopeDenied
-
-    let body: z.output<typeof requestBodySchema>
-    try {
-      const parsedBody = await parseJsonBody(req, requestBodySchema);
-      if (!parsedBody.ok) return parsedBody.response;
-      body = parsedBody.data
-    } catch {
-      return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
-    }
-    const rows: EmployerLevyOpeningWrite[] = []
+  permission: "payroll.manage",
+  feature: "payroll",
+  scope: "unrestricted",
+  body: requestBodySchema,
+  handler: async ({ authz: gate, body }) => {
+    const rows: EmployerLevyOpeningWrite[] = [];
     for (const row of body.rows) {
-      rows.push({ country: row.country.trim(), levyKey: row.levyKey.trim(), region: row.region?.trim() || null, baseYtd: row.baseYtd })
+      rows.push({
+        country: row.country.trim(),
+        levyKey: row.levyKey.trim(),
+        region: row.region?.trim() || null,
+        baseYtd: row.baseYtd,
+      });
     }
 
     try {
@@ -101,20 +108,19 @@ export const POST = defineRoute({
         actorId: gate.user.id,
         taxYear: assertTaxYear(body.taxYear),
         rows,
-      })
-      return NextResponse.json(result)
+      });
+      return NextResponse.json(result);
     } catch (error) {
       if (error instanceof EmployerLevyOpeningSaveError) {
         return apiErrorResponse(error, {
           safeStatus: 409,
           details: { errors: error.result.errors, created: 0, updated: 0, deleted: 0 },
-        })
+        });
       }
       if (error instanceof PayrollError) {
-        return apiErrorResponse(error, { safeStatus: 422 })
+        return apiErrorResponse(error, { safeStatus: 422 });
       }
-      throw error
+      throw error;
     }
-
   },
-})
+});

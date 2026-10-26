@@ -1,9 +1,11 @@
-import { defineRoute } from '@/lib/api/route'
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
-import { isUuid } from "../../../../lib/list-params";
-import { parseJsonBody } from "../../../../lib/api/json";
+import { isUuid } from "@/lib/list-params";
+import {
+  createPayrollWorkLocation,
+  listPayrollWorkLocations,
+  updatePayrollWorkLocation,
+} from "@openbooks/engine/payroll/work-location-admin";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -16,151 +18,126 @@ export const GET = defineRoute({
   feature: "payroll",
   handler: async ({ request: request, authz: gate }) => {
     const orgId = gate.user.orgId;
-    const employees = await db.execute<{ employmentId: string; employeeName: string; subsidiaryName: string }>(sql`
-      select employment.id as "employmentId", party.display_name as "employeeName",
-             subsidiary.name as "subsidiaryName"
-        from worker_employments employment
-        join employee_payroll_profiles profile
-          on profile.org_id = employment.org_id and profile.employment_id = employment.id
-        join parties party
-          on party.org_id = employment.org_id and party.id = employment.worker_party_id
-        join subsidiaries subsidiary
-          on subsidiary.org_id = employment.org_id and subsidiary.id = employment.employer_subsidiary_id
-        join worker_employment_versions version
-          on version.org_id = employment.org_id and version.employment_id = employment.id
-         and version.recorded_until is null and version.effective_to is null
-         and version.status in ('active', 'on_leave')
-       where employment.org_id = ${orgId} and subsidiary.is_active and not subsidiary.is_elimination
-         and (${gate.allowedSubsidiaryIds === null}::boolean
-           or employment.employer_subsidiary_id = any(${`{${[...(gate.allowedSubsidiaryIds ?? [])].join(",")}}`}::uuid[]))
-       order by party.display_name, employment.id
-    `, "objects");
     const url = new URL(request.url);
     const employmentId = url.searchParams.get("employmentId");
     const periodStart = url.searchParams.get("periodStart");
     const periodEnd = url.searchParams.get("periodEnd");
-    if (!employmentId && !periodStart && !periodEnd) return NextResponse.json({ employees });
-    if (!employmentId || !isUuid(employmentId) || !periodStart || !dateShape.test(periodStart)
-        || !periodEnd || !dateShape.test(periodEnd) || periodStart > periodEnd) {
-      return NextResponse.json({ error: "employment and a valid payroll period are required" }, { status: 422 });
+    if (!employmentId && !periodStart && !periodEnd) {
+      const result = await listPayrollWorkLocations({
+        orgId,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      });
+      return NextResponse.json({ employees: result.employees });
     }
-    // Same predicate as POST/PATCH: the detail rows name work shares, service
-    // days and evidence for one employment, so an employment outside the
-    // caller payroll scope reads as missing instead of leaking by UUID.
-    const allowed = await db.execute(sql`
-      select employment.id
-        from worker_employments employment
-        join subsidiaries subsidiary
-          on subsidiary.org_id = employment.org_id and subsidiary.id = employment.employer_subsidiary_id
-       where employment.org_id = ${orgId} and employment.id = ${employmentId}
-         and subsidiary.is_active and not subsidiary.is_elimination
-         and (${gate.allowedSubsidiaryIds === null}::boolean
-           or employment.employer_subsidiary_id = any(${`{${[...(gate.allowedSubsidiaryIds ?? [])].join(",")}}`}::uuid[]))
-    `, "objects");
-    if (!allowed[0]) return NextResponse.json({ error: "employment is outside your payroll scope" }, { status: 404 });
-    const rows = await db.execute(sql`
-      select id, region, subregion, service_days as "serviceDays", work_share::text as "workShare",
-             source, evidence_document_id as "evidenceDocumentId", change_reason as "changeReason"
-        from payroll_work_location_allocations
-       where org_id = ${orgId} and employment_id = ${employmentId}
-         and period_start = ${periodStart}::date and period_end = ${periodEnd}::date
-       order by region, subregion, id
-    `, "objects");
-    return NextResponse.json({ employees, rows });
-
+    if (
+      !employmentId ||
+      !isUuid(employmentId) ||
+      !periodStart ||
+      !dateShape.test(periodStart) ||
+      !periodEnd ||
+      !dateShape.test(periodEnd) ||
+      periodStart > periodEnd
+    ) {
+      return NextResponse.json(
+        { error: "employment and a valid payroll period are required" },
+        { status: 422 },
+      );
+    }
+    const result = await listPayrollWorkLocations({
+      orgId,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      detail: { employmentId, periodStart, periodEnd },
+    });
+    if (result.kind === "employment_out_of_scope") {
+      return NextResponse.json(
+        { error: "employment is outside your payroll scope" },
+        { status: 404 },
+      );
+    }
+    if (result.kind !== "detail") return NextResponse.json({ employees: result.employees });
+    return NextResponse.json({ employees: result.employees, rows: result.rows });
   },
-})
-
-const saveSchema = z.object({
-  employmentId: z.string().refine(isUuid, 'employmentId must be a valid UUID; select an employment in your payroll scope'),
-  periodStart: z.string().regex(dateShape),
-  periodEnd: z.string().regex(dateShape),
-  region: z.string().trim().min(1).max(32),
-  subregion: z.string().trim().max(64).nullable().optional(),
-  serviceDays: z.number().int().nonnegative().nullable().optional(),
-  workShare: z.string().regex(shareShape).nullable().optional(),
-  source: z.enum(["hr_records", "certificate", "adequate_records"]),
-  evidenceDocumentId: z.string().refine(isUuid, 'evidenceDocumentId must be a valid UUID; select a saved evidence document').nullable().optional(),
-  changeReason: z.string().trim().min(1).max(1000),
-}).refine((value) => value.periodStart <= value.periodEnd, {
-  message: "period start must not follow period end",
-}).refine((value) => (value.serviceDays != null) !== (value.workShare != null), {
-  message: "enter either service days or a work share",
 });
+
+const saveSchema = z
+  .object({
+    employmentId: z
+      .string()
+      .refine(
+        isUuid,
+        "employmentId must be a valid UUID; select an employment in your payroll scope",
+      ),
+    periodStart: z.string().regex(dateShape),
+    periodEnd: z.string().regex(dateShape),
+    region: z.string().trim().min(1).max(32),
+    subregion: z.string().trim().max(64).nullable().optional(),
+    serviceDays: z.number().int().nonnegative().nullable().optional(),
+    workShare: z.string().regex(shareShape).nullable().optional(),
+    source: z.enum(["hr_records", "certificate", "adequate_records"]),
+    evidenceDocumentId: z
+      .string()
+      .refine(isUuid, "evidenceDocumentId must be a valid UUID; select a saved evidence document")
+      .nullable()
+      .optional(),
+    changeReason: z.string().trim().min(1).max(1000),
+  })
+  .refine((value) => value.periodStart <= value.periodEnd, {
+    message: "period start must not follow period end",
+  })
+  .refine((value) => (value.serviceDays != null) !== (value.workShare != null), {
+    message: "enter either service days or a work share",
+  });
 
 export const POST = defineRoute({
   permission: "payroll.manage",
   feature: "payroll",
-  handler: async ({ request: request, authz: gate }) => {
-    const parsed = await parseJsonBody(request, saveSchema, { status: 422 });
-    if (!parsed.ok) return parsed.response;
-    const value = parsed.data;
+  body: saveSchema,
+  invalidBodyStatus: 422,
+  handler: async ({ authz: gate, body: value }) => {
     const orgId = gate.user.orgId;
-    const allowed = await db.execute(sql`
-      select employment.id
-        from worker_employments employment
-        join subsidiaries subsidiary
-          on subsidiary.org_id = employment.org_id and subsidiary.id = employment.employer_subsidiary_id
-       where employment.org_id = ${orgId} and employment.id = ${value.employmentId}
-         and subsidiary.is_active and not subsidiary.is_elimination
-         and (${gate.allowedSubsidiaryIds === null}::boolean
-           or employment.employer_subsidiary_id = any(${`{${[...(gate.allowedSubsidiaryIds ?? [])].join(",")}}`}::uuid[]))
-    `, "objects");
-    if (!allowed[0]) return NextResponse.json({ error: "employment is outside your payroll scope" }, { status: 404 });
-    const saved = await withOrgTransaction(orgId, async () => {
-      const row = await db.execute(sql`
-        insert into payroll_work_location_allocations
-          (org_id, employment_id, period_start, period_end, region, subregion, service_days,
-           work_share, source, evidence_document_id, change_reason, created_by, updated_by)
-        values (${orgId}, ${value.employmentId}, ${value.periodStart}::date, ${value.periodEnd}::date,
-          ${value.region}, ${value.subregion ?? null}, ${value.serviceDays ?? null},
-          ${value.workShare ?? null}, ${value.source}, ${value.evidenceDocumentId ?? null},
-          ${value.changeReason}, ${gate.user.id}, ${gate.user.id})
-        returning id, region, subregion, service_days as "serviceDays", work_share::text as "workShare",
-          source, evidence_document_id as "evidenceDocumentId", change_reason as "changeReason"
-      `, "objects");
-      if (!row[0]) throw new Error("work location allocation insert returned no row");
-      return row[0];
-    });
-    return NextResponse.json({ row: saved }, { status: 201 });
-
+    const result = await createPayrollWorkLocation(
+      orgId,
+      gate.user.id,
+      gate.allowedSubsidiaryIds,
+      value,
+    );
+    if (result.kind === "employment_out_of_scope") {
+      return NextResponse.json(
+        { error: "employment is outside your payroll scope" },
+        { status: 404 },
+      );
+    }
+    return NextResponse.json({ row: result.row }, { status: 201 });
   },
-})
+});
 
 const updateSchema = saveSchema.extend({ id: z.string().refine(isUuid) });
 
 export const PATCH = defineRoute({
   permission: "payroll.manage",
   feature: "payroll",
-  handler: async ({ request: request, authz: gate }) => {
-    const parsed = await parseJsonBody(request, updateSchema, { status: 422 });
-    if (!parsed.ok) return parsed.response;
-    const value = parsed.data;
+  body: updateSchema,
+  invalidBodyStatus: 422,
+  handler: async ({ authz: gate, body: value }) => {
     const orgId = gate.user.orgId;
-    const allowed = await db.execute(sql`
-      select employment.id
-        from worker_employments employment
-        join subsidiaries subsidiary
-          on subsidiary.org_id = employment.org_id and subsidiary.id = employment.employer_subsidiary_id
-       where employment.org_id = ${orgId} and employment.id = ${value.employmentId}
-         and subsidiary.is_active and not subsidiary.is_elimination
-         and (${gate.allowedSubsidiaryIds === null}::boolean
-           or employment.employer_subsidiary_id = any(${`{${[...(gate.allowedSubsidiaryIds ?? [])].join(",")}}`}::uuid[]))
-    `, "objects");
-    if (!allowed[0]) return NextResponse.json({ error: "employment is outside your payroll scope" }, { status: 404 });
-    const row = await withOrgTransaction(orgId, async () => db.execute(sql`
-      update payroll_work_location_allocations
-         set region = ${value.region}, subregion = ${value.subregion ?? null},
-             service_days = ${value.serviceDays ?? null}, work_share = ${value.workShare ?? null},
-             source = ${value.source}, evidence_document_id = ${value.evidenceDocumentId ?? null},
-             change_reason = ${value.changeReason}, updated_at = now(), updated_by = ${gate.user.id}
-       where org_id = ${orgId} and employment_id = ${value.employmentId} and id = ${value.id}
-         and period_start = ${value.periodStart}::date and period_end = ${value.periodEnd}::date
-       returning id, region, subregion, service_days as "serviceDays", work_share::text as "workShare",
-         source, evidence_document_id as "evidenceDocumentId", change_reason as "changeReason"
-    `, "objects"));
-    if (!row[0]) return NextResponse.json({ error: "allocation was not found for this employment period" }, { status: 404 });
-    return NextResponse.json({ row: row[0] });
-
+    const result = await updatePayrollWorkLocation(
+      orgId,
+      gate.user.id,
+      gate.allowedSubsidiaryIds,
+      value,
+    );
+    if (result.kind === "employment_out_of_scope") {
+      return NextResponse.json(
+        { error: "employment is outside your payroll scope" },
+        { status: 404 },
+      );
+    }
+    if (result.kind === "not_found") {
+      return NextResponse.json(
+        { error: "allocation was not found for this employment period" },
+        { status: 404 },
+      );
+    }
+    return NextResponse.json({ row: result.row });
   },
-})
+});

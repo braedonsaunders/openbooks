@@ -1,11 +1,10 @@
-import { uuidId } from "@/lib/api/json-schema"
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json"
-import { NextResponse } from 'next/server'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { normalizeMoney } from '@openbooks/engine/money/money'
+import { uuidId } from "@/lib/api/json-schema";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 import { PayrollError } from "@openbooks/engine/payroll/error";
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import {
@@ -16,45 +15,59 @@ import {
   OpeningBalanceSaveError,
   saveOpeningBalances,
   type OpeningBalanceWrite,
-} from '@openbooks/engine/payroll/opening-balances'
-import { US_STATES } from '@openbooks/engine/payroll/us/rates'
-import { canonicalDecimal } from '../../../../lib/exact-decimal'
-import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
-import { scopedOpeningBalances } from '../../../../lib/payroll-scoped-views'
+} from "@openbooks/engine/payroll/opening-balances";
+import { US_STATES } from "@openbooks/engine/payroll/us/rates";
+import { canonicalDecimal } from "../../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
+import { scopedOpeningBalances } from "../../../../lib/payroll-scoped-views";
 import {
   saveItSurtaxSaldoCarryIns,
   SurtaxSaldoSaveError,
-} from '@openbooks/engine/payroll/it/saldo-carryins'
+} from "@openbooks/engine/payroll/it/saldo-carryins";
 import { notFound } from "@/lib/api/responses";
 
 const openingAmount = z.string().superRefine((value, ctx) => {
-  if (value.trim() === '') return
+  if (value.trim() === "") return;
   if (canonicalDecimal(value, 4) === null) {
-    ctx.addIssue({ code: 'custom', message: moneyRefusal('Opening-balance amount', value) })
+    ctx.addIssue({ code: "custom", message: moneyRefusal("Opening-balance amount", value) });
   }
-})
-const openingAmountMap = z.record(z.string(), openingAmount)
+});
+const openingAmountMap = z.record(z.string(), openingAmount);
 const openingBalanceRowSchema = z.strictObject({
   employeePartyId: uuidId,
   amounts: openingAmountMap.optional(),
   components: z.unknown().optional(),
   programs: openingAmountMap.optional(),
   suiStates: openingAmountMap.optional(),
-  accountBases: z.array(z.strictObject({
-    programKey: z.string().min(1),
-    filingAccountId: uuidId,
-    region: z.string().nullable(),
-    insurableYtd: openingAmount,
-  })).optional(),
+  accountBases: z
+    .array(
+      z.strictObject({
+        programKey: z.string().min(1),
+        filingAccountId: uuidId,
+        region: z.string().nullable(),
+        insurableYtd: openingAmount,
+      }),
+    )
+    .optional(),
   updatedAt: z.unknown().optional(),
-})
-const requestBodySchema = z.strictObject({
-  taxYear: z.union([z.number().int(), z.string().regex(/^\d{4}$/).transform(Number)]),
-  rows: z.array(openingBalanceRowSchema),
-  auditReason: z.string().trim().min(1).max(2000).optional(),
-  sourceReference: z.string().trim().min(1).max(2000).optional(),
-}).refine(body => body.sourceReference === undefined || body.auditReason !== undefined, "A source-referenced opening change requires an audit reason")
-
+});
+const requestBodySchema = z
+  .strictObject({
+    taxYear: z.union([
+      z.number().int(),
+      z
+        .string()
+        .regex(/^\d{4}$/)
+        .transform(Number),
+    ]),
+    rows: z.array(openingBalanceRowSchema),
+    auditReason: z.string().trim().min(1).max(2000).optional(),
+    sourceReference: z.string().trim().min(1).max(2000).optional(),
+  })
+  .refine(
+    (body) => body.sourceReference === undefined || body.auditReason !== undefined,
+    "A source-referenced opening change requires an audit reason",
+  );
 
 /**
  * The carry-in grid's two IT-only assessed-saldo columns (migration 0393):
@@ -66,10 +79,10 @@ const requestBodySchema = z.strictObject({
  * (presence is the declaration).
  */
 
-const IT_SALDO_KEYS = ['itRegionaleSaldo', 'itComunaleSaldo'] as const
+const IT_SALDO_KEYS = ["itRegionaleSaldo", "itComunaleSaldo"] as const;
 
-export const dynamic = 'force-dynamic'
-export const runtime = 'nodejs'
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 /**
  * Mid-year adoption carry-in: the statutory year-to-date an employer
@@ -87,38 +100,45 @@ export const runtime = 'nodejs'
  */
 
 async function currentTaxYear(orgId: string): Promise<number> {
-  return Number((await businessToday(orgId)).slice(0, 4))
+  return Number((await businessToday(orgId)).slice(0, 4));
 }
 
 async function parseYear(orgId: string, raw: string | null): Promise<number> {
-  if (!raw) return currentTaxYear(orgId)
-  const year = Number(raw)
-  return Number.isInteger(year) ? year : currentTaxYear(orgId)
+  if (!raw) return currentTaxYear(orgId);
+  const year = Number(raw);
+  return Number.isInteger(year) ? year : currentTaxYear(orgId);
 }
 
 export const GET = defineRoute({
-  permission: 'payroll.read',
-  feature: 'payroll',
+  permission: "payroll.read",
+  feature: "payroll",
   handler: async ({ request: req, authz: gate }) => {
-    let year: number
+    let year: number;
     try {
-      year = assertTaxYear(await parseYear(gate.user.orgId, new URL(req.url).searchParams.get('year')))
+      year = assertTaxYear(
+        await parseYear(gate.user.orgId, new URL(req.url).searchParams.get("year")),
+      );
     } catch (error) {
-      return NextResponse.json({ error: message(error) }, { status: 422 })
+      return NextResponse.json({ error: message(error) }, { status: 422 });
     }
-    const data = await scopedOpeningBalances(gate, year)
+    const data = await scopedOpeningBalances(gate, year);
     // Pack-declared contribution programs ride alongside the statutory fields:
     // the grid shows one carry-in column per program some employee's country
     // pack declares, labeled from the declaration itself.
-    const programs = await declaredProgramBaseFields()
-    const accountPrograms = await declaredAccountOpeningBaseFields()
+    const programs = await declaredProgramBaseFields();
+    const accountPrograms = await declaredAccountOpeningBaseFields();
     return NextResponse.json({
       ...data,
       fields: OPENING_BALANCE_FIELDS.map((field) => ({
-        key: field.key, label: field.label, help: field.help, packs: field.packs,
+        key: field.key,
+        label: field.label,
+        help: field.help,
+        packs: field.packs,
       })),
       programs: programs.map((program) => ({
-        key: program.programKey, label: program.label, help: program.help,
+        key: program.programKey,
+        label: program.label,
+        help: program.help,
         packs: [program.country],
       })),
       // Per-state SUI carry-in codes the grid offers for US employees. Once
@@ -126,140 +146,177 @@ export const GET = defineRoute({
       // rows; the unscoped insurable amount keeps feeding FUTA.
       suiStates: {
         codes: [...US_STATES],
-        help: 'Pre-adoption wages insurable for unemployment insurance in this state. '
-          + 'Enter only wages the gaining state\u2019s transfer rule lets transfer '
-          + '(most states credit same-employer wages reported to another state toward the new state\u2019s base).',
+        help:
+          "Pre-adoption wages insurable for unemployment insurance in this state. " +
+          "Enter only wages the gaining state\u2019s transfer rule lets transfer " +
+          "(most states credit same-employer wages reported to another state toward the new state\u2019s base).",
       },
       accountPrograms: accountPrograms.map((program) => ({
-        key: program.programKey, label: program.label, help: program.help,
-        country: program.country, filingProgramType: program.filingProgramType,
+        key: program.programKey,
+        label: program.label,
+        help: program.help,
+        country: program.country,
+        filingProgramType: program.filingProgramType,
         requiresRegion: program.requiresRegion,
       })),
-    })
-
+    });
   },
-})
+});
 
 /** Exact numeric(19,4) money string, empty when omitted, or 'invalid'. */
-function persistMoney(value: unknown): string | '' | 'invalid' {
-  if (value == null || value === '' || (typeof value === 'string' && value.trim() === '')) return ''
-  const exact = canonicalDecimal(value, 4)
-  if (exact === null) return 'invalid'
+function persistMoney(value: unknown): string | "" | "invalid" {
+  if (value == null || value === "" || (typeof value === "string" && value.trim() === ""))
+    return "";
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) return "invalid";
   try {
-    return normalizeMoney(exact)
+    return normalizeMoney(exact);
   } catch {
-    return 'invalid'
+    return "invalid";
   }
 }
 
 // The refusal names the offending entry, so the map carries the first bad
 // key and value instead of a bare 'invalid' no message can observe.
-type MoneyMap = { ok: true; map: Record<string, unknown> } | { ok: false; key: string; value: unknown }
+type MoneyMap =
+  { ok: true; map: Record<string, unknown> } | { ok: false; key: string; value: unknown };
 function persistMoneyMap(raw: Record<string, unknown>): MoneyMap {
-  const out: Record<string, unknown> = {}
+  const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(raw)) {
-    const persisted = persistMoney(value)
-    if (persisted === 'invalid') return { ok: false, key, value }
-    out[key] = persisted
+    const persisted = persistMoney(value);
+    if (persisted === "invalid") return { ok: false, key, value };
+    out[key] = persisted;
   }
-  return { ok: true, map: out }
+  return { ok: true, map: out };
 }
 
 /** Component openings arrive keyed by component id (or code); values are text. */
 function componentAmounts(raw: unknown): Record<string, unknown> | undefined {
-  if (raw === undefined || raw === null) return undefined
-  if (typeof raw !== 'object' || Array.isArray(raw)) return undefined
-  return raw as Record<string, unknown>
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  return raw as Record<string, unknown>;
 }
 
 export const POST = defineRoute({
-  permission: 'payroll.manage',
-  feature: 'payroll',
-  handler: async ({ request: req, authz: gate }) => {
-
-    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 })
-    if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data
-
-    const rows: OpeningBalanceWrite[] = []
-    const saldoRows: { employeePartyId: string; regionaleSaldo: unknown; comunaleSaldo: unknown }[] = []
+  permission: "payroll.manage",
+  feature: "payroll",
+  body: requestBodySchema,
+  invalidBodyStatus: 422,
+  handler: async ({ authz: gate, body }) => {
+    const rows: OpeningBalanceWrite[] = [];
+    const saldoRows: {
+      employeePartyId: string;
+      regionaleSaldo: unknown;
+      comunaleSaldo: unknown;
+    }[] = [];
     for (const row of body.rows) {
-      if (row.components !== undefined && row.components !== null &&
-          (typeof row.components !== 'object' || Array.isArray(row.components))) {
-        return NextResponse.json({ error: 'components must be an object of component amounts' }, { status: 422 })
+      if (
+        row.components !== undefined &&
+        row.components !== null &&
+        (typeof row.components !== "object" || Array.isArray(row.components))
+      ) {
+        return NextResponse.json(
+          { error: "components must be an object of component amounts" },
+          { status: 422 },
+        );
       }
       // The row's loader-served version for the lost-update guard. Absent
       // means the caller does not speak versions (the file importer) and the
       // row saves unguarded, as before — never a silent default.
-      let updatedAt: string | null | undefined
-      if (row.updatedAt === undefined || row.updatedAt === null) updatedAt = row.updatedAt
-      else if (typeof row.updatedAt === 'string') updatedAt = row.updatedAt
+      let updatedAt: string | null | undefined;
+      if (row.updatedAt === undefined || row.updatedAt === null) updatedAt = row.updatedAt;
+      else if (typeof row.updatedAt === "string") updatedAt = row.updatedAt;
       else {
-        return NextResponse.json({ error: 'updatedAt must be the row version string or null' }, { status: 422 })
+        return NextResponse.json(
+          { error: "updatedAt must be the row version string or null" },
+          { status: 422 },
+        );
       }
-      const amounts = persistMoneyMap((row.amounts ?? {}) as Record<string, unknown>)
+      const amounts = persistMoneyMap((row.amounts ?? {}) as Record<string, unknown>);
       if (!amounts.ok) {
-        return NextResponse.json({ error: moneyRefusal(`Opening-balance amount for "${amounts.key}"`, amounts.value) }, { status: 422 })
+        return NextResponse.json(
+          { error: moneyRefusal(`Opening-balance amount for "${amounts.key}"`, amounts.value) },
+          { status: 422 },
+        );
       }
-      const rawComponents = componentAmounts(row.components)
-      let components: Record<string, unknown> | undefined
+      const rawComponents = componentAmounts(row.components);
+      let components: Record<string, unknown> | undefined;
       if (rawComponents !== undefined) {
-        const persisted = persistMoneyMap(rawComponents)
+        const persisted = persistMoneyMap(rawComponents);
         if (!persisted.ok) {
-          return NextResponse.json({ error: moneyRefusal(`Component amount for "${persisted.key}"`, persisted.value) }, { status: 422 })
+          return NextResponse.json(
+            { error: moneyRefusal(`Component amount for "${persisted.key}"`, persisted.value) },
+            { status: 422 },
+          );
         }
-        components = persisted.map
+        components = persisted.map;
       }
-      let programs: Record<string, unknown> | undefined
+      let programs: Record<string, unknown> | undefined;
       if (row.programs !== undefined) {
-        const persisted = persistMoneyMap(row.programs as Record<string, unknown>)
+        const persisted = persistMoneyMap(row.programs as Record<string, unknown>);
         if (!persisted.ok) {
-          return NextResponse.json({ error: moneyRefusal(`Program carry-in for "${persisted.key}"`, persisted.value) }, { status: 422 })
+          return NextResponse.json(
+            { error: moneyRefusal(`Program carry-in for "${persisted.key}"`, persisted.value) },
+            { status: 422 },
+          );
         }
-        programs = persisted.map
+        programs = persisted.map;
       }
       const saldoRaw = {
         regionaleSaldo: amounts.map[IT_SALDO_KEYS[0]] ?? null,
         comunaleSaldo: amounts.map[IT_SALDO_KEYS[1]] ?? null,
-      }
-      delete amounts.map[IT_SALDO_KEYS[0]]
-      delete amounts.map[IT_SALDO_KEYS[1]]
+      };
+      delete amounts.map[IT_SALDO_KEYS[0]];
+      delete amounts.map[IT_SALDO_KEYS[1]];
       // All-blank saldo is an untouched row, not a clearing: keep what is
       // stored (a conjured zero would silence the installment refusal).
       if (
-        (saldoRaw.regionaleSaldo != null && String(saldoRaw.regionaleSaldo) !== '') ||
-        (saldoRaw.comunaleSaldo != null && String(saldoRaw.comunaleSaldo) !== '')
+        (saldoRaw.regionaleSaldo != null && String(saldoRaw.regionaleSaldo) !== "") ||
+        (saldoRaw.comunaleSaldo != null && String(saldoRaw.comunaleSaldo) !== "")
       ) {
         saldoRows.push({
           employeePartyId: row.employeePartyId,
           regionaleSaldo: saldoRaw.regionaleSaldo,
           comunaleSaldo: saldoRaw.comunaleSaldo,
-        })
+        });
       }
-      let suiStates: Record<string, unknown> | undefined
+      let suiStates: Record<string, unknown> | undefined;
       if (row.suiStates !== undefined) {
-        const persisted = persistMoneyMap(row.suiStates as Record<string, unknown>)
+        const persisted = persistMoneyMap(row.suiStates as Record<string, unknown>);
         if (!persisted.ok) {
-          return NextResponse.json({ error: moneyRefusal(`SUI carry-in for "${persisted.key}"`, persisted.value) }, { status: 422 })
+          return NextResponse.json(
+            { error: moneyRefusal(`SUI carry-in for "${persisted.key}"`, persisted.value) },
+            { status: 422 },
+          );
         }
-        suiStates = persisted.map
+        suiStates = persisted.map;
       }
-      let accountBases: Record<string, unknown>[] | undefined
+      let accountBases: Record<string, unknown>[] | undefined;
       if (row.accountBases !== undefined) {
-        accountBases = []
+        accountBases = [];
         for (const rawBase of row.accountBases) {
-          const base = rawBase
-          const amount = persistMoney(base.insurableYtd)
-          if (amount === 'invalid') {
-            return NextResponse.json({ error: moneyRefusal(`Account wage-base opening for "${base.programKey}"`, base.insurableYtd, 'an amount', 4) }, { status: 422 })
+          const base = rawBase;
+          const amount = persistMoney(base.insurableYtd);
+          if (amount === "invalid") {
+            return NextResponse.json(
+              {
+                error: moneyRefusal(
+                  `Account wage-base opening for "${base.programKey}"`,
+                  base.insurableYtd,
+                  "an amount",
+                  4,
+                ),
+              },
+              { status: 422 },
+            );
           }
-          if (amount === '') continue
+          if (amount === "") continue;
           accountBases.push({
             programKey: base.programKey,
             filingAccountId: base.filingAccountId,
             region: base.region,
             insurableYtd: amount,
-          })
+          });
         }
       }
       rows.push({
@@ -276,7 +333,7 @@ export const POST = defineRoute({
         suiStates,
         accountBases,
         updatedAt,
-      })
+      });
     }
 
     try {
@@ -287,7 +344,7 @@ export const POST = defineRoute({
           taxYear: assertTaxYear(body.taxYear),
           rows: saldoRows,
           allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-        })
+        });
       }
       const result = await saveOpeningBalances({
         auditReason: body.auditReason,
@@ -297,10 +354,10 @@ export const POST = defineRoute({
         taxYear: assertTaxYear(body.taxYear),
         rows,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      })
-      return NextResponse.json(result)
+      });
+      return NextResponse.json(result);
     } catch (error) {
-      if (error instanceof ScopeNotFoundError) return notFound("record")
+      if (error instanceof ScopeNotFoundError) return notFound("record");
       // A refusal is data the operator has to see per row, not a bare 4xx: a
       // whole-workforce load rejected for one transposed column must say which
       // employee, and nothing was written.
@@ -308,23 +365,22 @@ export const POST = defineRoute({
         return apiErrorResponse(error, {
           safeStatus: 409,
           details: { errors: error.result.errors, created: 0, updated: 0, deleted: 0, skipped: [] },
-        })
+        });
       }
       if (error instanceof SurtaxSaldoSaveError) {
         return apiErrorResponse(error, {
           safeStatus: 409,
           details: { errors: error.result.errors, created: 0, updated: 0, deleted: 0, skipped: [] },
-        })
+        });
       }
       if (error instanceof PayrollError) {
-        return apiErrorResponse(error, { safeStatus: 422 })
+        return apiErrorResponse(error, { safeStatus: 422 });
       }
-      throw error
+      throw error;
     }
-
   },
-})
+});
 
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : 'invalid request'
+  return error instanceof Error ? error.message : "invalid request";
 }

@@ -1,54 +1,54 @@
-import { parseRoeEventRow } from '@openbooks/engine/payroll/roe-event-row'
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from '@/lib/api/json'
-import { fileContentDisposition } from '@/lib/export'
-import { NextResponse } from 'next/server'
-import { yearEndFiling } from '@openbooks/engine/payroll/filing-registry'
-import { PayrollPackError } from '@openbooks/engine/payroll/packs'
+import { parseRoeEventRow } from "@openbooks/engine/payroll/roe-event-row";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { fileContentDisposition } from "@/lib/export";
+import { NextResponse } from "next/server";
+import { yearEndFiling } from "@openbooks/engine/payroll/filing-registry";
+import { PayrollPackError } from "@openbooks/engine/payroll/packs";
 import { PayrollError } from "@openbooks/engine/payroll/error";
-import { orgYearEndFilings } from '@openbooks/engine/payroll/yearend'
-import { payrollYearRefusal } from '../../../../../lib/payroll-year'
-import type { Authz } from '../../../../../lib/authz'
-import { guardPayrollRoeEmployees, guardPayrollFilingData } from '../../subsidiary-scope'
+import { orgYearEndFilings } from "@openbooks/engine/payroll/yearend";
+import { payrollYearRefusal } from "../../../../../lib/payroll-year";
+import type { Authz } from "../../../../../lib/authz";
+import { guardPayrollRoeEmployees, guardPayrollFilingData } from "../../subsidiary-scope";
 
-const requestBodySchema = z.looseObject({
-  country: z.string().trim().min(2).max(3),
-  filing: z.string().trim().min(1).max(120),
-  year: z.unknown(),
-}).catchall(z.string({ error: 'each filing parameter must be text' }).max(2000))
+const requestBodySchema = z
+  .looseObject({
+    country: z.string().trim().min(2).max(3),
+    filing: z.string().trim().min(1).max(120),
+    year: z.unknown(),
+  })
+  .catchall(z.string({ error: "each filing parameter must be text" }).max(2000));
 
-
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 type FileInput = {
-  country: string
-  filing: string
-  year: number
-  params: Record<string, string>
-}
+  country: string;
+  filing: string;
+  year: number;
+  params: Record<string, string>;
+};
 
 function parseBody(body: Record<string, unknown>): FileInput | NextResponse {
-  const yearRefusal = payrollYearRefusal(body.year)
-  if (yearRefusal !== null) return NextResponse.json({ error: yearRefusal }, { status: 422 })
-  const year = Number(body.year)
-  if (typeof body.country !== 'string' || typeof body.filing !== 'string') {
-    return NextResponse.json({ error: 'country and filing are required' }, { status: 422 })
+  const yearRefusal = payrollYearRefusal(body.year);
+  if (yearRefusal !== null) return NextResponse.json({ error: yearRefusal }, { status: 422 });
+  const year = Number(body.year);
+  if (typeof body.country !== "string" || typeof body.filing !== "string") {
+    return NextResponse.json({ error: "country and filing are required" }, { status: 422 });
   }
-  const params: Record<string, string> = {}
+  const params: Record<string, string> = {};
   for (const [key, value] of Object.entries(body)) {
-    if (key === 'country' || key === 'filing' || key === 'year') continue
-    if (typeof value !== 'string') {
-      return NextResponse.json({ error: `${key} must be a string` }, { status: 422 })
+    if (key === "country" || key === "filing" || key === "year") continue;
+    if (typeof value !== "string") {
+      return NextResponse.json({ error: `${key} must be a string` }, { status: 422 });
     }
-    params[key] = value
+    params[key] = value;
   }
-  return { country: body.country, filing: body.filing, year, params }
+  return { country: body.country, filing: body.filing, year, params };
 }
 
-async function serveFile(gate: Authz, input: FileInput, method: 'GET' | 'POST' = 'POST') {
-  const { country, filing: filingKey, year, params } = input
+async function serveFile(gate: Authz, input: FileInput, method: "GET" | "POST" = "POST") {
+  const { country, filing: filingKey, year, params } = input;
   // A filing that is ISSUED per employee declares an `issue` block, and
   // `issue.param` names the body key its selection travels under. That
   // declaration is the whole test: asking instead whether this is Canada's
@@ -63,71 +63,71 @@ async function serveFile(gate: Authz, input: FileInput, method: 'GET' | 'POST' =
   // shape check and the subsidiary-scope guard, and reach the builder
   // unvalidated. `orgYearEndFilings` copies `issue` straight off this same
   // declaration, so the registry is the earlier and org-independent answer.
-  let filing: ReturnType<typeof yearEndFiling>
+  let filing: ReturnType<typeof yearEndFiling>;
   try {
-    filing = yearEndFiling(country, filingKey)
+    filing = yearEndFiling(country, filingKey);
   } catch (e) {
-    if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 })
-    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
-    throw e
+    if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 });
+    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 });
+    throw e;
   }
-  const issue = filing.issue ?? null
-  if (method === 'GET' && issue && params[issue.param] != null) {
+  const issue = filing.issue ?? null;
+  if (method === "GET" && issue && params[issue.param] != null) {
     return NextResponse.json(
-      { error: 'issue filing selections must be submitted in a POST body' },
+      { error: "issue filing selections must be submitted in a POST body" },
       { status: 405 },
-    )
+    );
   }
-  const section = (await orgYearEndFilings(gate.user.orgId, year))
-    .find((candidate) => candidate.country === country && candidate.key === filingKey)
-  const selected = issue ? params[issue.param] : undefined
+  const section = (await orgYearEndFilings(gate.user.orgId, year)).find(
+    (candidate) => candidate.country === country && candidate.key === filingKey,
+  );
+  const selected = issue ? params[issue.param] : undefined;
   if (section && selected == null) {
-    const denied = await guardPayrollFilingData(gate, country, filingKey, section.data, year)
-    if (denied) return denied
+    const denied = await guardPayrollFilingData(gate, country, filingKey, section.data, year);
+    if (denied) return denied;
   }
   // The pack-owned employee selection is an additional direct boundary. It
   // can name a subset (or a row absent from the current population), so guard
   // the submitted identities before the pack builds any bytes. The registry's
   // declared limit is enforced before this query, keeping the POST bounded.
   if (issue && selected != null) {
-    const entries = selected.split(',').filter(Boolean)
+    const entries = selected.split(",").filter(Boolean);
     // `commentMaxLength` is the decoded limit. Six is the maximum number of
     // URI characters per UTF-16 code unit after encodeURIComponent; the fixed
     // allowance covers each UUID/reason delimiter. This keeps malformed or
     // hand-crafted bodies bounded before any subsidiary lookup runs.
-    const maxEncodedSelectionLength = issue.maxSelection * (256 + issue.commentMaxLength * 6)
-    if (
-      entries.length > issue.maxSelection
-      || selected.length > maxEncodedSelectionLength
-    ) {
-      return NextResponse.json({ error: 'invalid employee selection' }, { status: 422 })
+    const maxEncodedSelectionLength = issue.maxSelection * (256 + issue.commentMaxLength * 6);
+    if (entries.length > issue.maxSelection || selected.length > maxEncodedSelectionLength) {
+      return NextResponse.json({ error: "invalid employee selection" }, { status: 422 });
     }
-    const ids = entries.map((entry) => entry.split(':', 1)[0]!)
+    const ids = entries.map((entry) => entry.split(":", 1)[0]!);
     // Shape is settled here, for every caller, before any scope guard runs.
     if (ids.some((id) => !parseRoeEventRow(id))) {
-      return NextResponse.json({ error: 'invalid employee selection' }, { status: 422 })
+      return NextResponse.json({ error: "invalid employee selection" }, { status: 422 });
     }
-    const denied = await guardPayrollRoeEmployees(gate, ids)
-    if (denied) return denied
+    const denied = await guardPayrollRoeEmployees(gate, ids);
+    if (denied) return denied;
   }
   try {
     if (!filing.download) {
       return NextResponse.json(
-        { error: filing.downloadRefusal ?? `the ${filing.label} filing declares no electronic file` },
+        {
+          error: filing.downloadRefusal ?? `the ${filing.label} filing declares no electronic file`,
+        },
         { status: 422 },
-      )
+      );
     }
-    const file = await filing.download.build(gate.user.orgId, year, params)
+    const file = await filing.download.build(gate.user.orgId, year, params);
     return new NextResponse(file.body, {
       headers: {
-        'Content-Type': file.contentType,
-        'Content-Disposition': fileContentDisposition('attachment', file.filename),
+        "Content-Type": file.contentType,
+        "Content-Disposition": fileContentDisposition("attachment", file.filename),
       },
-    })
+    });
   } catch (e) {
-    if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 })
-    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
-    throw e
+    if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 });
+    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 });
+    throw e;
   }
 }
 
@@ -145,23 +145,26 @@ async function serveFile(gate: Authz, input: FileInput, method: 'GET' | 'POST' =
  * file. An unknown country/filing pair is a 404 that names what IS declared.
  */
 export const GET = defineRoute({
-  permission: 'payroll.run',
-  feature: 'payroll',
+  permission: "payroll.run",
+  feature: "payroll",
   handler: async ({ request: req, authz: gate }) => {
-    const url = new URL(req.url)
-    const params = Object.fromEntries(url.searchParams)
-    const yearRefusal = payrollYearRefusal(params.year)
-    if (yearRefusal !== null) return NextResponse.json({ error: yearRefusal }, { status: 422 })
-    const year = Number(params.year)
-    return serveFile(gate, {
-      country: params.country ?? '',
-      filing: params.filing ?? '',
-      year,
-      params,
-    }, 'GET')
-
+    const url = new URL(req.url);
+    const params = Object.fromEntries(url.searchParams);
+    const yearRefusal = payrollYearRefusal(params.year);
+    if (yearRefusal !== null) return NextResponse.json({ error: yearRefusal }, { status: 422 });
+    const year = Number(params.year);
+    return serveFile(
+      gate,
+      {
+        country: params.country ?? "",
+        filing: params.filing ?? "",
+        year,
+        params,
+      },
+      "GET",
+    );
   },
-})
+});
 
 /**
  * POST { country, filing, year, …filing parameters } — the electronic file
@@ -171,14 +174,16 @@ export const GET = defineRoute({
  * limits.
  */
 export const POST = defineRoute({
-  permission: 'payroll.run',
-  feature: 'payroll',
-  handler: async ({ request: req, authz: gate }) => {
-    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 })
-    if (!parsedBody.ok) return parsedBody.response
-    const input = parseBody(parsedBody.data)
-    if (input instanceof NextResponse) return input
-    return serveFile(gate, input)
-
+  permission: "payroll.run",
+  feature: "payroll",
+  body: requestBodySchema,
+  opaque: {
+    year: "The existing refusal mapper preserves the endpoint's accepted year representations.",
   },
-})
+  invalidBodyStatus: 422,
+  handler: async ({ authz: gate, body }) => {
+    const input = parseBody(body);
+    if (input instanceof NextResponse) return input;
+    return serveFile(gate, input);
+  },
+});
