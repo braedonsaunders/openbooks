@@ -160,7 +160,7 @@ import {
 } from "./resourcing-requests-adapter.ts";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
 import { hrmCompCycleFlowAdapter, hrmCompCycleSubjectProfile } from "./comp-cycles-adapter.ts";
-// HR-20 begin: crew time batches approve through Flows.
+// Crew time batches approve through Flows.
 import {
   CREW_TIME_BATCH_SUBJECT_KIND,
   crewBatchFlowAdapter,
@@ -171,7 +171,6 @@ import {
   manufacturingFlowAdapter,
   workOrderSubjectProfile,
 } from "./manufacturing-adapter.ts";
-// HR-20 end
 import {
   employmentMigrationFlowAdapter,
   employmentMigrationSubjectProfile,
@@ -229,12 +228,10 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if (subjectKind === HRM_CHANGE_REQUEST_SUBJECT_KIND) return hrmChangeRequestFlowAdapter;
   if (subjectKind === HRM_LEAVE_REQUEST_SUBJECT_KIND) return hrmLeaveRequestFlowAdapter;
   if (subjectKind === RESOURCING_REQUEST_SUBJECT_KIND) return resourcingRequestFlowAdapter;
-  // HR-12 begin: compensation cycles approve through Flows.
+  // Compensation cycles approve through Flows.
   if (subjectKind === HRM_COMP_CYCLE_SUBJECT_KIND) return hrmCompCycleFlowAdapter;
-  // HR-12 end
-  // HR-20 begin: crew time batches approve through Flows.
+  // Crew time batches approve through Flows.
   if (subjectKind === CREW_TIME_BATCH_SUBJECT_KIND) return crewBatchFlowAdapter;
-  // HR-20 end
   if (subjectKind === WORK_ORDER_SUBJECT_KIND) return manufacturingFlowAdapter;
   if (subjectKind === HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND) return employmentMigrationFlowAdapter;
   // A pay run is a document, but with payroll's own authoring vocabulary; the
@@ -328,12 +325,8 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     hrmChangeRequestSubjectProfile,
     hrmLeaveRequestSubjectProfile,
     resourcingRequestSubjectProfile,
-    // HR-12 begin
     hrmCompCycleSubjectProfile,
-    // HR-12 end
-    // HR-20 begin
     crewBatchSubjectProfile,
-    // HR-20 end
     workOrderSubjectProfile,
     employmentMigrationSubjectProfile,
   ];

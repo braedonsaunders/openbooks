@@ -333,7 +333,7 @@ export function writableSetupEntity(
   };
 }
 
-// HR-18 begin: create-time defaults for recruiting-depth Setup. A kit
+// Create-time defaults for recruiting-depth Setup. A kit
 // created without a declared scale rates on the full canonical scale —
 // defaulted here (before coercion), because the generic stringArray
 // coercion would otherwise store an empty list the storage CHECK refuses
@@ -348,7 +348,6 @@ export function foldRecruitingSetupCreate(
   }
   return rawBody;
 }
-// HR-18 end
 
 // Create-time defaults for pay components. A deduction that does not state
 // its protected-base membership starts outside it. Assessability is stored

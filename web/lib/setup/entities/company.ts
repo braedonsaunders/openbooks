@@ -32,7 +32,7 @@ export const COMPANY_ENTITIES: SetupEntity[] = [
     ],
   },
   // --- Company -------------------------------------------------------------
-  // HR-15 begin: admin-authored home announcements (org settings JSON, not a
+  // Admin-authored home announcements (org settings JSON, not a
   // table) with audience scope and dates. Gated on homeAnnouncements.
   {
     key: "home-announcements",
@@ -62,7 +62,6 @@ export const COMPANY_ENTITIES: SetupEntity[] = [
       { key: "endsOn", kind: "date" },
     ],
   },
-  // HR-15 end
   {
     // Subsidiaries form the organization's legal-entity tree.
     // baseCurrency is the entity's functional currency: locked after create so

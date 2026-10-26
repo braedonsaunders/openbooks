@@ -8,9 +8,8 @@ import { loadProjectType } from "../../../lib/project-type";
 import { listBillableFieldTickets, listBillingRequests } from "../../../lib/billing-requests";
 import { resolveInvoicingPreference } from "../../../lib/invoicing-preference";
 import { availableToBill } from "../../../lib/project-available-to-bill";
-// HR-20 begin: crew-today rows for the cockpit.
+// Crew-today rows for the cockpit.
 import { crewToday } from "@openbooks/engine/hrm/field-time/reads";
-// HR-20 end
 import { isFeatureEnabled } from "../../../lib/features";
 import { listScopedPartyOptions } from "../../../lib/scoped-options";
 import type { ProjectCockpitData } from "./ProjectDrawer";

@@ -201,12 +201,11 @@ export const candidates = pgTable(
     consentRecordedAt: timestamp("consent_recorded_at", { withTimezone: true }),
     isInternal: boolean("is_internal").notNull().default(false),
     notes: text("notes"),
-    // HR-18 begin: declared match tags for talent-pool rediscovery (0229).
+    // Declared match tags for talent-pool rediscovery (0229).
     tags: text("tags")
       .array()
       .notNull()
       .default(sql`'{}'`),
-    // HR-18 end
     ...auditColumns,
   },
   (t) => [
@@ -277,9 +276,8 @@ export const interviews = pgTable(
     feedback: text("feedback"),
     scorecard: jsonb("scorecard"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
-    // HR-18 begin: the structured-interview kit this sitting runs (0229).
+    // The structured-interview kit this sitting runs (0229).
     kitId: uuid("kit_id"),
-    // HR-18 end
     ...auditColumns,
   },
   (t) => [
@@ -304,9 +302,8 @@ export const interviewPanel = pgTable(
     orgId: orgRef(),
     interviewId: uuid("interview_id").notNull(),
     partyId: uuid("party_id").notNull(),
-    // HR-18 begin: the attributes this panelist focuses on (0229).
+    // The attributes this panelist focuses on (0229).
     focusAttributeIds: uuid("focus_attribute_ids").array(),
-    // HR-18 end
     ...auditColumns,
   },
   (t) => [
@@ -363,7 +360,7 @@ export const offers = pgTable(
     respondedAt: timestamp("responded_at", { withTimezone: true }),
     declineReason: text("decline_reason"),
     approvedChangeId: uuid("approved_change_id"),
-    // HR-18 begin: template offer rendering + e-sign lifecycle (0229). The
+    // Template offer rendering + e-sign lifecycle (0229). The
     // signature status rides BESIDE the commercial status, never inside it.
     templateId: uuid("template_id"),
     version: integer("version").notNull().default(1),
@@ -375,7 +372,6 @@ export const offers = pgTable(
     // emailed once and never stored. NULL means no link is outstanding;
     // overwriting it on resend is what revokes the previous link.
     signingTokenHash: text("signing_token_hash"),
-    // HR-18 end
     ...auditColumns,
   },
   (t) => [

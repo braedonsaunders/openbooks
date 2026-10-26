@@ -86,8 +86,6 @@ async function enableEveryHrmReportFeature(orgId: string): Promise<void> {
        where id = ${orgId}`);
   }
 }
-// HR-12 end
-// HR-14 end
 
 async function grantPermissions(
   orgId: string,
@@ -860,11 +858,9 @@ test(
           "hrm_comp_cycle_lines",
           "hrm_headcount_plan_lines",
           "hrm_pay_gap_snapshots",
-          // HR-14 begin
           "hrm_qualifications",
           "hrm_qualification_alerts",
-          // HR-14 end
-          // HR-18 begin: recruiting-depth entities read through Recruiting
+          // Recruiting-depth entities read through Recruiting
           // (enabled above) and the recruiting grant.
           "hrm_scorecards",
           "hrm_interview_slots",
@@ -872,20 +868,17 @@ test(
           "hrm_postings",
           "hrm_retention_runs",
           "hrm_pool_members",
-          // HR-18 end
-          // HR-19 begin: documents, signers, retention actions, surveys
+          // Documents, signers, retention actions, surveys
           // and the org chart.
           "hrm_documents",
           "hrm_document_signers",
           "hrm_retention_actions",
           "hrm_survey_results",
           "hrm_org_chart",
-          // HR-19 end
-          // HR-21 begin: the payroll checks and the governance ledger.
+          // The payroll checks and the governance ledger.
           "payroll_anomaly_flags",
           "ai_decisions",
           "ai_capabilities",
-          // HR-21 end
         ] as const) {
           assert.equal(
             await canRunReportEntity(reader, { entity: key }),

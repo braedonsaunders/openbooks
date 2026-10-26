@@ -140,7 +140,6 @@ function permissionValues<D extends HrmDomain>(domain: D): readonly HrmPermissio
  * Admin-only like the employment keys above (granted via the catalogue
  * spread; the role seed refreshes on re-run).
  */
-// HR-12 begin
 export const HRM_COMPENSATION_PERMISSIONS = permissionValues("compensation");
 export type HrmCompensationPermission = HrmPermissionName<"compensation">;
 
@@ -274,7 +273,6 @@ export async function requireHrmCompensationManageOnEmployment(
     "hrm.compensation.manage",
   );
 }
-// HR-12 end
 
 /**
  * Foundational HRM employment authorization.
@@ -777,7 +775,6 @@ export async function requireAggregatePositionRead(
  * responding rides invitation tokens, never a grant. Admin-only like the
  * employment keys above (granted via the catalogue spread).
  */
-// HR-19 begin
 export const HRM_DOCUMENT_PERMISSIONS = permissionValues("documents");
 export type HrmDocumentPermission = HrmPermissionName<"documents">;
 
@@ -860,7 +857,6 @@ export async function requireOrgChartRead(
     "Org chart access requires hrm.org_chart.read, hrm.employment.read or hrm.self.read — ask an administrator to grant it in /admin/roles.",
   );
 }
-// HR-19 end
 
 // H-lens begin: party-subject subsidiary lens shared across hrm/.
 // Every decision below delegates to the canonical subsidiary-scope module
@@ -1846,7 +1842,7 @@ export async function requireEmploymentOrTeamSubject(
   }
 }
 
-// HR-13 begin: construction-compliance duties. Read sees rate tables,
+// Construction-compliance duties. Read sees rate tables,
 // classifications, comp classes, per-diem policies, certified runs and
 // findings; manage authors them and runs generation, approval and voids.
 // Org-level grants (construction configuration is org-wide, never
@@ -1884,9 +1880,8 @@ export async function requireConstructionScope(
 
 /** Author construction-compliance configuration, entries, runs and findings transitions. */
 const requireHrmConstructionManage = requireHrm("construction", "manage");
-// HR-13 end
 
-// HR-14 begin: certification and dispatch-gating duties (0225). Read sees
+// Certification and dispatch-gating duties (0225). Read sees
 // the taxonomy, held qualifications, requirements, coverage and alerts;
 // manage records, verifies, renews, revokes and authors requirements.
 // Org-level grants like construction (qualification configuration is
@@ -1937,4 +1932,3 @@ export async function requireAggregateCertificationsManage(
   await requireHrmCertificationsManage(exec, orgId, actorId);
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
-// HR-14 end

@@ -78,7 +78,7 @@ const HRM_ENROLLMENT_STATUSES = [
 const HRM_REQUISITION_STATUSES = ["draft", "open", "on_hold", "filled", "cancelled"] as const;
 const HRM_APPLICATION_STATUSES = ["active", "rejected", "withdrawn", "hired"] as const;
 
-// HR-18 begin: recruiting-depth vocabularies (0229) — the commercial offer
+// Recruiting-depth vocabularies (0229) — the commercial offer
 // statuses stay the 0195 vocabulary; signature_status rides beside it.
 const HRM_SLOT_KINDS = ["proposed", "booked", "declined"] as const;
 const HRM_OFFER_STATUSES = [
@@ -98,12 +98,11 @@ const HRM_OFFER_SIGNATURE_STATUSES = [
   "voided",
 ] as const;
 const HRM_POSTING_STATUSES = ["draft", "published", "paused", "closed", "error"] as const;
-// HR-18 end
 
 const HRM_PROCESS_KINDS = ["onboarding", "offboarding", "transfer"] as const;
 const HRM_PROCESS_STATUSES = ["open", "completed", "cancelled"] as const;
 
-// HR-16 begin: automation + reason-code report entities (0226/0227).
+// Automation + reason-code report entities (0226/0227).
 const AUTOMATIONS_READ_PERMISSION = "automations.read";
 const AUTOMATIONS_FEATURE_KEY = "automations";
 
@@ -124,12 +123,10 @@ const AUTOMATION_RUN_STATUSES = [
   "skipped_no_match",
   "simulated",
 ] as const;
-// HR-16 end
 const HRM_STEP_STATUSES = ["pending", "done", "skipped"] as const;
 const HRM_STEP_OWNERS = ["manager", "hr", "employee", "named_party"] as const;
 const HRM_STEP_EVIDENCE = ["none", "acknowledgement", "attachment"] as const;
 
-// HR-12 begin
 const HRM_COMP_LINE_STATUSES = ["pending", "proposed", "approved", "rejected", "pushed"] as const;
 const HRM_PLAN_LINE_KINDS = ["create", "backfill", "change", "terminate"] as const;
 const HRM_PLAN_LINE_STATUSES = [
@@ -140,15 +137,13 @@ const HRM_PLAN_LINE_STATUSES = [
   "filled",
   "cancelled",
 ] as const;
-// HR-12 end
-// HR-14 begin: certification register and alert queue report entities (0225).
+// Certification register and alert queue report entities (0225).
 const HRM_CERTIFICATIONS_READ_PERMISSION = "hrm.certifications.read";
 const HRM_CERTIFICATIONS_FEATURE_KEY = "hrmCertifications";
 
 const HRM_QUALIFICATION_STATUSES = ["valid", "revoked", "pending_verification"] as const;
 const HRM_ALERT_CHANNELS = ["inbox", "email"] as const;
-// HR-14 end
-// HR-19 begin: documents, signers, retention actions, survey results, org
+// Documents, signers, retention actions, survey results, org
 // chart report entities (0230).
 const HRM_DOCUMENTS_READ_PERMISSION = "hrm.documents.read";
 export const HRM_DOCUMENTS_FEATURE_KEY = "hrmDocuments";
@@ -172,7 +167,6 @@ const HRM_RETENTION_ACTIONS = ["delete", "anonymize"] as const;
 const HRM_SURVEY_KINDS = ["engagement", "pulse", "onboarding", "exit", "custom"] as const;
 const HRM_SURVEY_ANONYMITY = ["anonymous", "confidential", "named"] as const;
 const HRM_SURVEY_STATUSES = ["draft", "open", "closed"] as const;
-// HR-19 end
 const HRM_REVIEW_KINDS = ["self", "manager", "peer"] as const;
 const HRM_REVIEW_STATUSES = [
   "pending",
@@ -373,10 +367,9 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       },
       { key: "applied_at", label: "Applied at", kind: "timestamp", expr: "r.applied_at" },
       { key: "reason", label: "Reason", kind: "text", expr: "r.reason" },
-      // HR-16 begin: 0227 classification carried from submit onto the event.
+      // 0227 classification carried from submit onto the event.
       { key: "action", label: "Action", kind: "text", expr: "r.action" },
       { key: "reason_code", label: "Reason code", kind: "text", expr: "r.reason_code" },
-      // HR-16 end
       { key: "created_at", label: "Created at", kind: "timestamp", expr: "r.created_at" },
       { key: "id", label: "Request (id)", kind: "uuid", expr: "r.id" },
       { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "r.employment_id" },
@@ -893,7 +886,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: "effective_from", direction: "desc" },
   },
-  // HR-12 begin: compensation report entities — bands, cycle lines,
+  // Compensation report entities — bands, cycle lines,
   // plan lines, and gap snapshots. All four sit behind the
   // compensation read grant and the hrmCompensation switch; gap
   // snapshots expose category aggregates only, never per-person pay.
@@ -1051,8 +1044,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: "as_of", direction: "desc" },
   },
-  // HR-12 end
-  // HR-16 begin: the automation recipe register (0226) — one row per org
+  // The automation recipe register (0226) — one row per org
   // recipe with its trigger kind, status, version, and last run. Recipes
   // are platform configuration, so no subsidiary scope: visibility rides
   // the automations.read grant and the automations switch.
@@ -1097,7 +1089,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: "name", direction: "asc" },
   },
-  // HR-16 begin: the automation run log (0226) — append-only firing
+  // The automation run log (0226) — append-only firing
   // evidence with the executed version, subject, steps, and error.
   {
     key: "automation_runs",
@@ -1169,8 +1161,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: "action", direction: "asc" },
   },
-  // HR-16 end
-  // HR-13 begin: construction-compliance report entities (0223/0224).
+  // Construction-compliance report entities (0223/0224).
   // Gated on the construction switch with the construction read grant —
   // a general-business org never sees them, and the feature-off path
   // hides rather than empties.
@@ -1295,8 +1286,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: "worked_on", direction: "desc" },
   },
-  // HR-13 end
-  // HR-14 begin: certification register (one row per held qualification)
+  // Certification register (one row per held qualification)
   // and the renewal alert queue (one row per qualification/lead-day).
   // Both read the 0225 ledger through the same joins the engine read
   // path uses; expiring/expired stays a viewer derivation over
@@ -1385,8 +1375,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: "due_on", direction: "asc" },
   },
-  // HR-14 end
-  // HR-19 begin: the document register (one row per non-deleted
+  // The document register (one row per non-deleted
   // document) and the signer timeline (one row per ordered signer).
   // Both read the 0230 cabinet through the same predicates the engine
   // read paths use: deleted documents never list; signer party ids and
@@ -1463,8 +1452,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: "signed_at", direction: "desc" },
   },
-  // HR-19 end
-  // HR-19 begin: the retention execution ledger (one row per flagged or
+  // The retention execution ledger (one row per flagged or
   // executed (document, schedule) pair). executed_at null = flagged,
   // waiting out the grace days; blocked_reason names the legal hold.
   // Execution itself stays human-approved (HR) or scheduler-run — the
@@ -1504,8 +1492,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: "due_on", direction: "asc" },
   },
-  // HR-19 end
-  // HR-19 begin: survey aggregates (one row per survey). Invitations
+  // Survey aggregates (one row per survey). Invitations
   // and responses count through the invitation ledger; eNPS and
   // participation stay viewer derivations over these counts, so the
   // report never persists a projection. Respondent links have no
@@ -1553,8 +1540,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: "closes_at", direction: "desc" },
   },
-  // HR-19 end
-  // HR-19 begin: the org-chart snapshot (one row per in-service
+  // The org-chart snapshot (one row per in-service
   // employment at the report as-of date). The as-of join is bounded
   // one-sided — versions effective on or before the as-of day,
   // currently-known revisions only — with the in-service status
@@ -1612,7 +1598,6 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: "employee", direction: "asc" },
   },
-  // HR-19 end
   // Continuous-performance entities (0228). 1:1s, feedback, calibration
   // entries and talent reviews read through the HR grant
   // (hrm.performance.read) with the report engine's run-path gate — the
@@ -1738,7 +1723,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: "reviewed_at", direction: "desc" },
   },
-  // HR-18 begin: recruiting-depth report entities (0229). Scorecards read
+  // Recruiting-depth report entities (0229). Scorecards read
   // interview-level aggregates with no author columns at all — the report
   // executor carries no reader identity, so "aggregate only for
   // non-authors" holds structurally: per-author detail lives only behind
@@ -1959,8 +1944,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: "added_on", direction: "desc" },
   },
-  // HR-18 end
-  // HR-21 begin: deterministic pre-run payroll/timesheet anomaly flags.
+  // Deterministic pre-run payroll/timesheet anomaly flags.
   // Employment-scoped like the checks queue (payroll.manage); flags
   // without an employment fail closed for restricted readers (no
   // sharedNull), exactly like the queue's own scope. The explanation is
@@ -2093,5 +2077,4 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: "capability", direction: "asc" },
   },
-  // HR-21 end
 ];

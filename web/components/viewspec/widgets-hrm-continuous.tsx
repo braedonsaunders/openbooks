@@ -115,5 +115,4 @@ export const HRM_CONTINUOUS_WIDGETS = {
   },
   /** A small loader-resolved note line (9-box unplaced placements). */
   "hrm-note": (props) => <NoteShell note={str(props, "note") ?? null} />,
-  // HR-17 end
 } satisfies Record<string, WidgetRenderer>;

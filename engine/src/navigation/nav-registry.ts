@@ -102,7 +102,7 @@ export const NAV_MODULES: NavModule[] = [
     group: "my-work",
     requiredPermission: "assistant.use",
   },
-  // HR-15 begin: Inbox is core — every leader lands here. Unpermissioned
+  // Inbox is core — every leader lands here. Unpermissioned
   // by design (like notifications): every query self-scopes to the actor.
   // The module key stays `approvals` (identifiers are stable); only the
   // place label (catalog) and target changed. The /inbox route stays
@@ -115,7 +115,6 @@ export const NAV_MODULES: NavModule[] = [
     group: "my-work",
     badgeCountHref: "/api/inbox?count=1",
   },
-  // HR-15 end
   // HR-15 rebrand: the notifications NAV ENTRY is removed — My Work shows
   // one Inbox entry and notices surface as its Notices filter. The
   // /notifications ROUTE, page, and API stay (deep links, hrefs, the scope
@@ -1171,7 +1170,7 @@ export const NAV_MODULES: NavModule[] = [
     subgroup: "automate",
     requiredPermission: "flows.manage",
   },
-  // HR-16 begin: the automation recipe builder beside Flows (platform nav
+  // The automation recipe builder beside Flows (platform nav
   // under Flows; the automations feature gates it, exception-only approval
   // is a per-flow setting).
   {
@@ -1239,9 +1238,7 @@ export const ADMIN_HUB_PERMISSIONS = [
   "admin.customization.manage",
   "scripts.manage",
   "flows.manage",
-  // HR-16 begin
   "automations.read",
-  // HR-16 end
   "apps.manage",
   "api.keys.manage",
   "sql.execute",
@@ -1706,9 +1703,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     "admin-page-layouts",
     "admin-navigation",
     "records",
-    // HR-16 begin
     "automations",
-    // HR-16 end
     "flows",
     "admin-scripts",
     "admin-extensions",

@@ -664,7 +664,7 @@ export interface QualificationAttention {
   expired: number;
 }
 
-// HR-14 begin: cockpit attention counts — how many held qualifications
+// Cockpit attention counts — how many held qualifications
 // project as expiring or expired today. Null without the certifications
 // read grant or while the switch is off (a refusal or an off-switch is
 // an omitted item, never a zero that reads as all-clear); only
@@ -686,4 +686,3 @@ export async function loadQualificationAttention(
     throw error;
   }
 }
-// HR-14 end

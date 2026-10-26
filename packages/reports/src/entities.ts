@@ -1037,7 +1037,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
         expr: "(case when te.memo_is_private then null else te.memo end)",
       },
       { key: "created_at", label: "Created at", kind: "timestamp", expr: "te.created_at" },
-      // HR-20 begin: equipment hours ride the entry (0231), priced through
+      // Equipment hours ride the entry (0231), priced through
       // the unit's equipment_charge item — null when no equipment ran.
       { key: "equipment_unit", label: "Equipment unit", kind: "text", expr: "eq.unit_number" },
       {
@@ -1047,7 +1047,6 @@ export const REPORT_ENTITIES: ReportEntity[] = [
         expr: "te.equipment_hours",
       },
       { key: "cost_code_ref", label: "Cost code", kind: "text", expr: "te.cost_code_ref" },
-      // HR-20 end
       { key: "id", label: "Time entry (id)", kind: "uuid", expr: "te.id" },
     ],
     defaultSort: { column: "worked_on", direction: "desc" },
@@ -2404,7 +2403,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
   // Service dispatch: job aging, technician utilization, first-time fix,
   // quote win rate and revenue per job.
   ...SERVICE_REPORT_ENTITIES,
-  // HR-20 begin: field time capture (0231). Clock events carry geo FLAGS
+  // Field time capture (0231). Clock events carry geo FLAGS
   // (inside/outside/unavailable) — raw coordinates are worker location
   // and live only in field_clock_coordinates behind hrm.employment.read.
   {
@@ -3259,7 +3258,6 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: "month", direction: "asc" },
   },
-  // HR-20 end
 ];
 
 const ledgerLineEntity = REPORT_ENTITIES.find((entity) => entity.key === "ledger_lines")!;

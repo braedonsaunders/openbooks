@@ -237,13 +237,12 @@ export const PERMISSION_CATALOGUE = [
   // separation of duties. Front-line managers approve; whoever owns payroll
   // and billing decides when a locked week may be unlocked again.
   "time.reopen",
-  // HR-20 begin: field time capture — self clock-in, foreman crew entry,
+  // Field time capture — self clock-in, foreman crew entry,
   // kiosk device management. All self-scoped or assignment-checked in
   // the service; grants here open the route, never another worker's time.
   "time.clock",
   "time.crew.enter",
   "time.kiosk.manage",
-  // HR-20 end
   // Payroll — a deliberately separate duty set: wages and deductions are
   // confidential, so none of these ride on time.* or admin.setup.manage.
   // read = see runs/stubs; manage = setup, profiles, components; run =
@@ -313,14 +312,13 @@ export const PERMISSION_CATALOGUE = [
   // elections and generates inputs. Admin-only like the employment keys.
   "hrm.benefits.read",
   "hrm.benefits.manage",
-  // HR-13 begin: construction compliance — read sees rate tables,
+  // Construction compliance — read sees rate tables,
   // classifications, comp classes, per-diem policies, certified runs and
   // findings; manage authors them and runs generation, approval, voids
   // and finding transitions. Admin-only like the employment keys above.
   "hrm.construction.read",
   "hrm.construction.manage",
-  // HR-13 end
-  // HR-14 begin: certifications and dispatch gating — read sees the
+  // Certifications and dispatch gating — read sees the
   // taxonomy, held qualifications, requirements and alerts; manage
   // records, verifies, renews, revokes and authors requirements.
   // Admin-only like the employment keys above.
@@ -343,7 +341,7 @@ export const PERMISSION_CATALOGUE = [
   "service.manage",
   "service.dispatch",
   "service.self",
-  // HR-19 begin: documents and surveys — the same confidentiality rule
+  // Documents and surveys — the same confidentiality rule
   // as employment. documents.read sees HR documents, templates, retention
   // state and exports; documents.manage authors templates, issues/sends/
   // voids documents and runs retention and DSAR exports. surveys.manage
@@ -353,7 +351,6 @@ export const PERMISSION_CATALOGUE = [
   "hrm.documents.read",
   "hrm.documents.manage",
   "hrm.surveys.manage",
-  // HR-19 end
   // HR-12 compensation (0221/0222) — the same confidentiality rule as
   // employment: who is paid what, and whether pay is equitable, are
   // never riders on time.*, payroll.*, or parties.*. read = bands,
@@ -404,7 +401,6 @@ export const PERMISSION_CATALOGUE = [
   // and the run log; manage authors/enables recipes and tunes approval
   // settings; run fires a recipe now. Built-in admin roles, not HR roles:
   // recipes can start processes, write fields and call webhooks.
-  // HR-16 begin
   "automations.read",
   "automations.manage",
   "automations.run",
@@ -413,7 +409,6 @@ export const PERMISSION_CATALOGUE = [
   // secrets and redelivers. Granted to admin roles, like api.keys.manage.
   "webhooks.read",
   "webhooks.manage",
-  // HR-16 end
   // Apps — installable packages (sandboxed frontend + governed backend).
   // `apps.use` runs an installed App; `apps.manage` installs/upgrades/removes.
   "apps.use",
@@ -778,11 +773,9 @@ export const PERMISSION_GROUPS: {
       { key: "time.manage", labelKey: permissionLabelKey("time.manage") },
       { key: "time.approve", labelKey: permissionLabelKey("time.approve") },
       { key: "time.reopen", labelKey: permissionLabelKey("time.reopen") },
-      // HR-20 begin
       { key: "time.clock", labelKey: permissionLabelKey("time.clock") },
       { key: "time.crew.enter", labelKey: permissionLabelKey("time.crew.enter") },
       { key: "time.kiosk.manage", labelKey: permissionLabelKey("time.kiosk.manage") },
-      // HR-20 end
     ],
   },
   {
@@ -829,19 +822,16 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.benefits.manage", labelKey: permissionLabelKey("hrm.benefits.manage") },
       { key: "hrm.self.read", labelKey: permissionLabelKey("hrm.self.read") },
       { key: "hrm.self.request", labelKey: permissionLabelKey("hrm.self.request") },
-      // HR-12 begin
       { key: "hrm.compensation.read", labelKey: permissionLabelKey("hrm.compensation.read") },
       { key: "hrm.compensation.manage", labelKey: permissionLabelKey("hrm.compensation.manage") },
       { key: "hrm.compensation.approve", labelKey: permissionLabelKey("hrm.compensation.approve") },
-      // HR-12 end
       { key: "hrm.team.read", labelKey: permissionLabelKey("hrm.team.read") },
       { key: "hrm.team.manage", labelKey: permissionLabelKey("hrm.team.manage") },
-      // HR-13 begin: appended after the team keys so the pinned group
+      // Appended after the team keys so the pinned group
       // order (admin keys, self keys, team keys, construction keys) holds.
       { key: "hrm.construction.read", labelKey: permissionLabelKey("hrm.construction.read") },
       { key: "hrm.construction.manage", labelKey: permissionLabelKey("hrm.construction.manage") },
-      // HR-13 end
-      // HR-14 begin: appended after construction; group order pins admin,
+      // Appended after construction; group order pins admin,
       // self, team, construction, then certifications keys.
       { key: "hrm.certifications.read", labelKey: permissionLabelKey("hrm.certifications.read") },
       {
@@ -853,12 +843,11 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.shifts.approve", labelKey: permissionLabelKey("hrm.shifts.approve") },
       { key: "hrm.attendance.read", labelKey: permissionLabelKey("hrm.attendance.read") },
       { key: "hrm.attendance.manage", labelKey: permissionLabelKey("hrm.attendance.manage") },
-      // HR-19 begin: appended after the construction keys so the pinned
+      // Appended after the construction keys so the pinned
       // group order holds.
       { key: "hrm.documents.read", labelKey: permissionLabelKey("hrm.documents.read") },
       { key: "hrm.documents.manage", labelKey: permissionLabelKey("hrm.documents.manage") },
       { key: "hrm.surveys.manage", labelKey: permissionLabelKey("hrm.surveys.manage") },
-      // HR-19 end
     ],
   },
   {
@@ -910,11 +899,9 @@ export const PERMISSION_GROUPS: {
     permissions: [
       { key: "flows.manage", labelKey: permissionLabelKey("flows.manage") },
       { key: "flows.approve", labelKey: permissionLabelKey("flows.approve") },
-      // HR-16 begin
       { key: "automations.read", labelKey: permissionLabelKey("automations.read") },
       { key: "automations.manage", labelKey: permissionLabelKey("automations.manage") },
       { key: "automations.run", labelKey: permissionLabelKey("automations.run") },
-      // HR-16 end
     ],
   },
   {
@@ -1316,11 +1303,10 @@ export const BUILT_IN_ROLES: Record<
       "time.manage",
       "time.approve",
       "time.reopen",
-      // HR-20 begin: field time — self clock plus crew entry and kiosks.
+      // Field time — self clock plus crew entry and kiosks.
       "time.clock",
       "time.crew.enter",
       "time.kiosk.manage",
-      // HR-20 end
       "service.read",
       "service.manage",
       "payroll.read",
@@ -1447,11 +1433,10 @@ export const BUILT_IN_ROLES: Record<
       "assets.maintain",
       "time.read",
       "time.manage",
-      // HR-20 begin: field time — self clock plus crew entry and kiosks.
+      // Field time — self clock plus crew entry and kiosks.
       "time.clock",
       "time.crew.enter",
       "time.kiosk.manage",
-      // HR-20 end
       // Reviewing bank and card reconciliations is part of the monthly books
       // review; performing and finalizing them (banking.reconcile) stays with
       // the controller.
@@ -1542,9 +1527,8 @@ export const BUILT_IN_ROLES: Record<
       // Reviewing expense reports reads them like every other subledger;
       // posting and paying them stay with accounts payable.
       "expenses.read",
-      // HR-20 begin: self clock-in rides every employee role.
+      // Self clock-in rides every employee role.
       "time.clock",
-      // HR-20 end
       "assistant.use",
       "documents.read",
       "feedback.use",
@@ -1646,10 +1630,9 @@ export const BUILT_IN_ROLES: Record<
       "hrm.self.read",
       "hrm.self.request",
       "hrm.leave.request",
-      // HR-20 begin: self clock-in rides every employee role.
+      // Self clock-in rides every employee role.
       "time.self",
       "time.clock",
-      // HR-20 end
       "expenses.self",
     ],
   },
@@ -1693,10 +1676,9 @@ export const BUILT_IN_ROLES: Record<
       "hrm.self.read",
       "hrm.self.request",
       "hrm.leave.request",
-      // HR-20 begin: self clock-in rides every employee role.
+      // Self clock-in rides every employee role.
       "time.self",
       "time.clock",
-      // HR-20 end
       "expenses.self",
     ],
   },

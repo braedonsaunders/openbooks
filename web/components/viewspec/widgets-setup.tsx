@@ -469,7 +469,7 @@ export const SETUP_WIDGETS = {
   ),
 
   /* --- automation flows ------------------------------------------------------- */
-  // HR-16 begin: the automation recipe list/builder cells (linear recipe
+  // The automation recipe list/builder cells (linear recipe
   // mode beside the graph-based flows builder — no new graph components).
   "new-automation": (props) => <NewAutomationListButton label={str(props, "label") ?? ""} />,
   "automation-name-cell": (props) => (

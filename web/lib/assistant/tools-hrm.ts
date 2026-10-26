@@ -14,11 +14,10 @@ import {
 } from "@openbooks/engine/hrm/leave-read";
 import { LeaveError } from "@openbooks/engine/hrm/leave-errors";
 import { HrmQualificationError } from "@openbooks/engine/hrm/qualifications/errors";
-// HR-19 begin: documents/surveys refusals (feature off, undeclared
+// Documents/surveys refusals (feature off, undeclared
 // category, token replay, suppression) reach the caller intact — both
 // error classes live in the documents errors module.
 import { HrmDocumentsError, HrmSurveysError } from "@openbooks/engine/hrm/documents/errors";
-// HR-19 end
 import { SelfServiceError } from "@openbooks/engine/hrm/self-service/actor";
 import { getMyProfile } from "@openbooks/engine/hrm/self-service/self-read";
 import {
@@ -38,11 +37,10 @@ import {
 } from "@openbooks/engine/hrm/employment-read";
 import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { HrmPositionError } from "@openbooks/engine/hrm/positions";
-// HR-13 begin: construction read services for the two compliance tools.
+// Construction read services for the two compliance tools.
 import { listFindings } from "@openbooks/engine/hrm/construction/findings";
 import { listRuns } from "@openbooks/engine/hrm/construction/certified";
 import { HrmConstructionError } from "@openbooks/engine/hrm/construction/errors";
-// HR-13 end
 import { HrmPerformanceError } from "@openbooks/engine/hrm/performance/errors";
 import {
   getCycleDetail,
@@ -109,22 +107,18 @@ export function hrmRefusal(error: unknown): ToolResult {
     error instanceof LeaveError ||
     error instanceof RecruitingError ||
     error instanceof HrmPerformanceError ||
-    // HR-13 begin: construction refusals reach the caller with their
+    // Construction refusals reach the caller with their
     // message intact, like every other read-service refusal above.
     error instanceof HrmConstructionError ||
-    // HR-13 end
     error instanceof BenefitsError ||
     error instanceof CompensationError ||
-    // HR-14 begin: qualification refusals (feature off by name, evidence
+    // Qualification refusals (feature off by name, evidence
     // required, unknown type) reach the caller with their message intact.
     error instanceof HrmQualificationError ||
-    // HR-14 end
-    // HR-19 begin: documents/surveys refusals reach the caller with
+    // Documents/surveys refusals reach the caller with
     // their message intact, like every other read-service refusal.
     error instanceof HrmDocumentsError ||
     error instanceof HrmSurveysError ||
-    // HR-19 end
-
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError ||
     error instanceof SelfServiceError
@@ -138,7 +132,7 @@ export function hrmRefusal(error: unknown): ToolResult {
 // tool block on purpose: they are module-level helpers, and sitting between
 // two tool definitions made the feature-parity scanner read their checks as
 // belonging to whichever tool happened to follow them.
-// HR-13 begin: read-only construction-compliance tools. Generating a
+// Read-only construction-compliance tools. Generating a
 // report, approving per-diem, and transitioning a finding are
 // human-attested HR actions with no assistant write surface by design —
 // these two tools read the flags and the frozen runs through the same
@@ -375,11 +369,10 @@ const hrmChangeRequests: AssistantToolDef = {
         expectedEmploymentRevision: number;
         payloadSchemaVersion: string;
         reason: string | null;
-        // HR-16 begin: 0227 classification carried from submit.
+        // 0227 classification carried from submit.
         action: string | null;
         reasonCode: string | null;
         appliedEmploymentChangeId: string | null;
-        // HR-16 end
         submittedBy: string | null;
         submittedAt: string | null;
         flowRunId: string | null;
@@ -409,11 +402,9 @@ const hrmChangeRequests: AssistantToolDef = {
             expectedEmploymentRevision: request.expectedEmploymentRevision,
             payloadSchemaVersion: request.payloadSchemaVersion,
             reason: request.reason,
-            // HR-16 begin
             action: request.action,
             reasonCode: request.reasonCode,
             appliedEmploymentChangeId: request.appliedEmploymentChangeId,
-            // HR-16 end
             submittedBy: request.submittedBy,
             submittedAt: request.submittedAt,
             flowRunId: request.flowRunId,
@@ -430,7 +421,7 @@ const hrmChangeRequests: AssistantToolDef = {
       collected.sort((x, y) =>
         y.createdAt < x.createdAt ? -1 : y.createdAt > x.createdAt ? 1 : x.id < y.id ? -1 : 1,
       );
-      // HR-16 begin: the applied event's verb (0227) resolves from the
+      // The applied event's verb (0227) resolves from the
       // employment_changes rows the loader already authorized, labels only —
       // one batched read, never per-row, and never the request table itself.
       const appliedIds = [
@@ -856,7 +847,7 @@ const hrmRecruiting: AssistantToolDef = {
     };
     const limit = Math.min(a.limit ?? 50, 200);
     try {
-      // HR-18 begin: scorecard summary (aggregate only, names of missing
+      // Scorecard summary (aggregate only, names of missing
       // seats — private notes never ride this shape).
       if (a.interviewId) {
         const { scorecardSummary } = await import("@openbooks/engine/hrm/recruiting/scorecards");
@@ -867,8 +858,7 @@ const hrmRecruiting: AssistantToolDef = {
         });
         return { ok: true, data: { summary, href: "/hrm/recruiting" } };
       }
-      // HR-18 end
-      // HR-18 begin: offer signature state (state only, never the letter).
+      // Offer signature state (state only, never the letter).
       if (a.offerId) {
         const { offerSignatureState } =
           await import("@openbooks/engine/hrm/recruiting/offers-signing");
@@ -879,7 +869,6 @@ const hrmRecruiting: AssistantToolDef = {
         });
         return { ok: true, data: { ...state, href: "/hrm/recruiting" } };
       }
-      // HR-18 end
       if (a.requisitionId) {
         const detail = await getRequisitionDetail({
           orgId: authz.user.orgId,
@@ -1322,7 +1311,7 @@ const hrmMe: AssistantToolDef = {
   },
 };
 
-// HR-15 begin: the caller's own inbox items (own scope only, core surface).
+// The caller's own inbox items (own scope only, core surface).
 const inboxItems: AssistantToolDef = {
   name: "inbox_items",
   description:
@@ -1503,7 +1492,6 @@ const hrmCertifiedPayroll: AssistantToolDef = {
     }
   },
 };
-// HR-13 end
 
 // Compensation and pay-equity read tools. Bands and placement, cycle
 // status, and plan status ride comp.read; the equity tool reports the
@@ -1637,7 +1625,7 @@ const hrmPayEquity: AssistantToolDef = {
   },
 };
 
-// HR-16 begin: automation run/error status (0226). Read-only: recipes and
+// Automation run/error status (0226). Read-only: recipes and
 // the run log with errors, behind the automations switch and read grant.
 const automationsStatus: AssistantToolDef = {
   name: "automations_status",
@@ -1715,9 +1703,8 @@ const automationsStatus: AssistantToolDef = {
     }
   },
 };
-// HR-16 end
 
-// HR-14 begin: certification register and dispatch-readiness reads
+// Certification register and dispatch-readiness reads
 // (0225). Both reuse the canonical qualification services behind the
 // certifications read grant — never a parallel query. License numbers
 // and free-text notes stay on the page and the report: the register
@@ -1854,9 +1841,8 @@ const hrmDispatchCheck: AssistantToolDef = {
     }
   },
 };
-// HR-14 end
 
-// HR-19 begin: documents, survey results, and org chart reads (0230).
+// Documents, survey results, and org chart reads (0230).
 // hrm_documents answers own (self-service) or manage scope: titles,
 // statuses, and signer progress — never file bytes, tokens, or
 // evidence. hrm_survey_results answers aggregate results only (the
@@ -2040,7 +2026,6 @@ const hrmOrgChart: AssistantToolDef = {
     }
   },
 };
-// HR-19 end
 
 // Continuous-performance read tools. 1:1s and feedback read through the
 // structural scope (own and reports) with the HR grant as the widening
@@ -2263,8 +2248,7 @@ export const HRM_TOOLS: AssistantToolDef[] = [
 // HR-15: the core own-scope inbox tool rides after every slice tool.
 HRM_TOOLS.push(inboxItems);
 
-// HR-12 end
-// HR-21 begin: AI rails tools. Every capability is a TOOL or a DETERMINISTIC
+// AI rails tools. Every capability is a TOOL or a DETERMINISTIC
 // service — the model phrases and drafts, the services compute. Each tool
 // logs its decision to the governance ledger: mutating paths log inside
 // their service, pure-read paths log here before returning.
@@ -2694,4 +2678,3 @@ const nlReport: AssistantToolDef = {
 };
 
 HRM_TOOLS.push(hrmExplainPay, payrollAnomalies, aiDraft, nlReport);
-// HR-21 end

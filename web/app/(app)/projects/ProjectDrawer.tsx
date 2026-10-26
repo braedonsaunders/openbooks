@@ -41,9 +41,8 @@ import {
   type InvoicingPref,
 } from "../../../components/invoicing-preference-fields";
 import { RateBookAssignmentSection } from "../parties/RateBookAssignmentSection";
-// HR-20 begin: project geofences, rehomed onto the project page.
+// Project geofences, rehomed onto the project page.
 import { GeofenceSection } from "../../../components/field-time/GeofenceSection";
-// HR-20 end
 import { shouldAutoActivateProject } from "./project-activation";
 import { profileHidesProjectHeaderField } from "../../../lib/project-header-visibility";
 import { FinancialsTab, type FinancialsData } from "./tabs/FinancialsTab";

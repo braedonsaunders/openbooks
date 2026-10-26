@@ -18,7 +18,7 @@ import { str, type WidgetRenderer } from "./widget-props";
 /** HR-19 document widgets, split out of widgets-hrm.tsx to keep each
  *  family under the 500-line composition cap. Verbatim adapters only. */
 export const HRM_DOCUMENT_WIDGETS = {
-  // HR-19 begin: the document flyout (signers timeline, events, versions,
+  // The document flyout (signers timeline, events, versions,
   // send/remind/void/hold) and the generate dialog (template + person +
   // merge preview), both closing by navigation. Null payloads render
   // nothing — the spec's `when` gates already omit them.
@@ -122,5 +122,4 @@ export const HRM_DOCUMENT_WIDGETS = {
       reissueFailed={str(props, "reissueFailed") ?? ""}
     />
   ),
-  // HR-19 end
 } satisfies Record<string, WidgetRenderer>;

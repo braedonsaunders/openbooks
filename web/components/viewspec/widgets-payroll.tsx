@@ -45,8 +45,7 @@ import {
   type PayrollPreviousRunProps,
   type PayrollScheduleListProps,
 } from "../../app/(app)/payroll/sections";
-// HR-21 begin: anomaly checks islands (verbatim adapters only).
-// HR-21 end
+// Anomaly checks islands (verbatim adapters only).
 import { BookOpen } from "lucide-react";
 import { Button } from "@openbooks/ui";
 import Link from "next/link";

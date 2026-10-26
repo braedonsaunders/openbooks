@@ -72,13 +72,11 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   "approval-request-host",
   "approvals-table",
   "approvals-pagination",
-  // HR-16 begin
   "assign-party-role",
   "automation-builder",
   "automation-last-run-cell",
   "automation-name-cell",
   "automation-row-actions",
-  // HR-16 end
   "apps-empty-icon",
   "apps-launcher-button",
   "apps-library-button",
@@ -232,21 +230,15 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   "health-hero",
   "hrm-change-request-actions",
   "hrm-change-request-dialog",
-  // HR-20 begin: field-time islands.
+  // Field-time islands.
   "hrm-clock-controls",
   "hrm-crew-workspace",
   "hrm-field-time-setup",
-  // HR-20 end
-  // HR-13 begin
   "hrm-compliance-actions",
   "hrm-compliance-generate",
-  // HR-13 end
-  // HR-14 begin
   "hrm-qualification-dialog",
   "hrm-qualification-requirement-manager",
   "hrm-qualification-requirement-remove",
-  // HR-14 end
-  // HR-19 begin
   "hrm-documents-drawer",
   "hrm-documents-generate-dialog",
   "hrm-install-app",
@@ -265,7 +257,6 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   "shipment-drawer",
   "shipping-bulk-buy",
   "org-chart-tree",
-  // HR-19 end
   "hrm-comp-cycle-dialog",
   "hrm-comp-cycle-move",
   "hrm-comp-equity-dialog",
@@ -312,10 +303,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   "hrm-onboarding-panel",
   "hrm-propose-change-dialog",
   "hrm-review-drawer",
-  // HR-16 begin
   "hrm-verb-chip",
-  // HR-16 end
-  // HR-17 begin
   "hrm-calibration-distribution",
   "hrm-calibration-entry",
   "hrm-calibration-missing",
@@ -329,7 +317,6 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   "hrm-session-dialog",
   "hrm-succession-plan",
   "hrm-talent-dialog",
-  // HR-17 end
   "hrm-window-dialog",
   "hrm-windows-manager",
   "hrm-window-drawer",

@@ -432,11 +432,10 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // nulled in sandboxes like tax_ids, never faked into a plausible lie.
   { tableName: "parties", columnName: "emergency_contact", transform: "null_out" },
   { tableName: "gifts", columnName: "tribute_name", transform: "faker_name" },
-  // HR-20 begin: raw clock coordinates are worker location — nulled in
+  // Raw clock coordinates are worker location — nulled in
   // sandboxes like tax_ids, never faked into a plausible lie. The
   // geo_check flag stays so approval behavior remains testable.
   { tableName: "time_clock_events", columnName: "geo", transform: "null_out" },
-  // HR-20 end
   { tableName: "vendor_roles", columnName: "tin_encrypted", transform: "reseal_secret" },
   { tableName: "vendor_roles", columnName: "tin_last4", transform: "null_out" },
   { tableName: "vendor_roles", columnName: "tin_type", transform: "null_out" },
@@ -535,7 +534,7 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // 0196: review answers and exit records assess named people in free
   // text, so a masked sandbox redacts the prose (ratings, scales and
   // status codes carry no PII and copy verbatim on purpose).
-  // HR-14 begin: license/credential numbers are candidate PII — nulled
+  // License/credential numbers are candidate PII — nulled
   // in sandboxes like tax_ids, never faked into a plausible lie.
   { tableName: "hrm_worker_qualifications", columnName: "identifier", transform: "null_out" },
   // Participant observations and feedback can contain personal or medical information.
@@ -598,7 +597,6 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_training_participants", columnName: "reason", transform: "redact" },
   { tableName: "hrm_training_feedback", columnName: "comments", transform: "redact" },
   { tableName: "hrm_training_feedback", columnName: "reason", transform: "redact" },
-  // HR-14 end
   { tableName: "hrm_review_answers", columnName: "text", transform: "redact" },
   // Reviewer assignments map employments to reviewer parties: linkable
   // identity, so masked sandboxes start with no overrides (NOT NULL jsonb
@@ -621,7 +619,7 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // 0292: the executed lien waiver's frozen print image carries every
   // name, figure and signature line exactly as signed.
   { tableName: "lien_waivers", columnName: "executed_snapshot", transform: "null_out" },
-  // HR-17 begin: 1:1 agenda prose, feedback bodies, calibration
+  // 1:1 agenda prose, feedback bodies, calibration
   // justifications and talent notes assess named people in free text —
   // same redact as review answers above.
   { tableName: "hrm_one_on_one_items", columnName: "body", transform: "redact" },
@@ -642,7 +640,6 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_talent_reviews", columnName: "notes", transform: "redact" },
   { tableName: "hrm_succession_candidates", columnName: "notes", transform: "redact" },
   { tableName: "hrm_succession_plans", columnName: "notes", transform: "redact" },
-  // HR-17 end
   // Raw inbound webhook bodies may hold customer contact data. The inbox is
   // excluded from clones, so this policy documents the classification rather
   // than rewriting rows; a clone path that ever copies the table must empty it.

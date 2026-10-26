@@ -86,7 +86,7 @@ const PUBLIC_SEGMENT_ROOTS = [
   "/api/time/kiosk",
   "/survey",
   "/kiosk",
-  // HR-18 begin: recruiting public surface, co-signed by security.
+  // Recruiting public surface, co-signed by security.
   // /careers is the public career page, /book and /offer are the candidate
   // self-booking and offer-signing pages. Candidates have no account, so
   // the session gate would 302 every one of them to /login.
@@ -104,7 +104,6 @@ const PUBLIC_SEGMENT_ROOTS = [
   "/api/recruiting/book",
   "/api/recruiting/offer",
   "/api/recruiting/feed",
-  // HR-18 end
   // Worker-to-web seam: every /api/internal route authenticates itself with
   // the shared OPENBOOKS_INTERNAL_TOKEN header and fails closed without it.
   "/api/internal",

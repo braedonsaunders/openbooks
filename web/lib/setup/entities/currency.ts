@@ -314,7 +314,7 @@ export const CURRENCY_ENTITIES: SetupEntity[] = [
       { key: "minorUnits", kind: "integer", required: true },
     ],
   },
-  // HR-18 begin: recruiting-depth configuration (0229), declared in
+  // Recruiting-depth configuration (0229), declared in
   // ./hrm-recruiting.ts; rehomed onto /hrm/recruiting (job descriptions on
   // Openings, kits + pools on Interviews, offer templates on Offers,
   // retention rules on Pools).
@@ -325,5 +325,4 @@ export const CURRENCY_ENTITIES: SetupEntity[] = [
   RECRUITING_OFFER_TEMPLATES_ENTITY,
   RECRUITING_RETENTION_RULES_ENTITY,
   RECRUITING_JOB_DESCRIPTIONS_ENTITY,
-  // HR-18 end
 ];

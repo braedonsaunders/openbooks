@@ -1186,7 +1186,7 @@ export interface PayrollCountryPack {
    * raw key. The generic resolver tries `factorLabels` first.
    */
   describeFactor?: (key: string) => string | null;
-  // HR-13 begin: labor-compliance declarations (HRM construction
+  // Labor-compliance declarations (HRM construction
   // compliance). OPTIONAL on both: a pack with no labor-compliance
   // reporting concept declares no files, and a pack with no
   // construction carve-outs declares no construction — the generic layer
@@ -1199,7 +1199,6 @@ export interface PayrollCountryPack {
   // module-evaluation time.
   laborComplianceFiles?: () => readonly LaborComplianceFileFormat[];
   construction?: PayrollPackConstruction;
-  // HR-13 end
 }
 
 /**

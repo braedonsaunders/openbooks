@@ -29,9 +29,8 @@ export const INBOX_OWNED_GATE_SUBJECTS: ReadonlySet<string> = new Set([
   HRM_CHANGE_REQUEST_SUBJECT_KIND,
   TIMESHEET_WEEK_SUBJECT_KIND,
   "expense_report",
-  // HR-20 begin: crew gates are owned by the crew adapter below.
+  // Crew gates are owned by the crew adapter below.
   CREW_TIME_BATCH_SUBJECT_KIND,
-  // HR-20 end
 ]);
 
 /** Bounded head window: the inbox is a working list, not an archive scan. */

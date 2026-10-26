@@ -130,10 +130,8 @@ export interface ChangeRequestQueueData {
   departmentOptions: { value: string; label: string }[];
   statusHeader: string;
   actionsHeader: string;
-  // HR-16 begin
   actionHeader: string;
   verbHeader: string;
-  // HR-16 end
   proposeButton: string;
   proposeHref: string;
   proposeOpen: boolean;
@@ -444,10 +442,8 @@ export async function loadChangeRequestQueue(
     departmentOptions: [],
     statusHeader: t("employment.changeRequests.statusLabel"),
     actionsHeader: t("queue.draftBadge"),
-    // HR-16 begin
     actionHeader: t("queue.columns.action"),
     verbHeader: t("queue.columns.verb"),
-    // HR-16 end
     proposeButton: t("queue.proposeButton"),
     proposeHref: queueHref(typeof sp.status === "string" ? sp.status : undefined, true),
     proposeOpen: sp.propose === "1",

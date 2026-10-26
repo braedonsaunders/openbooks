@@ -868,7 +868,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       href: "/hrm/leave?segment=pending",
     });
   }
-  // HR-14 begin: lapsed certifications refuse dispatch, expiring ones
+  // Lapsed certifications refuse dispatch, expiring ones
   // warn it — both link into the pre-filtered ledger segment.
   if (qualificationAttention && qualificationAttention.expired > 0) {
     attention.push({
@@ -888,7 +888,6 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       href: "/hrm/qualifications?segment=expiring",
     });
   }
-  // HR-14 end
   if (positions && unfundedFte > 0) {
     attention.push({
       tone: "warning",

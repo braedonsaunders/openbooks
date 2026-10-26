@@ -295,19 +295,15 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
   LEAVE_PAYROLL_ENTITLEMENT_MAPPINGS_ENTITY,
   // HR action/reason codes. Declared in ./hrm-action-reasons.ts; rehomed
   // onto /hrm/change-requests (never a standalone setup page).
-  // HR-16 begin
   ACTION_REASONS_ENTITY,
-  // HR-16 end
   // HR documents (0230, HR-19): categories, templates, and retention
   // schedules. Rehomed as sections onto /hrm/documents (never standalone
   // setup pages); the Setup generic write path shares the engine
   // validation through normalizeHrmDocumentTemplateInput +
   // validateEntityIntegrity.
-  // HR-19 begin
   DOCUMENT_CATEGORIES_ENTITY,
   DOCUMENT_TEMPLATES_ENTITY,
   RETENTION_SCHEDULES_ENTITY,
-  // HR-19 end
   // HRM benefit plans and ordered pricing tiers. Declared in
   // ./hrm-benefits.ts; ordinary registry entities behind the hrm switch.
   BENEFIT_PLANS_ENTITY,
@@ -321,12 +317,10 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
   // HRM compensation architecture (0221, HR-12): job families, levels
   // and versioned pay bands behind the hrmCompensation switch, rehomed
   // as sections onto the Compensation page.
-  // HR-12 begin
   JOB_FAMILIES_ENTITY,
   JOB_LEVELS_ENTITY,
   PAY_BANDS_ENTITY,
-  // HR-12 end
-  // HR-13 begin: construction classifications, rate schedules, comp
+  // Construction classifications, rate schedules, comp
   // classes, per-diem policies and ratio rules. Declared in
   // ./hrm-construction.ts; rehomed onto the HRM Compliance page.
   CONSTRUCTION_CLASSIFICATIONS_ENTITY,
@@ -334,13 +328,11 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
   CONSTRUCTION_COMP_CLASSES_ENTITY,
   CONSTRUCTION_PER_DIEM_POLICIES_ENTITY,
   CONSTRUCTION_RATIO_RULES_ENTITY,
-  // HR-13 end
-  // HR-14 begin: qualification taxonomy and extended vocabulary.
+  // Qualification taxonomy and extended vocabulary.
   // Declared in ./hrm-qualifications.ts; rehomed onto the HRM
   // Qualifications page.
   QUALIFICATION_TYPES_ENTITY,
   QUALIFICATION_SETTINGS_ENTITY,
-  // HR-14 end
   // Project geofences and kiosk devices. Declared in ./field-time.ts;
   // rehomed onto the project page and the Timesheets setup surface.
   PROJECT_GEOFENCES_ENTITY,

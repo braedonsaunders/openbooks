@@ -559,7 +559,7 @@ test("every setup column, field and filter resolves its rendered English label",
   assert.deepEqual(missing, []);
 });
 
-// HR-14 begin: qualification taxonomy and vocabulary ride the registry
+// Qualification taxonomy and vocabulary ride the registry
 // rehomed onto the Qualifications page — one surface, never two.
 test("qualification setup entities are gated and rehomed", () => {
   for (const key of ["qualification-types", "qualification-settings"]) {
@@ -575,7 +575,6 @@ test("qualification setup entities are gated and rehomed", () => {
   assert.equal(settings.allowCreate, false, "the settings singleton is never created here");
   assert.equal(settings.allowDelete, false, "the settings singleton is never deleted here");
 });
-// HR-14 end
 
 // C7a: one authoritative setup feature gate. A descriptor carries exactly one
 // of featureKey / featureKeysAny, never both; every consumer (rail, loader,

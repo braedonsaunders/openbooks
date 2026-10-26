@@ -21,9 +21,7 @@ import { hrmFeedbackRequestAdapter } from "./adapters/hrm-feedback-request.ts";
 import { hrmReviewAdapter } from "./adapters/hrm-review.ts";
 import { notificationAdapter } from "./adapters/notification.ts";
 import { timesheetWeekAdapter } from "./adapters/timesheet-week.ts";
-// HR-20 begin
 import { crewTimeBatchAdapter } from "./adapters/crew-time-batch.ts";
-// HR-20 end
 import { equityActionAdapter } from "./adapters/equity-action.ts";
 import { registerInboxAdapter } from "./registry.ts";
 
@@ -32,17 +30,14 @@ registerInboxAdapter(hrmProcessStepAdapter);
 registerInboxAdapter(hrmLeaveRequestAdapter);
 registerInboxAdapter(hrmChangeRequestAdapter);
 registerInboxAdapter(hrmReviewAdapter);
-// HR-17 begin: feedback requests waiting on the actor.
+// Feedback requests waiting on the actor.
 registerInboxAdapter(hrmFeedbackRequestAdapter);
-// HR-17 end
 registerInboxAdapter(notificationAdapter);
 registerInboxAdapter(hrmBenefitEnrollmentWindowAdapter);
 registerInboxAdapter(hrmQualificationAlertAdapter);
 registerInboxAdapter(fieldTicketSignatureAdapter);
 registerInboxAdapter(timesheetWeekAdapter);
-// HR-20 begin
 registerInboxAdapter(crewTimeBatchAdapter);
-// HR-20 end
 registerInboxAdapter(expenseReportAdapter);
 registerInboxAdapter(documentSignatureAdapter);
 // HR-21: blocking payroll checks and overdue capability reviews.

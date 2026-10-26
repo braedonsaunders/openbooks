@@ -180,7 +180,7 @@ export function ExplainDrawer({ explain }: { explain: PayExplain | null }) {
     </UrlDrawer>
   );
 }
-// HR-21 end: the Explain drawer lives above; HrmFacts follows untouched.
+// The Explain drawer lives above; HrmFacts follows untouched.
 export function HrmFacts({
   facts,
   empty,

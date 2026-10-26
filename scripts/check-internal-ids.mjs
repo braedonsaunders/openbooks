@@ -40,6 +40,8 @@
  *   anywhere, including on warehouse lines.
  * - HR-NN (HR-12, ...) and AUDIT-CONTROLS ids are durable product
  *   requirements traceability, not work tracking, and are not refused.
+ *   A section marker that opens a comment with an id followed by begin,
+ *   start or end is work organization and is refused for any id family.
  * - SEC-NN collides with secondary-book/section fixture shorthand
  *   (SEC-1), and RLS/DSAR prose is row-level-security / subject-access
  *   product vocabulary; only numbered RLS-/DSAR- findings are refused.
@@ -77,6 +79,8 @@ const ID_PATTERNS = [
   // Review finding ids (F-t06-016, F-reg-003, F-coord-004, ...). Case-
   // sensitive: form and box codes are upper-case (F-1040) and never match.
   /\bF-[a-z]+[0-9]*-[0-9]{2,}\b/,
+  // Section markers that bracket code by work item.
+  /(?:\/\/|\/\*|\{\/\*)\s*[A-Z]{2,5}-[0-9]+[a-z]?\s+(?:begin|start|end)\b(?!-)/,
 ];
 
 // Published schema lines that predate a pattern. Their bytes are

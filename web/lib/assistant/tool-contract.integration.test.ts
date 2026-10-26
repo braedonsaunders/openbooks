@@ -143,18 +143,15 @@ const FEATURE_OFF = new Set([
   "budgets_feature_disabled",
   "allocations_feature_disabled",
   "hrm_feature_disabled",
-  // HR-13 begin: the construction switch is its own documented off-code —
+  // The construction switch is its own documented off-code —
   // pack-has-none and feature-off are never collapsed.
   "hrm_construction_feature_disabled",
-  // HR-13 end
   "api_access_feature_disabled",
-  // HR-16 begin: the contract scratch org never enables automations.
+  // The contract scratch org never enables automations.
   "automations_feature_disabled",
-  // HR-16 end
-  // HR-20 begin: the contract scratch org never enables field time —
+  // The contract scratch org never enables field time —
   // both tools prove their feature-off refusals here, never real paths.
   "fieldTime_feature_disabled",
-  // HR-20 end
 ]);
 
 function readerAuthz(orgId: string, userId: string = randomUUID()): Authz {

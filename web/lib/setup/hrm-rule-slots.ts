@@ -114,7 +114,7 @@ export const RULE_SLOT_ENTITIES: Readonly<Record<string, RuleSlotEntity>> = {
       { key: "carryoverRule", column: "carryover_rule" },
     ],
   },
-  // HR-19 begin: document templates (0230) — signer membership and merge
+  // Document templates (0230) — signer membership and merge
   // keys fold from drawer slots into jsonb arrays. No generated slot
   // columns (review-template precedent): the drawer prefills from the
   // template row itself.
@@ -134,7 +134,6 @@ export const RULE_SLOT_ENTITIES: Readonly<Record<string, RuleSlotEntity>> = {
       { key: "mergeFields", column: "merge_fields", kind: "array" },
     ],
   },
-  // HR-19 end
 };
 
 /**

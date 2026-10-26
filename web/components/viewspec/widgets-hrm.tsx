@@ -53,19 +53,16 @@ import {
 } from "../../app/(app)/hrm/sections";
 import { PositionDrawer } from "../../app/(app)/hrm/positions/sections";
 import { RecruitingDrawer } from "../../app/(app)/hrm/recruiting/sections";
-// HR-14 begin: qualification islands (verbatim adapters only).
-// HR-14 end
-// HR-13 begin: construction-compliance islands (verbatim adapters only).
-// HR-13 end
+// Qualification islands (verbatim adapters only).
+// Construction-compliance islands (verbatim adapters only).
 import {
   AwardPortfolioTable,
   ProgramPortfolioTable,
   BenefitDeliveryTable,
 } from "../../app/(app)/hrm/benefits/PortfolioTables";
 import { HrmFacts } from "../../app/(app)/me/sections";
-// HR-21 begin: the Explain drawer (verbatim adapter only).
+// The Explain drawer (verbatim adapter only).
 import { ExplainDrawer } from "../../app/(app)/me/sections";
-// HR-21 end
 import { ProcessDrawer } from "../../app/(app)/hrm/processes/sections";
 import {
   CycleDialog,
@@ -161,10 +158,9 @@ export const HRM_WIDGETS = {
       canVerb={props.canVerb === true}
     />
   ),
-  /** HR-16 begin: the applied event's verb chip (0227) — renders only when
+  /** The applied event's verb chip (0227) — renders only when
    *  the loader resolved a non-apply verb; null rows render nothing. */
   "hrm-verb-chip": (props) => <HrmVerbChip label={str(props, "label")} />,
-  // HR-16 end
   /** The propose-change dialog, opened from the page header through the
    *  `propose` search param; closing navigates the param away. */
   "hrm-propose-change-dialog": (props) => (
@@ -340,7 +336,7 @@ export const HRM_WIDGETS = {
       recordOpen={props.recordOpen === true}
     />
   ),
-  // HR-14 begin: qualification record/detail entry point over a
+  // Qualification record/detail entry point over a
   // qualification id (detail) or the record flag (blank form), closing
   // by navigating the search params away.
   "hrm-qualification-dialog": (props) => (
@@ -367,7 +363,6 @@ export const HRM_WIDGETS = {
       canManage={props.canManage === true}
     />
   ),
-  // HR-14 end
   /** Label/value facts behind the Me profile and overview panels — the
    *  loader-resolved rows, never ids. Empty sets render the loader's empty
    *  line (a missing address is legitimate) rather than a blank panel. */
@@ -721,7 +716,7 @@ export const HRM_WIDGETS = {
       />
     );
   },
-  // HR-13 begin: construction-compliance islands. One row-action island
+  // Construction-compliance islands. One row-action island
   // per table (findings, per-diem entries, certified runs) driven by the
   // row's own status, and the certified-generate dialog driven by the
   // `generate` search param — @openbooks/ui primitives only.
@@ -755,7 +750,6 @@ export const HRM_WIDGETS = {
       closeHref={str(props, "closeHref") ?? "/hrm/compliance"}
     />
   ),
-  // HR-13 end
 
   /** Recruiting funnel figures beside the queue link: open requisitions,
    *  offers awaiting response, interviews this week — loader-resolved.

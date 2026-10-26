@@ -625,7 +625,7 @@ const getFieldTicket: AssistantToolDef = {
   },
 };
 
-// HR-20 begin: field-time reads — own clock status (self) and crew
+// Field-time reads — own clock status (self) and crew
 // batches. Both reuse the canonical field-time read services; the team
 // scope additionally requires time.read inside the tool.
 const FIELD_TIME_FEATURE_ERROR = "fieldTime_feature_disabled";
@@ -722,7 +722,6 @@ const crewBatches: AssistantToolDef = {
     }
   },
 };
-// HR-20 end
 
 export const TIME_TOOLS: AssistantToolDef[] = [
   getTimesheetWeek,
@@ -731,8 +730,6 @@ export const TIME_TOOLS: AssistantToolDef[] = [
   unbilledTime,
   listFieldTickets,
   getFieldTicket,
-  // HR-20 begin
   timeClockStatus,
   crewBatches,
-  // HR-20 end
 ];

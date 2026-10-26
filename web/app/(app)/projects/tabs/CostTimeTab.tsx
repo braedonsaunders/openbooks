@@ -20,9 +20,8 @@ import {
 import { KpiStrip, type Kpi } from "../../../../components/kpi-strip";
 import { PagedTable } from "../../../../components/paged-table";
 import { refusalMessageFromBody } from "@/lib/api-error";
-// HR-20 begin: crew-today section.
+// Crew-today section.
 import { CrewTodaySection } from "../../../../components/field-time/CrewTodaySection";
-// HR-20 end
 
 interface TimeRow {
   key: string | null;

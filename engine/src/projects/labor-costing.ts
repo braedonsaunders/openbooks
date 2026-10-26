@@ -830,7 +830,7 @@ export function computeCostRate(
  * touched). Safe to call for any id set; skips silently when the org has no
  * covering wage. Returns the number of entries stamped.
  */
-// HR-13 begin: prevailing-wage injection point. The HRM construction
+// Prevailing-wage injection point. The HRM construction
 // module owns schedule-aware wage resolution but this module may not
 // import it (bounded modules), so the resolver is injected — the web
 // approval path registers the HRM implementation, tests register fakes,
@@ -849,7 +849,6 @@ let prevailingWageEntryWage: PrevailingWageEntryWage = async () => null;
 export function setPrevailingWageEntryWage(hook: PrevailingWageEntryWage): void {
   prevailingWageEntryWage = hook;
 }
-// HR-13 end
 
 export async function snapshotLaborCostRates(
   orgId: string,
@@ -914,7 +913,7 @@ export async function snapshotLaborCostRates(
   let stamped = 0;
   // Cache wage resolution per employee+date (a week of entries shares both).
   const cache = new Map<string, ResolvedWage | null>();
-  // HR-13 begin: prevailing-wage hook (registered by the HRM
+  // Prevailing-wage hook (registered by the HRM
   // construction module from the web approval path — this module never
   // imports hrm, so the resolver is injected, not referenced). When the
   // org runs prevailing wage and the entry's project is in a rate
@@ -924,7 +923,6 @@ export async function snapshotLaborCostRates(
   // wage was prevailing-priced rides alongside because a schedule line
   // is not a labor_cost_rates row and must stamp a null rate id.
   const prevailingPriced = new Map<string, boolean>();
-  // HR-13 end
   const fxCache = new Map<string, string>();
   for (const r of rows) {
     if (r.work_order_id) {
@@ -941,7 +939,7 @@ export async function snapshotLaborCostRates(
     const targetSubsidiaryId = r.target_subsidiary_id ?? rootSubsidiaryId;
     const key = `${r.employee_party_id}|${r.worked_on}|${targetSubsidiaryId}|${r.project_id ?? ""}`;
     let wage = cache.get(key);
-    // HR-13 begin: prevailing-wage prices in-scope project hours first.
+    // Prevailing-wage prices in-scope project hours first.
     if (wage === undefined && r.project_id) {
       const prevailing = await prevailingWageEntryWage({
         orgId,
@@ -956,7 +954,6 @@ export async function snapshotLaborCostRates(
         cache.set(key, wage);
       }
     }
-    // HR-13 end
     if (wage === undefined) {
       wage = await resolveWage(orgId, r.employee_party_id, r.worked_on, {
         jobTitle: r.job_title,

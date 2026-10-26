@@ -19,7 +19,7 @@ export async function validateTalentIntegrity(
   rowId: string | undefined,
   executor: SqlExecutor,
 ): Promise<SetupIntegrityVerdict> {
-  // HR-18 begin: recruiting-depth configuration (0229). Every structured
+  // Recruiting-depth configuration (0229). Every structured
   // field is validated through the engine service that owns the shape —
   // validateAvailabilityWindows, parseClauses, CANONICAL_RATING_KEYS —
   // and parents prove visibility in this org (the current row merges on
@@ -274,7 +274,6 @@ export async function validateTalentIntegrity(
       }
     }
   }
-  // HR-18 end
   // Compensation levels may leave assessment criteria undeclared. Every
   // declared weight remains positive and exact; the family, when
   // named, must be visible in this org. Bands order min <= target <=

@@ -18,7 +18,7 @@ export const documentSignatureAdapter: InboxAdapter = {
   },
   async act(): Promise<void> {
     throw new Error(
-      "document e-sign has not landed — signature requests arrive with HR-19, and this item will complete there",
+      "Document signatures are completed from the document itself; open the document to sign it.",
     );
   },
 };

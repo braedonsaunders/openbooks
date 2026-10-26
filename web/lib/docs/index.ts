@@ -16,15 +16,12 @@ import { manufacturingOverview } from "./articles/mfg-overview";
 import { hrmProcesses } from "./articles/hrm-processes";
 // HR-15: inbox and persona homes article.
 import { inboxAndHome } from "./articles/inbox-and-home";
-// HR-16 begin
 import { automations } from "./articles/automations";
 import { webhooks } from "./articles/webhooks";
 import { correctingAndRescinding } from "./articles/correcting-and-rescinding";
-// HR-16 end
 import { performanceAndRetention } from "./articles/performance-and-retention";
-// HR-17 begin: continuous-performance article.
+// Continuous-performance article.
 import { continuousPerformance } from "./articles/continuous-performance";
-// HR-17 end
 import { selfService } from "./articles/self-service";
 import { payroll } from "./articles/payroll";
 import { employmentMigration } from "./articles/employment-migration";
@@ -32,30 +29,25 @@ import { positionsAndHeadcount } from "./articles/positions-and-headcount";
 import { leaveTimeVersusValue } from "./articles/leave-time-versus-value";
 import { recruitingFunnel } from "./articles/recruiting-funnel";
 import { benefitsEnrollment } from "./articles/benefits-enrollment";
-// HR-13 begin: construction-compliance article.
+// Construction-compliance article.
 import { certifiedPayrollPrevailingWagePerDiem } from "./articles/certified-payroll-prevailing-wage-per-diem";
-// HR-13 end
-// HR-20 begin: field-time articles.
+// Field-time articles.
 import { fieldClockIn } from "./articles/field-clock-in";
 import { crewTimeEntry } from "./articles/crew-time-entry";
 import { scheduling } from "./articles/scheduling";
-// HR-20 end
 import { compensationAndTransparency } from "./articles/compensation-transparency";
-// HR-14 begin: certifications, licenses, and dispatch gating article.
+// Certifications, licenses, and dispatch gating article.
 import { certificationsLicensesDispatch } from "./articles/certifications-licenses-dispatch";
 import { payslipExplanations } from "./articles/payslip-explanations";
 import { payrollChecks } from "./articles/payroll-checks";
 import { aiGovernanceLedger } from "./articles/ai-governance-ledger";
-// HR-14 end
-// HR-19 begin: documents/signatures/retention, engagement surveys, and org
+// Documents/signatures/retention, engagement surveys, and org
 // chart articles.
 import { documentsSignaturesAndRetention } from "./articles/documents-signatures-and-retention";
 import { engagementSurveys } from "./articles/engagement-surveys";
 import { orgChartAndDirectory } from "./articles/org-chart-and-directory";
-// HR-19 end
-// HR-18 begin: structured interviews, offers and job boards article.
+// Structured interviews, offers and job boards article.
 import { structuredInterviewsOffersJobBoards } from "./articles/structured-interviews-offers-job-boards";
-// HR-18 end
 import { taxConfiguration } from "./articles/tax-configuration";
 import { electronicInvoicing } from "./articles/electronic-invoicing";
 import { apEmailInbox } from "./articles/ap-email-inbox";
@@ -512,36 +504,23 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   staffingBoardEvidence,
   softHardBookings,
   retainersDrawdownsRecognition,
-  // HR-13 begin
   certifiedPayrollPrevailingWagePerDiem,
-  // HR-13 end
-  // HR-14 begin
   certificationsLicensesDispatch,
-  // HR-14 end
-  // HR-19 begin
   documentsSignaturesAndRetention,
   engagementSurveys,
   orgChartAndDirectory,
-  // HR-19 end
-  // HR-18 begin
   structuredInterviewsOffersJobBoards,
-  // HR-18 end
-  // HR-21 begin
   payslipExplanations,
   payrollChecks,
   aiGovernanceLedger,
-  // HR-21 end
-  // HR-14 begin: pre-existing red on the stacked base — the 31defe406
+  // Pre-existing red on the stacked base — the 31defe406
   // reconciliation left fieldTickets/subcontractorCompliance listed twice
   // (once on the long line above, once here). The duplicate line is removed.
-  // HR-14 end
   // HR-14 deduped fieldTickets/subcontractorCompliance (listed on the long
   // line above) — HR-20 keeps that removal and adds only its own articles.
-  // HR-20 begin
   fieldClockIn,
   crewTimeEntry,
   scheduling,
-  // HR-20 end
   itemRates,
   financialReports,
   analyticsAndSavedViews,

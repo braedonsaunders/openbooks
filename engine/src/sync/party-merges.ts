@@ -342,19 +342,17 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   // so re-pointing cannot duplicate (the party-merges coverage test names
   // every parties(id) foreign key; this one was missing from the seam).
   ["hrm_benefit_plans", "provider_party_id"],
-  // HR-12 begin: the cycle budget holder and the line decider follow the
+  // The cycle budget holder and the line decider follow the
   // merge wholesale. SIMPLE, not GUARDED: no uniqueness on either table
   // involves those party columns, so re-pointing cannot duplicate.
   // proposed_by/actor/generated_by name users, never parties: no entry.
   ["hrm_comp_cycle_budgets", "manager_party_id"],
   ["hrm_comp_cycle_lines", "approver_party_id"],
-  // HR-12 end
-  // HR-13 begin: the allowance seam keys the run's read on
+  // The allowance seam keys the run's read on
   // employee_party_id like the benefits seam above — same guarded shape,
   // same reason (entry-keyed uniqueness, no party merge collision).
   ["hrm_allowance_payroll_inputs", "employee_party_id"],
-  // HR-13 end
-  // HR-17 begin: 1:1 item authors/assignees, feedback authors and
+  // 1:1 item authors/assignees, feedback authors and
   // requested parties, and calibration facilitators follow the merge
   // wholesale. SIMPLE, not GUARDED: no uniqueness on these tables
   // involves a party column (1:1 slots key employments, feedback has no
@@ -366,8 +364,7 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["hrm_feedback", "author_party_id"],
   ["hrm_feedback", "requested_from_party_id"],
   ["hrm_calibration_sessions", "facilitator_party_id"],
-  // HR-17 end
-  // HR-19 begin: document subjects, signer parties, and export subjects
+  // Document subjects, signer parties, and export subjects
   // follow the merge wholesale. SIMPLE, not GUARDED: no uniqueness on
   // those three tables involves a party column, so re-pointing cannot
   // duplicate. Survey responses carry no party column (anonymous links
@@ -376,12 +373,10 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["hrm_documents", "party_id"],
   ["hrm_document_signers", "signer_party_id"],
   ["hrm_data_subject_exports", "party_id"],
-  // HR-19 end
-  // HR-20 begin: clock events follow the merge wholesale. SIMPLE, not
+  // Clock events follow the merge wholesale. SIMPLE, not
   // GUARDED: the event uniqueness is (org, client_event_id) and carries
   // no party column, so re-pointing the worker cannot collide.
   ["time_clock_events", "employee_party_id"],
-  // HR-20 end
 ];
 
 /**
@@ -538,7 +533,7 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
     column: "employee_party_id",
     conflict: "s.pay_run_document_id = d.pay_run_document_id",
   },
-  // HR-19 begin: one invitation per (survey, party) — the table's own
+  // One invitation per (survey, party) — the table's own
   // unique key minus the party being merged. Two rows collide only when
   // both parties were invited to the SAME survey; the guarded path keeps
   // the surviving invitation instead of forking the respondent's link.
@@ -547,7 +542,6 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
     column: "party_id",
     conflict: "s.org_id = d.org_id and s.survey_id = d.survey_id",
   },
-  // HR-19 end
   {
     table: "payroll_opening_balances",
     column: "employee_party_id",
@@ -642,7 +636,7 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
       "s.org_id = d.org_id and s.cycle_id = d.cycle_id and s.employment_id = d.employment_id" +
       " and s.kind = d.kind",
   },
-  // HR-20 begin: the foreman-day uniqueness is (org, foreman, project,
+  // The foreman-day uniqueness is (org, foreman, project,
   // worked_on) and the line uniqueness spans the nullable line key —
   // both mirrored exactly with IS NOT DISTINCT FROM. A conflicting row
   // stays on the absorbed party, never silently absorbed.
@@ -666,7 +660,6 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
     column: "employee_party_id",
     conflict: "s.org_id = d.org_id",
   },
-  // HR-20 end
   {
     // 0375: separation events carry a partial one-open-per-employee unique
     // (org, employee) over draft/confirmed rows — the table's constrained

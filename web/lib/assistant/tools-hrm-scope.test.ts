@@ -83,7 +83,7 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ segment: "archived" }));
   assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ requisitionId: "nope" }));
   assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ limit: 0 }));
-  // HR-14 begin: half-addressed calls parse (addressing is
+  // Half-addressed calls parse (addressing is
   // runtime-enforced with stable codes); genuinely invalid values throw.
   byName.get("hrm_qualifications")!.inputSchema.parse({});
   byName.get("hrm_qualifications")!.inputSchema.parse({ employmentId: UUID, status: "expiring" });
@@ -101,8 +101,7 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ subjectKind: "crew" }));
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ subjectId: "nope" }));
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ on: "tomorrow" }));
-  // HR-14 end
-  // HR-19 begin: documents filter to a declared status/category; results
+  // Documents filter to a declared status/category; results
   // half-address to the survey id (addressing is runtime-enforced);
   // the chart half-addresses to asOf/search. Genuinely invalid values
   // throw; a missing survey id throws (the read cannot run without it).
@@ -115,8 +114,7 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   byName.get("hrm_org_chart")!.inputSchema.parse({});
   byName.get("hrm_org_chart")!.inputSchema.parse({ asOf: "2026-09-01", search: "Eng" });
   assert.throws(() => byName.get("hrm_org_chart")!.inputSchema.parse({ asOf: "tomorrow" }));
-  // HR-19 end
-  // HR-17 begin: continuous tools parse minimal inputs; genuinely invalid values throw.
+  // Continuous tools parse minimal inputs; genuinely invalid values throw.
   byName.get("hrm_one_on_ones")!.inputSchema.parse({});
   byName.get("hrm_one_on_ones")!.inputSchema.parse({ employmentId: UUID });
   byName.get("hrm_one_on_ones")!.inputSchema.parse({ status: "held", limit: 10 });
@@ -132,7 +130,6 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   byName.get("hrm_calibration")!.inputSchema.parse({ sessionId: UUID });
   byName.get("hrm_calibration")!.inputSchema.parse({ cycleId: UUID });
   assert.throws(() => byName.get("hrm_calibration")!.inputSchema.parse({ sessionId: "nope" }));
-  // HR-17 end
 });
 
 // A computed refusal must reach the caller with its message intact; anything
@@ -157,7 +154,7 @@ test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
       error: "review cycle has no required question",
     },
   );
-  // HR-14 begin: a computed qualification refusal names the remedy and
+  // A computed qualification refusal names the remedy and
   // reaches the caller intact — never a parse error, never silence.
   // (Message quoted verbatim from recordQualification.)
   assert.deepEqual(
@@ -172,8 +169,7 @@ test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
         'Qualification type "CPSA-1" requires evidence — attach the certificate or license file before recording.',
     },
   );
-  // HR-14 end
-  // HR-19 begin: a computed documents refusal (undeclared category)
+  // A computed documents refusal (undeclared category)
   // reaches the caller intact — never a parse error, never silence.
   assert.deepEqual(
     hrmRefusal(
@@ -188,7 +184,6 @@ test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
         'category "offer" is not declared — declare it under Setup → Workforce → Document Categories first',
     },
   );
-  // HR-19 end
   // F15 begin: the placement gate's refusals (uniform not-found for
   // unknown/foreign/hidden employments, the named-remedy refusal for
   // grant-less callers) reach the assistant caller with their message
@@ -227,7 +222,7 @@ test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
   assert.throws(() => hrmRefusal(new Error("SELECT * FROM secrets")), /SELECT/);
 });
 
-// HR-18 begin: recruiting depth reads ride hrm_recruiting (names and
+// Recruiting depth reads ride hrm_recruiting (names and
 // states only, never PII), each refusing by name while Recruiting is off,
 // through the canonical depth services — never parallel SQL.
 test("hrm_recruiting depth inputs accept valid IDs and reject malformed IDs", () => {
@@ -239,7 +234,6 @@ test("hrm_recruiting depth inputs accept valid IDs and reject malformed IDs", ()
   assert.throws(() => recruiting.inputSchema.parse({ interviewId: "nope" }));
   assert.throws(() => recruiting.inputSchema.parse({ offerId: "nope" }));
 });
-// HR-18 end
 test("HR-21 tool inputs parse; refusals stay tool errors, never throws", () => {
   const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
   byName.get("hrm_explain_pay")!.inputSchema.parse({ employmentId: UUID });
@@ -255,4 +249,3 @@ test("HR-21 tool inputs parse; refusals stay tool errors, never throws", () => {
     definitionJson: '{"entity":"x","columns":[]}',
   });
 });
-// HR-21 end

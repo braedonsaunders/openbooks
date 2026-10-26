@@ -80,7 +80,7 @@ export async function validateReviewIntegrity(
     // CHECK would refuse with a worse message.
     body.ratingScale = scale;
   }
-  // HR-19 begin: document templates (0230) — the folded signer/merge
+  // Document templates (0230) — the folded signer/merge
   // slots are proved with the engine's own words (validateTemplateInput
   // shares the API's validation; never a second classifier) and the
   // category must be declared in hrm_document_categories. Edits merge
@@ -135,8 +135,7 @@ export async function validateReviewIntegrity(
     body.signerRoles = merged.signerRoles;
     body.mergeFields = merged.mergeFields;
   }
-  // HR-19 end
-  // HR-19 begin: retention schedules (0230) — a schedule for an
+  // Retention schedules (0230) — a schedule for an
   // undeclared category would never match a document, so the save is
   // refused against the Setup vocabulary instead of stored as a dead
   // rule. Categories themselves prove key shape with the engine's own
@@ -160,7 +159,6 @@ export async function validateReviewIntegrity(
       return e instanceof Error ? e.message : "Invalid category key";
     }
   }
-  // HR-19 end
   if (entity.key === "hrm-review-template-sections") {
     let values = body;
     if (rowId) {
