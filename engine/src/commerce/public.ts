@@ -17,11 +17,7 @@ export {
   receiveInboundEvent,
   replayEvent,
 } from "./inbound.ts";
-export {
-  channelAdapter,
-  registeredChannelKinds,
-  workspaceTabsFor,
-} from "./adapters.ts";
+export { channelAdapter, registeredChannelKinds, workspaceTabsFor } from "./adapters.ts";
 export { CHANNEL_ACCOUNT_ROLES } from "./contracts.ts";
 export {
   linkExternal,
@@ -44,11 +40,7 @@ export {
   titleMatchScore,
   type PayoutLineSuggestion,
 } from "./exception-assistance.ts";
-export {
-  listChannelLocations,
-  unlinkChannelLocation,
-  upsertChannelLocation,
-} from "./locations.ts";
+export { listChannelLocations, unlinkChannelLocation, upsertChannelLocation } from "./locations.ts";
 export {
   listDueSyncPairs,
   listInventoryConflicts,
@@ -93,6 +85,10 @@ export {
 export { SHOPIFY_WEBHOOK_TOPICS } from "./shopify/subscriptions.ts";
 export { loadShopifyChannel, type ShopifyChannelAccess } from "./shopify/channel-access.ts";
 export { importShopifyLocations } from "./shopify/locations.ts";
+export {
+  listChannelStockLocationOptions,
+  type ChannelStockLocationOption,
+} from "./stock-location-queries.ts";
 export { ensureShopifyAdapterRegistered } from "./shopify/adapter.ts";
 export { loadChannelOrder, listChannelOrderEvents } from "./orders.ts";
 export { reviveFulfilmentPayload } from "./fulfilments.ts";
