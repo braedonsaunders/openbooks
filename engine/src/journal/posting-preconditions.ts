@@ -1,8 +1,9 @@
 /**
  * Precondition hooks: refusals a domain raises, and state it must establish,
- * before a document's accounting transaction writes. A hook refuses with a
- * PostingError carrying its domain's message; the ledger propagates it
- * unchanged. Ordering and installation: see posting-contributors.ts.
+ * before a document is saved or its accounting transaction writes. A hook
+ * documents the refusal it raises when that is not the domain's own error;
+ * the ledger handles each exactly as it handled the direct call. Ordering
+ * and installation: see posting-contributors.ts.
  */
 import type { SqlExecutor } from "../platform/db.ts";
 import { postingContributorRegistry } from "./posting-contributors.ts";

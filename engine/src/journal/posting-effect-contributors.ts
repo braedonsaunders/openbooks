@@ -1,8 +1,9 @@
 /**
- * Effect hooks: subledger, automation and event effects of a committed
- * posting. Every effect is idempotent by document or journal line, so the
- * post-commit drain may run it again. Ordering and installation: see
- * posting-contributors.ts.
+ * Effect hooks: subledger, automation and event effects of a posting. Hooks
+ * documented as running inside the posting transaction commit or roll back
+ * with the entry; the rest run after commit from the posting_effects drain,
+ * which may run them again, so each is idempotent by document or journal
+ * line. Ordering and installation: see posting-contributors.ts.
  */
 import type { SqlExecutor } from "../platform/db.ts";
 import { postingContributorRegistry } from "./posting-contributors.ts";
@@ -94,7 +95,10 @@ export interface PostingEffectContributors {
     ): Promise<void>;
   };
   sales: {
-    /** Redeems a cash sale's stored-value tenders against its entry; a refused tender throws a PostingError. */
+    /**
+     * Redeems a cash sale's stored-value tenders against its entry, inside the
+     * posting transaction; a refused tender throws a PostingError.
+     */
     redeemCashSaleTenders(
       orgId: string,
       documentId: string,
