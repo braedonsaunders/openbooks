@@ -41,6 +41,7 @@ import { AGING_PERIOD_PRESETS, agingPeriodPreset } from "../../../../lib/aging-p
 import {
   IncompleteReportPeriodError,
   parseReportQuery,
+  REPORT_PARAM_KEYS,
   resolveAgingCurrencyParams,
 } from "../../../../lib/report-filters";
 import { reportScheduleAnchor, scheduleParamsFrom } from "../../../../lib/report-schedule-anchor";
@@ -234,6 +235,16 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
   // Never the shared filter bar's `basis`: that word means accrual/cash.
   // The currency scope resolves before the readers: the validated target is
   // an input to both rebuilds, not a display concern applied after them.
+  // A page with no currency selection reads the base summary, whatever the
+  // currency scope turns out to be, so that rebuild starts alongside it.
+  const baseSummary =
+    subView &&
+    !detail &&
+    !sp[REPORT_PARAM_KEYS.currency] &&
+    sp[REPORT_PARAM_KEYS.currencyBasis] !== "transaction"
+      ? agingByParty(side, asOf, dims, undefined, { basis: "base" })
+      : null;
+  baseSummary?.catch(() => undefined);
   const [scope, opts, org] = subView
     ? await Promise.all([
         agingCurrenciesInScope(side, asOf, dims),
@@ -257,7 +268,7 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
         summary = both.summary;
         detailResult = both.detail;
       } else {
-        summary = await agingByParty(side, asOf, dims, undefined, runOpts);
+        summary = await (baseSummary ?? agingByParty(side, asOf, dims, undefined, runOpts));
       }
     } catch (e) {
       // Same banner contract as underived consolidated rates: a
