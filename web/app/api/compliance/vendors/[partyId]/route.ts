@@ -13,53 +13,57 @@ import { complianceWriteFailure } from "@/lib/compliance-errors";
 import { isUuid } from "@/lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.object({
-  complianceClassId: uuidString({ error: "complianceClassId must be a valid compliance class id" })
-    .nullable()
-    .optional(),
-  informationReturnForm: z
-    .string()
-    .refine(
-      (value) => value === "none" || FORM_TYPES.includes(value as FormType),
-      "informationReturnForm must be an installed information return form or none",
-    )
-    .nullable()
-    .optional(),
-  informationReturnBox: z.string().trim().max(40).nullable().optional(),
-  taxClassification: z
-    .string()
-    .refine(
-      (value) => TAX_CLASSIFICATIONS.has(value),
-      "taxClassification must be an installed tax classification",
-    )
-    .nullable()
-    .optional(),
-  tin: z
-    .string()
-    .max(100)
-    .refine(
-      (value) => value.trim() === "" || /^\d{9}$/.test(value.replace(/[\s-]/g, "")),
-      "tin must contain exactly 9 digits; remove other characters and correct the number",
-    )
-    .nullable()
-    .optional(),
-  tinType: z
-    .string()
-    .refine((value) => TIN_TYPES.has(value), "tinType must be an installed TIN type")
-    .nullable()
-    .optional(),
-  backupWithholding: z
-    .boolean({ error: "backupWithholding must be a boolean" })
-    .nullable()
-    .optional(),
-  reportable: z.boolean({ error: "reportable must be a boolean" }).nullable().optional(),
-  reason: z
-    .string()
-    .trim()
-    .min(1, "reason is required for a vendor compliance change")
-    .max(2000)
-    .optional(),
-});
+const requestBodySchema = z
+  .object({
+    complianceClassId: uuidString({
+      error: "complianceClassId must be a valid compliance class id",
+    })
+      .nullable()
+      .optional(),
+    informationReturnForm: z
+      .string()
+      .refine(
+        (value) => value === "none" || FORM_TYPES.includes(value as FormType),
+        "informationReturnForm must be an installed information return form or none",
+      )
+      .nullable()
+      .optional(),
+    informationReturnBox: z.string().trim().max(40).nullable().optional(),
+    taxClassification: z
+      .string()
+      .refine(
+        (value) => TAX_CLASSIFICATIONS.has(value),
+        "taxClassification must be an installed tax classification",
+      )
+      .nullable()
+      .optional(),
+    tin: z
+      .string()
+      .max(100)
+      .refine(
+        (value) => value.trim() === "" || /^\d{9}$/.test(value.replace(/[\s-]/g, "")),
+        "tin must contain exactly 9 digits; remove other characters and correct the number",
+      )
+      .nullable()
+      .optional(),
+    tinType: z
+      .string()
+      .refine((value) => TIN_TYPES.has(value), "tinType must be an installed TIN type")
+      .nullable()
+      .optional(),
+    backupWithholding: z
+      .boolean({ error: "backupWithholding must be a boolean" })
+      .nullable()
+      .optional(),
+    reportable: z.boolean({ error: "reportable must be a boolean" }).nullable().optional(),
+    reason: z
+      .string()
+      .trim()
+      .min(1, "reason is required for a vendor compliance change")
+      .max(2000)
+      .optional(),
+  })
+  .optional();
 
 async function authorizeVendorSettings() {
   const gate = await guardPermission("compliance.manage");
@@ -131,6 +135,9 @@ export const PATCH = defineRoute({
   params: z.object({ partyId: z.string() }),
   body: requestBodySchema,
   handler: async ({ authz: gate, params: routeParams, body }) => {
+    if (body === undefined) {
+      return NextResponse.json({ error: "invalid request body" }, { status: 400 });
+    }
     const params = Promise.resolve(routeParams);
     const { orgId, id: actorId } = gate.user;
     // This route serves two switches: the compliance class is COI tracking

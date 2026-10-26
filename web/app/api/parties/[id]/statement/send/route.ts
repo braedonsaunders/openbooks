@@ -60,7 +60,8 @@ const statementBody = z
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
   })
-  .strict();
+  .strict()
+  .optional();
 
 function sideOf(req: Request, body?: { side?: unknown }): Side {
   const raw =
@@ -143,6 +144,9 @@ export const POST = defineRoute({
   params: z.object({ id: z.string() }),
   body: statementBody,
   handler: async ({ request: req, authz: gate, params, body: input }) => {
+    if (input === undefined) {
+      return NextResponse.json({ error: "invalid request body" }, { status: 400 });
+    }
     const { id } = params;
     const body = input as {
       to?: string;

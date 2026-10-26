@@ -8,15 +8,17 @@ import { guardSubsidiaryScope } from "@/lib/authz";
 import { isUuid } from "@/lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.object({
-  action: z.literal("approve").optional(),
-  reason: z
-    .string()
-    .trim()
-    .min(1, "reason is required to revoke an exception")
-    .max(2000)
-    .optional(),
-});
+const requestBodySchema = z
+  .object({
+    action: z.literal("approve").optional(),
+    reason: z
+      .string()
+      .trim()
+      .min(1, "reason is required to revoke an exception")
+      .max(2000)
+      .optional(),
+  })
+  .optional();
 
 export const runtime = "nodejs";
 
@@ -31,6 +33,9 @@ export const PATCH = defineRoute({
   params: z.object({ id: z.string() }),
   body: requestBodySchema,
   handler: async ({ authz: gate, params: routeParams, body }) => {
+    if (body === undefined) {
+      return NextResponse.json({ error: "invalid request body" }, { status: 400 });
+    }
     const params = Promise.resolve(routeParams);
     const { orgId, id: actorId } = gate.user;
     const { id } = await params;
@@ -95,6 +100,9 @@ export const DELETE = defineRoute({
   params: z.object({ id: z.string() }),
   body: requestBodySchema,
   handler: async ({ authz: gate, params: routeParams, body }) => {
+    if (body === undefined) {
+      return NextResponse.json({ error: "invalid request body" }, { status: 400 });
+    }
     const params = Promise.resolve(routeParams);
     const { orgId, id: actorId } = gate.user;
     const { id } = await params;
