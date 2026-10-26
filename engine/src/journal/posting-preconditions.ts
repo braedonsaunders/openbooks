@@ -56,6 +56,12 @@ export interface ReturnSourceSelection {
   serialId?: string | null;
 }
 
+/** A document and its lines as a source-integrity check compares them with live state. */
+export interface PostingSourceSnapshot {
+  document: Record<string, unknown>;
+  lines: Record<string, unknown>[];
+}
+
 export interface PostingPreconditions {
   scripting: DocumentScriptHooks & {
     /** Merge a before_post custom mutation without replacing protected posting controls. */
@@ -184,6 +190,32 @@ export interface PostingPreconditions {
       orgId: string,
       documentId: string,
       options?: { persist?: boolean },
+    ): Promise<void>;
+  };
+  projects: {
+    /**
+     * Refuses, with a PostingError, a generated bill or invoice whose economics
+     * left its project billing source. lock re-reads the document under its
+     * row lock inside the posting transaction.
+     */
+    assertGeneratedBillingPostable(
+      runner: SqlExecutor,
+      orgId: string,
+      documentId: string,
+      source: PostingSourceSnapshot,
+      lock?: boolean,
+    ): Promise<void>;
+  };
+  "contractor-withholding": {
+    /**
+     * Refuses, with a PostingError naming its remedy, a withholding remittance
+     * or deposit bill that no longer matches its captured source.
+     */
+    assertSourcesCurrent(
+      runner: SqlExecutor,
+      orgId: string,
+      documentId: string,
+      source: PostingSourceSnapshot,
     ): Promise<void>;
   };
 }

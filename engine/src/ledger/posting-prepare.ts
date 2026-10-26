@@ -1,12 +1,9 @@
 import { lockLedgerSetupFence } from '../organization/ledger-setup-fence.ts';
 import { normalizeJournalCurrencyLines } from "./journal-currency.ts";
-import { assertWithholdingDepositCurrent } from "../contractor-withholding/deposits.ts";
-import { assertWithholdingRemittanceCurrent, ContractorWithholdingError } from "../contractor-withholding/service.ts";
 import { documentTaxDate, staleTaxRateLine } from '../tax/document-tax-date.ts';
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
-import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../projects/billing-source-integrity.ts";
 import { PayrollError as PayrollRemittanceError } from "../money/payroll-error.ts";
 import { isZero, toUnits } from "../money/money.ts";
 import { parseMoney, sumMoney } from "../money/brands.ts";
@@ -318,12 +315,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     };
   }
 
-  try {
-    await assertGeneratedBillingPostable(db, doc.orgId, documentId, { document: doc, lines });
-  } catch (error) {
-    if (error instanceof BillingSourceIntegrityError) throw new PostingError(error.message);
-    throw error;
-  }
+  await postingPreconditionHooks
+    .require("projects")
+    .assertGeneratedBillingPostable(db, doc.orgId, documentId, { document: doc, lines });
 
   // A remittance bill posts its source entity's books in its stamped
   // currency: reconcile it against live payroll here (fail fast, before FX
@@ -332,8 +326,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   // from the check itself.
   try {
     await postingPreconditionHooks.require("payroll").assertRemittanceBillCurrent(doc.orgId, documentId, db);
-    try { await assertWithholdingRemittanceCurrent(db, doc.orgId, documentId, { document: doc, lines }); await assertWithholdingDepositCurrent(db, doc.orgId, documentId, { document: doc, lines }); }
-    catch (error) { if (error instanceof ContractorWithholdingError) throw new PostingError(error.remedy ? `${error.message} ${error.remedy}` : error.message); throw error; }
+    await postingPreconditionHooks
+      .require("contractor-withholding")
+      .assertSourcesCurrent(db, doc.orgId, documentId, { document: doc, lines });
   } catch (error) {
     if (error instanceof PayrollRemittanceError) throw new PostingError(error.message);
     throw error;

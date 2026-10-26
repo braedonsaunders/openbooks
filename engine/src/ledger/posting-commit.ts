@@ -6,18 +6,9 @@ import {
 } from "./payment-terms-snapshot.ts";
 import { assertEntityPostingDate } from "../organization/accounting-preferences.ts";
 import { validateJournalInstructions } from "./journal-instructions.ts";
-import {
-  assertWithholdingRemittanceCurrent,
-  ContractorWithholdingError,
-} from "../contractor-withholding/service.ts";
-import { assertWithholdingDepositCurrent } from "../contractor-withholding/deposits.ts";
 import { and, eq, sql } from "drizzle-orm";
 import { inDbTransaction, schema } from "../platform/db.ts";
 
-import {
-  assertGeneratedBillingPostable,
-  BillingSourceIntegrityError,
-} from "../projects/billing-source-integrity.ts";
 
 import type { ContributedLineWithSource } from "../journal/contributed-lines.ts";
 import { parseMoney } from "../money/brands.ts";
@@ -86,18 +77,15 @@ export async function commitDocumentPosting(
     );
     await assertSourcesCurrent(tx, prepared);
     const { book, period } = await lockPostingScope(tx, prepared, actorId);
-    try {
-      await assertGeneratedBillingPostable(
+    await postingPreconditionHooks
+      .require("projects")
+      .assertGeneratedBillingPostable(
         tx,
         doc.orgId,
         documentId,
         { document: prepared.effectiveDoc, lines: prepared.postingLines },
         true,
       );
-    } catch (error) {
-      if (error instanceof BillingSourceIntegrityError) throw new PostingError(error.message);
-      throw error;
-    }
     if (deps.migration) await tx.execute(sql`set local openbooks.migration = on`);
     const paymentTermsSnapshot = await retainPaymentTerms(tx, prepared);
     const auditBefore = options.audit
@@ -145,20 +133,9 @@ async function assertSourcesCurrent(tx: PostingTx, prepared: PreparedPosting): P
   if (doc.kind === "vendor_bill" || doc.kind === "vendor_credit") {
     await postingPreconditionHooks.require("payroll").assertRemittanceBillCurrent(doc.orgId, documentId, tx);
   }
-  try {
-    await assertWithholdingRemittanceCurrent(tx, doc.orgId, documentId, {
-      document: effectiveDoc,
-      lines: postingLines,
-    });
-    await assertWithholdingDepositCurrent(tx, doc.orgId, documentId, {
-      document: effectiveDoc,
-      lines: postingLines,
-    });
-  } catch (error) {
-    if (error instanceof ContractorWithholdingError)
-      throw new PostingError(error.remedy ? `${error.message} ${error.remedy}` : error.message);
-    throw error;
-  }
+  await postingPreconditionHooks
+    .require("contractor-withholding")
+    .assertSourcesCurrent(tx, doc.orgId, documentId, { document: effectiveDoc, lines: postingLines });
 }
 
 /**

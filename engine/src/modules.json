@@ -171,6 +171,7 @@
         "chart",
         "close",
         "compliance",
+        "contractor-withholding",
         "crm",
         "equity",
         "flows",
@@ -290,6 +291,7 @@
       "dependsOn": [
         "country-tax-packs",
         "fx",
+        "journal",
         "money",
         "organization",
         "platform",
