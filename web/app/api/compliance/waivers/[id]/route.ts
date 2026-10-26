@@ -1,26 +1,24 @@
-import { submitComplianceWaiver } from '@openbooks/engine/compliance/waivers'
-import { defineRoute } from '@/lib/api/route'
-import { z } from 'zod'
-import { parseJsonBody } from '@/lib/api/json'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { guardSubsidiaryScope } from '@/lib/authz'
-import { guardComplianceFeature } from '@/lib/compliance'
-import { isUuid } from '@/lib/list-params'
-import { notFound } from '@/lib/api/responses'
+import { submitComplianceWaiver } from "@openbooks/engine/compliance/waivers";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { guardSubsidiaryScope } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.object({
-  action: z.literal('approve').optional(),
+  action: z.literal("approve").optional(),
   reason: z
     .string()
     .trim()
-    .min(1, 'reason is required to revoke an exception')
+    .min(1, "reason is required to revoke an exception")
     .max(2000)
     .optional(),
-})
+});
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Submit a pending exception through its native Flow command. The tenant's
@@ -28,37 +26,29 @@ export const runtime = 'nodejs'
  * native release makes the unrevoked exception effective.
  */
 export const PATCH = defineRoute({
-  permission: 'compliance.waive',
-  feature: {
-    none: 'No optional feature applies to this permission-governed endpoint.',
-  },
+  permission: "compliance.waive",
+  feature: "subcontractorCompliance",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz: gate, params: routeParams }) => {
-    const params = Promise.resolve(routeParams)
-    const blocked = await guardComplianceFeature(gate.user.orgId)
-    if (blocked) return blocked
-    const { orgId, id: actorId } = gate.user
-    const { id } = await params
-    if (!isUuid(id)) return notFound('record')
-
-    const parsedBody = await parseJsonBody(req, requestBodySchema)
-    if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data
-    if ((body.action ?? 'approve') !== 'approve') {
-      return NextResponse.json(
-        { error: 'unknown exception action' },
-        { status: 400 },
-      )
+  body: requestBodySchema,
+  handler: async ({ authz: gate, params: routeParams, body }) => {
+    const params = Promise.resolve(routeParams);
+    const { orgId, id: actorId } = gate.user;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
+    if ((body.action ?? "approve") !== "approve") {
+      return NextResponse.json({ error: "unknown exception action" }, { status: 400 });
     }
 
-    const row = (await db.execute<{
-        requestedBy: string | null
-        createdBy: string | null
-        approvedAt: string | null
-        revokedAt: string | null
-        partySubsidiaryId: string | null
-        projectSubsidiaryId: string | null
-      }>(sql`
+    const row = (
+      await db.execute<{
+        requestedBy: string | null;
+        createdBy: string | null;
+        approvedAt: string | null;
+        revokedAt: string | null;
+        partySubsidiaryId: string | null;
+        projectSubsidiaryId: string | null;
+      }>(
+        sql`
       select w.requested_by as "requestedBy", w.created_by as "createdBy",
              w.approved_at as "approvedAt", w.revoked_at as "revokedAt",
              party.subsidiary_id as "partySubsidiaryId", pj.subsidiary_id as "projectSubsidiaryId"
@@ -66,35 +56,33 @@ export const PATCH = defineRoute({
         join parties party on party.id = w.party_id and party.org_id = w.org_id
         left join projects pj on pj.id = w.project_id and pj.org_id = w.org_id
        where w.org_id = ${orgId} and w.id = ${id}
-    `, 'objects'))[0]
-    if (!row) return notFound('record')
+    `,
+        "objects",
+      )
+    )[0];
+    if (!row) return notFound("record");
     const partyDenied = guardSubsidiaryScope(gate, row.partySubsidiaryId, {
       orgWideNull: true,
-    })
-    if (partyDenied) return partyDenied
+    });
+    if (partyDenied) return partyDenied;
     // A vendor-wide exception has no project leg to fence; a project-scoped
     // one fences exactly like the loaders that list it.
     const projectDenied = guardSubsidiaryScope(gate, row.projectSubsidiaryId, {
       orgWideNull: true,
-    })
-    if (projectDenied) return projectDenied
+    });
+    if (projectDenied) return projectDenied;
     if (row.revokedAt !== null) {
       return NextResponse.json(
-        { error: 'a revoked exception request cannot be approved' },
+        { error: "a revoked exception request cannot be approved" },
         { status: 422 },
-      )
+      );
     }
     if (row.approvedAt !== null) {
-      return NextResponse.json(
-        { error: 'not found or already decided' },
-        { status: 404 },
-      )
+      return NextResponse.json({ error: "not found or already decided" }, { status: 404 });
     }
-    return NextResponse.json(
-      await submitComplianceWaiver({ orgId, actorId, id }),
-    )
+    return NextResponse.json(await submitComplianceWaiver({ orgId, actorId, id }));
   },
-})
+});
 
 /**
  * Revoke an exception. Revocation is recorded, not deleted: the window during
@@ -102,78 +90,69 @@ export const PATCH = defineRoute({
  * to see, so the row stays and gains a revocation reason and actor.
  */
 export const DELETE = defineRoute({
-  permission: 'compliance.waive',
-  feature: {
-    none: 'No optional feature applies to this permission-governed endpoint.',
-  },
+  permission: "compliance.waive",
+  feature: "subcontractorCompliance",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz: gate, params: routeParams }) => {
-    const params = Promise.resolve(routeParams)
-    const blocked = await guardComplianceFeature(gate.user.orgId)
-    if (blocked) return blocked
-    const { orgId, id: actorId } = gate.user
-    const { id } = await params
-    if (!isUuid(id)) return notFound('record')
-
-    const parsedBody = await parseJsonBody(req, requestBodySchema)
-    if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data
-    const reason = (body.reason ?? '').trim()
+  body: requestBodySchema,
+  handler: async ({ authz: gate, params: routeParams, body }) => {
+    const params = Promise.resolve(routeParams);
+    const { orgId, id: actorId } = gate.user;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
+    const reason = (body.reason ?? "").trim();
     if (!reason)
-      return NextResponse.json(
-        { error: 'a revocation needs a reason' },
-        { status: 400 },
-      )
+      return NextResponse.json({ error: "a revocation needs a reason" }, { status: 400 });
 
     // Subsidiary fence before the revocation: a hidden-entity exception reads
     // as 404 and is never touched. Missing and hidden are indistinguishable,
     // so the refusal never oracles which ids exist elsewhere.
-    const fenced = (await db.execute<{
-        partySubsidiaryId: string | null
-        projectSubsidiaryId: string | null
-      }>(sql`
+    const fenced = (
+      await db.execute<{
+        partySubsidiaryId: string | null;
+        projectSubsidiaryId: string | null;
+      }>(
+        sql`
       select party.subsidiary_id as "partySubsidiaryId", pj.subsidiary_id as "projectSubsidiaryId"
         from compliance_waivers w
         join parties party on party.id = w.party_id and party.org_id = w.org_id
         left join projects pj on pj.id = w.project_id and pj.org_id = w.org_id
        where w.org_id = ${orgId} and w.id = ${id}
-    `, 'objects'))[0]
-    if (!fenced) return notFound('record')
-    const fencedPartyDenied = guardSubsidiaryScope(
-      gate,
-      fenced.partySubsidiaryId,
-      { orgWideNull: true },
-    )
-    if (fencedPartyDenied) return fencedPartyDenied
-    const fencedProjectDenied = guardSubsidiaryScope(
-      gate,
-      fenced.projectSubsidiaryId,
-      { orgWideNull: true },
-    )
-    if (fencedProjectDenied) return fencedProjectDenied
+    `,
+        "objects",
+      )
+    )[0];
+    if (!fenced) return notFound("record");
+    const fencedPartyDenied = guardSubsidiaryScope(gate, fenced.partySubsidiaryId, {
+      orgWideNull: true,
+    });
+    if (fencedPartyDenied) return fencedPartyDenied;
+    const fencedProjectDenied = guardSubsidiaryScope(gate, fenced.projectSubsidiaryId, {
+      orgWideNull: true,
+    });
+    if (fencedProjectDenied) return fencedProjectDenied;
 
     const revokedId = await db.transaction(async (tx) => {
-      const updated = await tx.execute<{ id: string }>(sql`
+      const updated = await tx.execute<{ id: string }>(
+        sql`
         update compliance_waivers
            set revoked_at = now(), revoked_by = ${actorId}, revoke_reason = ${reason},
                updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and id = ${id} and revoked_at is null
         returning id
-      `, 'objects')
-      if (updated.length === 0) return null
+      `,
+        "objects",
+      );
+      if (updated.length === 0) return null;
 
       await tx.execute(sql`
         insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'compliance_waivers', ${id}, 'update',
-                ${JSON.stringify({ after: { revoked: true, reason } })}::jsonb, ${actorId})`)
-      return updated[0]!.id
-    })
+                ${JSON.stringify({ after: { revoked: true, reason } })}::jsonb, ${actorId})`);
+      return updated[0]!.id;
+    });
     if (revokedId === null) {
-      return NextResponse.json(
-        { error: 'not found or already revoked' },
-        { status: 404 },
-      )
+      return NextResponse.json({ error: "not found or already revoked" }, { status: 404 });
     }
-    return NextResponse.json({ id: revokedId })
+    return NextResponse.json({ id: revokedId });
   },
-})
+});

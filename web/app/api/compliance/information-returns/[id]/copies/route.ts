@@ -1,43 +1,45 @@
-import { defineRoute } from '@/lib/api/route'
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from '@/lib/api/json'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
 import {
   canFurnishRecipientCopies,
   InformationReturnError,
   stampRecipientCopiesPrinted,
-} from '@openbooks/engine/compliance/information-returns'
-import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
-import { guardSubsidiaryScope } from '@/lib/authz';
-import { guardInformationReturnsFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
-import { maskTin, type RecipientFormData } from '@/lib/information-return-form'
-import { payerTaxIdentifier } from '@openbooks/engine/organization/company-identity'
-import { renderInformationReturnBatchPdf, renderInformationReturnPdf } from '@/lib/information-return-pdf'
-import { isUuid } from '@/lib/list-params'
+} from "@openbooks/engine/compliance/information-returns";
+import { rendererUnavailableResponse } from "@/lib/api/pdf-renderer";
+import { guardSubsidiaryScope } from "@/lib/authz";
+import { loadInformationReturnFilingScope } from "@/lib/compliance";
+import { maskTin, type RecipientFormData } from "@/lib/information-return-form";
+import { payerTaxIdentifier } from "@openbooks/engine/organization/company-identity";
+import {
+  renderInformationReturnBatchPdf,
+  renderInformationReturnPdf,
+} from "@/lib/information-return-pdf";
+import { isUuid } from "@/lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.strictObject({
-  recipientId: uuidString({ error: 'recipientId must be a valid recipient id' }).nullable().optional(),
-})
+  recipientId: uuidString({ error: "recipientId must be a valid recipient id" })
+    .nullable()
+    .optional(),
+});
 
-
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 function addressLines(address: Record<string, string | null> | null): string | null {
-  if (!address) return null
+  if (!address) return null;
   const parts = [
     address.line1,
     address.line2,
-    [address.city, address.region, address.postalCode].filter(Boolean).join(' '),
+    [address.city, address.region, address.postalCode].filter(Boolean).join(" "),
     address.country,
-  ].filter((line): line is string => Boolean(line && line.trim()))
-  return parts.length > 0 ? parts.join('\n') : null
+  ].filter((line): line is string => Boolean(line && line.trim()));
+  return parts.length > 0 ? parts.join("\n") : null;
 }
 
 /**
@@ -51,59 +53,63 @@ function addressLines(address: Record<string, string | null> | null): string | n
  * being reported, and printing them a form would say otherwise.
  */
 export const GET = defineRoute({
-  permission: 'compliance.read',
-  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
-  params: z.object({ "id": z.string() }),
+  permission: "compliance.read",
+  feature: "informationReturns",
+  params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params: routeParams }) => {
     const params = Promise.resolve(routeParams);
-    const blocked = await guardInformationReturnsFeature(gate.user.orgId)
-    if (blocked) return blocked
-    const { orgId } = gate.user
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
-    const recipientId = new URL(req.url).searchParams.get('recipientId')
-    if (recipientId && !isUuid(recipientId)) return notFound("record")
+    const { orgId } = gate.user;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
+    const recipientId = new URL(req.url).searchParams.get("recipientId");
+    if (recipientId && !isUuid(recipientId)) return notFound("record");
     // Entity isolation before any filing detail is read (same 404 as a missing filing).
-    const filingScope = await loadInformationReturnFilingScope(orgId, id)
-    if (!filingScope) return notFound("record")
-    const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
-    if (scopeDenied) return scopeDenied
+    const filingScope = await loadInformationReturnFilingScope(orgId, id);
+    if (!filingScope) return notFound("record");
+    const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId);
+    if (scopeDenied) return scopeDenied;
 
-    const filings = (await db.execute<{
-        tax_year: number
-        form_type: string
-        currency: string
-        status: string
-        payer_snapshot: { taxIds?: Record<string, string> } | null
-        payer_name: string
-      }>(sql`
+    const filings = await db.execute<{
+      tax_year: number;
+      form_type: string;
+      currency: string;
+      status: string;
+      payer_snapshot: { taxIds?: Record<string, string> } | null;
+      payer_name: string;
+    }>(
+      sql`
       select f.tax_year, f.form_type, f.currency, f.status, f.payer_snapshot,
              coalesce(f.payer_snapshot->>'name', s.name, o.name) as payer_name
         from information_return_filings f
         join orgs o on o.id = f.org_id
         left join subsidiaries s on s.id = f.subsidiary_id and s.org_id = f.org_id
        where f.org_id = ${orgId} and f.id = ${id}
-    `, 'objects'))
-    const filing = filings[0]
-    if (!filing) return notFound("record")
+    `,
+      "objects",
+    );
+    const filing = filings[0];
+    if (!filing) return notFound("record");
     if (!canFurnishRecipientCopies(filing.status)) {
       return NextResponse.json(
-        { error: `a ${filing.status} filing is not frozen — finalize it before furnishing recipient copies` },
+        {
+          error: `a ${filing.status} filing is not frozen — finalize it before furnishing recipient copies`,
+        },
         { status: 422 },
-      )
+      );
     }
 
-    const recipients = (await db.execute<{
-        id: string
-        status: string
-        tin_last4: string | null
-        tin_type: string | null
-        computed_amounts: Record<string, string>
-        adjustments: Record<string, string>
-        corrected_from_id: string | null
-        name: string
-        address: Record<string, string | null> | null
-      }>(sql`
+    const recipients = await db.execute<{
+      id: string;
+      status: string;
+      tin_last4: string | null;
+      tin_type: string | null;
+      computed_amounts: Record<string, string>;
+      adjustments: Record<string, string>;
+      corrected_from_id: string | null;
+      name: string;
+      address: Record<string, string | null> | null;
+    }>(
+      sql`
       select r.id, r.status, r.tin_last4, r.tin_type, r.computed_amounts, r.adjustments,
              r.corrected_from_id,
              coalesce(r.recipient_snapshot->>'legalName', p.display_name) as name,
@@ -113,9 +119,11 @@ export const GET = defineRoute({
        where r.org_id = ${orgId} and r.filing_id = ${id} and r.status = 'included'
          and (${recipientId ?? null}::uuid is null or r.id = ${recipientId ?? null}::uuid)
        order by name
-    `, 'objects'))
+    `,
+      "objects",
+    );
     if (recipients.length === 0) {
-      return NextResponse.json({ error: 'no included recipients to print' }, { status: 422 })
+      return NextResponse.json({ error: "no included recipients to print" }, { status: 422 });
     }
 
     // The payer TIN comes from the frozen snapshot once finalized, so a reprint of
@@ -123,8 +131,8 @@ export const GET = defineRoute({
     // The filing is frozen above, so only its payer snapshot is authoritative.
     // Never put a live org tax ID on a stamped copy: changing org settings after
     // finalization must not alter the evidence furnished to the recipient.
-    const taxIds = filing.payer_snapshot?.taxIds ?? {}
-    const payerTin = payerTaxIdentifier(taxIds)
+    const taxIds = filing.payer_snapshot?.taxIds ?? {};
+    const payerTin = payerTaxIdentifier(taxIds);
 
     const forms: RecipientFormData[] = recipients.map((r) => ({
       formType: filing.form_type,
@@ -139,39 +147,38 @@ export const GET = defineRoute({
       corrected: r.corrected_from_id !== null,
       void: false,
       currency: filing.currency,
-    }))
+    }));
 
-    let pdf: Buffer
+    let pdf: Buffer;
     try {
       pdf =
         forms.length === 1
           ? await renderInformationReturnPdf(forms[0]!)
-          : await renderInformationReturnBatchPdf(forms)
+          : await renderInformationReturnBatchPdf(forms);
     } catch (e) {
-      const rendererRefusal = rendererUnavailableResponse(e)
-      if (rendererRefusal) return rendererRefusal
-      throw e
+      const rendererRefusal = rendererUnavailableResponse(e);
+      if (rendererRefusal) return rendererRefusal;
+      throw e;
     }
 
-    const stamp = await businessToday(orgId)
+    const stamp = await businessToday(orgId);
     const filename =
       forms.length === 1
-        ? `${filing.form_type}-${filing.tax_year}-${forms[0]!.recipientName.replace(/[^\w-]+/g, '_')}-${stamp}.pdf`
-        : `${filing.form_type}-${filing.tax_year}-recipient-copies-${stamp}.pdf`
-    const body = new Uint8Array(pdf)
+        ? `${filing.form_type}-${filing.tax_year}-${forms[0]!.recipientName.replace(/[^\w-]+/g, "_")}-${stamp}.pdf`
+        : `${filing.form_type}-${filing.tax_year}-recipient-copies-${stamp}.pdf`;
+    const body = new Uint8Array(pdf);
     return new NextResponse(body, {
       status: 200,
       headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Length': String(body.byteLength),
-        'Content-Disposition': `inline; filename="${filename}"`,
-        'X-Content-Type-Options': 'nosniff',
-        'Cache-Control': 'private, no-store',
+        "Content-Type": "application/pdf",
+        "Content-Length": String(body.byteLength),
+        "Content-Disposition": `inline; filename="${filename}"`,
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store",
       },
-    })
-
+    });
   },
-})
+});
 
 /**
  * Mark recipient copies furnished: all included recipients, or one via
@@ -182,42 +189,43 @@ export const GET = defineRoute({
  * this filing answers exactly like not-found.
  */
 export const POST = defineRoute({
-  permission: 'compliance.manage',
-  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
-  params: z.object({ "id": z.string() }),
-  handler: async ({ request: req, authz: gate, params: routeParams }) => {
+  permission: "compliance.manage",
+  feature: "informationReturns",
+  params: z.object({ id: z.string() }),
+  body: requestBodySchema,
+  handler: async ({ authz: gate, params: routeParams, body }) => {
     const params = Promise.resolve(routeParams);
-    const blocked = await guardInformationReturnsFeature(gate.user.orgId)
-    if (blocked) return blocked
-    const { orgId, id: actorId } = gate.user
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
+    const { orgId, id: actorId } = gate.user;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
 
-    const parsedBody = await parseJsonBody(req, requestBodySchema)
-    if (!parsedBody.ok) return parsedBody.response
-    const rawRecipientId = parsedBody.data.recipientId ?? null
-    let recipientId: string | null = null
+    const rawRecipientId = body.recipientId ?? null;
+    let recipientId: string | null = null;
     if (rawRecipientId !== null) {
-      if (typeof rawRecipientId !== 'string' || !isUuid(rawRecipientId)) {
-        return notFound("record")
+      if (typeof rawRecipientId !== "string" || !isUuid(rawRecipientId)) {
+        return notFound("record");
       }
-      recipientId = rawRecipientId
+      recipientId = rawRecipientId;
     }
     // Entity isolation before any filing detail is read (same 404 as a missing filing).
-    const filingScope = await loadInformationReturnFilingScope(orgId, id)
-    if (!filingScope) return notFound("record")
-    const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
-    if (scopeDenied) return scopeDenied
+    const filingScope = await loadInformationReturnFilingScope(orgId, id);
+    if (!filingScope) return notFound("record");
+    const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId);
+    if (scopeDenied) return scopeDenied;
 
     try {
-      const furnished = await stampRecipientCopiesPrinted({ orgId, filingId: id, recipientId, actorId })
-      return NextResponse.json({ furnished })
+      const furnished = await stampRecipientCopiesPrinted({
+        orgId,
+        filingId: id,
+        recipientId,
+        actorId,
+      });
+      return NextResponse.json({ furnished });
     } catch (error) {
       if (error instanceof InformationReturnError) {
-        return apiErrorResponse(error)
+        return apiErrorResponse(error);
       }
-      throw error
+      throw error;
     }
-
   },
-})
+});
