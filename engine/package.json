@@ -851,6 +851,7 @@
     "./tax/contracts": "./src/tax/public-contracts.ts",
     "./tax/nexus-ledger": "./src/tax/nexus-ledger.ts",
     "./tax/pack-provisioning": "./src/tax/pack-provisioning.ts",
+    "./tax/party-tax-ids-read": "./src/tax/party-tax-ids-read.ts",
     "./tax/persist": "./src/tax/persist.ts",
     "./tax/rate-providers": "./src/tax/rate-providers.ts",
     "./tax/seed-tax-forms": "./src/tax/seed-tax-forms.ts",
