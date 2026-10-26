@@ -82,12 +82,16 @@ export function validateFieldTimeSettings(raw: unknown): FieldTimeSettings {
     );
   }
   if (typeof rec.signatureRequired !== "boolean") {
-    throw new FieldTimeError("signature_rule_not_declared",
-      "The signature rule is not declared — choose whether signatures are required in Timesheets setup before submitting crew time");
+    throw new FieldTimeError(
+      "signature_rule_not_declared",
+      "The signature rule is not declared — choose whether signatures are required in Timesheets setup before submitting crew time",
+    );
   }
   if (typeof rec.photoRequired !== "boolean") {
-    throw new FieldTimeError("photo_rule_not_declared",
-      "The photo rule is not declared — choose whether photos are required in Timesheets setup before anyone clocks in");
+    throw new FieldTimeError(
+      "photo_rule_not_declared",
+      "The photo rule is not declared — choose whether photos are required in Timesheets setup before anyone clocks in",
+    );
   }
   return {
     rounding: { incrementMinutes: increment, mode },
@@ -100,8 +104,13 @@ export function validateFieldTimeSettings(raw: unknown): FieldTimeSettings {
 }
 
 export async function loadFieldTimeSettings(orgId: string): Promise<FieldTimeSettings> {
-  const row = (await db.execute<{ settings: unknown }>(sql`
-    select settings->'fieldTime' as settings from orgs where id = ${orgId}`, "objects"))[0];
+  const row = (
+    await db.execute<{ settings: unknown }>(
+      sql`
+    select settings->'fieldTime' as settings from orgs where id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   if (!row || row.settings == null) {
     throw new FieldTimeError(
       "field_time_not_configured",
@@ -109,4 +118,37 @@ export async function loadFieldTimeSettings(orgId: string): Promise<FieldTimeSet
     );
   }
   return validateFieldTimeSettings(row.settings);
+}
+
+/** Raw setup value: unlike clock reads, setup can display an undeclared policy. */
+export async function readFieldTimeSettingsValue(orgId: string): Promise<unknown | null> {
+  const row = (
+    await db.execute<{ settings: unknown }>(
+      sql`
+    select settings->'fieldTime' as settings from orgs where id = ${orgId}`,
+      "objects",
+    )
+  )[0];
+  return row?.settings ?? null;
+}
+
+/** Persist the validated policy using the one org-wide field-time setting. */
+export async function saveFieldTimeSettings(
+  orgId: string,
+  settings: FieldTimeSettings,
+): Promise<boolean> {
+  const updated = await db.execute<never>(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{fieldTime}', ${JSON.stringify({
+           roundingIncrement: settings.rounding.incrementMinutes,
+           roundingMode: settings.rounding.mode,
+           unpaidBreakMinutes: settings.unpaidBreakMinutes,
+           autoCloseHours: settings.autoCloseHours,
+           signatureRequired: settings.signatureRequired,
+           equipmentToleranceHours: settings.equipmentToleranceHours,
+           photoRequired: settings.photoRequired,
+         })}::jsonb),
+             updated_at = now()
+       where id = ${orgId}`);
+  return (updated.rowCount ?? 0) === 1;
 }

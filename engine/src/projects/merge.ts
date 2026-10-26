@@ -38,6 +38,22 @@ export class ProjectMergeError extends Error {
   readonly name = "ProjectMergeError";
 }
 
+/** Read the subsidiary identity for each project involved in a merge. */
+export async function projectMergeScope(
+  orgId: string,
+  survivorId: string,
+  duplicateId: string,
+): Promise<Array<{ subsidiary_id: string | null }>> {
+  return withOrgTransaction(orgId, () =>
+    db.execute<{ subsidiary_id: string | null }>(
+      sql`
+      select subsidiary_id from projects
+       where org_id = ${orgId} and id in (${survivorId}, ${duplicateId})`,
+      "objects",
+    ),
+  );
+}
+
 export interface DuplicateProject {
   id: string;
   code: string | null;
@@ -216,7 +232,8 @@ export async function findDuplicateProjects(
     // normally empty — it guards the invariant. The legacy connector identity
     // (custom.nsid, carried by rows created before the envelope convergence)
     // is unfenced and is the leg that fires on real mirror duplicates.
-    const sourceRows = await db.execute<{ key: string; projects: Row[] }>(sql`
+    const sourceRows = await db.execute<{ key: string; projects: Row[] }>(
+      sql`
       with keyed as (
         select ${cols},
                (p.custom -> 'source' ->> 'system') as system,
@@ -227,31 +244,46 @@ export async function findDuplicateProjects(
       )
       select system || '|' || external_id as key, json_agg(to_jsonb(k) order by k.name, k.id) as projects
         from (select * from keyed where system is not null and external_id is not null) k
-       group by system, external_id having count(*) > 1`, "objects");
+       group by system, external_id having count(*) > 1`,
+      "objects",
+    );
     for (const row of sourceRows) {
       groups.push({ kind: "source_ref", key: row.key, projects: toProjects(row.projects) });
     }
-    const nsidRows = await db.execute<{ key: string; projects: Row[] }>(sql`
+    const nsidRows = await db.execute<{ key: string; projects: Row[] }>(
+      sql`
       select p.custom ->> 'nsId' as key, json_agg(to_jsonb(p) order by p.name, p.id) as projects
         from (select ${cols}, p.custom from projects p
               where p.org_id = ${orgId} and p.custom ->> 'nsId' is not null ${scope} ${unresolved}) p
-       group by p.custom ->> 'nsId' having count(*) > 1`, "objects");
+       group by p.custom ->> 'nsId' having count(*) > 1`,
+      "objects",
+    );
     for (const row of nsidRows) {
-      groups.push({ kind: "source_ref", key: `nsId:${row.key}`, projects: toProjects(row.projects) });
+      groups.push({
+        kind: "source_ref",
+        key: `nsId:${row.key}`,
+        projects: toProjects(row.projects),
+      });
     }
-    const nameRows = await db.execute<{ key: string; projects: Row[] }>(sql`
+    const nameRows = await db.execute<{ key: string; projects: Row[] }>(
+      sql`
       select lower(p.name) || '|' || coalesce(p.customer_id::text, '-') as key,
              json_agg(to_jsonb(p) order by p.name, p.id) as projects
         from (select ${cols} from projects p where p.org_id = ${orgId} ${scope} ${unresolved}) p
-       group by lower(p.name), p.customer_id having count(*) > 1`, "objects");
+       group by lower(p.name), p.customer_id having count(*) > 1`,
+      "objects",
+    );
     for (const row of nameRows) {
       groups.push({ kind: "name_customer", key: row.key, projects: toProjects(row.projects) });
     }
-    const codeRows = await db.execute<{ key: string; projects: Row[] }>(sql`
+    const codeRows = await db.execute<{ key: string; projects: Row[] }>(
+      sql`
       select p.code as key, json_agg(to_jsonb(p) order by p.name, p.id) as projects
         from (select ${cols} from projects p
               where p.org_id = ${orgId} and p.code is not null and p.code <> '' ${scope} ${unresolved}) p
-       group by p.code having count(*) > 1`, "objects");
+       group by p.code having count(*) > 1`,
+      "objects",
+    );
     for (const row of codeRows) {
       groups.push({ kind: "job_number", key: row.key, projects: toProjects(row.projects) });
     }
@@ -293,15 +325,18 @@ async function loadProject(
   id: string,
   lock = false,
 ): Promise<ProjectRow | null> {
-  const found = (await runner.execute<ProjectRow>(lock
-    ? sql`
+  const found = await runner.execute<ProjectRow>(
+    lock
+      ? sql`
       select id, code, name, customer_id, status, is_active, parent_id, subsidiary_id,
              contract_value::text as contract_value, project_type_id, invoicing_preference, custom
         from projects where id = ${id} and org_id = ${orgId} limit 1 for update`
-    : sql`
+      : sql`
       select id, code, name, customer_id, status, is_active, parent_id, subsidiary_id,
              contract_value::text as contract_value, project_type_id, invoicing_preference, custom
-        from projects where id = ${id} and org_id = ${orgId} limit 1`, "objects"));
+        from projects where id = ${id} and org_id = ${orgId} limit 1`,
+    "objects",
+  );
   return found[0] ?? null;
 }
 
@@ -351,24 +386,38 @@ async function customProjectRefs(
   runner: SqlExecutor,
   orgId: string,
 ): Promise<{ targetTable: string; key: string }[]> {
-  const defs = await runner.execute<{ target_table: string; key: string }>(sql`
+  const defs = await runner.execute<{ target_table: string; key: string }>(
+    sql`
     select target_table, key from custom_field_defs
      where org_id = ${orgId} and field_type = 'reference'
-       and config ->> 'referenceTable' = 'projects' and is_active`, "objects");
+       and config ->> 'referenceTable' = 'projects' and is_active`,
+    "objects",
+  );
   const valid: { targetTable: string; key: string }[] = [];
   for (const def of defs) {
     // Target tables are tenant data: only touch real tables with a custom
     // column, never interpolate an unchecked identifier anywhere else.
     if (!/^[a-z_]+$/.test(def.target_table) || !/^[a-z_][a-z0-9_]*$/.test(def.key)) continue;
-    const exists = (await runner.execute<{ n: string }>(sql`
+    const exists = (
+      await runner.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from information_schema.columns
        where table_schema = 'public' and table_name = ${def.target_table}
-         and column_name = 'custom'`, "objects"))[0]?.n;
-    const orgScoped = (await runner.execute<{ n: string }>(sql`
+         and column_name = 'custom'`,
+        "objects",
+      )
+    )[0]?.n;
+    const orgScoped = (
+      await runner.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from information_schema.columns
        where table_schema = 'public' and table_name = ${def.target_table}
-         and column_name = 'org_id'`, "objects"))[0]?.n;
-    if (exists === "1" && orgScoped === "1") valid.push({ targetTable: def.target_table, key: def.key });
+         and column_name = 'org_id'`,
+        "objects",
+      )
+    )[0]?.n;
+    if (exists === "1" && orgScoped === "1")
+      valid.push({ targetTable: def.target_table, key: def.key });
   }
   return valid;
 }
@@ -380,7 +429,13 @@ async function planMerge(
   duplicateId: string,
   lock = false,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
-): Promise<{ survivor: ProjectRow; duplicate: ProjectRow; moved: MergePreview["moved"]; customRefs: MergePreview["customRefs"]; alreadyMerged: boolean }> {
+): Promise<{
+  survivor: ProjectRow;
+  duplicate: ProjectRow;
+  moved: MergePreview["moved"];
+  customRefs: MergePreview["customRefs"];
+  alreadyMerged: boolean;
+}> {
   if (survivorId === duplicateId) {
     throw new ProjectMergeError("a project cannot merge into itself");
   }
@@ -421,7 +476,8 @@ async function planMerge(
   }
   const prior = mergedInto(duplicate.custom);
   if (prior) {
-    if (prior === survivorId) return { survivor, duplicate, moved: [], customRefs: [], alreadyMerged: true };
+    if (prior === survivorId)
+      return { survivor, duplicate, moved: [], customRefs: [], alreadyMerged: true };
     throw new ProjectMergeError("this project already merged into another project");
   }
   if (mergedInto(survivor.custom)) {
@@ -468,18 +524,28 @@ async function planMerge(
     if (cursor === duplicateId) {
       throw new ProjectMergeError("merge would cycle the project hierarchy");
     }
-    const parent = (await runner.execute<{ parent_id: string | null }>(sql`
-      select parent_id from projects where id = ${cursor} and org_id = ${orgId} limit 1`, "objects"))[0];
+    const parent = (
+      await runner.execute<{ parent_id: string | null }>(
+        sql`
+      select parent_id from projects where id = ${cursor} and org_id = ${orgId} limit 1`,
+        "objects",
+      )
+    )[0];
     if (!parent) break;
     cursor = parent.parent_id;
   }
   // Lines of non-draft documents are frozen by the storage immutability
   // guard and cannot follow the merge: a duplicate carrying them refuses,
   // naming the count, instead of splitting posted history. Draft lines move.
-  const frozenLines = (await runner.execute<{ n: string }>(sql`
+  const frozenLines = (
+    await runner.execute<{ n: string }>(
+      sql`
     select count(*)::text as n
       from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-     where dl.org_id = ${orgId} and dl.project_id = ${duplicateId} and d.status <> 'draft'`, "objects"))[0]?.n;
+     where dl.org_id = ${orgId} and dl.project_id = ${duplicateId} and d.status <> 'draft'`,
+      "objects",
+    )
+  )[0]?.n;
   if (frozenLines !== "0") {
     throw new ProjectMergeError(
       `cannot move lines of ${frozenLines} non-draft document(s); void or correct them first`,
@@ -493,13 +559,18 @@ async function planMerge(
   // same migration-aware lens postEntry will see — so both preview and
   // commit refuse by name instead of the guard firing a raw storage error
   // mid-merge.
-  const closedLines = (await runner.execute<{ n: string }>(sql`
+  const closedLines = (
+    await runner.execute<{ n: string }>(
+      sql`
     select count(*)::text as n
       from journal_lines jl
       join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
      where jl.org_id = ${orgId} and jl.project_id = ${duplicateId}
        and e.status in ('posted', 'reversed')
-       and period_module_blocks_write(${orgId}, e.period_id, e.book_id, jl.subsidiary_id, 'gl', true)`, "objects"))[0]?.n;
+       and period_module_blocks_write(${orgId}, e.period_id, e.book_id, jl.subsidiary_id, 'gl', true)`,
+      "objects",
+    )
+  )[0]?.n;
   if (closedLines !== "0") {
     throw new ProjectMergeError(
       `cannot merge: ${closedLines} posted journal line(s) sit in a closed GL period; reopen the period before merging`,
@@ -508,7 +579,8 @@ async function planMerge(
   // Baseline sequence is unique per project. Report a collision directly
   // before the broader immutable-evidence refusal so the operator can see
   // why a copy could not be reassigned even if reassignment were available.
-  const baselineCollisions = await runner.execute<{ sequence: number }>(sql`
+  const baselineCollisions = await runner.execute<{ sequence: number }>(
+    sql`
     select d.sequence
       from project_budget_baselines d
      where d.org_id = ${orgId} and d.project_id = ${duplicateId}
@@ -516,13 +588,16 @@ async function planMerge(
                     where s.org_id = ${orgId} and s.project_id = ${survivorId}
                       and s.sequence = d.sequence)
      order by d.sequence
-     limit 5`, "objects");
+     limit 5`,
+    "objects",
+  );
   if (baselineCollisions.length > 0) {
     throw new ProjectMergeError(
       `cannot merge: budget baseline sequence ${baselineCollisions.map((row) => row.sequence).join(", ")} exists on both projects; retain each recorded baseline with its original project`,
     );
   }
-  const benefitScopeCollisions = await runner.execute<{ program_id: string }>(sql`
+  const benefitScopeCollisions = await runner.execute<{ program_id: string }>(
+    sql`
     select d.program_id::text as program_id
       from hrm_benefit_program_scopes d
       join hrm_benefit_program_scopes s
@@ -530,7 +605,9 @@ async function planMerge(
        and s.project_id = ${survivorId}
      where d.org_id = ${orgId} and d.project_id = ${duplicateId}
      order by d.program_id
-     limit 5`, "objects");
+     limit 5`,
+    "objects",
+  );
   if (benefitScopeCollisions.length > 0) {
     throw new ProjectMergeError(
       "cannot merge: a benefit program has project scopes on both projects; reconcile the program's project scope so one effective inclusion or exclusion remains for the surviving project, then retry the merge",
@@ -538,9 +615,14 @@ async function planMerge(
   }
   const appendOnlyEvidence: string[] = [];
   for (const [table, column] of APPEND_ONLY_PROJECT_REFERENCES) {
-    const count = (await runner.execute<{ n: string }>(sql`
+    const count = (
+      await runner.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from ${sql.identifier(table)}
-       where org_id = ${orgId} and ${sql.identifier(column)} = ${duplicateId}`, "objects"))[0]?.n;
+       where org_id = ${orgId} and ${sql.identifier(column)} = ${duplicateId}`,
+        "objects",
+      )
+    )[0]?.n;
     if (count !== "0") appendOnlyEvidence.push(`${count ?? "0"} ${table}.${column}`);
   }
   if (appendOnlyEvidence.length > 0) {
@@ -549,7 +631,9 @@ async function planMerge(
     );
   }
   // Storage-level collisions fail closed before anything moves.
-  const budgetCollision = (await runner.execute<{ n: string }>(sql`
+  const budgetCollision = (
+    await runner.execute<{ n: string }>(
+      sql`
     select count(*)::text as n
       from budget_lines d
       join budget_lines s
@@ -557,11 +641,18 @@ async function planMerge(
        and s.period_id = d.period_id and s.subsidiary_id is not distinct from d.subsidiary_id
        and s.department_id is not distinct from d.department_id and s.project_id = ${survivorId}
        and s.location_id is not distinct from d.location_id and s.class_id is not distinct from d.class_id
-     where d.org_id = ${orgId} and d.project_id = ${duplicateId}`, "objects"))[0]?.n;
+     where d.org_id = ${orgId} and d.project_id = ${duplicateId}`,
+      "objects",
+    )
+  )[0]?.n;
   if (budgetCollision !== "0") {
     throw new ProjectMergeError("both projects hold the same budget cell; reconcile budgets first");
   }
-  const functionalCollision = await runner.execute<{ duplicate_period: string; survivor_period: string }>(sql`
+  const functionalCollision = await runner.execute<{
+    duplicate_period: string;
+    survivor_period: string;
+  }>(
+    sql`
     select daterange(d.effective_from, d.effective_to, '[]')::text as duplicate_period,
            daterange(s.effective_from, s.effective_to, '[]')::text as survivor_period
       from functional_mappings d
@@ -570,31 +661,43 @@ async function planMerge(
        and daterange(d.effective_from, d.effective_to, '[]') &&
            daterange(s.effective_from, s.effective_to, '[]')
      where d.org_id = ${orgId} and d.project_id = ${duplicateId}
-     limit 5`, "objects");
+     limit 5`,
+    "objects",
+  );
   if (functionalCollision.length > 0) {
     throw new ProjectMergeError(
-      `both projects have functional mappings for overlapping effective periods `
-      + `(${functionalCollision.map((row) => `${row.duplicate_period} and ${row.survivor_period}`).join("; ")}); `
-      + "reconcile the project mappings in Nonprofit Setup before merging",
+      `both projects have functional mappings for overlapping effective periods ` +
+        `(${functionalCollision.map((row) => `${row.duplicate_period} and ${row.survivor_period}`).join("; ")}); ` +
+        "reconcile the project mappings in Nonprofit Setup before merging",
     );
   }
-  const retroCollision = (await runner.execute<{ n: string }>(sql`
+  const retroCollision = (
+    await runner.execute<{ n: string }>(
+      sql`
     select count(*)::text as n
       from payroll_retro_allocations d
       join payroll_retro_allocations s
         on s.org_id = d.org_id and s.settlement_id = d.settlement_id
        and s.component_id = d.component_id and s.project_id = ${survivorId}
        and s.department_id is not distinct from d.department_id
-     where d.org_id = ${orgId} and d.project_id = ${duplicateId}`, "objects"))[0]?.n;
+     where d.org_id = ${orgId} and d.project_id = ${duplicateId}`,
+      "objects",
+    )
+  )[0]?.n;
   if (retroCollision !== "0") {
-    throw new ProjectMergeError("both projects hold the same retro allocation bucket; reconcile first");
+    throw new ProjectMergeError(
+      "both projects hold the same retro allocation bucket; reconcile first",
+    );
   }
-  const orderCollision = await runner.execute<{ number: string }>(sql`
+  const orderCollision = await runner.execute<{ number: string }>(
+    sql`
     select d.number from change_orders d
      where d.org_id = ${orgId} and d.project_id = ${duplicateId}
        and exists (select 1 from change_orders s
                     where s.org_id = ${orgId} and s.project_id = ${survivorId} and s.number = d.number)
-     limit 5`, "objects");
+     limit 5`,
+    "objects",
+  );
   if (orderCollision.length > 0) {
     throw new ProjectMergeError(
       `change order number ${orderCollision.map((row) => row.number).join(", ")} exists on both projects`,
@@ -603,25 +706,35 @@ async function planMerge(
   // One primary baseline per project in storage: moving the duplicate's
   // primary onto a survivor that already holds one would violate the
   // partial unique index instead of merging. Refuse with the remedy.
-  const baselineCollision = (await runner.execute<{ n: string }>(sql`
+  const baselineCollision = (
+    await runner.execute<{ n: string }>(
+      sql`
     select count(*)::text as n
       from schedule_baselines d
      where d.org_id = ${orgId} and d.project_id = ${duplicateId} and d.is_primary
        and exists (select 1 from schedule_baselines s
-                    where s.org_id = ${orgId} and s.project_id = ${survivorId} and s.is_primary)`, "objects"))[0]?.n;
+                    where s.org_id = ${orgId} and s.project_id = ${survivorId} and s.is_primary)`,
+      "objects",
+    )
+  )[0]?.n;
   if (baselineCollision !== "0") {
-    throw new ProjectMergeError("both projects hold a primary schedule baseline; reconcile baselines first");
+    throw new ProjectMergeError(
+      "both projects hold a primary schedule baseline; reconcile baselines first",
+    );
   }
   // Pay applications number per project like change orders: the same
   // application number on both sides would violate the per-project unique
   // index on the move. Name the numbers, like the change-order guard.
-  const payAppCollision = await runner.execute<{ number: string }>(sql`
+  const payAppCollision = await runner.execute<{ number: string }>(
+    sql`
     select d.application_number as number from pay_applications d
      where d.org_id = ${orgId} and d.project_id = ${duplicateId}
        and exists (select 1 from pay_applications s
                     where s.org_id = ${orgId} and s.project_id = ${survivorId}
                       and s.application_number = d.application_number)
-     limit 5`, "objects");
+     limit 5`,
+    "objects",
+  );
   if (payAppCollision.length > 0) {
     throw new ProjectMergeError(
       `pay application number ${payAppCollision.map((row) => row.number).join(", ")} exists on both projects`,
@@ -630,21 +743,29 @@ async function planMerge(
   // One open pay application per project in storage: moving the duplicate's
   // open application onto a survivor that already holds one would violate
   // the partial unique index instead of merging. Refuse with the remedy.
-  const openPayAppCollision = (await runner.execute<{ n: string }>(sql`
+  const openPayAppCollision = (
+    await runner.execute<{ n: string }>(
+      sql`
     select count(*)::text as n
       from pay_applications d
      where d.org_id = ${orgId} and d.project_id = ${duplicateId}
        and d.status in ('draft', 'submitted', 'approved')
        and exists (select 1 from pay_applications s
                     where s.org_id = ${orgId} and s.project_id = ${survivorId}
-                      and s.status in ('draft', 'submitted', 'approved'))`, "objects"))[0]?.n;
+                      and s.status in ('draft', 'submitted', 'approved'))`,
+      "objects",
+    )
+  )[0]?.n;
   if (openPayAppCollision !== "0") {
-    throw new ProjectMergeError("both projects hold an open pay application; reconcile pay applications first");
+    throw new ProjectMergeError(
+      "both projects hold an open pay application; reconcile pay applications first",
+    );
   }
   // A project booking is unique per week and person-or-role key. Moving both
   // copies onto one project would violate that identity; edit one booking's
   // resource or week before retrying the merge.
-  const assignmentCollision = await runner.execute<{ detail: string }>(sql`
+  const assignmentCollision = await runner.execute<{ detail: string }>(
+    sql`
     select coalesce(p.display_name, d.job_title, d.employee_party_id::text)
            || ' on ' || d.week_start::text as detail
       from res_assignments d
@@ -655,7 +776,9 @@ async function planMerge(
                       and s.week_start = d.week_start
                       and coalesce(s.employee_party_id::text, lower(s.job_title))
                           = coalesce(d.employee_party_id::text, lower(d.job_title)))
-     limit 5`, "objects");
+     limit 5`,
+    "objects",
+  );
   if (assignmentCollision.length > 0) {
     throw new ProjectMergeError(
       `resource assignment for ${assignmentCollision.map((row) => row.detail).join("; ")} exists on both projects; edit one booking's resource or week first`,
@@ -664,7 +787,8 @@ async function planMerge(
   // Field-time identity is per foreman-day in storage: the same foreman's
   // batch for the same day on both sides would violate the unique index on
   // the move. Name the collisions like the change-order guard.
-  const batchCollision = await runner.execute<{ detail: string }>(sql`
+  const batchCollision = await runner.execute<{ detail: string }>(
+    sql`
     select p.display_name || ' on ' || d.worked_on::text as detail
       from crew_time_batches d
       join parties p on p.id = d.foreman_party_id and p.org_id = d.org_id
@@ -672,26 +796,32 @@ async function planMerge(
        and exists (select 1 from crew_time_batches s
                     where s.org_id = ${orgId} and s.project_id = ${survivorId}
                       and s.foreman_party_id = d.foreman_party_id and s.worked_on = d.worked_on)
-     limit 5`, "objects");
+     limit 5`,
+    "objects",
+  );
   if (batchCollision.length > 0) {
     throw new ProjectMergeError(
       `crew time for the same foreman day exists on both projects (${batchCollision.map((row) => row.detail).join("; ")}); reconcile crew time first`,
     );
   }
   // One geofence of each kind per project in storage.
-  const geofenceCollision = await runner.execute<{ kind: string }>(sql`
+  const geofenceCollision = await runner.execute<{ kind: string }>(
+    sql`
     select d.kind from project_geofences d
      where d.org_id = ${orgId} and d.project_id = ${duplicateId}
        and exists (select 1 from project_geofences s
                     where s.org_id = ${orgId} and s.project_id = ${survivorId} and s.kind = d.kind)
-     limit 5`, "objects");
+     limit 5`,
+    "objects",
+  );
   if (geofenceCollision.length > 0) {
     throw new ProjectMergeError(
       `a ${geofenceCollision.map((row) => row.kind).join(", ")} geofence exists on both projects; reconcile geofences first`,
     );
   }
   // Per-diem and travel pay uniqueness is per worker-day in storage.
-  const perDiemCollision = await runner.execute<{ detail: string }>(sql`
+  const perDiemCollision = await runner.execute<{ detail: string }>(
+    sql`
     select p.display_name || ' on ' || d.worked_on::text as detail
       from hrm_per_diem_entries d
       join worker_employments e on e.org_id = d.org_id and e.id = d.employment_id
@@ -700,13 +830,16 @@ async function planMerge(
        and exists (select 1 from hrm_per_diem_entries s
                     where s.org_id = ${orgId} and s.project_id = ${survivorId}
                       and s.employment_id = d.employment_id and s.worked_on = d.worked_on)
-     limit 5`, "objects");
+     limit 5`,
+    "objects",
+  );
   if (perDiemCollision.length > 0) {
     throw new ProjectMergeError(
       `per-diem for the same worker day exists on both projects (${perDiemCollision.map((row) => row.detail).join("; ")}); reconcile per-diem entries first`,
     );
   }
-  const travelCollision = await runner.execute<{ detail: string }>(sql`
+  const travelCollision = await runner.execute<{ detail: string }>(
+    sql`
     select p.display_name || ' on ' || d.worked_on::text as detail
       from hrm_travel_pay_entries d
       join worker_employments e on e.org_id = d.org_id and e.id = d.employment_id
@@ -715,7 +848,9 @@ async function planMerge(
        and exists (select 1 from hrm_travel_pay_entries s
                     where s.org_id = ${orgId} and s.project_id = ${survivorId}
                       and s.employment_id = d.employment_id and s.worked_on = d.worked_on)
-     limit 5`, "objects");
+     limit 5`,
+    "objects",
+  );
   if (travelCollision.length > 0) {
     throw new ProjectMergeError(
       `travel pay for the same worker day exists on both projects (${travelCollision.map((row) => row.detail).join("; ")}); reconcile travel pay entries first`,
@@ -723,17 +858,28 @@ async function planMerge(
   }
   const moved: MergePreview["moved"] = [];
   for (const [table, column] of PROJECT_REFS) {
-    const count = (await runner.execute<{ n: string }>(sql`
+    const count = (
+      await runner.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from ${sql.identifier(table)}
-       where org_id = ${orgId} and ${sql.identifier(column)} = ${duplicateId}`, "objects"))[0]?.n;
+       where org_id = ${orgId} and ${sql.identifier(column)} = ${duplicateId}`,
+        "objects",
+      )
+    )[0]?.n;
     moved.push({ table, rows: Number(count ?? 0) });
   }
   const customRefs: MergePreview["customRefs"] = [];
   for (const ref of await customProjectRefs(runner, orgId)) {
-    const count = (await runner.execute<{ n: string }>(sql`
+    const count = (
+      await runner.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from ${sql.identifier(ref.targetTable)}
-       where org_id = ${orgId} and custom ->> ${ref.key} = ${duplicateId}`, "objects"))[0]?.n;
-    if (count !== "0") customRefs.push({ table: ref.targetTable, key: ref.key, rows: Number(count ?? 0) });
+       where org_id = ${orgId} and custom ->> ${ref.key} = ${duplicateId}`,
+        "objects",
+      )
+    )[0]?.n;
+    if (count !== "0")
+      customRefs.push({ table: ref.targetTable, key: ref.key, rows: Number(count ?? 0) });
   }
   return { survivor, duplicate, moved, customRefs, alreadyMerged: false };
 }
@@ -805,7 +951,8 @@ async function moveJournalLinesForProjectMerge(
     source_document_id: string | null;
     reverses_entry_id: string | null;
     custom: Record<string, unknown>;
-  }>(sql`
+  }>(
+    sql`
     select distinct e.id, e.status, e.book_id, e.subsidiary_id, e.entry_number,
            e.posting_date::text as posting_date, e.period_id, e.memo, e.origin,
            e.source_document_id, e.reverses_entry_id, e.custom
@@ -813,13 +960,15 @@ async function moveJournalLinesForProjectMerge(
       join journal_lines jl on jl.entry_id = e.id and jl.org_id = e.org_id
      where e.org_id = ${orgId} and jl.project_id = ${duplicateId}
        and e.status in ('posted', 'reversed')
-     order by e.id`, "objects");
+     order by e.id`,
+    "objects",
+  );
 
-  const asText = (value: unknown): string | null =>
-    value == null ? null : String(value);
+  const asText = (value: unknown): string | null => (value == null ? null : String(value));
   let moved = draftMoved;
   for (const entry of entries) {
-    const rows = await tx.execute<Record<string, unknown>>(sql`
+    const rows = await tx.execute<Record<string, unknown>>(
+      sql`
       select id, line_number, account_id, subsidiary_id, amount::text, currency,
              txn_amount::text, fx_rate::text, memo, party_id, department_id,
              project_id, location_id, class_id, equipment_unit_id,
@@ -827,7 +976,9 @@ async function moveJournalLinesForProjectMerge(
              is_open_item, extra_dims, custom, contributor_kind, contributor_ref
         from journal_lines
        where entry_id = ${entry.id} and org_id = ${orgId}
-       order by line_number`, "objects");
+       order by line_number`,
+      "objects",
+    );
     if (rows.length === 0) continue;
     const legs = rows.map((row) => ({
       accountId: String(row.account_id),
@@ -904,9 +1055,7 @@ async function moveJournalLinesForProjectMerge(
        where org_id = ${orgId}
          and (cost_journal_entry_id = ${entry.id} or overhead_journal_entry_id = ${entry.id})
     `);
-    const oldByNumber = new Map(
-      rows.map((row) => [Number(row.line_number), String(row.id)]),
-    );
+    const oldByNumber = new Map(rows.map((row) => [Number(row.line_number), String(row.id)]));
     await tx.execute(sql`
       update documents set posted_entry_id = ${replacement.entryId}
        where org_id = ${orgId} and posted_entry_id = ${entry.id}`);
@@ -970,10 +1119,13 @@ export async function mergeProjects(
       // append-only journal guard admits no project escape. Previous values
       // are restored on success; after a failure only rollback is legal, and the settings
       // last only until the transaction ends either way.
-      const prior = await tx.execute<{ name: string; value: string }>(sql`
+      const prior = await tx.execute<{ name: string; value: string }>(
+        sql`
         select 'openbooks.amend' as name, coalesce(current_setting('openbooks.amend', true), 'off') as value
          union all
-        select 'openbooks.migration', coalesce(current_setting('openbooks.migration', true), 'off')`, "objects");
+        select 'openbooks.migration', coalesce(current_setting('openbooks.migration', true), 'off')`,
+        "objects",
+      );
       const restore = new Map(prior.map((r) => [r.name, r.value]));
       // Sequential restores: concurrent set_config calls share this
       // transaction's single pg client.
@@ -987,7 +1139,14 @@ export async function mergeProjects(
       };
       await tx.execute(sql`set local openbooks.amend = on`);
       await tx.execute(sql`set local openbooks.migration = on`);
-      const plan = await planMerge(tx, orgId, opts.survivorId, opts.duplicateId, true, opts.allowedSubsidiaryIds);
+      const plan = await planMerge(
+        tx,
+        orgId,
+        opts.survivorId,
+        opts.duplicateId,
+        true,
+        opts.allowedSubsidiaryIds,
+      );
       if (plan.alreadyMerged) {
         await restoreSettings();
         return {
@@ -1007,17 +1166,24 @@ export async function mergeProjects(
         // keep this update guard so a concurrent append cannot reach its
         // immutable storage trigger as a raw error.
         if (table === "journal_lines" || APPEND_ONLY_PROJECT_REF_TABLES.has(table)) continue;
-        const updated = table === "schedule_patterns"
-          ? (await tx.execute<{ id: string }>(sql`
+        const updated =
+          table === "schedule_patterns"
+            ? await tx.execute<{ id: string }>(
+                sql`
               update schedule_patterns
                  set project_id = ${opts.survivorId}, revision = revision + 1,
                      updated_at = now(), updated_by = ${opts.actorId}
                where org_id = ${orgId} and project_id = ${opts.duplicateId}
-              returning id`, "objects"))
-          : (await tx.execute<{ id: string }>(sql`
+              returning id`,
+                "objects",
+              )
+            : await tx.execute<{ id: string }>(
+                sql`
               update ${sql.identifier(table)} set ${sql.identifier(column)} = ${opts.survivorId}
                where org_id = ${orgId} and ${sql.identifier(column)} = ${opts.duplicateId}
-              returning id`, "objects"));
+              returning id`,
+                "objects",
+              );
         if (updated.length > 0) movedCounts[table] = updated.length;
       }
       const journalLinesMoved = await moveJournalLinesForProjectMerge(
@@ -1060,7 +1226,9 @@ export async function mergeProjects(
            set is_active = false, custom = ${JSON.stringify(mergedCustom)}::jsonb,
                updated_at = now(), updated_by = ${opts.actorId}
          where org_id = ${orgId} and id = ${opts.duplicateId}`);
-      const audit = (await tx.execute<{ id: string }>(sql`
+      const audit = (
+        await tx.execute<{ id: string }>(
+          sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'projects', ${opts.duplicateId}, 'merge',
                 ${JSON.stringify({
@@ -1068,7 +1236,10 @@ export async function mergeProjects(
                   moved: movedCounts,
                   reason: "duplicate project merge",
                 })}::jsonb, ${opts.actorId})
-        returning id`, "objects"))[0];
+        returning id`,
+          "objects",
+        )
+      )[0];
       await restoreSettings();
       return {
         survivorId: opts.survivorId,
@@ -1078,5 +1249,6 @@ export async function mergeProjects(
         alreadyMerged: false,
         auditId: audit?.id ?? null,
       };
-    }));
+    }),
+  );
 }
