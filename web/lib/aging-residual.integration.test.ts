@@ -227,6 +227,35 @@ test('a receipt journal applied in full to an invoice leaves no reconciling line
   }
 })
 
+test('a receipt journal applied in part reconciles by its unapplied remainder', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    let receipt = ''
+    await withBypassContext(async () => {
+      const eInv = await postInvoice(org, 'RES-INV-6', '1000.0000')
+      // An unapplied-receipt journal for the customer, 100 of its 300 applied.
+      receipt = await postEntry(org, 'PARTRECEIPT', [[org.accounts.bank, '300.0000', null], [org.accounts.ar, '-300.0000', org.customerId]])
+      await db.execute(sql`insert into applications (org_id, from_line_id, to_line_id, amount, source_amount, applied_on,
+          source_transaction_amount, source_transaction_currency, target_transaction_amount, target_transaction_currency,
+          settlement_rate, settlement_rate_source, settlement_rate_reference)
+        values (${org.orgId}, ${await lineId(receipt, org.accounts.ar)}, ${await lineId(eInv, org.accounts.ar)},
+          '100.0000', '100.0000', ${D}, '100.0000', 'CAD', '100.0000', 'CAD', 1, 'same_currency', 'RES-PROBE-3')`)
+    })
+    await withOrgContext(org.orgId, async () => {
+      const gl = await controlBalance(org, 'asset_receivable', D)
+      assert.equal(gl, '700.0000')
+      const aging = await agingByParty('ar', D, undefined, org.orgId)
+      assert.equal(aging.totals.total, gl, 'the summary ties the AR control')
+      const reconciling = aging.rows.find((row) => row.reconciling === true)
+      assert.ok(reconciling, 'the unapplied remainder of the receipt reconciles')
+      assert.equal(reconciling.total, '-200.0000')
+      assert.deepEqual(reconciling.entries?.map((entry) => [entry.entryId, entry.amount]), [[receipt, '-200.0000']])
+    })
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
 const consolidatedRows = [
   { label: "aging cutover open balance", register: async () => {
         const { sql } = await import('drizzle-orm')

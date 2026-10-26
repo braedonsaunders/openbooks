@@ -8,7 +8,7 @@ import { mulDecimal } from "@openbooks/engine/money/money";
 // resolve until merge; a relative import binds this checkout everywhere.
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "@openbooks/engine/records/open-item-kinds";
 import { appliedLegAmountExpr, datedAppliedAmountSql } from "@openbooks/engine/records/balance-due";
-import { asOfPostedEntryLateral, openItemCandidateDocumentsSql } from "@openbooks/engine/records/open-item-scopes";
+import { asOfPostedEntryLateral, openItemCandidateDocumentsSql, openItemCandidateLinesSql } from "@openbooks/engine/records/open-item-scopes";
 import { resolveOrgId } from "../org-scope";
 import { presentationCurrency, presentationRates, presentationSpotRatesSql, presentationAmountSql } from "../fx-presentation";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
@@ -280,7 +280,15 @@ function openDocumentsSql(
         -- control residual and the cash open items read, so the document rows
         -- and the control account always describe the same ledger.
         ${asOfPostedEntryLateral(orgId, asOf)}
-        join journal_lines jl on jl.entry_id = je.id and jl.is_open_item
+        -- Each document's own lines, looked up by its entry: joining the
+        -- control accounts' lines as a set reads every line they ever held.
+        -- OFFSET 0 keeps the planner from flattening the lookup back into
+        -- that set join.
+        join lateral (
+          select jl.* from journal_lines jl
+           where jl.entry_id = je.id and jl.org_id = ${orgId} and jl.is_open_item
+          offset 0
+        ) jl on true
         join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
         join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
@@ -612,17 +620,25 @@ async function unopenedControlLines(
        where l.org_id = ${orgId} and ${controlScope} and e.posting_date <= ${asOf}
          and e.book_id in ${statementBookIdsExpr(orgId, bookId)}
          and ${dimWhere(dims)}
-         and not exists (
+         -- An open-item line settled on the date leaves no remainder, so
+         -- only the open-item lines the index holds open (or a later
+         -- application touched) can reconcile; other control lines always
+         -- can.
+         and (not l.is_open_item
+              or l.id in (${openItemCandidateLinesSql({ orgId, asOf, accounts: controlScope })}))
+         -- Carried: the line's entry is the one carrying a document of this
+         -- side on the date, which can only be a document that entry posts.
+         and not (l.is_open_item and exists (
            select 1 from documents d
            ${asOfPostedEntryLateral(orgId, asOf)}
-           join journal_lines dl on dl.entry_id = je.id and dl.is_open_item
-          where dl.id = l.id
-            and d.org_id = ${orgId}
+          where d.org_id = ${orgId}
+            and (d.id = e.source_document_id or d.posted_entry_id = e.id)
+            and je.id = e.id
             and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
             and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
             and coalesce(d.posting_date, d.document_date) <= ${asOf}
             and ${dimWhere(dims, sql`d`)}
-         )
+         ))
     ), remainders as (
       select cl.*, ${datedAppliedAmountSql(orgId, sql`cl.line_id`, asOf)} as consumed
         from control_lines cl
@@ -1008,12 +1024,16 @@ export async function agingCurrenciesInScope(
   // a payment-only currency is offered too.
   const { kinds } = agingKinds(side);
   const baseCurrency = await presentationCurrency(resolvedOrgId);
+  // A currency is offered when a document in it can still be open on the
+  // date: the report in any other currency has no rows to show.
+  const accountScope = side === "ap" ? apOpenAccountScope(sql`a`, resolvedOrgId) : arOpenAccountScope(sql`a`);
   const r = await db.execute<{ ccy: string }>(sql`
     select distinct d.currency as ccy
       from documents d
       join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
      where d.org_id = ${resolvedOrgId}
+       and d.id in (${openItemCandidateDocumentsSql({ orgId: resolvedOrgId, asOf, accounts: accountScope })})
        and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
        and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
        and coalesce(d.posting_date, d.document_date) <= ${asOf}
