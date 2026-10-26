@@ -1,4 +1,4 @@
-import { ServerPagedTable } from '../../../../components/server-paged-table'
+import { PagedTable } from '../../../../components/paged-table'
 import { Badge, Button, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
@@ -109,12 +109,12 @@ export async function AccessList({
     <ListPageLayout header={<PageHeader title={t('title')} description={t('description')} back={{ href: '/platform', label: t('backToPlatform') }} actions={<Button asChild><Link href={platformDrawerHref(basePath, currentParams, 'grant', 'new') as never}>{t('grantAccess')}</Link></Button>} />}>
       <div className="space-y-5">
         {drawerOpen ? <GrantAccessForm open closeHref={drawerCloseHref} members={members} organizations={organizations} actingUsers={actingUsers} /> : null}
-        <ServerPagedTable
+        <PagedTable
           rows={grants} rowKey={(row) => row.id}
-          total={total} page={page} perPage={perPage}
+          serverWindow={{ total, page, perPage }}
           basePath={basePath} currentParams={currentParams} sort={sort} dir={dir}
           empty={filtered ? t('emptyFiltered') : t('empty')}
-          toolbar={<><SearchInput placeholder={t('searchPlaceholder')} /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label={t('status')} options={[
+          toolbarAfter={<><SearchInput placeholder={t('searchPlaceholder')} /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label={t('status')} options={[
             { value: 'active', label: t('statuses.active'), count: Number(statusCounts.active ?? 0) },
             { value: 'inactive', label: t('statuses.revoked'), count: Number(statusCounts.inactive ?? 0) },
           ]} /></>}

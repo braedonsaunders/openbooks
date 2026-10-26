@@ -1,4 +1,4 @@
-import { ServerPagedTable } from '../../../../components/server-paged-table'
+import { PagedTable } from '../../../../components/paged-table'
 import Link from 'next/link'
 import { ShieldAlert } from 'lucide-react'
 import { Badge, Button, PageHeader } from '@openbooks/ui'
@@ -135,12 +135,12 @@ export async function UsersList({
     <ListPageLayout header={<PageHeader title={t('title')} description={t('description')} back={{ href: '/platform', label: t('backToPlatform') }} />}>
       <div className="space-y-5">
 
-        <ServerPagedTable
+        <PagedTable
           rows={rows} rowKey={(row) => row.id}
-          total={total} page={page} perPage={perPage}
+          serverWindow={{ total, page, perPage }}
           basePath={basePath} currentParams={currentParams} sort={sort} dir={dir}
           empty={filtered ? t('emptyFiltered') : t('empty')}
-          toolbar={<><SearchInput placeholder={t('searchPlaceholder')} /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label={t('status')} options={[
+          toolbarAfter={<><SearchInput placeholder={t('searchPlaceholder')} /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label={t('status')} options={[
             { value: 'active', label: t('statuses.active'), count: Number(statusCounts.active ?? 0) },
             { value: 'inactive', label: t('statuses.inactive'), count: Number(statusCounts.inactive ?? 0) },
             { value: 'super', label: t('statuses.superAdmin'), count: Number(statusCounts.super ?? 0) },

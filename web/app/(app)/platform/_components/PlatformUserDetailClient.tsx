@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Badge, UrlDrawer } from '@openbooks/ui'
 import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
-import { ServerPagedTable } from '../../../../components/server-paged-table'
+import { PagedTable } from '../../../../components/paged-table'
 import type { PlatformGrant, PlatformUser } from '../../../../lib/platform-admin'
 import { asDate } from '../../../../lib/platform-console'
 import { useViewerFormat } from '@/lib/viewer-format'
@@ -93,12 +93,10 @@ export function PlatformUserDetailClient({
           <Fact label={t('facts.accountId')} value={user.id} mono />
         </dl>
       ) : (
-        <ServerPagedTable
+        <PagedTable
           rows={grants}
           rowKey={(grant) => grant.id}
-          total={totalGrants}
-          page={grantsPage}
-          perPage={grantsPerPage}
+          serverWindow={{ total: totalGrants, page: grantsPage, perPage: grantsPerPage }}
           pageParamKey="grantPage"
           perPageParamKey="grantPerPage"
           basePath="/platform/users"

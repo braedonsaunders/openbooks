@@ -1,4 +1,4 @@
-import { ServerPagedTable } from '../../../../components/server-paged-table'
+import { PagedTable } from '../../../../components/paged-table'
 import { Badge, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
@@ -89,12 +89,12 @@ export async function EmailLogList({
     <ListPageLayout header={<PageHeader title={t('title')} description={t('description')} back={{ href: '/platform', label: t('backToPlatform') }} />}>
       <div className="space-y-5">
 
-        <ServerPagedTable
+        <PagedTable
           rows={rows} rowKey={(row) => row.id}
-          total={total} page={page} perPage={perPage}
+          serverWindow={{ total, page, perPage }}
           basePath={basePath} currentParams={currentParams} sort={sort} dir={dir}
           empty={filtered ? t('emptyFiltered') : t('empty')}
-          toolbar={<><SearchInput placeholder={t('searchPlaceholder')} /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label={t('status')} options={STATUSES.map((value) => ({ value, label: t(`statuses.${value}`), count: Number(statusCounts[value] ?? 0) }))} /></>}
+          toolbarAfter={<><SearchInput placeholder={t('searchPlaceholder')} /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label={t('status')} options={STATUSES.map((value) => ({ value, label: t(`statuses.${value}`), count: Number(statusCounts[value] ?? 0) }))} /></>}
           columns={[
           { key: 'subject', header: t('columns.subject'), sortKey: 'subject', cell: (row) => <EmailSubjectCell subject={row.subject} category={row.categoryKey ?? ''} /> },
           { key: 'organization', header: t('columns.organization'), sortKey: 'organization', cell: (row) => row.orgName },

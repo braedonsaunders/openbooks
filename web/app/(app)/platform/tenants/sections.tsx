@@ -1,4 +1,4 @@
-import { ServerPagedTable } from '../../../../components/server-paged-table'
+import { PagedTable } from '../../../../components/paged-table'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
@@ -62,12 +62,12 @@ export async function TenantsList({
     <ListPageLayout header={<PageHeader title={t('title')} description={t('description')} back={{ href: '/platform', label: t('backToPlatform') }} actions={<NewOrganizationButton basePath={basePath} />} />}>
       <div className="space-y-5">
 
-        <ServerPagedTable
+        <PagedTable
           rows={rows} rowKey={(row) => row.id}
-          total={total} page={page} perPage={perPage}
+          serverWindow={{ total, page, perPage }}
           basePath={basePath} currentParams={currentParams} sort={sort} dir={dir}
           empty={filtered ? t('emptyFiltered') : t('empty')}
-          toolbar={<><SearchInput placeholder={t('searchPlaceholder')} /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="environment" label={t('environment')} options={(['production', 'sandbox', 'preview'] as const).map((value) => ({ value, label: t(`environments.${value}`), count: Number(environmentCounts[value] ?? 0) }))} /></>}
+          toolbarAfter={<><SearchInput placeholder={t('searchPlaceholder')} /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="environment" label={t('environment')} options={(['production', 'sandbox', 'preview'] as const).map((value) => ({ value, label: t(`environments.${value}`), count: Number(environmentCounts[value] ?? 0) }))} /></>}
           columns={[
           { key: 'name', header: t('columns.organization'), sortKey: 'name', cell: (org) => <OrgNameCell name={org.name} subtitle={org.legalName ?? ''} /> },
           { key: 'environment', header: t('environment'), sortKey: 'environment', cell: (org) => <OrgEnvironmentCell envKind={org.envKind} variant={ENV_VARIANT[org.envKind]} parentNote={org.parentName ? t('parentNote', { name: org.parentName }) : ''} /> },
