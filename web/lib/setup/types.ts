@@ -78,6 +78,12 @@ export interface SetupOption {
 export const setupOptionLabel = (option: SetupOption, t: (key: string) => string): string =>
   option.labelKey ? t(option.labelKey) : (option.label ?? option.value);
 
+/** Resolve a Setup list column header: its literal label, else its declared key, else `fields.<key>`. */
+export const setupColumnHeader = (
+  column: Pick<SetupColumn, "key" | "label" | "labelKey">,
+  t: (key: string) => string,
+): string => column.label ?? t(column.labelKey ?? `fields.${column.key}`);
+
 /**
  * Options that come from a runtime registry rather than this pure module.
  * Server surfaces materialize them via `resolveDynamicSetupOptions`

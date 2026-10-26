@@ -85,6 +85,7 @@ export type {
 } from "./types";
 export {
   setupOptionLabel,
+  setupColumnHeader,
   setupFieldVisible,
   setupFieldOptions,
   setupEntitySubsidiaryField,

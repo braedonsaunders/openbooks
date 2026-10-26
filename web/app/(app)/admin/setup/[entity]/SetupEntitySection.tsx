@@ -24,6 +24,7 @@ import {
   setupChildEntities,
   resolveSetupEntityGate,
   setupOptionLabel,
+  setupColumnHeader,
   toSnake,
   type SetupColumn,
   type SetupEntity,
@@ -772,7 +773,7 @@ export async function SetupEntitySection({
                 align: ["number", "money", "percent"].includes(column.kind)
                   ? ("right" as const)
                   : ("left" as const),
-                header: column.label ?? t(column.labelKey ?? `fields.${column.key}`),
+                header: setupColumnHeader(column, t),
                 cell: (row) => {
                   const content =
                     renderColumn?.(column, row) ??

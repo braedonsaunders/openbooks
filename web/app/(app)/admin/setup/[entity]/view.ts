@@ -39,6 +39,7 @@ import {
   resolveSetupEntityGate,
   setupEntityForFeatureState,
   setupOptionLabel,
+  setupColumnHeader,
   toSnake,
   type SetupColumn,
   type SetupColumnKind,
@@ -415,7 +416,7 @@ export async function loadSetupEntity(
     columns: listColumns.map((c) => ({
       key: c.key,
       kind: c.kind,
-      header: t(`fields.${c.key}`),
+      header: setupColumnHeader(c, t),
     })),
     rows: entity
       ? rows.map((row) => {
