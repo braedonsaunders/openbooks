@@ -5,7 +5,11 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "@openbooks/engine/platform/db";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/testing/fixtures";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+} from "@openbooks/engine/testing/fixtures";
 
 /**
  * Inventory writes lock the count / transfer order / voucher row and recheck
@@ -20,18 +24,34 @@ const state = { user: { orgId: "", id: "" }, scope: null as Set<string> | null }
 Object.assign(globalThis, { __inventoryScopeAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
-      return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
-        "export async function guardPermission(){return {user:globalThis.__inventoryScopeAudit.user,allowedSubsidiaryIds:globalThis.__inventoryScopeAudit.scope}}",
-      ) };
+    // Inventory routes import the alias. The relative specifier stays for any
+    // leftover relative import; either path must be the stub or the real
+    // auth module replaces the test bypass for the rest of the process.
+    if (
+      (specifier === "@/lib/authz" || specifier === "../../../../lib/authz") &&
+      context.parentURL?.includes("/api/inventory/")
+    ) {
+      return {
+        shortCircuit: true,
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            "export async function guardPermission(){return {user:globalThis.__inventoryScopeAudit.user,allowedSubsidiaryIds:globalThis.__inventoryScopeAudit.scope}}",
+          ),
+      };
     }
     // The counts route gates through the factory's "@/lib/feature-gates"
     // spelling at request time; it must see the same test session as the
     // route file's relative import.
     if (specifier === "@/lib/feature-gates") {
-      return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
-        "export async function guardFeaturePermission(){return {user:globalThis.__inventoryScopeAudit.user,allowedSubsidiaryIds:globalThis.__inventoryScopeAudit.scope}}",
-      ) };
+      return {
+        shortCircuit: true,
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            "export async function guardFeaturePermission(){return {user:globalThis.__inventoryScopeAudit.user,allowedSubsidiaryIds:globalThis.__inventoryScopeAudit.scope}}",
+          ),
+      };
     }
     return next(specifier, context);
   },
@@ -39,23 +59,41 @@ registerHooks({
 const { POST: countsPost } = await import("./counts/route");
 const { POST: advancedPost } = await import("./advanced/route");
 
-
 async function fixture() {
   installEngineSeams();
   const org = await createScratchOrg();
   const actor = (await seedFlowActors(org.orgId)).adminId;
   state.user = { orgId: org.orgId, id: actor };
   // Transfer ship and receive are multi-location workflow, gated by Warehousing.
-  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true,"warehousing":true}'::jsonb) where id=${org.orgId}`);
+  await db.execute(
+    sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true,"warehousing":true}'::jsonb) where id=${org.orgId}`,
+  );
   const hidden = randomUUID();
-  await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`);
-  await db.execute(sql`insert into stock_locations(id,org_id,location_id,code,kind,is_active) values (${randomUUID()},${org.orgId},${org.locationId},'TRANSIT-SCOPE','transit',true)`);
+  await db.execute(
+    sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`,
+  );
+  await db.execute(
+    sql`insert into stock_locations(id,org_id,location_id,code,kind,is_active) values (${randomUUID()},${org.orgId},${org.locationId},'TRANSIT-SCOPE','transit',true)`,
+  );
   const { receiveInventory } = await import("@openbooks/engine/inventory/movements");
-  await receiveInventory(org.orgId, actor, { itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "5", unitCost: "10", subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date });
+  await receiveInventory(org.orgId, actor, {
+    itemId: org.items.fifo,
+    stockLocationId: org.stockLocationId,
+    quantity: "5",
+    unitCost: "10",
+    subsidiaryId: org.subsidiaryId,
+    offsetAccountId: org.accounts.clearing,
+    date: org.date,
+  });
   return { org, actor, hidden };
 }
 
-async function seedCount(orgId: string, actor: string, subsidiaryId: string, locationId: string): Promise<string> {
+async function seedCount(
+  orgId: string,
+  actor: string,
+  subsidiaryId: string,
+  locationId: string,
+): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into stock_counts (id, org_id, location_id, subsidiary_id, counted_on, status, created_by, updated_by)
@@ -64,14 +102,29 @@ async function seedCount(orgId: string, actor: string, subsidiaryId: string, loc
 }
 
 async function countStatus(orgId: string, countId: string): Promise<string> {
-  return (await db.execute<{ status: string }>(sql`select status from stock_counts where org_id=${orgId} and id=${countId}`, "objects"))[0]!.status;
+  return (
+    await db.execute<{ status: string }>(
+      sql`select status from stock_counts where org_id=${orgId} and id=${countId}`,
+      "objects",
+    )
+  )[0]!.status;
 }
 
 const countsCall = (body: unknown) =>
-  countsPost(new Request("http://audit.local/api/inventory/counts", { method: "POST", body: JSON.stringify(body) }));
+  countsPost(
+    new Request("http://audit.local/api/inventory/counts", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  );
 
 const advancedCall = (body: unknown) =>
-  advancedPost(new Request("http://audit.local/api/inventory/advanced", { method: "POST", body: JSON.stringify(body) }));
+  advancedPost(
+    new Request("http://audit.local/api/inventory/advanced", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  );
 
 test("count writes refuse an out-of-scope count and leave it untouched", async () => {
   const { org, actor, hidden } = await fixture();
@@ -79,12 +132,24 @@ test("count writes refuse an out-of-scope count and leave it untouched", async (
     state.scope = new Set([org.subsidiaryId]);
     const countA = await seedCount(org.orgId, actor, org.subsidiaryId, org.locationId);
     const countB = await seedCount(org.orgId, actor, hidden, org.locationId);
-    const refused = await countsCall({ action: "cancel", countId: countB, idempotencyKey: randomUUID() });
+    const refused = await countsCall({
+      action: "cancel",
+      countId: countB,
+      idempotencyKey: randomUUID(),
+    });
     // Out-of-scope records read as not found (hide-details contract): the
     // row exists but the caller must not distinguish it from absent.
     assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()));
-    assert.equal(await countStatus(org.orgId, countB), "draft", "a refused cancel leaves the count untouched");
-    const accepted = await countsCall({ action: "cancel", countId: countA, idempotencyKey: randomUUID() });
+    assert.equal(
+      await countStatus(org.orgId, countB),
+      "draft",
+      "a refused cancel leaves the count untouched",
+    );
+    const accepted = await countsCall({
+      action: "cancel",
+      countId: countA,
+      idempotencyKey: randomUUID(),
+    });
     assert.equal(accepted.status, 200, JSON.stringify(await accepted.clone().json()));
     assert.equal(await countStatus(org.orgId, countA), "cancelled");
   } finally {
@@ -101,22 +166,36 @@ test("count cancel waits on a count reassignment in flight instead of racing it"
     state.scope = new Set([org.subsidiaryId]);
     const moving = await seedCount(org.orgId, actor, org.subsidiaryId, org.locationId);
     await writer.query("begin");
-    await writer.query("select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)");
-    const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+    await writer.query(
+      "select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)",
+    );
+    const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!
+      .pid;
     await writer.query("update stock_counts set subsidiary_id=$1 where id=$2", [hidden, moving]);
     pending = countsCall({ action: "cancel", countId: moving, idempotencyKey: randomUUID() });
     let blocked = false;
     for (let n = 0; n < 200; n++) {
-      blocked = !!((await pool.query("select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))", [pid])).rowCount);
+      blocked = !!(
+        await pool.query("select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))", [
+          pid,
+        ])
+      ).rowCount;
       if (blocked) break;
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
-    assert.ok(blocked, "the cancel waits on the locked count instead of mutating the pre-reassignment row");
+    assert.ok(
+      blocked,
+      "the cancel waits on the locked count instead of mutating the pre-reassignment row",
+    );
     await writer.query("commit");
     const response = await pending;
     // Same uniform 404 after the reassignment lands: hidden, not forbidden.
     assert.equal(response.status, 404, JSON.stringify(await response.clone().json()));
-    assert.equal(await countStatus(org.orgId, moving), "draft", "the cancel refused after the reassignment leaves the count draft");
+    assert.equal(
+      await countStatus(org.orgId, moving),
+      "draft",
+      "the cancel refused after the reassignment leaves the count draft",
+    );
   } finally {
     await writer.query("rollback").catch(() => {});
     await pending?.catch(() => {});
@@ -146,19 +225,39 @@ test("transfer ship refuses an out-of-scope order and leaves it draft", async ()
     state.scope = null;
     const orderB = await seedOrder(hidden);
     state.scope = new Set([org.subsidiaryId]);
-    const refused = await advancedCall({ action: "shipTransfer", id: orderB, date: org.date, idempotencyKey: randomUUID() });
+    const refused = await advancedCall({
+      action: "shipTransfer",
+      id: orderB,
+      date: org.date,
+      idempotencyKey: randomUUID(),
+    });
     // Out-of-scope order hides as not found, same as counts above.
     assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()));
     assert.equal(
-      (await db.execute<{ status: string }>(sql`select status from transfer_orders where id=${orderB}`, "objects"))[0]!.status,
+      (
+        await db.execute<{ status: string }>(
+          sql`select status from transfer_orders where id=${orderB}`,
+          "objects",
+        )
+      )[0]!.status,
       "draft",
       "a refused ship leaves the order draft",
     );
     const orderA = await seedOrder(org.subsidiaryId);
-    const accepted = await advancedCall({ action: "shipTransfer", id: orderA, date: org.date, idempotencyKey: randomUUID() });
+    const accepted = await advancedCall({
+      action: "shipTransfer",
+      id: orderA,
+      date: org.date,
+      idempotencyKey: randomUUID(),
+    });
     assert.equal(accepted.status, 200, JSON.stringify(await accepted.clone().json()));
     assert.equal(
-      (await db.execute<{ status: string }>(sql`select status from transfer_orders where id=${orderA}`, "objects"))[0]!.status,
+      (
+        await db.execute<{ status: string }>(
+          sql`select status from transfer_orders where id=${orderA}`,
+          "objects",
+        )
+      )[0]!.status,
       "in_transit",
     );
   } finally {

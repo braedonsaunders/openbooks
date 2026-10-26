@@ -75,6 +75,7 @@ const mockSources = new Map<string, string>([
       export const registerRequestOrgResolver = () => {}
       export const withBypass = (fn) => fn()
       export const withBypassContext = (fn) => fn()
+      export const withOrgContext = (_orgId, fn) => fn()
       export const db = {
         async execute(query, mode) {
           const inMode = (result) => (mode === 'objects' ? result.rows : result)
@@ -110,7 +111,9 @@ const mockUrls = new Map<string, string>([
   ["../../../../../lib/feature-gates", "mock:gates"],
   ["@/lib/feature-gates", "mock:gates"],
   ["../../../../../lib/analytics/true-cost-data", "mock:data"],
+  ["@/lib/analytics/true-cost-data", "mock:data"],
   ["../../../../../lib/analytics/true-cost-engine", "mock:engine"],
+  ["@/lib/analytics/true-cost-engine", "mock:engine"],
   ["@openbooks/engine/platform/db", "mock:db"],
 ]);
 let realAuthzUrl = "";
