@@ -1,10 +1,10 @@
-import { z } from 'zod'
+import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 
 import { NextResponse } from "next/server";
-import { sql } from 'drizzle-orm'
+import { sql } from "drizzle-orm";
 import { db, orgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   PaymentAcceptanceError,
@@ -16,15 +16,16 @@ import {
 import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { normalizeMoney } from "@openbooks/engine/money/money";
 import { guardUnrestrictedScope } from "../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../../lib/payroll-decimal-refusal";
-import { readPaymentProviderSetupData } from '@/lib/setup/payment-providers-data'
+import { readPaymentProviderSetupData } from "@/lib/setup/payment-providers-data";
 
-const surchargeMoney = (field: string) => z.string().superRefine((value, ctx) => {
-  if (canonicalDecimal(value, 4) === null) ctx.addIssue({ code: "custom", message: moneyRefusal(field, value) });
-});
+const surchargeMoney = (field: string) =>
+  z.string().superRefine((value, ctx) => {
+    if (canonicalDecimal(value, 4) === null)
+      ctx.addIssue({ code: "custom", message: moneyRefusal(field, value) });
+  });
 const acceptanceConfigSchema = z.object({
   action: z.never().optional(),
   provider: z.enum(["stripe", "adyen", "gocardless"]),
@@ -43,17 +44,37 @@ const acceptanceConfigSchema = z.object({
   defaultDisputedFundsAccountId: uuidString().nullable().optional(),
   defaultChargebackLossAccountId: uuidString().nullable().optional(),
   defaultDisputeFeeAccountId: uuidString().nullable().optional(),
-})
+});
 const requestBodySchema = z.union([
   z.discriminatedUnion("action", [
-    z.object({ action: z.literal("saveRule"), name: z.string().trim().min(1).max(200), calculation: z.enum(["percent", "fixed", "percent_plus_fixed"]), feeIncomeAccountId: uuidString(), id: uuidString().optional(), provider: z.enum(["stripe", "adyen", "gocardless"]).nullable().optional(), paymentMethod: z.enum(["card", "bank_debit", "all"]).optional(), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), percent: surchargeMoney("Surcharge percent").nullable().optional(), fixedAmount: surchargeMoney("Surcharge fixed amount").nullable().optional(), capAmount: surchargeMoney("Surcharge cap amount").nullable().optional() }),
+    z.object({
+      action: z.literal("saveRule"),
+      name: z.string().trim().min(1).max(200),
+      calculation: z.enum(["percent", "fixed", "percent_plus_fixed"]),
+      feeIncomeAccountId: uuidString(),
+      id: uuidString().optional(),
+      provider: z.enum(["stripe", "adyen", "gocardless"]).nullable().optional(),
+      paymentMethod: z.enum(["card", "bank_debit", "all"]).optional(),
+      effectiveFrom: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional(),
+      effectiveTo: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .optional(),
+      percent: surchargeMoney("Surcharge percent").nullable().optional(),
+      fixedAmount: surchargeMoney("Surcharge fixed amount").nullable().optional(),
+      capAmount: surchargeMoney("Surcharge cap amount").nullable().optional(),
+    }),
     z.object({ action: z.literal("deleteRule"), id: uuidString() }),
     z.object({ action: z.literal("test"), provider: z.enum(["stripe", "adyen", "gocardless"]) }),
   ]),
   acceptanceConfigSchema,
 ]);
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /** Audit-evidence shape for payment_surcharge_rules: the stored row itself. */
 type SurchargeRuleSnapshot = {
@@ -68,7 +89,7 @@ type SurchargeRuleSnapshot = {
   effectiveFrom: string;
   effectiveTo: string | null;
   isActive: boolean;
-}
+};
 
 const SURCHARGE_RULE_SNAPSHOT_COLUMNS = sql`
   name, calculation, percent::text as percent, fixed_amount::text as "fixedAmount",
@@ -110,31 +131,31 @@ async function legacyGET(authz: Parameters<typeof readPaymentProviderSetupData>[
 
 export const GET = defineRoute({
   permission: "admin.setup.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: "onlinePayments",
   handler: async ({ authz }) => withOrgTransaction(authz.user.orgId, () => legacyGET(authz)),
 });
 
 export const POST = defineRoute({
-  permission: 'admin.setup.manage',
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  scope: 'unrestricted',
+  permission: "admin.setup.manage",
+  feature: "onlinePayments",
+  scope: "unrestricted",
   body: requestBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
-    const gate = routeAuthz
+    const gate = routeAuthz;
 
-    if (!(await isFeatureEnabled(gate.user.orgId, "onlinePayments"))) {
-      return NextResponse.json({ error: "feature disabled" }, { status: 404 });
-    }
+    const orgId = gate.user.orgId;
 
-    const orgId = gate.user.orgId
-
-    if (body.action === 'saveRule') {
+    if (body.action === "saveRule") {
       const unrestrictedScope = guardUnrestrictedScope(gate);
       if (unrestrictedScope) return unrestrictedScope;
       const name = typeof body.name === "string" ? body.name.trim() : "";
-      const calculation = body.calculation
+      const calculation = body.calculation;
       if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
-      if (calculation !== "percent" && calculation !== "fixed" && calculation !== "percent_plus_fixed") {
+      if (
+        calculation !== "percent" &&
+        calculation !== "fixed" &&
+        calculation !== "percent_plus_fixed"
+      ) {
         return NextResponse.json({ error: "invalid calculation" }, { status: 400 });
       }
       if (typeof body.feeIncomeAccountId !== "string" || !isUuid(body.feeIncomeAccountId)) {
@@ -144,18 +165,34 @@ export const POST = defineRoute({
       if (id !== null && !isUuid(id)) {
         return NextResponse.json({ error: "invalid rule id" }, { status: 400 });
       }
-      const provider = body.provider === "stripe" || body.provider === "adyen" || body.provider === "gocardless" ? body.provider : null;
-      const paymentMethod = body.paymentMethod === "card" || body.paymentMethod === "bank_debit" ? body.paymentMethod : "all";
+      const provider =
+        body.provider === "stripe" || body.provider === "adyen" || body.provider === "gocardless"
+          ? body.provider
+          : null;
+      const paymentMethod =
+        body.paymentMethod === "card" || body.paymentMethod === "bank_debit"
+          ? body.paymentMethod
+          : "all";
 
       // Effective dating accepts only real calendar days: a malformed string
       // would otherwise surface as a Postgres cast failure and an inverted
       // range as a constraint violation — both raw 500s.
-      const effectiveFrom = typeof body.effectiveFrom === "string" && body.effectiveFrom ? body.effectiveFrom : await businessToday(orgId);
-      const effectiveTo = typeof body.effectiveTo === "string" && body.effectiveTo ? body.effectiveTo : null;
+      const effectiveFrom =
+        typeof body.effectiveFrom === "string" && body.effectiveFrom
+          ? body.effectiveFrom
+          : await businessToday(orgId);
+      const effectiveTo =
+        typeof body.effectiveTo === "string" && body.effectiveTo ? body.effectiveTo : null;
       if (!isIsoCalendarDate(effectiveFrom)) {
-        return NextResponse.json({ error: "effectiveFrom must be a calendar date (YYYY-MM-DD)" }, { status: 422 });
+        return NextResponse.json(
+          { error: "effectiveFrom must be a calendar date (YYYY-MM-DD)" },
+          { status: 422 },
+        );
       }
-      if (effectiveTo !== null && (!isIsoCalendarDate(effectiveTo) || effectiveTo < effectiveFrom)) {
+      if (
+        effectiveTo !== null &&
+        (!isIsoCalendarDate(effectiveTo) || effectiveTo < effectiveFrom)
+      ) {
         return NextResponse.json(
           { error: "effectiveTo must be a calendar date on or after effectiveFrom" },
           { status: 422 },
@@ -169,7 +206,8 @@ export const POST = defineRoute({
         if (raw == null || raw === "") return null;
         const exact = canonicalDecimal(raw, 4);
         if (exact === null) return "invalid";
-        if (compareDecimal(exact, "0") <= 0 || exact.replace("-", "").split(".")[0]!.length > 12) return "invalid";
+        if (compareDecimal(exact, "0") <= 0 || exact.replace("-", "").split(".")[0]!.length > 12)
+          return "invalid";
         return normalizeMoney(exact);
       };
       const percent = moneyOrNull(body.percent);
@@ -200,9 +238,14 @@ export const POST = defineRoute({
       // The calculation owns exactly its components: a component it ignores must
       // not be stored (misleading setup), and the rule must actually charge — a
       // policy whose fee is identically zero would silently pass as a surcharge.
-      if ((calculation === "fixed" && percent !== null) || (calculation === "percent" && fixedAmount !== null)) {
+      if (
+        (calculation === "fixed" && percent !== null) ||
+        (calculation === "percent" && fixedAmount !== null)
+      ) {
         return NextResponse.json(
-          { error: `${calculation} surcharges do not take a ${calculation === "fixed" ? "percent" : "fixed amount"}` },
+          {
+            error: `${calculation} surcharges do not take a ${calculation === "fixed" ? "percent" : "fixed amount"}`,
+          },
           { status: 422 },
         );
       }
@@ -220,16 +263,20 @@ export const POST = defineRoute({
       // A referenced fee account must be a real posting income account the
       // caller may see: entity-owned accounts outside their subsidiaries fail
       // the same lookup (record-level 404-shaped refusal, unchanged).
-      const feeScope = gate.allowedSubsidiaryIds === null
-        ? sql``
-        : sql` and (subsidiary_id is null or subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[]))`;
-      const feeAccount = await db.execute<{ id: string }>(sql`
+      const feeScope =
+        gate.allowedSubsidiaryIds === null
+          ? sql``
+          : sql` and (subsidiary_id is null or subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[]))`;
+      const feeAccount = await db.execute<{ id: string }>(
+        sql`
         select id from accounts
          where org_id = ${orgId} and id = ${body.feeIncomeAccountId}
            and type in ('income', 'income_other') and is_active and not is_summary
            ${feeScope}
          limit 1
-      `, "objects");
+      `,
+        "objects",
+      );
       if (!feeAccount[0]) {
         return NextResponse.json({ error: "fee income account not found" }, { status: 422 });
       }
@@ -263,13 +310,18 @@ export const POST = defineRoute({
           try {
             await withOrgTransaction(orgId, async () => {
               const beforeRow = id
-                ? ((await db.execute<SurchargeRuleSnapshot>(sql`
+                ? ((
+                    await db.execute<SurchargeRuleSnapshot>(
+                      sql`
                       select ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
                         from payment_surcharge_rules
                        where org_id = ${orgId} and id = ${id}
                        for update
-                    `, "objects"))[0] ?? null)
-                : null
+                    `,
+                      "objects",
+                    )
+                  )[0] ?? null)
+                : null;
               if (id && !beforeRow) throw new SurchargeRuleMissing();
 
               // Same provider tier + overlapping effective window + overlapping
@@ -277,7 +329,8 @@ export const POST = defineRoute({
               // message; migration 0023's exclusion constraint is the authoritative
               // concurrency guard when two transactions both pass this read.
               // Disjoint methods (card-only vs bank-debit-only) never compete.
-              const clash = await db.execute<{ id: string }>(sql`
+              const clash = await db.execute<{ id: string }>(
+                sql`
                 select id from payment_surcharge_rules
                  where org_id = ${orgId} and is_active
                    and provider is not distinct from ${values.provider}
@@ -287,11 +340,14 @@ export const POST = defineRoute({
                    and not ((payment_method = 'card' and ${values.paymentMethod} = 'bank_debit')
                          or (payment_method = 'bank_debit' and ${values.paymentMethod} = 'card'))
                  limit 1
-              `, "objects");
+              `,
+                "objects",
+              );
               if (clash[0]) throw new SurchargeRuleDatingConflict(values.effectiveFrom);
 
               if (id) {
-                const updated = await db.execute<SurchargeRuleSnapshot>(sql`
+                const updated = await db.execute<SurchargeRuleSnapshot>(
+                  sql`
                   update payment_surcharge_rules set
                     name = ${values.name}, calculation = ${values.calculation}, percent = ${values.percent},
                     fixed_amount = ${values.fixedAmount}, cap_amount = ${values.capAmount},
@@ -300,7 +356,9 @@ export const POST = defineRoute({
                     effective_to = ${values.effectiveTo}, updated_at = now(), updated_by = ${gate.user.id}
                   where org_id = ${orgId} and id = ${id}
                   returning ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
-                `, "objects");
+                `,
+                  "objects",
+                );
                 const afterRow = updated[0];
                 if (!afterRow) throw new SurchargeRuleMissing();
                 await db.execute(sql`
@@ -309,7 +367,8 @@ export const POST = defineRoute({
                           ${JSON.stringify({ rule: [beforeRow, afterRow] })}::jsonb, ${gate.user.id})
                 `);
               } else {
-                const inserted = await db.execute<SurchargeRuleSnapshot & { id: string }>(sql`
+                const inserted = await db.execute<SurchargeRuleSnapshot & { id: string }>(
+                  sql`
                   insert into payment_surcharge_rules
                     (org_id, name, calculation, percent, fixed_amount, cap_amount, fee_income_account_id,
                      provider, payment_method, effective_from, effective_to, created_by, updated_by)
@@ -317,7 +376,9 @@ export const POST = defineRoute({
                           ${values.capAmount}, ${values.feeIncomeAccountId}, ${values.provider}, ${values.paymentMethod},
                           ${values.effectiveFrom}, ${values.effectiveTo}, ${gate.user.id}, ${gate.user.id})
                   returning id, ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
-                `, "objects");
+                `,
+                  "objects",
+                );
                 const afterRow = inserted[0]!;
                 await db.execute(sql`
                   insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -325,13 +386,15 @@ export const POST = defineRoute({
                           ${JSON.stringify({ rule: [null, afterRow] })}::jsonb, ${gate.user.id})
                 `);
               }
-            })
-            break
+            });
+            break;
           } catch (error) {
             if (postgresErrorCode(error) !== "40P01") throw error;
             if (!ownsTransaction || attempt >= 2) {
               return NextResponse.json(
-                { error: "surcharge rule save conflicted with another transaction; retry the save" },
+                {
+                  error: "surcharge rule save conflicted with another transaction; retry the save",
+                },
                 { status: 409 },
               );
             }
@@ -349,11 +412,13 @@ export const POST = defineRoute({
         // than leaking a constraint name or converting the loser into a 500.
         const code = postgresErrorCode(e);
         if (code === "23P01" || code === "23505") {
-          return apiErrorResponse(new SurchargeRuleDatingConflict(values.effectiveFrom), { safeStatus: 409 });
+          return apiErrorResponse(new SurchargeRuleDatingConflict(values.effectiveFrom), {
+            safeStatus: 409,
+          });
         }
         throw e;
       }
-      return NextResponse.json({ ok: true })
+      return NextResponse.json({ ok: true });
     }
 
     if (body.action === "deleteRule") {
@@ -364,21 +429,27 @@ export const POST = defineRoute({
       }
       try {
         await withOrgTransaction(orgId, async () => {
-          const before = await db.execute<SurchargeRuleSnapshot>(sql`
+          const before = await db.execute<SurchargeRuleSnapshot>(
+            sql`
             select ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
               from payment_surcharge_rules
              where org_id = ${orgId} and id = ${body.id}
              for update
-          `, "objects");
+          `,
+            "objects",
+          );
           const beforeRow = before[0];
           if (!beforeRow || !beforeRow.isActive) throw new SurchargeRuleMissing();
           // Deactivation is a real state change: re-deleting an inactive rule
           // must fail loudly rather than fabricate another audit entry.
-          const deactivated = await db.execute<{ id: string }>(sql`
+          const deactivated = await db.execute<{ id: string }>(
+            sql`
             update payment_surcharge_rules set is_active = false, updated_at = now(), updated_by = ${gate.user.id}
              where org_id = ${orgId} and id = ${body.id} and is_active
             returning id
-          `, "objects");
+          `,
+            "objects",
+          );
           if (!deactivated[0]) throw new SurchargeRuleMissing();
           await db.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -395,22 +466,25 @@ export const POST = defineRoute({
       return NextResponse.json({ ok: true });
     }
 
-    if (body.action === 'test') {
+    if (body.action === "test") {
       // A connection test reads the org-wide config (including sealed-secret
       // presence) and writes its last_error back to the shared row: restricted
       // callers are refused before touching it.
       const unrestrictedTest = guardUnrestrictedScope(gate);
       if (unrestrictedTest) return unrestrictedTest;
-      const provider = body.provider
+      const provider = body.provider;
       if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
         return NextResponse.json({ error: "unknown provider" }, { status: 400 });
       }
-      const config = await db.execute<Parameters<typeof configSecrets>[0]>(sql`
+      const config = await db.execute<Parameters<typeof configSecrets>[0]>(
+        sql`
         select id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
                publishable_key, settings, surcharge_rule_id, secrets
           from psp_provider_configs
          where org_id = ${orgId} and provider = ${provider} limit 1
-      `, "objects")
+      `,
+        "objects",
+      );
       if (!config[0]) return NextResponse.json({ ok: false, detail: "provider is not configured" });
       let result: { ok: boolean; detail: string };
       try {
@@ -422,7 +496,7 @@ export const POST = defineRoute({
         update psp_provider_configs set last_error = ${result.ok ? null : result.detail}, updated_at = now()
          where org_id = ${orgId} and provider = ${provider}
       `);
-      return NextResponse.json(result)
+      return NextResponse.json(result);
     }
 
     // Provider configs are org-wide rows with no subsidiary lineage: saving one
@@ -431,9 +505,12 @@ export const POST = defineRoute({
     // saves above stay available to restricted callers, constrained to
     // in-scope fee accounts by the scoped lookup.
 
-    const provider = body.provider
+    const provider = body.provider;
     if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
-      return NextResponse.json({ error: "provider must be stripe, adyen or gocardless" }, { status: 400 });
+      return NextResponse.json(
+        { error: "provider must be stripe, adyen or gocardless" },
+        { status: 400 },
+      );
     }
     for (const [field, value] of [
       ["defaultBankAccountId", body.defaultBankAccountId],
@@ -447,7 +524,10 @@ export const POST = defineRoute({
       }
     }
     try {
-      if (body.settings != null && (typeof body.settings !== "object" || Array.isArray(body.settings))) {
+      if (
+        body.settings != null &&
+        (typeof body.settings !== "object" || Array.isArray(body.settings))
+      ) {
         throw new PaymentAcceptanceError("provider settings must be an object");
       }
       const settings = normalizeAcceptanceProviderSettings(
@@ -465,7 +545,8 @@ export const POST = defineRoute({
           // The unrestricted gate above already refused restricted callers; the
           // engine re-asserts it, so the settlement bank can never be set
           // cross-entity even by a future caller that skips the route guard.
-          defaultBankAccountId: typeof body.defaultBankAccountId === "string" ? body.defaultBankAccountId : null,
+          defaultBankAccountId:
+            typeof body.defaultBankAccountId === "string" ? body.defaultBankAccountId : null,
           publishableKey: typeof body.publishableKey === "string" ? body.publishableKey : null,
           surchargeRuleId: typeof body.surchargeRuleId === "string" ? body.surchargeRuleId : null,
           // Automation fields travel through untouched: an omitted field stays
@@ -476,14 +557,17 @@ export const POST = defineRoute({
           defaultDisputeFeeAccountId: body.defaultDisputeFeeAccountId,
           settings,
           apiKey: typeof body.apiKey === "string" && body.apiKey ? body.apiKey : null,
-          webhookSecret: typeof body.webhookSecret === "string" && body.webhookSecret ? body.webhookSecret : null,
+          webhookSecret:
+            typeof body.webhookSecret === "string" && body.webhookSecret
+              ? body.webhookSecret
+              : null,
         },
         gate.allowedSubsidiaryIds,
-      )
-      return NextResponse.json({ ok: true })
+      );
+      return NextResponse.json({ ok: true });
     } catch (e) {
-      if (e instanceof PaymentAcceptanceError) return apiErrorResponse(e, { safeStatus: 422 })
+      if (e instanceof PaymentAcceptanceError) return apiErrorResponse(e, { safeStatus: 422 });
       return apiErrorResponse(e);
     }
   },
-})
+});

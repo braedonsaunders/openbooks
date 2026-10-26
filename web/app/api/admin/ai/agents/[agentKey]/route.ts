@@ -1,64 +1,89 @@
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 
-import { NextResponse } from 'next/server'
-import { isContinuousCloseAgentKey } from '@openbooks/engine/continuous-close/continuous-close'
-import { CONTINUOUS_CLOSE_DETECTOR_SPECS } from '@openbooks/engine/agents/continuous-close-config'
-import { canonicalDecimal } from '@openbooks/engine/money/decimal'
-import { moneyRefusal } from '@openbooks/engine/money/decimal-refusal'
+import { NextResponse } from "next/server";
+import { isContinuousCloseAgentKey } from "@openbooks/engine/continuous-close/continuous-close";
+import { CONTINUOUS_CLOSE_DETECTOR_SPECS } from "@openbooks/engine/agents/continuous-close-config";
+import { canonicalDecimal } from "@openbooks/engine/money/decimal";
+import { moneyRefusal } from "@openbooks/engine/money/decimal-refusal";
 
-import { CONTINUOUS_CLOSE_DISABLED_REMEDY, saveOrgAiAgentSettings } from '../../../../../../lib/assistant/ai-config'
+import {
+  CONTINUOUS_CLOSE_DISABLED_REMEDY,
+  saveOrgAiAgentSettings,
+} from "@/lib/assistant/ai-config";
 
-const detectorKeys = [...new Set(CONTINUOUS_CLOSE_DETECTOR_SPECS.map((spec) => spec.detectorKey))] as [string, ...string[]];
+const detectorKeys = [
+  ...new Set(CONTINUOUS_CLOSE_DETECTOR_SPECS.map((spec) => spec.detectorKey)),
+] as [string, ...string[]];
 const materialityThresholdSchema = z.string().superRefine((value, ctx) => {
-  if (canonicalDecimal(value, 4) === null) ctx.addIssue({ code: 'custom', message: moneyRefusal('Materiality threshold', value) })
-})
+  if (canonicalDecimal(value, 4) === null)
+    ctx.addIssue({ code: "custom", message: moneyRefusal("Materiality threshold", value) });
+});
 const requestBodySchema = z.object({
-  agentKey: z.string().optional(), enabled: z.boolean(), automaticRuns: z.boolean(), cadence: z.enum(["daily", "weekly"]),
+  agentKey: z.string().optional(),
+  enabled: z.boolean(),
+  automaticRuns: z.boolean(),
+  cadence: z.enum(["daily", "weekly"]),
   materialityThreshold: materialityThresholdSchema,
-  detectors: z.array(z.object({ detectorKey: z.enum(detectorKeys), enabled: z.boolean(), materialityThreshold: materialityThresholdSchema.nullable(), parameters: z.record(z.string(), z.number()) })),
-  analysis: z.object({ rootCauseAnalysis: z.boolean(), recommendations: z.boolean(), narrative: z.boolean(), modelTier: z.enum(["fast", "smart"]), maxToolSteps: z.number().int().min(4).max(30) }),
-  notification: z.object({ mode: z.enum(["findings_only", "digest", "immediate"]), roleIds: z.array(uuidString()).max(100), userIds: z.array(uuidString()).max(100) }).nullable().optional(),
+  detectors: z.array(
+    z.object({
+      detectorKey: z.enum(detectorKeys),
+      enabled: z.boolean(),
+      materialityThreshold: materialityThresholdSchema.nullable(),
+      parameters: z.record(z.string(), z.number()),
+    }),
+  ),
+  analysis: z.object({
+    rootCauseAnalysis: z.boolean(),
+    recommendations: z.boolean(),
+    narrative: z.boolean(),
+    modelTier: z.enum(["fast", "smart"]),
+    maxToolSteps: z.number().int().min(4).max(30),
+  }),
+  notification: z
+    .object({
+      mode: z.enum(["findings_only", "digest", "immediate"]),
+      roleIds: z.array(uuidString()).max(100),
+      userIds: z.array(uuidString()).max(100),
+    })
+    .nullable()
+    .optional(),
 });
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /** Persist one agent's schedule and detector controls without touching provider secrets. */
 
-
 export const PUT = defineRoute({
   permission: "admin.ai.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "Agent policies may be configured before Continuous Close is enabled; the service refuses activation until the feature is on.",
+  },
   scope: "unrestricted",
-  params: z.object({ "agentKey": z.string() }),
+  params: z.object({ agentKey: z.string() }),
   body: requestBodySchema,
   handler: async ({ body, params, authz: routeAuthz }) => {
+    const gate = routeAuthz;
 
-    const gate = routeAuthz
-
-
-
-    const { agentKey } = params
+    const { agentKey } = params;
     if (!isContinuousCloseAgentKey(agentKey)) {
-      return NextResponse.json({ error: 'invalid_agent' }, { status: 404 })
+      return NextResponse.json({ error: "invalid_agent" }, { status: 404 });
     }
-
 
     try {
       const policy = await saveOrgAiAgentSettings(gate.user.orgId, gate.user.id, {
         ...body,
         agentKey,
-      })
-      return NextResponse.json(policy)
+      });
+      return NextResponse.json(policy);
     } catch (error) {
       // Same refusal as the bulk form: 409 with the remedy, not a bare code.
-      if ((error as Error).message === 'feature_disabled') {
-        return NextResponse.json({ error: CONTINUOUS_CLOSE_DISABLED_REMEDY }, { status: 409 })
+      if ((error as Error).message === "feature_disabled") {
+        return NextResponse.json({ error: CONTINUOUS_CLOSE_DISABLED_REMEDY }, { status: 409 });
       }
-      return apiErrorResponse(error)
+      return apiErrorResponse(error);
     }
   },
 });

@@ -1,50 +1,59 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 
-import { deriveEmailDeliveryKey, emailDeliveryBlockedMessage, sendVia, isValidEmailAddress } from '@openbooks/emails'
-import { insertEmailLog, markEmailFailed, markEmailSent, markEmailUncertain, resolveOrgEmailTransportDetailed } from '@openbooks/engine/delivery/email-config/module'
+import {
+  deriveEmailDeliveryKey,
+  emailDeliveryBlockedMessage,
+  sendVia,
+  isValidEmailAddress,
+} from "@openbooks/emails";
+import {
+  insertEmailLog,
+  markEmailFailed,
+  markEmailSent,
+  markEmailUncertain,
+  resolveOrgEmailTransportDetailed,
+} from "@openbooks/engine/delivery/email-config/module";
 
 const requestBodySchema = z.object({ to: z.string().trim().min(1).max(320) });
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Send a test email through the org's currently-saved transport (synchronous so
  * the admin sees the outcome immediately). Records an email_log row either way.
  */
 
-
 export const POST = defineRoute({
   permission: "admin.setup.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "Email delivery tests are available while administrators configure organization-wide transport.",
+  },
   body: requestBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
-
     // Sending through (and probing) the org transport is setup authority.
-    const gate = routeAuthz
+    const gate = routeAuthz;
 
-    const orgId = gate.user.orgId
+    const orgId = gate.user.orgId;
 
-    let to: string
+    let to: string;
     try {
-
-
-      to = body.to
+      to = body.to;
     } catch {
-      return NextResponse.json({ error: 'invalid JSON' }, { status: 400 })
+      return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
     }
-    if (!isValidEmailAddress(to)) return NextResponse.json({ error: 'Enter a valid recipient email.' }, { status: 422 })
+    if (!isValidEmailAddress(to))
+      return NextResponse.json({ error: "Enter a valid recipient email." }, { status: 422 });
 
-    const resolution = await resolveOrgEmailTransportDetailed(orgId)
-    if (resolution.state !== 'ready') {
-      return NextResponse.json({ error: emailDeliveryBlockedMessage(resolution) }, { status: 422 })
+    const resolution = await resolveOrgEmailTransportDetailed(orgId);
+    if (resolution.state !== "ready") {
+      return NextResponse.json({ error: emailDeliveryBlockedMessage(resolution) }, { status: 422 });
     }
-    const transport = resolution.transport
+    const transport = resolution.transport;
 
-    const subject = 'OpenBooks email test'
+    const subject = "OpenBooks email test";
     const logId = await insertEmailLog({
       orgId,
       provider: transport.provider,
@@ -52,30 +61,38 @@ export const POST = defineRoute({
       fromAddr: transport.from,
       replyToAddr: transport.replyTo ?? null,
       subject,
-      status: 'queued',
-      categoryKey: 'test',
+      status: "queued",
+      categoryKey: "test",
       meta: { userId: gate.user.id },
-      actor: { kind: 'user', userId: gate.user.id },
-    })
+      actor: { kind: "user", userId: gate.user.id },
+    });
     try {
-      const outcome = await sendVia(transport, {
-        to,
-        subject,
-        text: `This is a test email from OpenBooks, sent via ${transport.provider}.`,
-        html: `<p>This is a test email from OpenBooks, sent via <strong>${transport.provider}</strong>.</p>`,
-        // The log row scope keeps this direct send's identity durable.
-      }, { deliveryKey: deriveEmailDeliveryKey({ orgId, scope: `test:${logId}`, to }) })
-      if (outcome.kind === 'sent') {
-        await markEmailSent(orgId, logId, outcome.providerMessageId)
-        return NextResponse.json({ ok: true, provider: transport.provider, messageId: outcome.providerMessageId })
+      const outcome = await sendVia(
+        transport,
+        {
+          to,
+          subject,
+          text: `This is a test email from OpenBooks, sent via ${transport.provider}.`,
+          html: `<p>This is a test email from OpenBooks, sent via <strong>${transport.provider}</strong>.</p>`,
+          // The log row scope keeps this direct send's identity durable.
+        },
+        { deliveryKey: deriveEmailDeliveryKey({ orgId, scope: `test:${logId}`, to }) },
+      );
+      if (outcome.kind === "sent") {
+        await markEmailSent(orgId, logId, outcome.providerMessageId);
+        return NextResponse.json({
+          ok: true,
+          provider: transport.provider,
+          messageId: outcome.providerMessageId,
+        });
       }
       // The provider may have accepted the message; do not claim failure.
-      await markEmailUncertain(orgId, logId, outcome.reason)
-      return NextResponse.json({ error: outcome.reason }, { status: 422 })
+      await markEmailUncertain(orgId, logId, outcome.reason);
+      return NextResponse.json({ error: outcome.reason }, { status: 422 });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'send failed'
-      await markEmailFailed(orgId, logId, message)
-      return NextResponse.json({ error: message }, { status: 422 })
+      const message = err instanceof Error ? err.message : "send failed";
+      await markEmailFailed(orgId, logId, message);
+      return NextResponse.json({ error: message }, { status: 422 });
     }
   },
 });
