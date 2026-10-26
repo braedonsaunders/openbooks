@@ -341,6 +341,19 @@ export async function reverseBillInventoryReceipts(
   }
 }
 
+/** A shipment or goods receipt void, as reverseOrderShipment receives it. */
+type ShipmentVoidInput = {
+  orgId: string;
+  voidDocumentId: string;
+  voidKind: string;
+  actorId: string;
+  reversalDate: string;
+  reason: string;
+};
+
+type ShipmentSource = { source_line_id: string; void_quantity: string };
+type SourceOrder = { id: string; status: string; kind: string };
+
 /**
  * Unwind one shipment (sales_fulfillment) or goods receipt
  * (purchase_receipt) inside the caller's void transaction: reverse every
@@ -356,14 +369,7 @@ export async function reverseBillInventoryReceipts(
  */
 export async function reverseOrderShipment(
   tx: Pick<typeof db, "execute">,
-  input: {
-    orgId: string;
-    voidDocumentId: string;
-    voidKind: string;
-    actorId: string;
-    reversalDate: string;
-    reason: string;
-  },
+  input: ShipmentVoidInput,
 ): Promise<void> {
   // Order shipments carry no posted entry, so the completion fence for
   // posted documents never sees them — yet their reversal journals post
@@ -400,96 +406,7 @@ export async function reverseOrderShipment(
   }
   if (voidQtyBySource.length > 0) {
     const sources = voidQtyBySource as { source_line_id: string; void_quantity: string }[];
-    // Malformed legacy provenance must refuse as a controlled void error,
-    // never as a raw SQL cast failure from the uuid[] predicates below.
-    for (const source of sources) {
-      if (!isUuid(source.source_line_id)) {
-        throw new DocumentVoidError(
-          "this document has a line with malformed order-line provenance — correct the line before voiding",
-        );
-      }
-    }
-    const expectedOrderKind =
-      input.voidKind === "sales_fulfillment" ? "sales_order" : "purchase_order";
-    const idArr = `{${sources.map((row) => row.source_line_id).join(",")}}`;
-    // Lock source headers before their lines (the order-cycle lock order),
-    // then the lines, so concurrent fulfill/receive commands serialize.
-    const orders = await tx.execute<{ id: string; status: string; kind: string }>(
-      sql`
-      select d.id, d.status, d.kind
-        from documents d
-       where d.org_id = ${input.orgId}
-         and d.id in (
-           select l.document_id from document_lines l
-            where l.org_id = ${input.orgId} and l.id = any(${idArr}::uuid[])
-         )
-       order by d.id
-       for update
-    `,
-      "objects",
-    );
-    for (const order of orders) {
-      if (order.kind !== expectedOrderKind) {
-        throw new DocumentVoidError(
-          "a source line does not belong to an order of the expected kind — correct the line before voiding",
-        );
-      }
-    }
-    const orderByLine = new Map<string, { id: string; status: string; kind: string }>();
-    for (const order of orders) {
-      const lineIds = await tx.execute<{ id: string }>(
-        sql`
-        select l.id from document_lines l
-         where l.org_id = ${input.orgId} and l.document_id = ${order.id}
-           and l.id = any(${idArr}::uuid[])
-      `,
-        "objects",
-      );
-      for (const line of lineIds) orderByLine.set(line.id, order);
-    }
-    if (orderByLine.size !== sources.length) {
-      throw new DocumentVoidError("a source order line for this document is missing");
-    }
-    const sourceLines = await tx.execute<{ id: string }>(
-      sql`
-      select l.id from document_lines l
-       where l.org_id = ${input.orgId} and l.id = any(${idArr}::uuid[])
-       order by l.id
-       for update of l
-    `,
-      "objects",
-    );
-    if (sourceLines.length !== sources.length) {
-      throw new DocumentVoidError("a source order line changed while it was being voided");
-    }
-    for (const source of sources) {
-      const order = orderByLine.get(source.source_line_id)!;
-      if (order.status !== "approved") {
-        throw new DocumentVoidError(
-          "the source order is no longer approved — resolve it before voiding",
-        );
-      }
-      // Restoring the counter must neither drive fulfilled negative nor cut
-      // into already-billed quantities; both are decided in storage arithmetic.
-      const cover = (
-        await tx.execute<{ restorable: boolean; billed_block: boolean }>(
-          sql`
-        select (quantity_fulfilled - ${source.void_quantity}::numeric) >= 0 as restorable,
-               (quantity_fulfilled - ${source.void_quantity}::numeric) < quantity_billed as billed_block
-          from document_lines where id = ${source.source_line_id} and org_id = ${input.orgId}
-      `,
-          "objects",
-        )
-      )[0]!;
-      if (!cover.restorable) {
-        throw new DocumentVoidError("voiding would drive a source line below zero fulfilled");
-      }
-      if (cover.billed_block) {
-        throw new DocumentVoidError(
-          "this document's quantities are already billed — reverse the invoice or bill first",
-        );
-      }
-    }
+    const { orders, orderByLine } = await lockShipmentSourceOrders(tx, input, sources);
     // Before-evidence for every source order whose counters are about to
     // move: captured under the locks above, before any counter or movement
     // write in this unwind.
@@ -500,8 +417,134 @@ export async function reverseOrderShipment(
         throw new DocumentVoidError("a source order disappeared while it was being voided");
       beforeSnapshots.set(order.id, snapshot);
     }
-    const liveMovements = await tx.execute<{ id: string }>(
+    await reverseLiveShipmentMovements(tx, input, movementKind);
+    await restoreSourceOrderCounters(tx, input, { orders, sources, orderByLine });
+    // After-evidence pairs each source order's before snapshot: the void's
+    // reason and actor travel on the envelope like the shipment's own.
+    for (const order of orders) {
+      const after = await captureTransactionAuditSnapshot(tx, order.id, input.orgId);
+      await recordTransactionAudit(tx, {
+        orgId: input.orgId,
+        documentId: order.id,
+        action: "update",
+        actorId: input.actorId,
+        source: "controlled_void",
+        reason: input.reason,
+        before: beforeSnapshots.get(order.id)!,
+        after,
+      });
+    }
+  }
+}
+
+/**
+ * Lock the source orders (headers before lines, the order-cycle lock order) and
+ * prove each line can take its quantity back without going negative or under billed.
+ */
+async function lockShipmentSourceOrders(
+  tx: Pick<typeof db, "execute">,
+  input: ShipmentVoidInput,
+  sources: ShipmentSource[],
+): Promise<{ orders: SourceOrder[]; orderByLine: Map<string, SourceOrder> }> {
+  // Malformed legacy provenance must refuse as a controlled void error,
+  // never as a raw SQL cast failure from the uuid[] predicates below.
+  for (const source of sources) {
+    if (!isUuid(source.source_line_id)) {
+      throw new DocumentVoidError(
+        "this document has a line with malformed order-line provenance — correct the line before voiding",
+      );
+    }
+  }
+  const expectedOrderKind =
+    input.voidKind === "sales_fulfillment" ? "sales_order" : "purchase_order";
+  const idArr = `{${sources.map((row) => row.source_line_id).join(",")}}`;
+  const orders = await tx.execute<{ id: string; status: string; kind: string }>(
+    sql`
+      select d.id, d.status, d.kind
+        from documents d
+       where d.org_id = ${input.orgId}
+         and d.id in (
+           select l.document_id from document_lines l
+            where l.org_id = ${input.orgId} and l.id = any(${idArr}::uuid[])
+         )
+       order by d.id
+       for update
+    `,
+    "objects",
+  );
+  for (const order of orders) {
+    if (order.kind !== expectedOrderKind) {
+      throw new DocumentVoidError(
+        "a source line does not belong to an order of the expected kind — correct the line before voiding",
+      );
+    }
+  }
+  const orderByLine = new Map<string, { id: string; status: string; kind: string }>();
+  for (const order of orders) {
+    const lineIds = await tx.execute<{ id: string }>(
       sql`
+        select l.id from document_lines l
+         where l.org_id = ${input.orgId} and l.document_id = ${order.id}
+           and l.id = any(${idArr}::uuid[])
+      `,
+      "objects",
+    );
+    for (const line of lineIds) orderByLine.set(line.id, order);
+  }
+  if (orderByLine.size !== sources.length) {
+    throw new DocumentVoidError("a source order line for this document is missing");
+  }
+  const sourceLines = await tx.execute<{ id: string }>(
+    sql`
+      select l.id from document_lines l
+       where l.org_id = ${input.orgId} and l.id = any(${idArr}::uuid[])
+       order by l.id
+       for update of l
+    `,
+    "objects",
+  );
+  if (sourceLines.length !== sources.length) {
+    throw new DocumentVoidError("a source order line changed while it was being voided");
+  }
+  for (const source of sources) {
+    const order = orderByLine.get(source.source_line_id)!;
+    if (order.status !== "approved") {
+      throw new DocumentVoidError(
+        "the source order is no longer approved — resolve it before voiding",
+      );
+    }
+    // Restoring the counter must neither drive fulfilled negative nor cut
+    // into already-billed quantities; both are decided in storage arithmetic.
+    const cover = (
+      await tx.execute<{ restorable: boolean; billed_block: boolean }>(
+        sql`
+        select (quantity_fulfilled - ${source.void_quantity}::numeric) >= 0 as restorable,
+               (quantity_fulfilled - ${source.void_quantity}::numeric) < quantity_billed as billed_block
+          from document_lines where id = ${source.source_line_id} and org_id = ${input.orgId}
+      `,
+        "objects",
+      )
+    )[0]!;
+    if (!cover.restorable) {
+      throw new DocumentVoidError("voiding would drive a source line below zero fulfilled");
+    }
+    if (cover.billed_block) {
+      throw new DocumentVoidError(
+        "this document's quantities are already billed — reverse the invoice or bill first",
+      );
+    }
+  }
+  return { orders, orderByLine };
+}
+
+/** Reverse every still-live stock movement of the voided document through the inventory kernel. */
+async function reverseLiveShipmentMovements(
+  tx: Pick<typeof db, "execute">,
+  input: ShipmentVoidInput,
+  movementKind: string,
+): Promise<void> {
+  const liveMovements = await tx.execute<{ id: string }>(
+    sql`
       select movement.id
         from inventory_movements movement
         join document_lines line
@@ -518,82 +561,94 @@ export async function reverseOrderShipment(
        order by movement.id
        for update of movement
     `,
-      "objects",
-    );
-    if (input.voidKind === "sales_fulfillment") {
-      for (const movement of liveMovements) {
-        const returned = await postedReturnQuantity(tx, input.orgId, {
-          returnKind: "receipt",
-          evidenceKey: "sourceIssueMovementId",
-          sourceMovementId: movement.id,
-        });
-        if (toUnits(returned) > 0n) {
-          throw new DocumentVoidError(
-            "this shipment has customer-credit returns; reverse those credits before voiding the shipment",
-          );
-        }
-      }
-    }
+    "objects",
+  );
+  if (input.voidKind === "sales_fulfillment") {
     for (const movement of liveMovements) {
-      try {
-        await reverseInventoryMovement(input.orgId, input.actorId, {
-          movementId: movement.id,
-          reversalDate: input.reversalDate,
-          reason: input.reason,
-        });
-      } catch (error) {
-        if (error instanceof DownstreamConsumptionError && input.voidKind === "purchase_receipt") {
-          throw await receiptConsumptionRefusal(tx, input.orgId, input.voidDocumentId);
-        }
-        if (error instanceof InventoryError) {
-          throw new DocumentVoidError(`this document cannot be voided yet — ${error.message}`);
-        }
-        throw error;
-      }
-      // A line shipped from another entity's stock also reverses its
-      // intercompany cross-charge, so neither entity keeps half of the sale.
-      if (
-        input.voidKind === "sales_fulfillment" &&
-        (await crossSubsidiaryShipment(tx, input.orgId, movement.id))
-      ) {
-        const handler = crossSubsidiaryFulfillmentHandler();
-        if (!handler)
-          throw new DocumentVoidError(
-            "this shipment was fulfilled by another subsidiary and cannot be voided in this installation",
-          );
-        await handler.voided(tx, {
-          orgId: input.orgId,
-          actorId: input.actorId,
-          issueMovementId: movement.id,
-          reversalDate: input.reversalDate,
-          reason: input.reason,
-        });
+      const returned = await postedReturnQuantity(tx, input.orgId, {
+        returnKind: "receipt",
+        evidenceKey: "sourceIssueMovementId",
+        sourceMovementId: movement.id,
+      });
+      if (toUnits(returned) > 0n) {
+        throw new DocumentVoidError(
+          "this shipment has customer-credit returns; reverse those credits before voiding the shipment",
+        );
       }
     }
-    // Approved lines are storage-immutable: restoring the
-    // fulfilled counter is operational reconciliation state, not a
-    // commercial edit. Reopen each source header while its counters restore
-    // (the established order-cycle pattern), then restore approved status.
-    for (const order of orders) {
-      const reopened = (
-        await tx.execute<{ id: string }>(
-          sql`
+  }
+  for (const movement of liveMovements) {
+    try {
+      await reverseInventoryMovement(input.orgId, input.actorId, {
+        movementId: movement.id,
+        reversalDate: input.reversalDate,
+        reason: input.reason,
+      });
+    } catch (error) {
+      if (error instanceof DownstreamConsumptionError && input.voidKind === "purchase_receipt") {
+        throw await receiptConsumptionRefusal(tx, input.orgId, input.voidDocumentId);
+      }
+      if (error instanceof InventoryError) {
+        throw new DocumentVoidError(`this document cannot be voided yet — ${error.message}`);
+      }
+      throw error;
+    }
+    // A line shipped from another entity's stock also reverses its
+    // intercompany cross-charge, so neither entity keeps half of the sale.
+    if (
+      input.voidKind === "sales_fulfillment" &&
+      (await crossSubsidiaryShipment(tx, input.orgId, movement.id))
+    ) {
+      const handler = crossSubsidiaryFulfillmentHandler();
+      if (!handler)
+        throw new DocumentVoidError(
+          "this shipment was fulfilled by another subsidiary and cannot be voided in this installation",
+        );
+      await handler.voided(tx, {
+        orgId: input.orgId,
+        actorId: input.actorId,
+        issueMovementId: movement.id,
+        reversalDate: input.reversalDate,
+        reason: input.reason,
+      });
+    }
+  }
+}
+
+// Approved lines are storage-immutable: restoring the
+// fulfilled counter is operational reconciliation state, not a
+// commercial edit. Reopen each source header while its counters restore
+// (the established order-cycle pattern), then restore approved status.
+async function restoreSourceOrderCounters(
+  tx: Pick<typeof db, "execute">,
+  input: ShipmentVoidInput,
+  shipment: {
+    orders: SourceOrder[];
+    sources: ShipmentSource[];
+    orderByLine: Map<string, SourceOrder>;
+  },
+): Promise<void> {
+  const { orders, sources, orderByLine } = shipment;
+  for (const order of orders) {
+    const reopened = (
+      await tx.execute<{ id: string }>(
+        sql`
         update documents
            set status = 'draft', updated_by = ${input.actorId}
          where id = ${order.id} and org_id = ${input.orgId} and status = 'approved'
         returning id
       `,
-          "objects",
-        )
-      )[0];
-      if (!reopened)
-        throw new DocumentVoidError("the source order changed while it was being voided");
-      for (const source of sources.filter(
-        (row) => orderByLine.get(row.source_line_id)!.id === order.id,
-      )) {
-        const restored = (
-          await tx.execute<{ id: string }>(
-            sql`
+        "objects",
+      )
+    )[0];
+    if (!reopened)
+      throw new DocumentVoidError("the source order changed while it was being voided");
+    for (const source of sources.filter(
+      (row) => orderByLine.get(row.source_line_id)!.id === order.id,
+    )) {
+      const restored = (
+        await tx.execute<{ id: string }>(
+          sql`
           update document_lines
              set quantity_fulfilled = quantity_fulfilled - ${source.void_quantity}::numeric,
                  updated_by = ${input.actorId}
@@ -601,40 +656,24 @@ export async function reverseOrderShipment(
              and quantity_fulfilled - ${source.void_quantity}::numeric >= 0
           returning id
         `,
-            "objects",
-          )
-        )[0];
-        if (!restored)
-          throw new DocumentVoidError("a source order line changed while it was being voided");
-      }
-      const restored = (
-        await tx.execute<{ id: string }>(
-          sql`
+          "objects",
+        )
+      )[0];
+      if (!restored)
+        throw new DocumentVoidError("a source order line changed while it was being voided");
+    }
+    const restored = (
+      await tx.execute<{ id: string }>(
+        sql`
         update documents
            set status = 'approved', updated_by = ${input.actorId}
          where id = ${order.id} and org_id = ${input.orgId} and status = 'draft'
         returning id
       `,
-          "objects",
-        )
-      )[0];
-      if (!restored)
-        throw new DocumentVoidError("the source order changed while it was being voided");
-    }
-    // After-evidence pairs each source order's before snapshot: the void's
-    // reason and actor travel on the envelope like the shipment's own.
-    for (const order of orders) {
-      const after = await captureTransactionAuditSnapshot(tx, order.id, input.orgId);
-      await recordTransactionAudit(tx, {
-        orgId: input.orgId,
-        documentId: order.id,
-        action: "update",
-        actorId: input.actorId,
-        source: "controlled_void",
-        reason: input.reason,
-        before: beforeSnapshots.get(order.id)!,
-        after,
-      });
-    }
+        "objects",
+      )
+    )[0];
+    if (!restored)
+      throw new DocumentVoidError("the source order changed while it was being voided");
   }
 }

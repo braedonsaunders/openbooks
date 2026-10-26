@@ -3,6 +3,8 @@ import { db, type SqlExecutor } from "../platform/db.ts";
 import { assertBillingReleasable, BillingReleaseRefusedError } from "./billing-provenance.ts";
 import { projectRetainageHeldSql } from "../projects/construction-billing.ts";
 import { add, cmp, neg } from "../money/money.ts";
+import { releaseLeavePayrollInputs } from "../payroll/leave-payroll-inputs.ts";
+import { releaseAllowancePayrollInputs } from "../payroll/allowance-payroll-inputs.ts";
 import { DocumentVoidError } from "./document-void-shared.ts";
 
 /**
@@ -202,6 +204,176 @@ export async function refuseUnavailablePayRunVoid(
   if (releasedBankFile) {
     throw new DocumentVoidError(
       `this pay run has released EFT bank file ${releasedBankFile.file_number}; record the payment or reverse it at the bank and mark the artifact before voiding`,
+    );
+  }
+}
+
+/**
+ * Un-count a voided pay run.
+ *
+ * Reversing the GL is not enough for payroll: the payroll subledger is
+ * `pay_runs` + `pay_stubs`, and EVERY consumer of it selects on
+ * `pay_runs.run_status = 'committed'` with no predicate on the document's
+ * status. Leaving a voided run committed therefore keeps it counted in
+ * statutory year-to-date (CPP/CPP2/EI room, US wage bases), WCB annual room,
+ * the EHT exemption, T4/T4 Summary/W-2/941 and the remittance summary — so the
+ * next run under-deducts against consumed room and the CRA is billed for
+ * withholdings that no longer exist. One status write retires the run from all
+ * of them at once.
+ *
+ * The two other claims a commit made must also be released:
+ *
+ * - `time_entries.payroll_batch_ref` — commit stamps the period's approved
+ *   hours with the run id so they are never paid twice. If the void left the
+ *   stamp, those hours could never be paid at all.
+ * - `entitlement_ledger` movements keyed to the run (vacation/banked-hours
+ *   accruals and payouts). Balances are SUM(ledger) with no run-status
+ *   predicate, so a voided accrual would stay in the employee's bank. These are
+ *   REVERSED, not deleted, dated on the same reversal date as the GL entry so
+ *   the entitlement liability and its GL account move together.
+ *
+ * A run that has been PAID needs no special handling here: the payment applies
+ * to the run's open net-pay items, so the generic "live payments or credits
+ * applied" guard above already refuses the void.
+ */
+export async function releaseVoidedPayRun(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  documentId: string,
+  actorId: string,
+): Promise<void> {
+  // A posted remittance bill is an AP payment obligation backed by this
+  // run's accrued liabilities. Refuse the source void until that bill is
+  // itself reversed; otherwise the bill would remain payable after the
+  // payroll subledger has been removed from statutory YTD and the next
+  // remittance could pay the same money twice. Locking the bill rows gives
+  // this check the same ordering as posting's remittance freshness guard.
+  const covered = (
+    await tx.execute<{ document_number: string }>(
+      sql`
+    select bill.document_number
+      from pay_runs r
+      join documents bill
+        on bill.org_id = r.org_id and bill.kind = 'vendor_bill' and bill.status = 'posted'
+       and bill.custom ? 'payrollRemittance'
+       and bill.custom->'payrollRemittance'->>'from' <= r.pay_date::text
+       and bill.custom->'payrollRemittance'->>'to' >= r.pay_date::text
+     where r.org_id = ${orgId} and r.document_id = ${documentId}
+     order by bill.created_at, bill.id
+     limit 1
+     for update of bill
+  `,
+      "objects",
+    )
+  )[0];
+  if (covered) {
+    throw new DocumentVoidError(
+      `this pay run is covered by posted payroll remittance bill ${covered.document_number}; void the remittance bill first`,
+    );
+  }
+
+  // A voided source with a committed retro top-up double-pays on reissue:
+  // refuse while any non-voided dependent retro run is committed. All such
+  // rows are locked first in document order; commitPayRun holds this same
+  // row to its flip and never locks the source, so either order serializes.
+  const dependents = await tx.execute<{
+    document_number: string;
+    run_status: string;
+    doc_status: string;
+  }>(
+    sql`
+    select retro_doc.document_number, rr.run_status, retro_doc.status as doc_status
+      from payroll_retro_settlements st
+      join pay_runs rr
+        on rr.org_id = st.org_id and rr.document_id = st.retro_pay_run_document_id
+      join documents retro_doc
+        on retro_doc.id = rr.document_id and retro_doc.org_id = rr.org_id
+     where st.org_id = ${orgId} and st.source_pay_run_document_id = ${documentId}
+       and rr.run_status <> 'voided'
+     order by rr.document_id
+     for update of rr
+  `,
+    "objects",
+  );
+  const blocking = dependents.find(
+    (row) => row.run_status === "committed" && row.doc_status !== "voided",
+  );
+  if (blocking) {
+    throw new DocumentVoidError(
+      `this pay run is settled by committed retro pay run ${blocking.document_number}; void the retro run first`,
+    );
+  }
+
+  await releaseLeavePayrollInputs(tx, { orgId, runDocumentId: documentId });
+  await releaseAllowancePayrollInputs(tx, { orgId, runDocumentId: documentId });
+
+  const run = await tx.execute<{ document_id: string }>(
+    sql`
+    update pay_runs
+       set run_status = 'voided', updated_at = now(), updated_by = ${actorId}
+     where org_id = ${orgId} and document_id = ${documentId}
+       and run_status <> 'voided'
+     returning document_id
+  `,
+    "objects",
+  );
+  if (run.length === 0) return; // already released (idempotent replay)
+
+  await tx.execute(sql`
+    update time_entries
+       set payroll_batch_ref = null, updated_at = now()
+     where org_id = ${orgId} and payroll_batch_ref = ${documentId}
+  `);
+
+  // One reversal movement per (run, plan, employee): the unique index
+  // entitlement_ledger_run_movement keeps void replay idempotent, and the CAS
+  // above already refuses a second void of this run — so a conflict here
+  // means some OTHER writer recorded adjustment movements for it, and
+  // silently dropping the reversal would leave entitlement balances wrong
+  // forever behind a run marked voided. Count the groups the reversal owes
+  // and refuse the void (this whole transaction rolls back) if the insert
+  // could not write every one of them.
+  const owed = (
+    await tx.execute<{ n: string }>(
+      sql`
+    select count(*)::text as n
+      from (
+        select l.plan_id, l.employee_party_id
+          from entitlement_ledger l
+         where l.org_id = ${orgId} and l.pay_run_document_id = ${documentId}
+           and l.kind <> 'adjustment'
+         group by l.org_id, l.plan_id, l.employee_party_id
+        having sum(l.amount) <> 0
+      ) owed_groups
+  `,
+      "objects",
+    )
+  )[0];
+  const reversed = await tx.execute<{ id: string }>(
+    sql`
+    insert into entitlement_ledger
+      (org_id, plan_id, employee_party_id, movement_date, amount, hours, kind,
+       pay_run_document_id, note, created_by, updated_by)
+    select l.org_id, l.plan_id, l.employee_party_id,
+           max(l.movement_date),
+           -sum(l.amount), -sum(l.hours), 'adjustment', ${documentId},
+           'Reversal: voided pay run',
+           (select void_requested_by from documents where id = ${documentId} and org_id = ${orgId}),
+           (select void_requested_by from documents where id = ${documentId} and org_id = ${orgId})
+      from entitlement_ledger l
+     where l.org_id = ${orgId} and l.pay_run_document_id = ${documentId}
+       and l.kind <> 'adjustment'
+     group by l.org_id, l.plan_id, l.employee_party_id
+    having sum(l.amount) <> 0
+    -- A prior adjustment returns no row and the required reversal count refuses the void below.
+    on conflict do nothing
+    returning id
+  `,
+    "objects",
+  );
+  if (Number(owed?.n ?? 0) !== reversed.length) {
+    throw new DocumentVoidError(
+      "entitlement adjustments already exist for this pay run, so the void cannot reverse its entitlements once; reload the run and review its entitlement adjustments before voiding",
     );
   }
 }
