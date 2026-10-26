@@ -1,15 +1,11 @@
-import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
-import { defineRoute } from "../../../../lib/api/route";
-import { can, type Authz } from "../../../../lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { can, getAuthz, type Authz } from "@/lib/authz";
 import { draftWithEvidence, DRAFT_KINDS } from "@openbooks/engine/hrm/ai/drafting";
 import { markDecisionOutcome } from "@openbooks/engine/hrm/ai/governance";
-import { aiRailsErrorResponse } from "../../../../lib/ai-rails";
-import { isFeatureEnabled } from "../../../../lib/features";
-import { notFound } from "@/lib/api/responses";
-
+import { aiRailsErrorResponse } from "@/lib/ai-rails";
 
 export const runtime = "nodejs";
 
@@ -35,7 +31,21 @@ const DRAFT_PERMISSIONS = [
 function missingDraftPermission(authz: Authz): NextResponse | null {
   return DRAFT_PERMISSIONS.some((permission) => can(authz, permission))
     ? null
-    : NextResponse.json({ error: `missing permission: one of ${DRAFT_PERMISSIONS.join(", ")}` }, { status: 403 });
+    : NextResponse.json(
+        { error: `missing permission: one of ${DRAFT_PERMISSIONS.join(", ")}` },
+        { status: 403 },
+      );
+}
+
+async function authorizeDrafts(requireAssistantUse: boolean): Promise<Authz | NextResponse> {
+  const authz = await getAuthz();
+  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const denied = missingDraftPermission(authz);
+  if (denied) return denied;
+  if (requireAssistantUse && !can(authz, "assistant.use")) {
+    return NextResponse.json({ error: "missing permission: assistant.use" }, { status: 403 });
+  }
+  return authz;
 }
 
 /**
@@ -52,55 +62,40 @@ function missingDraftPermission(authz: Authz): NextResponse | null {
  * does not, so the ledger never loses an outcome.
  */
 export const POST = defineRoute({
-  public: "session",
-  handler: async ({ request: req, authz: gate }) => {
-  const denied = missingDraftPermission(gate);
-  if (denied) return denied;
-  if (!can(gate, "assistant.use")) {
-    return NextResponse.json({ error: "missing permission: assistant.use" }, { status: 403 });
-  }
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, draftBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    const draft = await draftWithEvidence({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      kind: body.kind,
-      subjectId: body.subjectId,
-    });
-    return NextResponse.json({ draft });
-  } catch (e) {
-    return aiRailsErrorResponse(e);
-  }
+  authorize: () => authorizeDrafts(true),
+  feature: "hrm",
+  body: draftBody,
+  handler: async ({ authz: gate, body }) => {
+    try {
+      const draft = await draftWithEvidence({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        kind: body.kind,
+        subjectId: body.subjectId,
+      });
+      return NextResponse.json({ draft });
+    } catch (e) {
+      return aiRailsErrorResponse(e);
+    }
   },
 });
 
 export const PATCH = defineRoute({
-  public: "session",
-  handler: async ({ request: req, authz: gate }) => {
-  const denied = missingDraftPermission(gate);
-  if (denied) return denied;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, outcomeBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    const decisionId = await markDecisionOutcome({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      decisionId: body.decisionId,
-      outcome: body.outcome,
-      note: body.note,
-    });
-    return NextResponse.json({ decisionId });
-  } catch (e) {
-    return aiRailsErrorResponse(e);
-  }
+  authorize: () => authorizeDrafts(false),
+  feature: "hrm",
+  body: outcomeBody,
+  handler: async ({ authz: gate, body }) => {
+    try {
+      const decisionId = await markDecisionOutcome({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        decisionId: body.decisionId,
+        outcome: body.outcome,
+        note: body.note,
+      });
+      return NextResponse.json({ decisionId });
+    } catch (e) {
+      return aiRailsErrorResponse(e);
+    }
   },
 });

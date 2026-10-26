@@ -1,13 +1,11 @@
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { projectScheduleBody } from '@/lib/project-schedule-input'
-import { parseJsonBody } from "@/lib/api/json"
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { guardPermission } from '../../../lib/authz'
-import { isUuid } from '../../../lib/list-params'
-import { guardProjectSchedulingFeature } from '../../../lib/projects-gate'
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { projectScheduleBody } from "@/lib/project-schedule-input";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { guardPermission } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
 import {
   ScheduleError,
   batchUpdateScheduleTasks,
@@ -23,9 +21,9 @@ import {
   updateScheduleTask,
   upsertScheduleCalendar,
   upsertScheduleResource,
-} from '../../../lib/project-schedule'
+} from "@/lib/project-schedule";
 import { notFound } from "@/lib/api/responses";
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * The project schedule API.
@@ -36,49 +34,55 @@ export const runtime = 'nodejs'
  * permitted subsidiaries before touching a row.
  */
 
-type Gate = Exclude<Awaited<ReturnType<typeof guardPermission>>, NextResponse>
+type Gate = Exclude<Awaited<ReturnType<typeof guardPermission>>, NextResponse>;
 
 /** Resolve + authorize the project, or return the response to send. */
-type ProjectResolution = { error: NextResponse } | { projectId: string }
+type ProjectResolution = { error: NextResponse } | { projectId: string };
 
 async function resolveProject(gate: Gate, projectId: string | null): Promise<ProjectResolution> {
   if (!projectId || !isUuid(projectId)) {
-    return { error: NextResponse.json({ error: 'projectId required' }, { status: 400 }) }
+    return { error: NextResponse.json({ error: "projectId required" }, { status: 400 }) };
   }
-  const project = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  const project = await db.execute<{ id: string; subsidiary_id: string | null }>(
+    sql`
     select id, subsidiary_id from projects
-     where id = ${projectId} and org_id = ${gate.user.orgId}`, 'objects'))
-  const row = project[0]
-  if (!row || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(row.subsidiary_id)))) {
-    return { error: notFound("record") }
+     where id = ${projectId} and org_id = ${gate.user.orgId}`,
+    "objects",
+  );
+  const row = project[0];
+  if (
+    !row ||
+    (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(row.subsidiary_id)))
+  ) {
+    return { error: notFound("record") };
   }
-  return { projectId: row.id }
+  return { projectId: row.id };
 }
 
 function handleError(error: unknown): Promise<NextResponse> {
   if (error instanceof ScheduleError) {
-    return apiErrorResponse(error)
+    return apiErrorResponse(error);
   }
-  throw error
+  throw error;
 }
 
 /** GET ?projectId= — the whole plan. */
 export const GET = defineRoute({
-  permission: 'projects.read',
-  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  permission: "projects.read",
+  feature: "projectScheduling",
   handler: async ({ request: req, authz: gate }): Promise<NextResponse> => {
-    const feature = await guardProjectSchedulingFeature(gate.user.orgId)
-    if (feature instanceof NextResponse) return feature
-
-    const resolved = await resolveProject(gate, new URL(req.url).searchParams.get('projectId'))
-    if ('error' in resolved) return resolved.error
+    const resolved = await resolveProject(gate, new URL(req.url).searchParams.get("projectId"));
+    if ("error" in resolved) return resolved.error;
 
     return NextResponse.json({
-      schedule: await loadProjectSchedule(gate.user.orgId, resolved.projectId, gate.allowedSubsidiaryIds),
-    })
-
+      schedule: await loadProjectSchedule(
+        gate.user.orgId,
+        resolved.projectId,
+        gate.allowedSubsidiaryIds,
+      ),
+    });
   },
-})
+});
 
 /**
  * POST — every schedule mutation, dispatched by `action`. One endpoint keeps
@@ -86,21 +90,16 @@ export const GET = defineRoute({
  * across a dozen routes.
  */
 export const POST = defineRoute({
-  permission: 'projects.manage',
-  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
-  handler: async ({ request: req, authz: gate }): Promise<NextResponse> => {
-    const feature = await guardProjectSchedulingFeature(gate.user.orgId)
-    if (feature instanceof NextResponse) return feature
+  permission: "projects.manage",
+  feature: "projectScheduling",
+  body: projectScheduleBody,
+  handler: async ({ authz: gate, body }): Promise<NextResponse> => {
+    const resolved = await resolveProject(gate, body.projectId ?? null);
+    if ("error" in resolved) return resolved.error;
 
-    const parsedBody = await parseJsonBody(req, projectScheduleBody);
-    if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data
-    const resolved = await resolveProject(gate, body.projectId ?? null)
-    if ('error' in resolved) return resolved.error
-
-    const orgId = gate.user.orgId
-    const projectId = resolved.projectId
-    const userId = gate.user.id ?? null
+    const orgId = gate.user.orgId;
+    const projectId = resolved.projectId;
+    const userId = gate.user.id ?? null;
 
     try {
       switch (body.action) {
@@ -108,101 +107,140 @@ export const POST = defineRoute({
         // inside its own transaction (the service takes the caller's scope):
         // the resolveProject pre-read above cannot authorize a project that a
         // concurrent PATCH has since moved to another subsidiary.
-        case 'createTask': {
+        case "createTask": {
           const id = await createScheduleTask(
             orgId,
             projectId,
             body.input as never,
             userId,
             gate.allowedSubsidiaryIds,
-          )
-          return NextResponse.json({ id })
+          );
+          return NextResponse.json({ id });
         }
-        case 'updateTask': {
+        case "updateTask": {
           if (!body.taskId || !isUuid(body.taskId)) {
-            return NextResponse.json({ error: 'taskId required' }, { status: 400 })
+            return NextResponse.json({ error: "taskId required" }, { status: 400 });
           }
-          await updateScheduleTask(orgId, projectId, body.taskId, (body.patch ?? {}) as never, userId, gate.allowedSubsidiaryIds)
-          return NextResponse.json({ ok: true })
+          await updateScheduleTask(
+            orgId,
+            projectId,
+            body.taskId,
+            (body.patch ?? {}) as never,
+            userId,
+            gate.allowedSubsidiaryIds,
+          );
+          return NextResponse.json({ ok: true });
         }
-        case 'batchUpdateTasks': {
-          const updates = Array.isArray(body.updates) ? body.updates : []
+        case "batchUpdateTasks": {
+          const updates = Array.isArray(body.updates) ? body.updates : [];
           if (updates.some((update) => !update?.id || !isUuid(String(update.id)))) {
-            return NextResponse.json({ error: 'every update needs a task id' }, { status: 400 })
+            return NextResponse.json({ error: "every update needs a task id" }, { status: 400 });
           }
-          await batchUpdateScheduleTasks(orgId, projectId, updates as never, userId, gate.allowedSubsidiaryIds)
-          return NextResponse.json({ ok: true })
+          await batchUpdateScheduleTasks(
+            orgId,
+            projectId,
+            updates as never,
+            userId,
+            gate.allowedSubsidiaryIds,
+          );
+          return NextResponse.json({ ok: true });
         }
-        case 'deleteTask': {
+        case "deleteTask": {
           if (!body.taskId || !isUuid(body.taskId)) {
-            return NextResponse.json({ error: 'taskId required' }, { status: 400 })
+            return NextResponse.json({ error: "taskId required" }, { status: 400 });
           }
-          await deleteScheduleTask(orgId, projectId, body.taskId, gate.allowedSubsidiaryIds)
-          return NextResponse.json({ ok: true })
+          await deleteScheduleTask(orgId, projectId, body.taskId, gate.allowedSubsidiaryIds);
+          return NextResponse.json({ ok: true });
         }
-        case 'createDependency': {
+        case "createDependency": {
           const input = (body.input ?? {}) as {
-            predecessorId?: string
-            successorId?: string
-            type?: string
-            lagDays?: number
-          }
+            predecessorId?: string;
+            successorId?: string;
+            type?: string;
+            lagDays?: number;
+          };
           if (!isUuid(String(input.predecessorId)) || !isUuid(String(input.successorId))) {
-            return NextResponse.json({ error: 'predecessor and successor required' }, { status: 400 })
+            return NextResponse.json(
+              { error: "predecessor and successor required" },
+              { status: 400 },
+            );
           }
-          await createScheduleDependency(orgId, projectId, input as never, userId, gate.allowedSubsidiaryIds)
-          return NextResponse.json({ ok: true })
+          await createScheduleDependency(
+            orgId,
+            projectId,
+            input as never,
+            userId,
+            gate.allowedSubsidiaryIds,
+          );
+          return NextResponse.json({ ok: true });
         }
-        case 'deleteDependency': {
+        case "deleteDependency": {
           if (!body.id || !isUuid(body.id)) {
-            return NextResponse.json({ error: 'id required' }, { status: 400 })
+            return NextResponse.json({ error: "id required" }, { status: 400 });
           }
-          await deleteScheduleDependency(orgId, projectId, body.id, gate.allowedSubsidiaryIds)
-          return NextResponse.json({ ok: true })
+          await deleteScheduleDependency(orgId, projectId, body.id, gate.allowedSubsidiaryIds);
+          return NextResponse.json({ ok: true });
         }
-        case 'createBaseline': {
-          const input = (body.input ?? {}) as { name?: string }
+        case "createBaseline": {
+          const input = (body.input ?? {}) as { name?: string };
           if (!input.name?.trim()) {
-            return NextResponse.json({ error: 'baseline name required' }, { status: 400 })
+            return NextResponse.json({ error: "baseline name required" }, { status: 400 });
           }
-          await createScheduleBaseline(orgId, projectId, input as never, userId, gate.allowedSubsidiaryIds)
-          return NextResponse.json({ ok: true })
+          await createScheduleBaseline(
+            orgId,
+            projectId,
+            input as never,
+            userId,
+            gate.allowedSubsidiaryIds,
+          );
+          return NextResponse.json({ ok: true });
         }
-        case 'deleteBaseline': {
+        case "deleteBaseline": {
           if (!body.id || !isUuid(body.id)) {
-            return NextResponse.json({ error: 'id required' }, { status: 400 })
+            return NextResponse.json({ error: "id required" }, { status: 400 });
           }
-          await deleteScheduleBaseline(orgId, projectId, body.id, gate.allowedSubsidiaryIds)
-          return NextResponse.json({ ok: true })
+          await deleteScheduleBaseline(orgId, projectId, body.id, gate.allowedSubsidiaryIds);
+          return NextResponse.json({ ok: true });
         }
-        case 'saveCalendar': {
-          const id = await upsertScheduleCalendar(orgId, projectId, (body.input ?? {}) as never, userId, gate.allowedSubsidiaryIds)
-          return NextResponse.json({ id })
+        case "saveCalendar": {
+          const id = await upsertScheduleCalendar(
+            orgId,
+            projectId,
+            (body.input ?? {}) as never,
+            userId,
+            gate.allowedSubsidiaryIds,
+          );
+          return NextResponse.json({ id });
         }
-        case 'deleteCalendar': {
+        case "deleteCalendar": {
           if (!body.id || !isUuid(body.id)) {
-            return NextResponse.json({ error: 'id required' }, { status: 400 })
+            return NextResponse.json({ error: "id required" }, { status: 400 });
           }
-          await deleteScheduleCalendar(orgId, projectId, body.id, gate.allowedSubsidiaryIds)
-          return NextResponse.json({ ok: true })
+          await deleteScheduleCalendar(orgId, projectId, body.id, gate.allowedSubsidiaryIds);
+          return NextResponse.json({ ok: true });
         }
-        case 'saveResource': {
-          const id = await upsertScheduleResource(orgId, projectId, (body.input ?? {}) as never, userId, gate.allowedSubsidiaryIds)
-          return NextResponse.json({ id })
+        case "saveResource": {
+          const id = await upsertScheduleResource(
+            orgId,
+            projectId,
+            (body.input ?? {}) as never,
+            userId,
+            gate.allowedSubsidiaryIds,
+          );
+          return NextResponse.json({ id });
         }
-        case 'deleteResource': {
+        case "deleteResource": {
           if (!body.id || !isUuid(body.id)) {
-            return NextResponse.json({ error: 'id required' }, { status: 400 })
+            return NextResponse.json({ error: "id required" }, { status: 400 });
           }
-          await deleteScheduleResource(orgId, projectId, body.id, gate.allowedSubsidiaryIds)
-          return NextResponse.json({ ok: true })
+          await deleteScheduleResource(orgId, projectId, body.id, gate.allowedSubsidiaryIds);
+          return NextResponse.json({ ok: true });
         }
         default:
-          return NextResponse.json({ error: 'unknown action' }, { status: 400 })
+          return NextResponse.json({ error: "unknown action" }, { status: 400 });
       }
     } catch (error) {
-      return handleError(error)
+      return handleError(error);
     }
-
   },
-})
+});

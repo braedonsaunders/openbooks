@@ -1,11 +1,13 @@
-import { NextResponse } from 'next/server'
-import { defineRoute } from '@/lib/api/route'
-import { parseJsonBody } from '@/lib/api/json'
-import { createMailbox, MailboxConfigurationError } from '@openbooks/engine/payables/ap-capture-service'
-import { guardSubsidiaryScope } from '../../../../lib/authz'
-import { createMailboxBody } from './schema'
+import { NextResponse } from "next/server";
+import { defineRoute } from "@/lib/api/route";
+import {
+  createMailbox,
+  MailboxConfigurationError,
+} from "@openbooks/engine/payables/ap-capture-service";
+import { guardSubsidiaryScope } from "@/lib/authz";
+import { createMailboxBody } from "./schema";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Create an inbound AP address for one legal entity. The webhook token is
@@ -13,26 +15,28 @@ export const runtime = 'nodejs'
  * never returned. The setup drawer saves through this endpoint.
  */
 export const POST = defineRoute({
-  permission: 'admin.setup.manage',
-  feature: { none: 'AP capture is governed by its document-capture configuration, not a feature switch.' },
-  handler: async ({ request, authz }) => {
-    const parsed = await parseJsonBody(request, createMailboxBody, { status: 422 })
-    if (!parsed.ok) return parsed.response
-    const denied = guardSubsidiaryScope(authz, parsed.data.subsidiaryId)
-    if (denied) return denied
+  permission: "admin.setup.manage",
+  feature: {
+    none: "AP capture is governed by its document-capture configuration, not a feature switch.",
+  },
+  body: createMailboxBody,
+  invalidBodyStatus: 422,
+  handler: async ({ authz, body }) => {
+    const denied = guardSubsidiaryScope(authz, body.subsidiaryId);
+    if (denied) return denied;
     try {
       const created = await createMailbox({
-        ...parsed.data,
+        ...body,
         orgId: authz.user.orgId,
         actorId: authz.user.id,
         allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-      })
-      return NextResponse.json({ id: created.id }, { status: 201 })
+      });
+      return NextResponse.json({ id: created.id }, { status: 201 });
     } catch (error) {
       if (error instanceof MailboxConfigurationError) {
-        return NextResponse.json({ error: error.message }, { status: error.status })
+        return NextResponse.json({ error: error.message }, { status: error.status });
       }
-      throw error
+      throw error;
     }
   },
-})
+});

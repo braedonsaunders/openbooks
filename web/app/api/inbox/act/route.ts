@@ -1,12 +1,8 @@
-import { defineRoute } from '@/lib/api/route'
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  actOnInboxItem,
-  InboxError,
-} from "@openbooks/engine/inbox/runtime";
+import { actOnInboxItem, InboxError } from "@openbooks/engine/inbox/runtime";
 import { TimeApprovalRefusal } from "@/lib/time-approval-refusal";
-import { inboxContext } from "../../../../lib/inbox-context";
-import { parseJsonBody } from "@/lib/api/json";
+import { inboxContext } from "@/lib/inbox-context";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -35,7 +31,8 @@ function errorOf(error: unknown): { status: number; body: Record<string, unknown
       },
     };
   }
-  if (error instanceof z.ZodError) return { status: 400, body: { error: "itemId and actionKey are required" } };
+  if (error instanceof z.ZodError)
+    return { status: 400, body: { error: "itemId and actionKey are required" } };
   const message = error instanceof Error ? error.message : "the action was refused";
   return { status: 422, body: { error: message } };
 }
@@ -51,23 +48,15 @@ function errorOf(error: unknown): { status: number; body: Record<string, unknown
  * cannot approve an out-of-scope gate a restricted actor guessed or kept.
  */
 export const POST = defineRoute({
-  public: 'session',
-  handler: async ({ request: req, authz }) => {
-    const parsedBody = await parseJsonBody(req, actBody);
-    if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data;
+  public: "session",
+  body: actBody,
+  handler: async ({ authz, body }) => {
     try {
-      await actOnInboxItem(
-        await inboxContext(authz),
-        body.itemId,
-        body.actionKey,
-        body.reason,
-      );
+      await actOnInboxItem(await inboxContext(authz), body.itemId, body.actionKey, body.reason);
       return NextResponse.json({ ok: true });
     } catch (error) {
       const { status, body } = errorOf(error);
       return NextResponse.json(body, { status });
     }
-
   },
-})
+});

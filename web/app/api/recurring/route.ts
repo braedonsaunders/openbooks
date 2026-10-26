@@ -1,6 +1,6 @@
 import { notFound } from "@/lib/api/responses";
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { isoDate, uuidId, parseJsonBody } from "@/lib/api/json";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { isoDate, uuidId } from "@/lib/api/json";
 import { z } from "zod";
 import {
   advanceCadence,
@@ -17,10 +17,10 @@ import {
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { can } from "../../../lib/authz";
-import { defineRoute } from "../../../lib/api/route";
+import { can } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
-import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents.ts";
+import { disabledDocKinds, isDocKindEnabled } from "@/lib/documents";
 
 export const runtime = "nodejs";
 
@@ -70,10 +70,13 @@ const createSchema = z.object({
  */
 export const GET = defineRoute({
   permission: "documents.manage",
-  feature: { none: "Recurring schedules are governed by document permissions and template kind availability." },
+  feature: {
+    none: "Recurring schedules are governed by document permissions and template kind availability.",
+  },
   handler: async ({ authz }) => {
-  const hidden = new Set(await disabledDocKinds(authz.user.orgId));
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+    const hidden = new Set(await disabledDocKinds(authz.user.orgId));
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
     select rs.id, rs.cadence, rs.cron, rs.next_run_on as "nextRunOn", rs.ends_on as "endsOn",
            rs.auto_post as "autoPost", rs.is_active as "isActive", rs.run_count as "runCount",
            rs.max_occurrences as "maxOccurrences", rs.skipped_run_ons::text[] as "skippedRunOns",
@@ -86,93 +89,112 @@ export const GET = defineRoute({
      where rs.org_id = ${authz.user.orgId}
        ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
      order by rs.is_active desc, rs.next_run_on
-  `, "objects"));
-  return NextResponse.json({
-    schedules: rows.filter((row) => !hidden.has(String(row.templateKind))),
-  });
+  `,
+      "objects",
+    );
+    return NextResponse.json({
+      schedules: rows.filter((row) => !hidden.has(String(row.templateKind))),
+    });
   },
 });
 
 export const POST = defineRoute({
   permission: "documents.manage",
-  feature: { none: "Recurring schedules are governed by document permissions and template kind availability." },
-  handler: async ({ request: req, authz }) => {
-  const parsedBody = await parseJsonBody(req, createSchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  const autoPost = body.autoPost ?? false;
-  if (autoPost && !can(authz, "gl.post")) {
-    return NextResponse.json({ error: "missing permission: gl.post" }, { status: 403 });
-  }
+  feature: {
+    none: "Recurring schedules are governed by document permissions and template kind availability.",
+  },
+  body: createSchema,
+  handler: async ({ authz, body }) => {
+    const autoPost = body.autoPost ?? false;
+    if (autoPost && !can(authz, "gl.post")) {
+      return NextResponse.json({ error: "missing permission: gl.post" }, { status: 403 });
+    }
 
-  if (!body.templateDocumentId && !body.templateDocumentNumber) {
-    return NextResponse.json({ error: "a template document is required" }, { status: 400 });
-  }
-  if (body.cadence === "custom_cron" && !body.cron) {
-    return NextResponse.json({ error: "cron is required for custom_cron" }, { status: 400 });
-  }
+    if (!body.templateDocumentId && !body.templateDocumentNumber) {
+      return NextResponse.json({ error: "a template document is required" }, { status: 400 });
+    }
+    if (body.cadence === "custom_cron" && !body.cron) {
+      return NextResponse.json({ error: "cron is required for custom_cron" }, { status: 400 });
+    }
 
-  const today = await businessToday(authz.user.orgId);
-  const nextRunOn = body.nextRunOn ?? today;
-  try { advanceCadence(nextRunOn, body.cadence, body.cron); }
-  catch (error) {
-    if (error instanceof RecurringError) return apiErrorResponse(new RecurringInputRefusal(error.message));
-    return apiErrorResponse(error);
-  }
-  if (body.endsOn && body.endsOn < nextRunOn) {
-    return NextResponse.json({ error: "endsOn must not precede nextRunOn" }, { status: 400 });
-  }
-  // Standing seasonal skips are stored sorted and deduplicated; matching is
-  // exact-date, so only true calendar dates reach the row.
-  const skippedRunOns = [...new Set(body.skippedRunOns ?? [])].sort();
-  const maxOccurrences = body.maxOccurrences ?? null;
-  // A backlog is a choice, never a side effect: creating into two or more
-  // past-due occurrences without a catch-up mode refuses with the exact
-  // missed dates, so the scheduler cannot silently bulk-post them. The
-  // gate counts what the run would bill — skips excluded, capped at the
-  // occurrence limit — so a choice covers exactly the listed dates.
-  const pending = pendingOccurrences(
-    {
-      cadence: body.cadence, cron: body.cron ?? null, nextRunOn, endsOn: body.endsOn ?? null,
-      anchorDay: Number(nextRunOn.slice(8, 10)), skippedRunOns, remaining: remainingOccurrences(maxOccurrences, 0),
-    },
-    today,
-  );
-  if (pending.occurrences.length >= CATCH_UP_CHOICE_THRESHOLD && !body.catchUp) {
-    return NextResponse.json({
-      error: `${pending.occurrences.length} periods are already due — choose how to catch up instead of bulk-generating them`,
-      code: "catch_up_choice_required",
-      occurrences: pending.occurrences,
-      truncated: pending.truncated,
-    }, { status: 409 });
-  }
-  const created = await db.transaction(async (tx) => {
-    const candidates = await tx.execute<{ id: string; kind: string }>(sql`
+    const today = await businessToday(authz.user.orgId);
+    const nextRunOn = body.nextRunOn ?? today;
+    try {
+      advanceCadence(nextRunOn, body.cadence, body.cron);
+    } catch (error) {
+      if (error instanceof RecurringError)
+        return apiErrorResponse(new RecurringInputRefusal(error.message));
+      return apiErrorResponse(error);
+    }
+    if (body.endsOn && body.endsOn < nextRunOn) {
+      return NextResponse.json({ error: "endsOn must not precede nextRunOn" }, { status: 400 });
+    }
+    // Standing seasonal skips are stored sorted and deduplicated; matching is
+    // exact-date, so only true calendar dates reach the row.
+    const skippedRunOns = [...new Set(body.skippedRunOns ?? [])].sort();
+    const maxOccurrences = body.maxOccurrences ?? null;
+    // A backlog is a choice, never a side effect: creating into two or more
+    // past-due occurrences without a catch-up mode refuses with the exact
+    // missed dates, so the scheduler cannot silently bulk-post them. The
+    // gate counts what the run would bill — skips excluded, capped at the
+    // occurrence limit — so a choice covers exactly the listed dates.
+    const pending = pendingOccurrences(
+      {
+        cadence: body.cadence,
+        cron: body.cron ?? null,
+        nextRunOn,
+        endsOn: body.endsOn ?? null,
+        anchorDay: Number(nextRunOn.slice(8, 10)),
+        skippedRunOns,
+        remaining: remainingOccurrences(maxOccurrences, 0),
+      },
+      today,
+    );
+    if (pending.occurrences.length >= CATCH_UP_CHOICE_THRESHOLD && !body.catchUp) {
+      return NextResponse.json(
+        {
+          error: `${pending.occurrences.length} periods are already due — choose how to catch up instead of bulk-generating them`,
+          code: "catch_up_choice_required",
+          occurrences: pending.occurrences,
+          truncated: pending.truncated,
+        },
+        { status: 409 },
+      );
+    }
+    const created = await db.transaction(async (tx) => {
+      const candidates = await tx.execute<{ id: string; kind: string }>(
+        sql`
       select d.id, d.kind from documents d where d.org_id = ${authz.user.orgId}
         and ${body.templateDocumentId ? sql`d.id = ${body.templateDocumentId}` : sql`d.document_number = ${body.templateDocumentNumber}`}
         ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
       order by d.id limit 2 for share of d
-    `, "objects");
-    // Recheck line scope after the template locks: a concurrent line edit
-    // may have committed while the candidate statement waited for its parent.
-    if (!candidates.length) return null;
-    const tpl = await tx.execute<{ id: string; kind: string }>(sql`
+    `,
+        "objects",
+      );
+      // Recheck line scope after the template locks: a concurrent line edit
+      // may have committed while the candidate statement waited for its parent.
+      if (!candidates.length) return null;
+      const tpl = await tx.execute<{ id: string; kind: string }>(
+        sql`
       select d.id, d.kind from documents d where d.org_id = ${authz.user.orgId}
-        and d.id = any(${`{${candidates.map(row => row.id).join(",")}}`}::uuid[])
+        and d.id = any(${`{${candidates.map((row) => row.id).join(",")}}`}::uuid[])
         ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
       order by d.id
-    `, "objects");
-    if (!tpl.length || !(await isDocKindEnabled(authz.user.orgId, tpl[0]!.kind))) return null;
-    if (tpl.length > 1) return "ambiguous" as const;
-    const templateDocumentId = tpl[0]!.id;
-    // Unknown period tokens refuse at save with their names, so a misspelled
-    // token can never reach a customer invoice.
-    await assertTemplateTokensKnown(tx, authz.user.orgId, templateDocumentId);
-    // The anchor day pins month-end starts: a schedule whose first occurrence
-    // is the 31st keeps billing on the 31st (clamped per month) instead of
-    // drifting. nextRunOn is a validated ISO date (checked above).
-    const anchorDay = Number(nextRunOn.slice(8, 10));
-    const row = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
+    `,
+        "objects",
+      );
+      if (!tpl.length || !(await isDocKindEnabled(authz.user.orgId, tpl[0]!.kind))) return null;
+      if (tpl.length > 1) return "ambiguous" as const;
+      const templateDocumentId = tpl[0]!.id;
+      // Unknown period tokens refuse at save with their names, so a misspelled
+      // token can never reach a customer invoice.
+      await assertTemplateTokensKnown(tx, authz.user.orgId, templateDocumentId);
+      // The anchor day pins month-end starts: a schedule whose first occurrence
+      // is the 31st keeps billing on the 31st (clamped per month) instead of
+      // drifting. nextRunOn is a validated ISO date (checked above).
+      const anchorDay = Number(nextRunOn.slice(8, 10));
+      const row = await tx.execute<Record<string, unknown> & { id: string }>(
+        sql`
       insert into recurring_schedules (org_id, template_document_id, cadence, cron, next_run_on, ends_on,
                                        max_occurrences, skipped_run_ons,
                                        auto_post, name, anchor_day, created_by, updated_by)
@@ -181,35 +203,41 @@ export const POST = defineRoute({
               ${autoPost}, ${body.name ?? null}, ${anchorDay},
               ${authz.user.id}, ${authz.user.id})
       returning *
-    `, "objects"));
-    // A schedule mints real documents on every due date, so its creation is
-    // recorded in the same transaction.
-    await tx.execute(sql`
+    `,
+        "objects",
+      );
+      // A schedule mints real documents on every due date, so its creation is
+      // recorded in the same transaction.
+      await tx.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)
       values
         (${authz.user.orgId}, 'recurring_schedules', ${row[0]!.id}, 'insert',
          ${JSON.stringify({ after: row[0] })}::jsonb, ${authz.user.id})
     `);
-    return row[0]!;
-  });
-  if (!created) return notFound("record");
-  if (created === "ambiguous") return NextResponse.json({ error: "document number is ambiguous; select a template ID" }, { status: 400 });
-  if (body.catchUp) {
-    try {
-      const outcome = await runScheduleCatchUp(authz.user.orgId, String(created.id), {
-        mode: body.catchUp.mode as CatchUpMode,
-        selectedDates: body.catchUp.dates,
-        postSelected: body.catchUp.post,
-        asOf: today,
-        actorId: authz.user.id,
-        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-      });
-      return NextResponse.json({ id: created.id, catchUp: outcome }, { status: 201 });
-    } catch (e) {
-      return apiErrorResponse(e);
+      return row[0]!;
+    });
+    if (!created) return notFound("record");
+    if (created === "ambiguous")
+      return NextResponse.json(
+        { error: "document number is ambiguous; select a template ID" },
+        { status: 400 },
+      );
+    if (body.catchUp) {
+      try {
+        const outcome = await runScheduleCatchUp(authz.user.orgId, String(created.id), {
+          mode: body.catchUp.mode as CatchUpMode,
+          selectedDates: body.catchUp.dates,
+          postSelected: body.catchUp.post,
+          asOf: today,
+          actorId: authz.user.id,
+          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+        });
+        return NextResponse.json({ id: created.id, catchUp: outcome }, { status: 201 });
+      } catch (e) {
+        return apiErrorResponse(e);
+      }
     }
-  }
-  return NextResponse.json({ id: created.id }, { status: 201 });
+    return NextResponse.json({ id: created.id }, { status: 201 });
   },
 });

@@ -1,21 +1,26 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 interface RouteState {
-  mode: 'committed' | 'pre-commit' | 'success' | 'moved'
-  createCalls: number
-  denyPost: boolean
-  lastOpts: { post?: boolean } | null
+  mode: "committed" | "pre-commit" | "success" | "moved";
+  createCalls: number;
+  denyPost: boolean;
+  lastOpts: { post?: boolean } | null;
 }
 
-const stateKey = Symbol.for('openbooks.project-charge-route-test')
-const routeState: RouteState = { mode: 'committed', createCalls: 0, denyPost: false, lastOpts: null }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+const stateKey = Symbol.for("openbooks.project-charge-route-test");
+const routeState: RouteState = {
+  mode: "committed",
+  createCalls: 0,
+  denyPost: false,
+  lastOpts: null,
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       export const db = {
         async execute(query, mode) {
@@ -30,7 +35,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.project-charge-route-test')]
       export async function guardPermission() {
@@ -48,7 +53,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:features',
+    "mock:features",
     `
       export async function isFeatureEnabled() { return true }
       export async function guardFeaturePermission() {
@@ -56,12 +61,9 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  ["mock:projects-gate", `export async function guardProjectsFeature() { return null }`],
   [
-    'mock:projects-gate',
-    `export async function guardProjectsFeature() { return null }`,
-  ],
-  [
-    'mock:project-charges',
+    "mock:project-charges",
     `
       const state = globalThis[Symbol.for('openbooks.project-charge-route-test')]
       export class ChargeError extends Error {}
@@ -92,110 +94,115 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['@/lib/authz', 'mock:authz'],
-  ['../../../lib/authz', 'mock:authz'],
-  ['@/lib/feature-gates', 'mock:features'],
-  ['../../../lib/features', 'mock:features'],
-  ['../../../lib/projects-gate', 'mock:projects-gate'],
-  ['../../../lib/project-charges', 'mock:project-charges'],
-])
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@/lib/authz", "mock:authz"],
+  ["../../../lib/authz", "mock:authz"],
+  ["@/lib/feature-gates", "mock:features"],
+  ["@/lib/features", "mock:features"],
+  ["../../../lib/projects-gate", "mock:projects-gate"],
+  ["@/lib/project-charges", "mock:project-charges"],
+]);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?project-charge-route-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?project-charge-route-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const body = {
-  projectId: '00000000-0000-4000-8000-00000000a001',
-  lines: [{ itemId: '00000000-0000-4000-8000-00000000a001', quantity: '1', costRate: '1', billRate: '1' }],
-}
+  projectId: "00000000-0000-4000-8000-00000000a001",
+  lines: [
+    { itemId: "00000000-0000-4000-8000-00000000a001", quantity: "1", costRate: "1", billRate: "1" },
+  ],
+};
 
-function reset(mode: RouteState['mode'], denyPost = false): void {
-  routeState.mode = mode
-  routeState.createCalls = 0
-  routeState.denyPost = denyPost
-  routeState.lastOpts = null
+function reset(mode: RouteState["mode"], denyPost = false): void {
+  routeState.mode = mode;
+  routeState.createCalls = 0;
+  routeState.denyPost = denyPost;
+  routeState.lastOpts = null;
 }
 
 function post(): Promise<Response> {
-  return POST(new Request('http://openbooks.test/api/project-charges', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  }))
+  return POST(
+    new Request("http://openbooks.test/api/project-charges", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
 }
 
-test('POST exposes the committed charge identity and lifecycle failure stage', async () => {
-  reset('committed')
-  const response = await post()
+test("POST exposes the committed charge identity and lifecycle failure stage", async () => {
+  reset("committed");
+  const response = await post();
 
-  assert.equal(response.status, 409)
+  assert.equal(response.status, 409);
   assert.deepEqual(await response.json(), {
-    error: 'project charge CHG-0001 (00000000-0000-4000-8000-00000000c001) was committed but posting failed: no accounting period covers 2026-08-28',
+    error:
+      "project charge CHG-0001 (00000000-0000-4000-8000-00000000c001) was committed but posting failed: no accounting period covers 2026-08-28",
     committed: true,
-    chargeId: '00000000-0000-4000-8000-00000000c001',
-    documentNumber: 'CHG-0001',
-    stage: 'posting',
-    cause: 'no accounting period covers 2026-08-28',
-  })
-  assert.equal(routeState.createCalls, 1)
-})
+    chargeId: "00000000-0000-4000-8000-00000000c001",
+    documentNumber: "CHG-0001",
+    stage: "posting",
+    cause: "no accounting period covers 2026-08-28",
+  });
+  assert.equal(routeState.createCalls, 1);
+});
 
-test('POST keeps pre-commit validation errors as ordinary 422 failures', async () => {
-  reset('pre-commit')
-  const response = await post()
+test("POST keeps pre-commit validation errors as ordinary 422 failures", async () => {
+  reset("pre-commit");
+  const response = await post();
 
-  assert.equal(response.status, 422)
-  assert.deepEqual(await response.json(), { error: 'item not found' })
-  assert.equal(routeState.createCalls, 1)
-})
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), { error: "item not found" });
+  assert.equal(routeState.createCalls, 1);
+});
 
-test('POST preserves the successful create response', async () => {
-  reset('success')
-  const response = await post()
+test("POST preserves the successful create response", async () => {
+  reset("success");
+  const response = await post();
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
-    id: '00000000-0000-4000-8000-00000000c002',
-    documentNumber: 'CHG-0002',
+    id: "00000000-0000-4000-8000-00000000c002",
+    documentNumber: "CHG-0002",
     approvalPending: false,
-  })
-  assert.equal(routeState.createCalls, 1)
-  assert.deepEqual(routeState.lastOpts, { post: true, allowedSubsidiaryIds: null })
-})
+  });
+  assert.equal(routeState.createCalls, 1);
+  assert.deepEqual(routeState.lastOpts, { post: true, allowedSubsidiaryIds: null });
+});
 
-test('POST answers a concurrent rehome exactly like the pre-read 404', async () => {
-  reset('moved')
-  const response = await post()
+test("POST answers a concurrent rehome exactly like the pre-read 404", async () => {
+  reset("moved");
+  const response = await post();
 
-  assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not_found' })
-  assert.equal(routeState.createCalls, 1)
-})
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "not_found" });
+  assert.equal(routeState.createCalls, 1);
+});
 
-test('POST without gl.post saves a draft and names the remedy instead of posting', async () => {
-  reset('success', true)
-  const response = await post()
+test("POST without gl.post saves a draft and names the remedy instead of posting", async () => {
+  reset("success", true);
+  const response = await post();
 
-  assert.equal(response.status, 200)
-  const body = await response.json() as { postRefusal?: unknown; posted?: unknown }
-  assert.deepEqual(routeState.lastOpts, { post: false, allowedSubsidiaryIds: null })
-  assert.equal(body.posted, false)
-  assert.match(String(body.postRefusal), /gl\.post/)
-  assert.equal(routeState.createCalls, 1)
-})
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { postRefusal?: unknown; posted?: unknown };
+  assert.deepEqual(routeState.lastOpts, { post: false, allowedSubsidiaryIds: null });
+  assert.equal(body.posted, false);
+  assert.match(String(body.postRefusal), /gl\.post/);
+  assert.equal(routeState.createCalls, 1);
+});

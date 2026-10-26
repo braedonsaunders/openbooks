@@ -1,28 +1,32 @@
-import { applyMapping, duplicateMappingTarget } from '../../../../lib/data-io/mapping'
+import { applyMapping, duplicateMappingTarget } from "@/lib/data-io/mapping";
 import { notFound } from "@/lib/api/responses";
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { BankingError } from '@openbooks/engine/banking/banking'
-import { db } from '@openbooks/engine/platform/db'
-import { applicationContextFromSession } from '../../../../lib/application/context'
-import { executeIdempotent } from '../../../../lib/application/idempotency'
-import { ApplicationError } from '../../../../lib/application/errors'
-import { can } from '../../../../lib/authz'
-import { defineRoute } from '../../../../lib/api/route'
-import { parseJsonBody } from '../../../../lib/api/json'
-import { getResource } from '../../../../lib/data-io/resources'
-import { customFieldViewerFor } from '../../../../lib/custom-fields'
-import { guessMapping, ImportParseError, MAX_IMPORT_ROWS, parseImportFile } from '../../../../lib/data-io/parse'
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { BankingError } from "@openbooks/engine/banking/banking";
+import { db } from "@openbooks/engine/platform/db";
+import { applicationContextFromSession } from "@/lib/application/context";
+import { executeIdempotent } from "@/lib/application/idempotency";
+import { ApplicationError } from "@/lib/application/errors";
+import { can } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { getResource } from "@/lib/data-io/resources";
+import { customFieldViewerFor } from "@/lib/custom-fields";
+import {
+  guessMapping,
+  ImportParseError,
+  MAX_IMPORT_ROWS,
+  parseImportFile,
+} from "@/lib/data-io/parse";
 import {
   CELL_PROVENANCE_KEY,
   IMPORT_FORMATS,
   type ImportFormat,
   type ImportMode,
-} from '../../../../lib/data-io/types'
+} from "../../../../lib/data-io/types";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Field-validated body for every import mode. Absent optional fields keep
@@ -33,23 +37,29 @@ export const runtime = 'nodejs'
  */
 const importBodySchema = z.object({
   mode: z
-    .enum(['parse', 'preview', 'commit'], { error: 'mode must be parse, preview or commit' })
-    .default('parse'),
+    .enum(["parse", "preview", "commit"], { error: "mode must be parse, preview or commit" })
+    .default("parse"),
   resource: z.string().optional(),
-  format: z.enum(IMPORT_FORMATS, { error: 'format must be csv, xlsx or json' }).optional(),
+  format: z.enum(IMPORT_FORMATS, { error: "format must be csv, xlsx or json" }).optional(),
   text: z.string().optional(),
   base64: z.string().optional(),
   // Import row keys are selected at runtime by the registered resource; the
   // adapter validates their meaning against that resource's column schema.
   rows: z.array(z.record(z.string(), z.json())).optional(),
   mapping: z.record(z.string(), z.string()).optional(),
-  importMode: z.enum(['insert', 'upsert'], { error: 'importMode must be insert or upsert' }).optional(),
+  importMode: z
+    .enum(["insert", "upsert"], { error: "importMode must be insert or upsert" })
+    .optional(),
   fileName: z.string().optional(),
-  post: z.boolean({ error: 'post must be a boolean' }).optional(),
-  idempotencyKey: z.string().regex(/^[A-Za-z0-9._:-]{8,200}$/, {
-    error: 'idempotencyKey must be 8-200 characters using letters, numbers, ".", "_", ":", or "-"',
-  }).optional(),
-})
+  post: z.boolean({ error: "post must be a boolean" }).optional(),
+  idempotencyKey: z
+    .string()
+    .regex(/^[A-Za-z0-9._:-]{8,200}$/, {
+      error:
+        'idempotencyKey must be 8-200 characters using letters, numbers, ".", "_", ":", or "-"',
+    })
+    .optional(),
+});
 
 /**
  * Generic import with a mode discriminator (mirrors the bank-import route):
@@ -65,197 +75,231 @@ const importBodySchema = z.object({
  * on top (e.g. importing accounts also needs admin.setup.manage).
  */
 export const POST = defineRoute({
-  permission: 'data.import',
-  feature: { none: 'Data import and export are permission-gated and have no organization feature switch.' },
-  handler: async ({ request: req, authz }) => {
-  const orgId = authz.user.orgId
+  permission: "data.import",
+  feature: {
+    none: "Data import and export are permission-gated and have no organization feature switch.",
+  },
+  body: importBodySchema,
+  opaque: {
+    mode: "Import mode defaults to parse when omitted, preserving the existing default request.",
+    resource: "Resource selection is validated against the registered import resources at runtime.",
+    format: "File format defaults to CSV when omitted, preserving the existing import behavior.",
+    text: "File content is optional because callers may supply either text or base64 content.",
+    base64: "File content is optional because callers may supply either text or base64 content.",
+    rows: "Import rows are validated against the selected resource's runtime column schema.",
+    mapping: "Mapping keys are resolved against the selected resource's runtime column schema.",
+    importMode: "Import mode defaults to upsert when omitted, preserving the existing behavior.",
+    fileName: "The uploaded filename is optional metadata and is not required to parse an import.",
+    post: "Posting is optional and is separately checked against the selected resource's capability.",
+    idempotencyKey:
+      "An idempotency key is required only for commit mode and is checked by the handler.",
+  },
+  maxBodyBytes: 25 * 1024 * 1024,
+  handler: async ({ request: req, authz, body }) => {
+    const orgId = authz.user.orgId;
 
-  // Bulk rows and base64 workbooks ride this body (up to MAX_IMPORT_ROWS
-  // rows), so the house 1 MiB default would refuse legitimate imports — the
-  // 25 MiB ceiling matches the file-cabinet upload limit for the same bytes.
-  const parsedBody = await parseJsonBody(req, importBodySchema, {
-    maxBodyBytes: 25 * 1024 * 1024,
-  });
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data
-  const mode = body.mode
-  const format: ImportFormat = body.format ?? 'csv'
+    // Bulk rows and base64 workbooks ride this body (up to MAX_IMPORT_ROWS
+    // rows), so the house 1 MiB default would refuse legitimate imports — the
+    // 25 MiB ceiling matches the file-cabinet upload limit for the same bytes.
+    const mode = body.mode;
+    const format: ImportFormat = body.format ?? "csv";
 
-  const viewer = customFieldViewerFor(authz)
-  const resource = await getResource(orgId, body.resource ?? '', authz.allowedSubsidiaryIds, viewer)
-  if (!resource) return notFound("record")
-  if (!resource.descriptor.supportsImport) {
-    return NextResponse.json({ error: 'resource is read-only' }, { status: 400 })
-  }
-  if (body.post === true && !resource.descriptor.canPost) {
-    return NextResponse.json(
-      { error: `posting is not supported for resource ${resource.descriptor.key}` },
-      { status: 400 },
-    )
-  }
-  if (!can(authz, resource.descriptor.writePermission)) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  }
-  // The export route binds the caller's subsidiary fence before every read.
-  // Writes carry the same fence: a resource that does not enforce it in its
-  // write() is refused outright for a restricted caller rather than silently
-  // loading rows into legal entities the caller cannot see.
-  if (authz.allowedSubsidiaryIds !== null && !resource.descriptor.scopedWrite) {
-    return NextResponse.json(
-      { error: 'importing this resource requires organization-wide access' },
-      { status: 403 },
-    )
-  }
-  if (mode === 'commit' && !body.idempotencyKey) {
-    return NextResponse.json({ error: 'commit requires an idempotencyKey' }, { status: 400 })
-  }
-
-  if (mode === 'parse') {
-    let parsed
-    try {
-      parsed = await parseImportFile(format, { text: body.text, base64: body.base64 })
-    } catch (error) {
-      // A file the parser refuses (duplicate columns, empty CSV, ...) is a
-      // caller error, not a server failure — report it instead of a 500. A
-      // banking-domain refusal keeps its own API status.
-      if (error instanceof ImportParseError) {
-        return apiErrorResponse(error, { safeStatus: 400 })
-      }
-      if (error instanceof BankingError) {
-        return apiErrorResponse(error)
-      }
-      throw error
+    const viewer = customFieldViewerFor(authz);
+    const resource = await getResource(
+      orgId,
+      body.resource ?? "",
+      authz.allowedSubsidiaryIds,
+      viewer,
+    );
+    if (!resource) return notFound("record");
+    if (!resource.descriptor.supportsImport) {
+      return NextResponse.json({ error: "resource is read-only" }, { status: 400 });
     }
-    const fields = await resource.fields()
-    const mapping = guessMapping(parsed.headers, fields.map((f) => f.key))
-    return NextResponse.json({
-      headers: parsed.headers,
-      rows: parsed.rows,
-      sample: parsed.rows.slice(0, 20),
-      total: parsed.rows.length,
-      truncated: parsed.truncated,
-      maxRows: MAX_IMPORT_ROWS,
-      fields,
-      mapping,
-    })
-  }
-
-  // preview / commit both need mapped rows.
-  const rawRows = body.rows ?? []
-  const mapping = body.mapping ?? {}
-  const duplicateTarget = duplicateMappingTarget(mapping)
-  if (duplicateTarget) {
-    return NextResponse.json(
-      {
-        error: 'multiple source columns map to the same target field',
-        field: duplicateTarget.field,
-        sources: duplicateTarget.sources,
-      },
-      { status: 400 },
-    )
-  }
-  // The parser caps files at MAX_IMPORT_ROWS, so the wizard can never send
-  // more — but a direct API caller can, in either mode. Running an unbounded
-  // row set (a 100k-savepoint write transaction, or a 100k-row dry run) to
-  // its timeout helps nobody; refuse with the same bound instead.
-  if (rawRows.length > MAX_IMPORT_ROWS) {
-    return NextResponse.json(
-      { error: `too many rows (maximum ${MAX_IMPORT_ROWS} per import)` },
-      { status: 400 },
-    )
-  }
-  const sourceHeaders = new Set(
-    rawRows.flatMap((row) => Object.keys(row)).filter((key) => key !== CELL_PROVENANCE_KEY),
-  )
-  const enabledTargets = new Set((await resource.fields()).map((field) => field.key))
-  for (const [source, target] of Object.entries(mapping)) {
-    if (!sourceHeaders.has(source)) {
+    if (body.post === true && !resource.descriptor.canPost) {
       return NextResponse.json(
-        { error: `source column "${source}" is not present in the imported rows — parse the file again before previewing or committing` },
+        { error: `posting is not supported for resource ${resource.descriptor.key}` },
         { status: 400 },
-      )
+      );
     }
-    if (target && !enabledTargets.has(target)) {
+    if (!can(authz, resource.descriptor.writePermission)) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    // The export route binds the caller's subsidiary fence before every read.
+    // Writes carry the same fence: a resource that does not enforce it in its
+    // write() is refused outright for a restricted caller rather than silently
+    // loading rows into legal entities the caller cannot see.
+    if (authz.allowedSubsidiaryIds !== null && !resource.descriptor.scopedWrite) {
       return NextResponse.json(
-        { error: `target field "${target}" is not available for resource ${resource.descriptor.key}` },
-        { status: 400 },
-      )
+        { error: "importing this resource requires organization-wide access" },
+        { status: 403 },
+      );
     }
-  }
-  const importMode: ImportMode = body.importMode ?? 'upsert'
-  const mappedRows = rawRows.map((raw) => applyMapping(raw, mapping))
-
-  // Transactions can optionally post to the ledger — gate that on the kind's
-  // post permission (on top of data.import + the create permission above).
-  let post = false
-  if (body.post && resource.descriptor.canPost) {
-    if (resource.descriptor.postPermission && !can(authz, resource.descriptor.postPermission)) {
-      return NextResponse.json({ error: 'forbidden: posting requires ' + resource.descriptor.postPermission }, { status: 403 })
+    if (mode === "commit" && !body.idempotencyKey) {
+      return NextResponse.json({ error: "commit requires an idempotencyKey" }, { status: 400 });
     }
-    post = true
-  }
 
-  const ctx = {
-    orgId,
-    actorId: authz.user.id,
-    permissions: authz.permissions,
-    customFieldViewer: viewer,
-    dryRun: mode === 'preview',
-    post,
-    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-  }
-
-  if (mode === 'preview') {
-    const outcome = await resource.write(mappedRows, importMode, ctx)
-    return NextResponse.json({ outcome, total: mappedRows.length })
-  }
-
-  // commit — the writes and the evidence row are one atomic unit.
-  const requestId = req.headers.get('x-request-id')?.trim() || crypto.randomUUID()
-  let committed: {
-    replayed: boolean
-    value: { outcome: Awaited<ReturnType<typeof resource.write>>; jobId: string | undefined }
-  }
-  try {
-    committed = await executeIdempotent({
-      context: applicationContextFromSession(authz, 'api', requestId),
-      operation: 'data.import.commit',
-      idempotencyKey: body.idempotencyKey!,
-      request: {
-        resource: resource.descriptor.key,
-        format,
-        fileName: body.fileName ?? null,
-        importMode,
+    if (mode === "parse") {
+      let parsed;
+      try {
+        parsed = await parseImportFile(format, { text: body.text, base64: body.base64 });
+      } catch (error) {
+        // A file the parser refuses (duplicate columns, empty CSV, ...) is a
+        // caller error, not a server failure — report it instead of a 500. A
+        // banking-domain refusal keeps its own API status.
+        if (error instanceof ImportParseError) {
+          return apiErrorResponse(error, { safeStatus: 400 });
+        }
+        if (error instanceof BankingError) {
+          return apiErrorResponse(error);
+        }
+        throw error;
+      }
+      const fields = await resource.fields();
+      const mapping = guessMapping(
+        parsed.headers,
+        fields.map((f) => f.key),
+      );
+      return NextResponse.json({
+        headers: parsed.headers,
+        rows: parsed.rows,
+        sample: parsed.rows.slice(0, 20),
+        total: parsed.rows.length,
+        truncated: parsed.truncated,
+        maxRows: MAX_IMPORT_ROWS,
+        fields,
         mapping,
-        rows: mappedRows,
-        post,
-        allowedSubsidiaryIds: authz.allowedSubsidiaryIds === null
-          ? null
-          : [...authz.allowedSubsidiaryIds].sort(),
-      },
-      execute: async () => {
-        const outcome = await resource.write(mappedRows, importMode, ctx)
-        const inserted = await db.execute<{ id: string }>(sql`
+      });
+    }
+
+    // preview / commit both need mapped rows.
+    const rawRows = body.rows ?? [];
+    const mapping = body.mapping ?? {};
+    const duplicateTarget = duplicateMappingTarget(mapping);
+    if (duplicateTarget) {
+      return NextResponse.json(
+        {
+          error: "multiple source columns map to the same target field",
+          field: duplicateTarget.field,
+          sources: duplicateTarget.sources,
+        },
+        { status: 400 },
+      );
+    }
+    // The parser caps files at MAX_IMPORT_ROWS, so the wizard can never send
+    // more — but a direct API caller can, in either mode. Running an unbounded
+    // row set (a 100k-savepoint write transaction, or a 100k-row dry run) to
+    // its timeout helps nobody; refuse with the same bound instead.
+    if (rawRows.length > MAX_IMPORT_ROWS) {
+      return NextResponse.json(
+        { error: `too many rows (maximum ${MAX_IMPORT_ROWS} per import)` },
+        { status: 400 },
+      );
+    }
+    const sourceHeaders = new Set(
+      rawRows.flatMap((row) => Object.keys(row)).filter((key) => key !== CELL_PROVENANCE_KEY),
+    );
+    const enabledTargets = new Set((await resource.fields()).map((field) => field.key));
+    for (const [source, target] of Object.entries(mapping)) {
+      if (!sourceHeaders.has(source)) {
+        return NextResponse.json(
+          {
+            error: `source column "${source}" is not present in the imported rows — parse the file again before previewing or committing`,
+          },
+          { status: 400 },
+        );
+      }
+      if (target && !enabledTargets.has(target)) {
+        return NextResponse.json(
+          {
+            error: `target field "${target}" is not available for resource ${resource.descriptor.key}`,
+          },
+          { status: 400 },
+        );
+      }
+    }
+    const importMode: ImportMode = body.importMode ?? "upsert";
+    const mappedRows = rawRows.map((raw) => applyMapping(raw, mapping));
+
+    // Transactions can optionally post to the ledger — gate that on the kind's
+    // post permission (on top of data.import + the create permission above).
+    let post = false;
+    if (body.post && resource.descriptor.canPost) {
+      if (resource.descriptor.postPermission && !can(authz, resource.descriptor.postPermission)) {
+        return NextResponse.json(
+          { error: "forbidden: posting requires " + resource.descriptor.postPermission },
+          { status: 403 },
+        );
+      }
+      post = true;
+    }
+
+    const ctx = {
+      orgId,
+      actorId: authz.user.id,
+      permissions: authz.permissions,
+      customFieldViewer: viewer,
+      dryRun: mode === "preview",
+      post,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    };
+
+    if (mode === "preview") {
+      const outcome = await resource.write(mappedRows, importMode, ctx);
+      return NextResponse.json({ outcome, total: mappedRows.length });
+    }
+
+    // commit — the writes and the evidence row are one atomic unit.
+    const requestId = req.headers.get("x-request-id")?.trim() || crypto.randomUUID();
+    let committed: {
+      replayed: boolean;
+      value: { outcome: Awaited<ReturnType<typeof resource.write>>; jobId: string | undefined };
+    };
+    try {
+      committed = await executeIdempotent({
+        context: applicationContextFromSession(authz, "api", requestId),
+        operation: "data.import.commit",
+        idempotencyKey: body.idempotencyKey!,
+        request: {
+          resource: resource.descriptor.key,
+          format,
+          fileName: body.fileName ?? null,
+          importMode,
+          mapping,
+          rows: mappedRows,
+          post,
+          allowedSubsidiaryIds:
+            authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds].sort(),
+        },
+        execute: async () => {
+          const outcome = await resource.write(mappedRows, importMode, ctx);
+          const inserted = await db.execute<{ id: string }>(
+            sql`
           insert into import_jobs
             (org_id, resource_key, resource_label, format, file_name, mode, status, mapping,
              total_rows, created_count, updated_count, failed_count, errors, created_by)
           values (${orgId}, ${resource.descriptor.key}, ${resource.descriptor.label}, ${format},
                   ${body.fileName ?? null}, ${importMode},
-                  ${outcome.failed > 0 && outcome.created === 0 && outcome.updated === 0 ? 'failed' : 'committed'},
+                  ${outcome.failed > 0 && outcome.created === 0 && outcome.updated === 0 ? "failed" : "committed"},
                   ${JSON.stringify(mapping)}::jsonb, ${mappedRows.length},
                   ${outcome.created}, ${outcome.updated}, ${outcome.failed},
                   ${JSON.stringify(outcome.errors)}::jsonb, ${authz.user.id})
-          returning id`, 'objects')
-        return { outcome, jobId: inserted[0]?.id }
-      },
-    })
-  } catch (error) {
-    if (error instanceof ApplicationError) {
-      return apiErrorResponse(error, { details: { code: error.code } })
+          returning id`,
+            "objects",
+          );
+          return { outcome, jobId: inserted[0]?.id };
+        },
+      });
+    } catch (error) {
+      if (error instanceof ApplicationError) {
+        return apiErrorResponse(error, { details: { code: error.code } });
+      }
+      throw error;
     }
-    throw error
-  }
 
-  return NextResponse.json({ ...committed.value, total: mappedRows.length, replayed: committed.replayed })
+    return NextResponse.json({
+      ...committed.value,
+      total: mappedRows.length,
+      replayed: committed.replayed,
+    });
   },
-})
+});
