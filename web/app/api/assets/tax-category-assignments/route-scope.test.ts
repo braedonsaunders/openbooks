@@ -13,7 +13,6 @@ interface AssetTaxState {
   installCalls: number;
   dbCalls: number;
   openPoolClass: string | null;
-  assignmentCalls: number;
   assignmentWrites: number;
 }
 
@@ -23,7 +22,6 @@ const assetTaxState: AssetTaxState = {
   installCalls: 0,
   dbCalls: 0,
   openPoolClass: null,
-  assignmentCalls: 0,
   assignmentWrites: 0,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = assetTaxState;
@@ -91,26 +89,17 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    "mock:asset-tax-assignment",
-    `
-      const state = globalThis[Symbol.for('openbooks.asset-tax-scope-test')]
-      export async function assignAssetTaxCategory() {
-        state.assignmentCalls += 1
-        return state.openPoolClass
-          ? { kind: 'open_pool', classCode: state.openPoolClass }
-          : { kind: 'assigned' }
-      }
-    `,
-  ],
 ]);
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "@openbooks/engine/platform/db")
       return { url: "mock:db", shortCircuit: true };
-    if (specifier === "@openbooks/engine/assets/asset-tax-category-assignments")
-      return { url: "mock:asset-tax-assignment", shortCircuit: true };
+    if (
+      specifier === "../platform/db.ts" &&
+      context.parentURL?.endsWith("/engine/src/assets/asset-tax-category-assignments.ts")
+    )
+      return { url: "mock:db", shortCircuit: true };
     if (specifier === "@openbooks/engine/tax-returns/depreciation-packs")
       return { url: "mock:packs", shortCircuit: true };
     if (specifier.endsWith("/lib/feature-gates"))
@@ -137,7 +126,6 @@ function reset(restricted: boolean): void {
   assetTaxState.installCalls = 0;
   assetTaxState.dbCalls = 0;
   assetTaxState.openPoolClass = null;
-  assetTaxState.assignmentCalls = 0;
   assetTaxState.assignmentWrites = 0;
 }
 
@@ -183,7 +171,6 @@ test("category assignment by a scoped caller is refused before any read", async 
   assert.equal(response.status, 403);
   assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
   assert.equal(assetTaxState.dbCalls, 0);
-  assert.equal(assetTaxState.assignmentCalls, 0);
 });
 
 test("removing a category class with a nonzero pool is refused without changing or auditing the assignment", async () => {
@@ -202,6 +189,5 @@ test("removing a category class with a nonzero pool is refused without changing 
   assert.equal(response.status, 422);
   const payload = (await response.json()) as { error: string };
   assert.match(payload.error, /cannot remove tax class "8" while its pool has a nonzero balance/);
-  assert.equal(assetTaxState.assignmentCalls, 1);
   assert.equal(assetTaxState.assignmentWrites, 0);
 });

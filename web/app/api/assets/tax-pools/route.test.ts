@@ -158,25 +158,6 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    "mock:tax-pool-route-queries",
-    `
-      const state = globalThis[Symbol.for('openbooks.tax-pools-route-test')]
-      export async function listTaxPoolRouteRows(input) {
-        state.filterCalls.push(input.allowedSubsidiaryIds === null ? null : [...input.allowedSubsidiaryIds])
-        state.queries.push('select ... from tax_pool_periods join tax_depreciation_pools tp where tp.subsidiary_id = any')
-        return [{ tax_year: String(input.taxYear), class_code: '8', regime: 'ca_cca' }]
-      }
-      export async function findActiveTaxPoolBook(_orgId, bookId) {
-        state.queries.push('select ... from accounting_books where id = ' + bookId)
-        return state.explicitBookExists ? { id: bookId } : null
-      }
-      export async function findTaxPoolSubsidiary(_orgId, subsidiaryId) {
-        state.queries.push('select ... from subsidiaries where id = ' + subsidiaryId)
-        return state.explicitSubsidiaryExists ? { id: subsidiaryId } : null
-      }
-    `,
-  ],
 ]);
 
 const selfUrl = new URL(import.meta.url).href;
@@ -189,12 +170,21 @@ const mockUrls = new Map<string, string>([
   ["../../../../lib/subsidiaries", mockUrl("subsidiaries")],
   ["@openbooks/engine/platform/db", mockUrl("db")],
   ["@openbooks/engine/platform/database", mockUrl("accounting-books")],
-  ["@openbooks/engine/assets/tax-pool-route-queries", mockUrl("tax-pool-route-queries")],
   ["@openbooks/engine/tax-returns/pool-run", mockUrl("tax-pool-run")],
 ]);
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (
+      specifier === "../platform/db.ts" &&
+      context.parentURL?.endsWith("/engine/src/assets/tax-pool-route-queries.ts")
+    )
+      return { url: mockUrl("db"), shortCircuit: true };
+    if (
+      specifier === "../organization/subsidiary-scope.ts" &&
+      context.parentURL?.endsWith("/engine/src/assets/tax-pool-route-queries.ts")
+    )
+      return { url: mockUrl("subsidiaries"), shortCircuit: true };
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);
