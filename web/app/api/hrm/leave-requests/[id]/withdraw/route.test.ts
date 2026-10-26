@@ -63,32 +63,36 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmLeaveWithdrawRouteNextResponse = NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmLeaveWithdrawRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
   ["../../../../../../lib/features", "mock:authz"],
   ["@openbooks/engine/hrm/leave", "mock:service"],
   ["@/lib/authz", "mock:authz"],
+  ["@/lib/features", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-leave-withdraw";
-  const withdrawRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-leave-withdraw";
+const withdrawRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 const REQUEST_ID = "00000000-0000-4000-8000-000000000031";
 const ctx = { params: Promise.resolve({ id: REQUEST_ID }) };
@@ -122,7 +126,9 @@ test("withdraw maps a terminal-state refusal with message intact", async () => {
 
 test("withdraw forwards a non-uuid id and the gate", async () => {
   reset();
-  const bad = await withdrawRoute!.POST(jsonRequest({ reason: "x" }), { params: Promise.resolve({ id: "nope" }) });
+  const bad = await withdrawRoute!.POST(jsonRequest({ reason: "x" }), {
+    params: Promise.resolve({ id: "nope" }),
+  });
   assert.equal(bad.status, 400);
   reset();
   routeState.gate = { status: 403 };
