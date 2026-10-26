@@ -1,4 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
+import type { SqlExecutor } from "../platform/db.ts";
 
 /**
  * The one shared answer to "which ACCOUNTS carry open payables" — the
@@ -275,4 +276,71 @@ export function openItemCandidateLinesSql(
   return sql`
     with ${candidateLinesCte(scope)}
     select l.line_id from lines l`;
+}
+
+/**
+ * Each open-item line on the scoped accounts that is not settled on a date,
+ * with the document whose entry carries it on that date and its unsigned
+ * remaining (`line_id`, `doc_id`, `remaining`). Unlike the AR/AP reader this
+ * keeps every document kind and reads the entry's book against a caller's
+ * book set; callers filter documents themselves. A line no document carries
+ * on the date is not returned.
+ */
+export function openItemCarriedLinesSql(
+  scope: Pick<OpenItemsAsOfScope, "orgId" | "asOf" | "accounts"> & { books: SQL },
+): SQL {
+  const { orgId, asOf } = scope;
+  return sql`
+    with ${candidateLinesCte(scope)},
+    resolved as materialized (
+      select l.line_id, l.entry_id, l.remaining, je.source_document_id,
+             (${entryInEffectSql(orgId, asOf, "je")}) and je.book_id in ${scope.books} as in_effect,
+             d.id as doc_id
+        from lines l
+        join journal_entries je on je.id = l.entry_id and je.org_id = ${orgId}
+        left join documents d on d.posted_entry_id = je.id and d.org_id = ${orgId}
+         and (je.source_document_id is null or je.source_document_id = d.id)
+    )
+    -- Membership is one boolean behind an optimization fence, so callers
+    -- joining these rows see an estimate in proportion to the candidates.
+    select carried.line_id, carried.doc_id, carried.remaining
+      from (
+        select r.line_id, r.doc_id, r.remaining, (r.in_effect and r.doc_id is not null) is true as carried
+          from resolved r
+        offset 0
+      ) carried
+     where carried.carried
+    union all
+    select r.line_id, d.id, r.remaining
+      from resolved r
+      join documents d on d.org_id = ${orgId} and (d.id = r.source_document_id or d.posted_entry_id = r.entry_id)
+      ${asOfPostedEntryLateral(orgId, asOf)}
+     where r.in_effect and r.doc_id is null and je.id = r.entry_id`;
+}
+
+/**
+ * Applications applied or unapplied after a date beyond which reading open
+ * items through the index costs more than rebuilding them from documents:
+ * each such application adds a line to correct and resolve.
+ */
+const INDEX_FAVORED_LATER_APPLICATIONS = 60_000;
+
+/**
+ * Whether the open-item index is the cheaper way to read a date. Both ways
+ * answer identically; a date far enough back that most of the ledger has
+ * been settled since reads faster from the documents themselves.
+ */
+export async function openItemIndexFavored(
+  executor: SqlExecutor,
+  orgId: string,
+  asOf: string,
+): Promise<boolean> {
+  const rows = await executor.execute<{ later: number }>(
+    sql`select ((select count(*) from applications x
+                  where x.org_id = ${orgId} and x.applied_on > ${asOf})
+              + (select count(*) from applications x
+                  where x.org_id = ${orgId} and x.unapplied_at is not null and x.unapplied_at::date > ${asOf}::date))::int as later`,
+    "objects",
+  );
+  return (rows[0]?.later ?? 0) <= INDEX_FAVORED_LATER_APPLICATIONS;
 }

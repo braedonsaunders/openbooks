@@ -12,6 +12,8 @@ import {
   asOfPostedEntryLateral,
   openItemCandidateDocumentsSql,
   openItemCandidateLinesSql,
+  openItemCarriedLinesSql,
+  openItemIndexFavored,
 } from "@openbooks/engine/records/open-item-scopes";
 import { resolveOrgId } from "../org-scope";
 import {
@@ -382,14 +384,95 @@ interface OpenDocumentSource extends Record<string, unknown> {
   txn_ccy: string;
   func_ccy: string;
   open_base: string;
-  open_txn: string;
+  open_txn: string | null;
+}
+
+/**
+ * The base-currency summary rebuild: the same documents and functional opens
+ * as `openDocumentsSql`, read from the open-item index. A document's base
+ * open is the sum of what its carried lines still owe on the date, and only
+ * lines the index holds open (or a later application touched) owe anything,
+ * so neither every line of every candidate document nor its applications
+ * are read. The transaction leg is not rebuilt (`open_txn` is null): only
+ * the base summary reads this.
+ */
+function openBaseDocumentsSql(
+  side: AgingSide,
+  asOf: string,
+  dims: DimFilter | undefined,
+  orgId: string,
+  orgBase: string,
+  kinds: readonly string[],
+  negativeKinds: readonly string[],
+  scope?: { bookId?: string | null },
+): SQL {
+  const accountScope =
+    side === "ap" ? apOpenAccountScope(sql`a`, orgId) : arOpenAccountScope(sql`a`);
+  const negative = sql.join(
+    negativeKinds.map((kind) => sql`${kind}`),
+    sql`, `,
+  );
+  return sql`
+    with carried as materialized (
+      ${openItemCarriedLinesSql({ orgId, asOf, accounts: accountScope, books: statementBookIdsExpr(orgId, scope?.bookId) })}
+    ),
+    doc_lines as (
+      select d.id as doc_id, d.kind, d.party_id, d.document_number,
+             d.due_date::text as due,
+             coalesce(d.due_date, d.posting_date, d.document_date)::text as age_basis_date,
+             case when d.due_date is not null then 'due_date'
+                  when d.posting_date is not null then 'posting_date' else 'document_date' end as age_basis_source,
+             (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date))::int as age_days,
+             d.currency as doc_currency,
+             jl.currency as txn_ccy,
+             coalesce(sub.base_currency, ${orgBase}) as func_ccy,
+             c.remaining
+        from carried c
+        join documents d on d.id = c.doc_id and d.org_id = ${orgId}
+        join journal_lines jl on jl.id = c.line_id and jl.org_id = ${orgId}
+        left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
+       where (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
+         and d.kind in (${sql.join(
+           kinds.map((kind) => sql`${kind}`),
+           sql`, `,
+         )})
+         and coalesce(d.posting_date, d.document_date) <= ${asOf}
+         and ${dimWhere(dims, sql`d`)}
+    ),
+    open_docs as (
+      select dl.doc_id, dl.kind, dl.party_id, dl.document_number, dl.due, dl.age_basis_date, dl.age_basis_source, dl.age_days,
+             dl.doc_currency, dl.txn_ccy, dl.func_ccy,
+             (case when dl.kind in (${negative}) then -1 else 1 end) * sum(dl.remaining) as open_base
+        from doc_lines dl
+       group by dl.doc_id, dl.kind, dl.party_id, dl.document_number, dl.due, dl.age_basis_date, dl.age_basis_source,
+                dl.age_days, dl.doc_currency, dl.txn_ccy, dl.func_ccy
+      having sum(dl.remaining) > 0
+    )
+    select od.doc_id, od.kind, od.party_id, p.display_name as party_name,
+           od.document_number as reference, od.due, od.age_basis_date, od.age_basis_source, od.age_days,
+           od.doc_currency, od.txn_ccy, od.func_ccy,
+           od.open_base, null::numeric as open_txn
+      from open_docs od
+      left join parties p on p.id = od.party_id and p.org_id = ${orgId}
+  `;
 }
 
 async function openDocuments(
   ...args: Parameters<typeof openDocumentsSql>
 ): Promise<OpenDocument[]> {
+  return readOpenDocuments(openDocumentsSql(...args));
+}
+
+/** The base summary's documents, without the transaction leg (`openTxn` is empty). */
+async function openBaseDocuments(
+  ...args: Parameters<typeof openBaseDocumentsSql>
+): Promise<OpenDocument[]> {
+  return readOpenDocuments(openBaseDocumentsSql(...args));
+}
+
+async function readOpenDocuments(query: SQL): Promise<OpenDocument[]> {
   const r = await db.execute<OpenDocumentSource>(
-    sql`select * from (${openDocumentsSql(...args)}) document_rows
+    sql`select * from (${query}) document_rows
     order by party_name nulls last, age_days desc, doc_id`,
     "objects",
   );
@@ -407,7 +490,7 @@ async function openDocuments(
     txnCcy: x.txn_ccy,
     funcCcy: x.func_ccy,
     openBase: x.open_base,
-    openTxn: x.open_txn,
+    openTxn: x.open_txn ?? "",
   }));
 }
 
@@ -464,9 +547,20 @@ export async function agingByParty(
   const basis: AgingCurrencyBasis = opts?.basis ?? "base";
   const orgBase = await presentationCurrency(resolvedOrgId);
   const target = opts?.reportingCurrency ?? orgBase;
-  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, negativeKinds, {
-    bookId: opts?.bookId,
-  });
+  // The base summary converts only functional opens, so it reads them from
+  // the open-item index when that is the cheaper way to read the date; the
+  // transaction basis rebuilds both legs.
+  const fromIndex = basis === "base" && (await openItemIndexFavored(db, resolvedOrgId, asOf));
+  const docs = await (fromIndex ? openBaseDocuments : openDocuments)(
+    side,
+    asOf,
+    dims,
+    resolvedOrgId,
+    orgBase,
+    kinds,
+    negativeKinds,
+    { bookId: opts?.bookId },
+  );
   const { residuals, unopenedLines } = await controlResiduals(
     side,
     asOf,
