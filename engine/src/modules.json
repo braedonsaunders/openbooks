@@ -195,7 +195,8 @@
         "scripting",
         "service",
         "stored-value",
-        "tax-returns"
+        "tax-returns",
+        "webhooks"
       ]
     },
     "compliance": {
@@ -463,8 +464,7 @@
         "records",
         "revenue",
         "sales",
-        "tax",
-        "webhooks"
+        "tax"
       ]
     },
     "journal": {
@@ -966,6 +966,7 @@
       "dependsOn": [
         "connectors",
         "fx",
+        "journal",
         "money",
         "organization",
         "platform"

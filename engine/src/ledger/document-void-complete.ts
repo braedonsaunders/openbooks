@@ -16,7 +16,6 @@ import {
   recordTransactionAudit,
 } from "../records/transaction-audit.ts";
 import { reverseFieldTicketProgressInTransaction } from "../projects/progress.ts";
-import { emitDocumentVoided } from "../webhooks/emit.ts";
 import { voidRemedyHooks } from "../journal/void-remedy-contributors.ts";
 import { PROVIDER_COMMIT_KINDS, requestProviderVoidTx } from "../tax/provider-commit.ts";
 import { AmortizationError } from "../amortization/errors.ts";
@@ -296,12 +295,13 @@ export async function completeRequestedDocumentVoid(
         String(doc.void_reversal_date),
       );
       // Subscriber event joins the void transaction: a rolled-back void announces nothing.
-      await emitDocumentVoided(tx, orgId, documentId, {
+      const webhooks = voidRemedyHooks.require("webhooks");
+      await webhooks.documentVoided(tx, orgId, documentId, {
         reversalEntryId,
         reason: String(doc.void_reason),
       });
       if (pairedDocumentId) {
-        await emitDocumentVoided(tx, orgId, pairedDocumentId, {
+        await webhooks.documentVoided(tx, orgId, pairedDocumentId, {
           reversalEntryId,
           reason: String(doc.void_reason),
         });

@@ -3,6 +3,7 @@ import { registerCompliancePostingContributors } from "../compliance/posting-con
 import { registerCrmPostingContributors } from "../crm/posting-contributors.ts";
 import { registerScriptingPostingContributors } from "../scripting/posting-contributors.ts";
 import { registerStoredValuePostingContributors } from "../stored-value/posting-contributors.ts";
+import { registerWebhooksPostingContributors } from "../webhooks/posting-contributors.ts";
 
 /**
  * Install every domain's posting, editing and voiding hooks. The ledger
@@ -19,4 +20,5 @@ export function installPostingContributors(): void {
   registerCrmPostingContributors();
   registerScriptingPostingContributors();
   registerStoredValuePostingContributors();
+  registerWebhooksPostingContributors();
 }

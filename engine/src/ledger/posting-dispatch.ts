@@ -12,7 +12,6 @@ import { createObligationsFromInvoice } from "../revenue/recognition.ts";
 import { postingEffectHooks } from "../journal/posting-effect-contributors.ts";
 import { hasStoredValueTenders, settleCashRefundTenders } from "../sales/document-tenders.ts";
 import { finalizePaymentAcceptanceForDocument } from "../payments-core/acceptance-effect.ts";
-import { emitDocumentPosted, emitPaymentReceived } from "../webhooks/emit.ts";
 import { claimPostingEffectsForDocument, markPostingEffectsFailed, markPostingEffectsSucceeded, PostingEffectsLeaseFencedError, PostingEffectsTerminalFailureError, type PostingEffectsRow } from "./posting-effects.ts";
 /**
  * Emit post-commit effects for a caller that used `deferEffects` so a larger
@@ -203,9 +202,10 @@ export async function runPostDocumentEffects(
       // Domain events fan out to webhook subscribers from the posted
       // snapshot. Emitted here — after the subledger effects — so a
       // failed effect fails the posting instead of announcing it.
-      await emitDocumentPosted(db, doc.orgId, doc.id);
+      const webhooks = postingEffectHooks.require("webhooks");
+      await webhooks.documentPosted(db, doc.orgId, doc.id);
       if (doc.kind === "customer_payment") {
-        await emitPaymentReceived(db, doc.orgId, doc.id);
+        await webhooks.paymentReceived(db, doc.orgId, doc.id);
       }
     }
     if (claimed && !options.alreadyClaimed) {
