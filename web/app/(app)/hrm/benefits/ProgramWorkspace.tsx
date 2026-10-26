@@ -5,7 +5,7 @@ import { getTranslations } from 'next-intl/server'
 import { Badge, Button } from '@openbooks/ui'
 import { db } from '@openbooks/engine/platform/database'
 import { listBenefitsProgramCatalog, type BenefitsProgramWorkspace } from '@openbooks/engine/hrm/benefits'
-import { PreparedPagedTable } from '../../../../components/prepared-paged-table'
+import { PagedTable } from '../../../../components/paged-table'
 import { Pagination } from '../../../../components/pagination'
 import { AuditTrailPanel } from '../../../../components/audit-trail-panel'
 import { can, type Authz } from '../../../../lib/authz'
@@ -40,26 +40,26 @@ export async function ProgramWorkspace({ authz, workspace, sp }: {
     <div className="flex items-start justify-between gap-3"><p className="text-sm text-slate-500">{t(program.nativeKind === 'insured' ? 'programWorkspace.participantsHint' : 'programWorkspace.entitlementParticipantsHint')}</p>
       {canManage && (program.nativeKind === 'insured' || workspace.nativeRecord.system_key === 'vacation') ? <Button asChild size="sm" variant="outline"><Link href={program.nativeKind === 'insured' ? `/hrm/benefits?view=employees&enrollment=new&benefitProgram=${program.id}` : `/hrm/benefits?view=employees&vacationTerms=new&benefitProgram=${program.id}`}>{t('programWorkspace.assignEmployee')}</Link></Button> : null}
     </div>
-    <PreparedPagedTable source="hrm_benefit_program_participants_page" rows={workspace.participants.map(person => ({
-      id: person.id, searchText: `${person.employeeName} ${person.status}`, cells: [
-        <Link key="employee" href={`/entities/employees?party=${person.employeePartyId}&partyTab=benefits`} className="font-medium text-teal-700 hover:underline">{person.employeeName}</Link>,
-        <span key="dates" className="whitespace-nowrap tabular-nums">{person.effectiveTo ? `${person.effectiveFrom} – ${person.effectiveTo}` : t('portfolio.effectiveOpen', { date: person.effectiveFrom })}</span>,
-        <Badge key="status">{t.has(`benefits.statusNames.${person.status}`) ? t(`benefits.statusNames.${person.status}`) : t.has(`programWorkspace.participantStatus.${person.status}`) ? t(`programWorkspace.participantStatus.${person.status}`) : person.status}</Badge>,
-        <Link key="assignment" href={person.nativeKind === 'enrollment' ? `/hrm/benefits?view=employees&enrollmentConfig=${person.id}` : `/hrm/benefits?view=employees&vacationTerms=${person.id}`} className="text-teal-700 hover:underline">{t('programWorkspace.openAssignment')}</Link>,
-      ],
-    }))} columns={[{key:'employee',header:t('benefits.columns.employee')},{key:'effective',header:t('portfolio.columns.effective')},{key:'status',header:t('portfolio.columns.status')},{key:'assignment',header:t('programWorkspace.assignment')}]} empty={<p>{t('programWorkspace.participantsEmpty')}</p>} />
+    <PagedTable prepared source="hrm_benefit_program_participants_page" rows={workspace.participants} rowKey={person => person.id}
+      columns={[
+        { key: 'employee', header: t('benefits.columns.employee'), cell: person => <Link href={`/entities/employees?party=${person.employeePartyId}&partyTab=benefits`} className="font-medium text-teal-700 hover:underline">{person.employeeName}</Link> },
+        { key: 'effective', header: t('portfolio.columns.effective'), cell: person => <span className="whitespace-nowrap tabular-nums">{person.effectiveTo ? `${person.effectiveFrom} – ${person.effectiveTo}` : t('portfolio.effectiveOpen', { date: person.effectiveFrom })}</span> },
+        { key: 'status', header: t('portfolio.columns.status'), cell: person => <Badge>{t.has(`benefits.statusNames.${person.status}`) ? t(`benefits.statusNames.${person.status}`) : t.has(`programWorkspace.participantStatus.${person.status}`) ? t(`programWorkspace.participantStatus.${person.status}`) : person.status}</Badge> },
+        { key: 'assignment', header: t('programWorkspace.assignment'), cell: person => <Link href={person.nativeKind === 'enrollment' ? `/hrm/benefits?view=employees&enrollmentConfig=${person.id}` : `/hrm/benefits?view=employees&vacationTerms=${person.id}`} className="text-teal-700 hover:underline">{t('programWorkspace.openAssignment')}</Link> },
+      ]} empty={<p>{t('programWorkspace.participantsEmpty')}</p>} />
     <Pagination basePath="/hrm/benefits" currentParams={{...sp,setupTab:'participants'}} pageParamKey="participantsPage" total={null} page={Number(sp.participantsPage ?? '1')} perPage={100} loadedCount={workspace.participants.length} hasMore={workspace.hasMoreParticipants} />
   </div>
   function activity(delivery: boolean) {
     const rows = delivery ? workspace.activity.filter(item => item.payRunDocumentId !== null) : workspace.activity
     return <div className="space-y-4"><p className="text-sm text-slate-500">{t(program.nativeKind === 'insured' ? 'programWorkspace.planDeliveryHint' : 'programWorkspace.entitlementDeliveryHint')}</p>
-      <PreparedPagedTable source="hrm_benefit_program_activity_page" rows={rows.map(item => ({ id:item.id,searchText:`${item.employeeName} ${item.onDate} ${item.status}`,cells:[
-        <Link key="employee" href={`/entities/employees?party=${item.employeePartyId}`} className="font-medium text-teal-700 hover:underline">{item.employeeName}</Link>,
-        <span key="date" className="tabular-nums">{item.onDate}</span>,
-        <span key="amount" className="tabular-nums">{item.currency ? money(item.amount,{currency:item.currency}) : `${item.amount} ${t(`programWorkspace.units.${item.unit}`)}`}</span>,
-        <Badge key="status">{item.payrollProcessed ? t('programWorkspace.processedPayroll') : item.payRunDocumentId ? t('programWorkspace.queuedPayroll') : t.has(`programWorkspace.activityStatus.${item.status}`) ? t(`programWorkspace.activityStatus.${item.status}`) : item.status}</Badge>,
-        item.payRunDocumentId ? <Link key="run" href={`/payroll/runs/${item.payRunDocumentId}`} className="text-teal-700 hover:underline">{t('programWorkspace.openPayRun')}</Link> : '—',
-      ] }))} columns={[{key:'employee',header:t('benefits.columns.employee')},{key:'date',header:t('programWorkspace.date')},{key:'amount',header:t('portfolio.columns.value'),align:'right'},{key:'status',header:t('portfolio.columns.status')},{key:'run',header:t('programWorkspace.payRun')}]} empty={<p>{t('programWorkspace.activityEmpty')}</p>} />
+      <PagedTable prepared source="hrm_benefit_program_activity_page" rows={rows} rowKey={item => item.id}
+        columns={[
+          { key: 'employee', header: t('benefits.columns.employee'), cell: item => <Link href={`/entities/employees?party=${item.employeePartyId}`} className="font-medium text-teal-700 hover:underline">{item.employeeName}</Link> },
+          { key: 'date', header: t('programWorkspace.date'), cell: item => <span className="tabular-nums">{item.onDate}</span> },
+          { key: 'amount', header: t('portfolio.columns.value'), align: 'right', cell: item => <span className="tabular-nums">{item.currency ? money(item.amount,{currency:item.currency}) : `${item.amount} ${t(`programWorkspace.units.${item.unit}`)}`}</span> },
+          { key: 'status', header: t('portfolio.columns.status'), cell: item => <Badge>{item.payrollProcessed ? t('programWorkspace.processedPayroll') : item.payRunDocumentId ? t('programWorkspace.queuedPayroll') : t.has(`programWorkspace.activityStatus.${item.status}`) ? t(`programWorkspace.activityStatus.${item.status}`) : item.status}</Badge> },
+          { key: 'run', header: t('programWorkspace.payRun'), cell: item => item.payRunDocumentId ? <Link href={`/payroll/runs/${item.payRunDocumentId}`} className="text-teal-700 hover:underline">{t('programWorkspace.openPayRun')}</Link> : '—' },
+        ]} empty={<p>{t('programWorkspace.activityEmpty')}</p>} />
       <Pagination basePath="/hrm/benefits" currentParams={{...sp,setupTab:delivery?'delivery':'activity'}} pageParamKey="activityPage" total={null} page={Number(sp.activityPage ?? '1')} perPage={100} loadedCount={rows.length} showRange={!delivery} hasMore={workspace.hasMoreActivity} />
     </div>
   }

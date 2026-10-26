@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { ListDrawerLink } from '../../../../components/list-drawer-link'
 import { useTranslations } from 'next-intl'
 import { Badge } from '@openbooks/ui'
-import { PreparedPagedTable, type PreparedTableRow } from '../../../../components/prepared-paged-table'
+import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import type { PortfolioAwardRow } from '../../../../lib/hrm/benefits-workspace'
 
 /**
@@ -24,56 +24,87 @@ export function useEffectiveRangeLabel(): (from: string | null, to: string | nul
   return (from, to) => from === null || from === '' ? '—' : to ? `${from} – ${to}` : t('portfolio.effectiveOpen', { date: from })
 }
 
-function programCells(row: UnifiedProgramRow, effectiveRange: (from: string | null, to: string | null) => string): PreparedTableRow {
-  return {
-    id: row.id,
-    searchText: `${row.code} ${row.name} ${row.familyLabel} ${row.statusLabel}`,
-    cells: [
-      <ListDrawerLink
-        key="name"
-        href={row.programHref as never}
-        className="font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-300"
-      >
-        {row.name}
-      </ListDrawerLink>,
-      row.familyLabel,
-      <span key="value" className="tabular-nums">
-        {row.valueLabel}
-      </span>,
-      <span key="effective" className="whitespace-nowrap tabular-nums">
-        {effectiveRange(row.effectiveFrom, row.effectiveTo)}
-      </span>,
-      <Badge key="status" variant={row.statusVariant}>
-        {row.statusLabel}
-      </Badge>,
-    ],
-  }
+function programColumns(
+  text: ProgramTableText,
+  effectiveRange: (from: string | null, to: string | null) => string,
+): PagedColumn<UnifiedProgramRow>[] {
+  return [
+    {
+      key: 'program',
+      header: text.program,
+      cell: (row) => (
+        <ListDrawerLink
+          href={row.programHref as never}
+          className="font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-300"
+        >
+          {row.name}
+        </ListDrawerLink>
+      ),
+    },
+    { key: 'family', header: text.family, cell: (row) => row.familyLabel },
+    {
+      key: 'value',
+      header: text.value,
+      align: 'right',
+      className: 'tabular-nums',
+      cell: (row) => <span className="tabular-nums">{row.valueLabel}</span>,
+    },
+    {
+      key: 'effective',
+      header: text.effective,
+      className: 'whitespace-nowrap tabular-nums',
+      cell: (row) => (
+        <span className="whitespace-nowrap tabular-nums">
+          {effectiveRange(row.effectiveFrom, row.effectiveTo)}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: text.status,
+      cell: (row) => <Badge variant={row.statusVariant}>{row.statusLabel}</Badge>,
+    },
+  ]
 }
 
-function awardCells(row: PortfolioAwardRow): PreparedTableRow {
-  return {
-    id: row.id,
-    searchText: `${row.programCode} ${row.programName} ${row.recipientLabel} ${row.statusLabel}`,
-    cells: [
-      row.programCode,
-      <Link
-        key="recipient"
-        href={row.awardHref as never}
-        className="font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-300"
-      >
-        {row.recipientLabel}
-      </Link>,
-      <span key="period" className="tabular-nums">
-        {row.periodTo ? `${row.periodFrom} – ${row.periodTo}` : row.periodFrom}
-      </span>,
-      <span key="value" className="tabular-nums">
-        {row.valueLabel}
-      </span>,
-      <Badge key="status" variant={row.statusVariant}>
-        {row.statusLabel}
-      </Badge>,
-    ],
-  }
+function awardColumns(text: AwardTableText): PagedColumn<PortfolioAwardRow>[] {
+  return [
+    { key: 'program', header: text.program, cell: (row) => row.programCode },
+    {
+      key: 'recipient',
+      header: text.recipient,
+      cell: (row) => (
+        <Link
+          href={row.awardHref as never}
+          className="font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-300"
+        >
+          {row.recipientLabel}
+        </Link>
+      ),
+    },
+    {
+      key: 'period',
+      header: text.period,
+      className: 'whitespace-nowrap tabular-nums',
+      cell: (row) => (
+        <span className="tabular-nums">
+          {row.periodTo ? `${row.periodFrom} – ${row.periodTo}` : row.periodFrom}
+        </span>
+      ),
+    },
+    {
+      key: 'value',
+      header: text.value,
+      align: 'right',
+      className: 'tabular-nums',
+      cell: (row) => <span className="tabular-nums">{row.valueLabel}</span>,
+    },
+    {
+      key: 'status',
+      header: text.status,
+      cell: (row) => <Badge variant={row.statusVariant}>{row.statusLabel}</Badge>,
+    },
+  ]
 }
 
 function emptyBlock(title: string, description: string) {
@@ -102,20 +133,18 @@ export function ProgramPortfolioTable({
 }) {
   const effectiveRange = useEffectiveRangeLabel()
   return (
-    <PreparedPagedTable
+    <PagedTable
+      prepared
+      searchable
       source="hrm_benefit_programs"
-      rows={rows.map((row) => programCells(row, effectiveRange))}
+      rows={rows}
+      rowKey={(row) => row.id}
+      searchText={(row) => `${row.code} ${row.name} ${row.familyLabel} ${row.statusLabel}`}
       toolbarAfter={typeFilter || statusFilter ? <>
         {typeFilter ? <ListFilterSelect basePath="/hrm/benefits" currentParams={typeFilter.currentParams} paramKey="type" label={typeFilter.label} allLabel={typeFilter.allLabel} options={typeFilter.options} /> : null}
         {statusFilter ? <ListFilterSelect basePath="/hrm/benefits" currentParams={statusFilter.currentParams} paramKey="status" label={statusFilter.label} allLabel={statusFilter.allLabel} options={statusFilter.options} /> : null}
       </> : undefined}
-      columns={[
-        { key: 'program', header: text.program },
-        { key: 'family', header: text.family },
-        { key: 'value', header: text.value, align: 'right', className: 'tabular-nums' },
-        { key: 'effective', header: text.effective, className: 'whitespace-nowrap tabular-nums' },
-        { key: 'status', header: text.status },
-      ]}
+      columns={programColumns(text, effectiveRange)}
       empty={emptyBlock(text.emptyTitle, text.emptyDescription)}
       paginationNote={truncated ? `${text.truncatedLabel} · ${text.totalLabel} ${total}` : undefined}
     />
@@ -137,17 +166,15 @@ export function AwardPortfolioTable({
   toolbarAfter?: ReactNode
 }) {
   return (
-    <PreparedPagedTable
+    <PagedTable
+      prepared
+      searchable
       source="hrm_benefit_awards"
-      rows={rows.map(awardCells)}
+      rows={rows}
+      rowKey={(row) => row.id}
+      searchText={(row) => `${row.programCode} ${row.programName} ${row.recipientLabel} ${row.statusLabel}`}
       toolbarAfter={toolbarAfter}
-      columns={[
-        { key: 'program', header: text.program },
-        { key: 'recipient', header: text.recipient },
-        { key: 'period', header: text.period, className: 'whitespace-nowrap tabular-nums' },
-        { key: 'value', header: text.value, align: 'right', className: 'tabular-nums' },
-        { key: 'status', header: text.status },
-      ]}
+      columns={awardColumns(text)}
       empty={emptyBlock(text.emptyTitle, text.emptyDescription)}
       paginationNote={truncated ? `${text.truncatedLabel} · ${text.totalLabel} ${total}` : undefined}
     />
@@ -156,14 +183,14 @@ export function AwardPortfolioTable({
 
 /** Cross-program delivery uses one queue for grants and native payroll benefit movements. */
 export function BenefitDeliveryTable({ rows, text }: { rows: import('../../../../lib/hrm/benefits-portfolio').BenefitDeliveryRow[]; text: AwardTableText }) {
-  return <PreparedPagedTable source="hrm_benefit_program_activity" rows={rows.map(row => ({
-    id:row.id,searchText:`${row.programName} ${row.employeeName} ${row.statusLabel}`,cells:[
-      <Link key="program" href={row.programHref as never} className="font-medium text-teal-700 hover:underline">{row.programName}</Link>,
-      <Link key="employee" href={row.employeeHref as never} className="text-teal-700 hover:underline">{row.employeeName}</Link>,
-      <span key="date" className="tabular-nums">{row.onDate}</span>,
-      <span key="amount" className="tabular-nums">{row.valueLabel}</span>,
-      <Badge key="status" variant={row.statusVariant}>{row.statusLabel}</Badge>,
-      row.recordHref ? <Link key="record" href={row.recordHref as never} className="text-teal-700 hover:underline">{row.recordLabel}</Link> : '—',
-    ],
-  }))} columns={[{key:'program',header:text.program},{key:'employee',header:text.recipient},{key:'date',header:text.period},{key:'amount',header:text.value,align:'right'},{key:'status',header:text.status},{key:'record',header:''}]} empty={emptyBlock(text.emptyTitle,text.emptyDescription)} />
+  return <PagedTable prepared searchable source="hrm_benefit_program_activity" rows={rows} rowKey={row => row.id}
+    searchText={row => `${row.programName} ${row.employeeName} ${row.statusLabel}`}
+    columns={[
+      { key: 'program', header: text.program, cell: row => <Link href={row.programHref as never} className="font-medium text-teal-700 hover:underline">{row.programName}</Link> },
+      { key: 'employee', header: text.recipient, cell: row => <Link href={row.employeeHref as never} className="text-teal-700 hover:underline">{row.employeeName}</Link> },
+      { key: 'date', header: text.period, cell: row => <span className="tabular-nums">{row.onDate}</span> },
+      { key: 'amount', header: text.value, align: 'right', cell: row => <span className="tabular-nums">{row.valueLabel}</span> },
+      { key: 'status', header: text.status, cell: row => <Badge variant={row.statusVariant}>{row.statusLabel}</Badge> },
+      { key: 'record', header: '', cell: row => row.recordHref ? <Link href={row.recordHref as never} className="text-teal-700 hover:underline">{row.recordLabel}</Link> : '—' },
+    ]} empty={emptyBlock(text.emptyTitle,text.emptyDescription)} />
 }

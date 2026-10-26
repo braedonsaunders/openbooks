@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/database'
 import { BenefitsError, listEnrollmentPlanOptions, listEnrollmentWindows, listEnrollments } from '@openbooks/engine/hrm/benefits'
 import { ListPageLayout } from '../../../../components/page-layout'
-import { PreparedPagedTable } from '../../../../components/prepared-paged-table'
+import { PagedTable } from '../../../../components/paged-table'
 import { ListFilterSelect } from '../../../../components/list-filter-select'
 import { requirePermission, can } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
@@ -112,13 +112,16 @@ export async function EmployeeBenefitsWorkspace({ sp }: { sp: Record<string, str
         {canManage ? <Button asChild><Link href={`${closeHref}&enrollment=new` as never}>{hrm('benefits.newEnrollment')}</Link></Button> : null}
         <ModuleHomeTabs tabs={tabs} />
       </>} />}>
-        <PreparedPagedTable source="hrm_employee_benefits" rows={filtered.map(row => ({ id: row.id,
-          searchText: `${row.employeeName} ${row.programName} ${row.programTypeLabel} ${row.statusLabel}`,
-          cells: [<Link key="employee" href={row.employeeHref as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{row.employeeName}</Link>,
-            <Link key="program" href={row.programHref as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{row.programName}</Link>, row.programTypeLabel,
-            `${row.effectiveFrom} – ${row.effectiveTo ?? '…'}`, <Badge key="status" variant={row.status === 'active' ? 'success' : 'outline'}>{row.statusLabel}</Badge>,
-            <Link key="open" href={row.assignmentHref as never} className="text-teal-700 hover:underline dark:text-teal-300">{t('openAssignment')}</Link>],
-        }))} columns={[{ key: 'employee', header: t('employee') }, { key: 'program', header: t('program') }, { key: 'type', header: t('type') }, { key: 'effective', header: t('effective') }, { key: 'status', header: t('status') }, { key: 'open', header: '' }]}
+        <PagedTable prepared searchable source="hrm_employee_benefits" rows={filtered} rowKey={row => row.id}
+          searchText={row => `${row.employeeName} ${row.programName} ${row.programTypeLabel} ${row.statusLabel}`}
+          columns={[
+            { key: 'employee', header: t('employee'), cell: row => <Link href={row.employeeHref as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{row.employeeName}</Link> },
+            { key: 'program', header: t('program'), cell: row => <Link href={row.programHref as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{row.programName}</Link> },
+            { key: 'type', header: t('type'), cell: row => row.programTypeLabel },
+            { key: 'effective', header: t('effective'), cell: row => `${row.effectiveFrom} – ${row.effectiveTo ?? '…'}` },
+            { key: 'status', header: t('status'), cell: row => <Badge variant={row.status === 'active' ? 'success' : 'outline'}>{row.statusLabel}</Badge> },
+            { key: 'open', header: '', cell: row => <Link href={row.assignmentHref as never} className="text-teal-700 hover:underline dark:text-teal-300">{t('openAssignment')}</Link> },
+          ]}
           toolbarAfter={<div key="benefits-filters" className="flex flex-wrap items-center gap-2">
             <ListFilterSelect basePath="/hrm/benefits" currentParams={currentParams} paramKey="employee" label={t('employee')} allLabel={hrm('benefits.allLabel')} options={employeeOptions} />
             <ListFilterSelect basePath="/hrm/benefits" currentParams={currentParams} paramKey="benefitProgram" label={t('program')} allLabel={hrm('benefits.allLabel')} options={programs} />

@@ -16,7 +16,7 @@ import { isProgramEditable, programResourceUrl, validateMembershipDraft, type Me
 import type { BuilderOption } from '../../../../lib/hrm/benefits-portfolio'
 import { TransactionDrawer } from '../../../../components/transaction-drawer'
 import { InspectorPanel } from '../../../../components/builder/builder-kit'
-import { PreparedPagedTable } from '../../../../components/prepared-paged-table'
+import { PagedTable } from '../../../../components/paged-table'
 import { AwardPortfolioTable, useEffectiveRangeLabel } from './PortfolioTables'
 import type { ProgramDetailDrawer } from '../../../../lib/hrm/benefits-workspace'
 import { CabinetFilePicker } from '../../../../components/cabinet-file-picker'
@@ -1189,36 +1189,12 @@ export function ProgramDrawer({
               {t('portfolio.members.employerWide')}
             </p>
           ) : null}
-          <PreparedPagedTable
+          <PagedTable
+            searchable
             source="hrm_benefit_program_participants"
-            rows={drawer.members.map((m) => ({
-              id: m.id,
-              searchText: `${m.employeeLabel} ${m.role ?? ''}`,
-              cells: [
-                m.employeeHref ? (
-                  <Link key="employee" href={m.employeeHref as never} className="font-medium text-teal-700 hover:underline">
-                    {m.employeeLabel}
-                  </Link>
-                ) : (
-                  m.employeeLabel
-                ),
-                <span key="range" className="whitespace-nowrap tabular-nums">
-                  {m.rangeLabel}
-                </span>,
-                m.role ?? '—',
-                m.weight ?? '—',
-                memberManageable ? (
-                  <Button key="remove" variant="ghost" size="sm" disabled={working} onClick={async () => {
-                    const removal = await promptDialog({ title: t('portfolio.removeReasonPrompt'), label: t('portfolio.removeReasonPrompt'), confirmLabel: t('portfolio.removeMember') })
-                    if (removal === null) return
-                    if (!removal.trim()) { toast.error(t('portfolio.removeReasonRequired')); return }
-                    await act({ action: 'removeMember', membershipId: m.id, reason: removal.trim() }, 'POST')
-                  }}>
-                    {t('portfolio.removeMember')}
-                  </Button>
-                ) : null,
-              ],
-            }))}
+            rows={drawer.members}
+            rowKey={(m) => m.id}
+            searchText={(m) => `${m.employeeLabel} ${m.role ?? ''}`}
             toolbarAfter={
               memberManageable ? (
                 <div className="ml-auto flex items-center">
@@ -1227,11 +1203,43 @@ export function ProgramDrawer({
               ) : undefined
             }
             columns={[
-              { key: 'employee', header: t('benefits.columns.employee') },
-              { key: 'effective', header: t('portfolio.columns.effective'), className: 'whitespace-nowrap tabular-nums' },
-              { key: 'role', header: t('portfolio.members.role') },
-              { key: 'weight', header: t('portfolio.members.weight'), align: 'right' },
-              { key: 'actions', header: '' },
+              {
+                key: 'employee',
+                header: t('benefits.columns.employee'),
+                cell: (m) => m.employeeHref ? (
+                  <Link href={m.employeeHref as never} className="font-medium text-teal-700 hover:underline">
+                    {m.employeeLabel}
+                  </Link>
+                ) : (
+                  m.employeeLabel
+                ),
+              },
+              {
+                key: 'effective',
+                header: t('portfolio.columns.effective'),
+                className: 'whitespace-nowrap tabular-nums',
+                cell: (m) => (
+                  <span className="whitespace-nowrap tabular-nums">
+                    {m.rangeLabel}
+                  </span>
+                ),
+              },
+              { key: 'role', header: t('portfolio.members.role'), cell: (m) => m.role ?? '—' },
+              { key: 'weight', header: t('portfolio.members.weight'), align: 'right', cell: (m) => m.weight ?? '—' },
+              {
+                key: 'actions',
+                header: '',
+                cell: (m) => memberManageable ? (
+                  <Button variant="ghost" size="sm" disabled={working} onClick={async () => {
+                    const removal = await promptDialog({ title: t('portfolio.removeReasonPrompt'), label: t('portfolio.removeReasonPrompt'), confirmLabel: t('portfolio.removeMember') })
+                    if (removal === null) return
+                    if (!removal.trim()) { toast.error(t('portfolio.removeReasonRequired')); return }
+                    await act({ action: 'removeMember', membershipId: m.id, reason: removal.trim() }, 'POST')
+                  }}>
+                    {t('portfolio.removeMember')}
+                  </Button>
+                ) : null,
+              },
             ]}
             empty={<p>{drawer.membersEmpty}</p>}
           />
