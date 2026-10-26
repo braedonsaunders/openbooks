@@ -258,6 +258,7 @@ function sortBasePath<T>(props: PagedTableProps<T>, definition: PreparedListSour
 
 /** A loaded list follows the URL sort through the active column's raw values. */
 function orderedRows<T>(props: PagedTableProps<T>): T[] {
+  if (props.sort === undefined) return props.rows
   const active = props.columns.find((column) => column.sortKey === props.sort && column.sortValue)
   const sortValue = active?.sortValue
   if (!active || !sortValue) return props.rows
