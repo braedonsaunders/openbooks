@@ -265,6 +265,10 @@ async function accountActivity(orgId: string, from: string, to: string, allowed:
        and e.status in ('posted', 'reversed')
        and e.book_id = ${statementBookExpr(orgId)}
        and ${excludePeriodEndJournals(sql`e.origin`)}
+       -- The line carries its entry's posting date, so the period bound
+       -- reads the (account, date) line index instead of every line since
+       -- inception; the entry bound keeps the statement basis authoritative.
+       and l.posting_date >= ${from} and l.posting_date <= ${to}
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
      group by sub.base_currency
@@ -314,23 +318,40 @@ async function depreciationAmortization(orgId: string, from: string, to: string,
       select l.amortization_expense_account_id as account_id
         from lease_agreements l
        where l.org_id = ${orgId}
+    ),
+    expense_accounts as (
+      select a.id from accounts a
+       where a.org_id = ${orgId} and a.type in ('expense', 'expense_other', 'expense_deferred')
+    ),
+    -- D&A is every expense line on a D&A account plus every expense line of a
+    -- depreciation run. Each half reads its own date-bounded index (the line's
+    -- carried posting date, the entry's origin); the union keeps a line that
+    -- satisfies both exactly once.
+    legs as (
+      select l.id, l.entry_id, l.amount, l.subsidiary_id
+        from journal_lines l
+       where l.org_id = ${orgId}
+         and l.account_id in (select d.account_id from da_accounts d)
+         and l.account_id in (select x.id from expense_accounts x)
+         and l.posting_date >= ${from} and l.posting_date <= ${to}
+      union
+      select l.id, l.entry_id, l.amount, l.subsidiary_id
+        from journal_entries run
+        join journal_lines l on l.entry_id = run.id and l.org_id = run.org_id
+       where run.org_id = ${orgId} and run.origin = 'depreciation'
+         and run.posting_date >= ${from} and run.posting_date <= ${to}
+         and l.account_id in (select x.id from expense_accounts x)
     )
-    select sub.base_currency as func, coalesce(sum(l.amount), 0)::text as s,
+    select sub.base_currency as func, coalesce(sum(legs.amount), 0)::text as s,
       max(e.posting_date)::text as late
-      from journal_lines l
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
-     where l.org_id = ${orgId}
-       and a.type in ('expense', 'expense_other', 'expense_deferred')
-       and e.status in ('posted', 'reversed')
+      from legs
+      join journal_entries e on e.id = legs.entry_id and e.org_id = ${orgId}
+      left join subsidiaries sub on sub.id = legs.subsidiary_id and sub.org_id = ${orgId}
+     where e.status in ('posted', 'reversed')
        and e.book_id = ${statementBookExpr(orgId)}
        and ${excludePeriodEndJournals(sql`e.origin`)}
-       ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
-       and (e.origin = 'depreciation' or exists (
-         select 1 from da_accounts d where d.account_id = a.id
-       ))
        and e.posting_date >= ${from} and e.posting_date <= ${to}
+       ${subsidiaryVisibleFilter(sql`legs.subsidiary_id`, allowed)}
      group by sub.base_currency
   `);
   // Expense accounts are debit-positive, already the D&A magnitude; each
