@@ -109,7 +109,16 @@
     "duplicatePayments": "重复付款",
     "duplicatePaymentsHint": "{value} 风险敞口 · {period}",
     "utilization": "利用率",
-    "overheadAbsorption": "间接费用吸收"
+    "overheadAbsorption": "间接费用吸收",
+    "spotlightFinancialHealth": "财务健康聚焦",
+    "spotlightCashflow": "现金流聚焦",
+    "spotlightReceivables": "应收账款洞察聚焦",
+    "spotlightCustomers": "客户洞察聚焦",
+    "spotlightVendors": "供应商绩效聚焦",
+    "spotlightSpendVelocity": "支出速度聚焦",
+    "spotlightTrueCost": "真实成本聚焦",
+    "spotlightUtilization": "利用率聚焦",
+    "spotlightSentinel": "Sentinel 聚焦"
   },
   "metricContext": {
     "today": "今日已过账",
@@ -149,7 +158,8 @@
     "admin": "管理",
     "ratios": "财务比率",
     "cash": "现金",
-    "analytics": "分析"
+    "analytics": "分析",
+    "spotlight": "分析聚焦"
   },
   "catalog": {
     "operatingExpenses": "损益表中本月至今的营业费用，不含销售成本。",
@@ -230,7 +240,16 @@
     "forensicRisk": "Sentinel总体风险评分，含已标记数量和风险敞口。",
     "duplicatePayments": "重复付款分组及其风险敞口。",
     "utilization": "来自利用率的全公司可计费率及异常数。",
-    "overheadAbsorption": "来自真实成本的已吸收负担与总额及差额。"
+    "overheadAbsorption": "来自真实成本的已吸收负担与总额及差额。",
+    "spotlightFinancialHealth": "来自财务健康的收入、利润率、健康评分和损益桥 — 展开查看发现。",
+    "spotlightCashflow": "来自现金流的预计现金、跑道和每周预测 — 展开查看桥图和账龄。",
+    "spotlightReceivables": "来自应收账款洞察的需关注逾期、付款时间和回收情况。",
+    "spotlightCustomers": "来自客户洞察的收入趋势、细分、主要客户和风险客户。",
+    "spotlightVendors": "来自供应商绩效的支出趋势、按时付款和主要供应商。",
+    "spotlightSpendVelocity": "来自支出速度的月度支出同比、速度、警报和支出健康度。",
+    "spotlightTrueCost": "来自真实成本的综合间接费用率、吸收率和类别构成。",
+    "spotlightUtilization": "来自利用率的可计费利用率与目标对比、趋势和部门成本。",
+    "spotlightSentinel": "来自 Sentinel 的完整性风险评分、检测计数和主要风险领域。"
   },
   "grid": {
     "customizing": "正在自定义您的仪表板",
@@ -256,7 +275,9 @@
     "close": "关闭",
     "added": "已添加",
     "empty": "没有可添加的小组件。",
-    "libraryCards": "洞察卡片"
+    "libraryCards": "洞察卡片",
+    "searchPlaceholder": "搜索小组件",
+    "noMatches": "没有与“{query}”匹配的小组件。"
   },
   "customize": {
     "title": "自定义仪表板",
@@ -392,5 +413,11 @@
     "anomalies": "{count}个异常",
     "unscheduled": "{count}人无排班",
     "gap": "差额{amount}"
+  },
+  "spotlight": {
+    "expand": "展开{title}",
+    "openDashboard": "打开仪表板",
+    "loadFailed": "无法加载此聚焦。",
+    "updated": "更新于 {time}"
   }
 }

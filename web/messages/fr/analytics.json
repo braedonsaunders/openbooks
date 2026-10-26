@@ -4552,5 +4552,31 @@
     "noPaymentHistory": "Aucun encaissement daté affecté dans cette période.",
     "noReminders": "Aucune preuve de remise de relance dans cette période.",
     "noComparableHistory": "Historique de paiement comparable insuffisant pour afficher le graphique."
+  },
+  "spotlight": {
+    "billedShare": "{pct} facturé",
+    "changeVsPrior": "Variation par rapport à la période précédente",
+    "customersOverdue": "{count, plural, one {# client à suivre} other {# clients à suivre}}",
+    "days": "{days} jours",
+    "empty": "Rien à afficher pour cette période.",
+    "findings": "Constats",
+    "grade": "Note {grade}",
+    "grossMarginTrend": "Évolution de la marge brute",
+    "hours": "{hours} h",
+    "noFindings": "Aucun constat pour cette période.",
+    "oldestDays": "Élément le plus ancien : {days, plural, one {# jour} other {# jours}}",
+    "openingOverdue": "Retard d’ouverture",
+    "otherChanges": "Autres variations",
+    "outstanding": "Encours",
+    "points": "{points} points",
+    "recovered": "Recouvré",
+    "revenueAndOperatingIncome": "Chiffre d’affaires et résultat d’exploitation",
+    "revenueTrend": "Évolution du chiffre d’affaires",
+    "spendByGrade": "Dépenses par note d’évaluation",
+    "spendHealth": "Santé des dépenses",
+    "stillOverdue": "Toujours en retard",
+    "utilizationTrend": "Évolution du taux facturable",
+    "weeks": "{weeks} sem.",
+    "yoy": "Sur un an {pct}"
   }
 }

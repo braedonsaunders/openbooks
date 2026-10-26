@@ -31,13 +31,14 @@ import { Badge } from '@openbooks/ui'
 import { cmp as compareMoney } from '@openbooks/engine/money'
 import { CardShell, EmptyRow, MetricTile, type MetricTone, type WidgetCardProps } from './_widget-tiles'
 import type { DashboardMetrics } from './_metrics'
-import { WIDGETS } from './_widget-registry'
+import { WIDGETS, isSpotlightWidget } from './_widget-registry'
 import { FinancialWidgetCard } from './_widget-views-financial'
 import { CashWidgetCard } from './_widget-views-cash'
 import { CustomerWidgetCard } from './_widget-views-customers'
 import { VendorWidgetCard } from './_widget-views-vendors'
 import { ProjectWidgetCard } from './_widget-views-projects'
 import { RiskWidgetCard } from './_widget-views-risk'
+import { SpotlightWidgetCard } from './_widget-views-spotlight'
 
 /** Widgets extracted from an Analytics dashboard render in that dashboard's widget module. */
 const ANALYTICS_WIDGET_CARDS: Record<string, (props: WidgetCardProps) => React.ReactNode> = {
@@ -91,6 +92,7 @@ export function WidgetCard({
   // figure lives behind the tile's link on the banking page.
   const displayWeeks = (weeks: number) => (weeks >= 10 ? Math.round(weeks) : Math.round(weeks * 10) / 10)
 
+  if (isSpotlightWidget(widgetId)) return <SpotlightWidgetCard widgetId={widgetId} data={data} />
   const source = WIDGETS[widgetId]?.analyticsSource
   const AnalyticsWidget = source ? ANALYTICS_WIDGET_CARDS[source] : undefined
   if (AnalyticsWidget) return <AnalyticsWidget widgetId={widgetId} data={data} />

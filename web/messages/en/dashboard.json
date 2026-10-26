@@ -109,7 +109,16 @@
     "duplicatePayments": "Duplicate payments",
     "duplicatePaymentsHint": "{value} at risk · {period}",
     "utilization": "Utilization",
-    "overheadAbsorption": "Overhead absorption"
+    "overheadAbsorption": "Overhead absorption",
+    "spotlightFinancialHealth": "Financial Health spotlight",
+    "spotlightCashflow": "Cash Flow spotlight",
+    "spotlightReceivables": "Receivables Intelligence spotlight",
+    "spotlightCustomers": "Customer Intelligence spotlight",
+    "spotlightVendors": "Vendor Performance spotlight",
+    "spotlightSpendVelocity": "Spend Velocity spotlight",
+    "spotlightTrueCost": "True Cost spotlight",
+    "spotlightUtilization": "Utilization spotlight",
+    "spotlightSentinel": "Sentinel spotlight"
   },
   "metricContext": {
     "today": "Posted today",
@@ -149,7 +158,8 @@
     "admin": "Administration",
     "ratios": "Financial ratios",
     "cash": "Cash",
-    "analytics": "Analytics"
+    "analytics": "Analytics",
+    "spotlight": "Analytics spotlights"
   },
   "catalog": {
     "operatingExpenses": "Month-to-date operating expenses, excluding cost of sales, from the profit and loss report.",
@@ -230,7 +240,16 @@
     "forensicRisk": "Overall Sentinel risk score, with the flagged count and value at risk.",
     "duplicatePayments": "Duplicate payment groups and their value at risk.",
     "utilization": "Company billable % from Utilization, with its anomaly count.",
-    "overheadAbsorption": "Absorbed burden vs total burden from True Cost, with the gap."
+    "overheadAbsorption": "Absorbed burden vs total burden from True Cost, with the gap.",
+    "spotlightFinancialHealth": "Revenue, margins, the health score and the P&L bridge from Financial Health — expand for findings.",
+    "spotlightCashflow": "Projected cash, runway and the weekly forecast from Cash Flow — expand for the bridge and aging.",
+    "spotlightReceivables": "Overdue needing attention, payment timing and recovery from Receivables Intelligence.",
+    "spotlightCustomers": "Revenue trend, segments, top customers and at-risk accounts from Customer Intelligence.",
+    "spotlightVendors": "Spend trend, on-time payment and top vendors from Vendor Performance.",
+    "spotlightSpendVelocity": "Monthly spend vs prior year, velocity, alerts and spend health from Spend Velocity.",
+    "spotlightTrueCost": "Composite overhead rate, absorption and category mix from True Cost.",
+    "spotlightUtilization": "Billable utilization against target, its trend and departmental cost from Utilization.",
+    "spotlightSentinel": "Integrity risk score, detector counts and top risk areas from Sentinel."
   },
   "grid": {
     "customizing": "Customizing your dashboard",
@@ -256,7 +275,9 @@
     "close": "Close",
     "added": "Added",
     "empty": "No widgets available to add.",
-    "libraryCards": "Insight cards"
+    "libraryCards": "Insight cards",
+    "searchPlaceholder": "Search widgets",
+    "noMatches": "No widgets match “{query}”."
   },
   "customize": {
     "title": "Customize dashboard",
@@ -392,5 +413,11 @@
     "anomalies": "{count} anomalies",
     "unscheduled": "{count} without schedules",
     "gap": "gap {amount}"
+  },
+  "spotlight": {
+    "expand": "Expand {title}",
+    "openDashboard": "Open dashboard",
+    "loadFailed": "This spotlight could not be loaded.",
+    "updated": "Updated {time}"
   }
 }

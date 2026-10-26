@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { Loader2, Plus, Save } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button, Drawer } from '@openbooks/ui'
@@ -13,6 +14,7 @@ import { widgetsForRole } from './_widget-registry'
 import type { DashboardApp } from './_app-widget'
 import { NavIcon } from '@/components/sidebar-nav'
 import { appWidgetId } from '@/lib/apps/surfaces'
+import { SearchInput } from '@/components/search-input'
 
 type LibraryCard = { id: string; name: string; description: string }
 
@@ -55,10 +57,21 @@ export function WidgetPalette({
   const present = presentIds instanceof Set ? presentIds : new Set(presentIds)
   const allowed = allowedWidgetIds instanceof Set ? allowedWidgetIds : new Set(allowedWidgetIds ?? [])
 
+  const [query, setQuery] = useState('')
+  // Every word must appear in the entry's name, description or section, in
+  // the viewer's language — the same text the palette shows.
+  const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
+  const matches = (...text: (string | undefined)[]) => {
+    const haystack = text.filter(Boolean).join(' ').toLocaleLowerCase()
+    return terms.every((term) => haystack.includes(term))
+  }
+
   const available = widgetsForRole(role).filter(
-    (w) => !present.has(w.id) && allowed.has(w.id),
+    (w) => !present.has(w.id) && allowed.has(w.id) &&
+      matches(t(w.labelKey), t(w.descriptionKey), t(CATEGORY_LABEL_KEYS[w.category])),
   )
-  const availableApps = apps.filter((app) => !present.has(appWidgetId(app.key)))
+  const availableApps = apps.filter((app) => !present.has(appWidgetId(app.key)) && matches(app.name, app.description, tApps('title')))
+  const shownCards = libraryCards.filter((card) => matches(card.name, card.description, t('palette.libraryCards')))
 
   const byCategory = new Map<WidgetCategory, WidgetMeta[]>()
   for (const w of available) {
@@ -82,9 +95,19 @@ export function WidgetPalette({
         </Button>
       ) : undefined}
     >
-          {byCategory.size === 0 && libraryCards.length === 0 && availableApps.length === 0 ? (
+          <div className="sticky -top-3 z-10 -mx-3 -mt-3 mb-3 border-b border-slate-100 bg-white/95 px-3 pt-3 pb-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+            <SearchInput
+              size="md"
+              value={query}
+              onValueChange={setQuery}
+              placeholder={t('palette.searchPlaceholder')}
+              className="w-full sm:w-full sm:max-w-none"
+            />
+          </div>
+
+          {byCategory.size === 0 && shownCards.length === 0 && availableApps.length === 0 ? (
             <p className="px-2 py-4 text-sm text-slate-400">
-              {t('palette.empty')}
+              {terms.length > 0 ? t('palette.noMatches', { query: query.trim() }) : t('palette.empty')}
             </p>
           ) : null}
 
@@ -115,13 +138,13 @@ export function WidgetPalette({
             </div>
           ))}
 
-          {libraryCards.length > 0 ? (
+          {shownCards.length > 0 ? (
             <div className="mb-4">
               <h3 className="mb-2 px-1 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
                 {t('palette.libraryCards')}
               </h3>
               <div className="space-y-1">
-                {libraryCards.map((c) => (
+                {shownCards.map((c) => (
                   <button
                     key={c.id}
                     onClick={() => onAddCard(c)}

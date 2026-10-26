@@ -8,7 +8,7 @@ import type { Authz } from '@/lib/authz'
 import { insightVisibilitySql } from '@/lib/insight-access'
 import { getAuthz, can } from '@/lib/authz'
 import { isUuid } from '@/lib/list-params'
-import { WIDGETS } from './_widget-registry'
+import { WIDGETS, isSpotlightWidget } from './_widget-registry'
 import { AnalyticsWidgetPreview, WidgetCard } from './_widget-views'
 import type { AllowedWidgetIds } from './widget-features'
 import { loadDashboardMetrics, pruneDashboardMetrics } from './_metrics'
@@ -177,7 +177,9 @@ export async function loadDashboardEditCanvas(
   for (const id of Object.keys(WIDGETS)) {
     if (!widgetAllowed(id)) continue
     if (!previewSet.has(id)) {
-      if (WIDGETS[id]!.analyticsSource) nodes[id] = <AnalyticsWidgetPreview key={id} widgetId={id} />
+      // Spotlights read their own projection, so an unsaved one previews live.
+      if (isSpotlightWidget(id)) nodes[id] = <WidgetCard key={id} widgetId={id} data={pruneDashboardMetrics(data, [id])} />
+      else if (WIDGETS[id]!.analyticsSource) nodes[id] = <AnalyticsWidgetPreview key={id} widgetId={id} />
       continue
     }
     nodes[id] = (

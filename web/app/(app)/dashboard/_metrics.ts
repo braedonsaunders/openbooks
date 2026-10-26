@@ -1083,6 +1083,17 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   // ── Analytics: risk (Sentinel) ──────────────────────────────────────────
   'kpi-forensic-risk': ['forensicRisk'],
   'kpi-duplicate-payments': ['duplicatePayments'],
+
+  // ── Analytics spotlights: read their dashboard projection client-side ──
+  'spotlight-financial-health': [],
+  'spotlight-cashflow': [],
+  'spotlight-receivables-intelligence': [],
+  'spotlight-customer-intelligence': [],
+  'spotlight-vendor-performance': [],
+  'spotlight-spend-velocity': [],
+  'spotlight-true-cost': [],
+  'spotlight-utilization': [],
+  'spotlight-sentinel': [],
 }
 
 const EMPTY_ANALYTICS_WIDGET_METRICS = {

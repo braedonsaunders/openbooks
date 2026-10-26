@@ -109,7 +109,16 @@
     "duplicatePayments": "Paiements en double",
     "duplicatePaymentsHint": "{value} à risque · {period}",
     "utilization": "Utilisation",
-    "overheadAbsorption": "Absorption des frais généraux"
+    "overheadAbsorption": "Absorption des frais généraux",
+    "spotlightFinancialHealth": "Aperçu Santé financière",
+    "spotlightCashflow": "Aperçu Flux de trésorerie",
+    "spotlightReceivables": "Aperçu Analyse des créances",
+    "spotlightCustomers": "Aperçu Analyse clients",
+    "spotlightVendors": "Aperçu Performance fournisseurs",
+    "spotlightSpendVelocity": "Aperçu Vélocité des dépenses",
+    "spotlightTrueCost": "Aperçu Coût réel",
+    "spotlightUtilization": "Aperçu Taux d’utilisation",
+    "spotlightSentinel": "Aperçu Sentinel"
   },
   "metricContext": {
     "today": "Comptabilisées aujourd’hui",
@@ -149,7 +158,8 @@
     "admin": "Administration",
     "ratios": "Ratios financiers",
     "cash": "Trésorerie",
-    "analytics": "Analytique"
+    "analytics": "Analytique",
+    "spotlight": "Aperçus analytiques"
   },
   "catalog": {
     "operatingExpenses": "Charges d’exploitation du mois à ce jour, hors coût des ventes, issues du compte de résultat.",
@@ -230,7 +240,16 @@
     "forensicRisk": "Score de risque global Sentinel, avec le nombre de cas signalés et le montant à risque.",
     "duplicatePayments": "Groupes de paiements en double et leur montant à risque.",
     "utilization": "% facturable de l’entreprise depuis Utilisation, avec son nombre d’anomalies.",
-    "overheadAbsorption": "Charges absorbées face au total depuis True Cost, avec l’écart."
+    "overheadAbsorption": "Charges absorbées face au total depuis True Cost, avec l’écart.",
+    "spotlightFinancialHealth": "Chiffre d’affaires, marges, score de santé et pont du compte de résultat de Santé financière — développez pour les constats.",
+    "spotlightCashflow": "Trésorerie projetée, autonomie et prévision hebdomadaire de Flux de trésorerie — développez pour le pont et l’ancienneté.",
+    "spotlightReceivables": "Retards à suivre, délais de paiement et recouvrement de l’Analyse des créances.",
+    "spotlightCustomers": "Évolution du chiffre d’affaires, segments, meilleurs clients et comptes à risque de l’Analyse clients.",
+    "spotlightVendors": "Évolution des dépenses, paiements à l’échéance et principaux fournisseurs de la Performance fournisseurs.",
+    "spotlightSpendVelocity": "Dépenses mensuelles par rapport à l’an dernier, vélocité, alertes et santé des dépenses de la Vélocité des dépenses.",
+    "spotlightTrueCost": "Taux composite de frais généraux, absorption et répartition par catégorie du Coût réel.",
+    "spotlightUtilization": "Taux facturable par rapport à l’objectif, son évolution et le coût par service du Taux d’utilisation.",
+    "spotlightSentinel": "Score de risque d’intégrité, résultats des détecteurs et principales zones de risque de Sentinel."
   },
   "grid": {
     "customizing": "Personnalisation du tableau de bord",
@@ -256,7 +275,9 @@
     "close": "Fermer",
     "added": "Ajouté",
     "empty": "Aucun widget disponible à ajouter.",
-    "libraryCards": "Cartes d'analyses"
+    "libraryCards": "Cartes d'analyses",
+    "searchPlaceholder": "Rechercher des widgets",
+    "noMatches": "Aucun widget ne correspond à « {query} »."
   },
   "customize": {
     "title": "Personnaliser le tableau de bord",
@@ -392,5 +413,11 @@
     "anomalies": "{count} anomalies",
     "unscheduled": "{count} sans horaires",
     "gap": "écart {amount}"
+  },
+  "spotlight": {
+    "expand": "Développer {title}",
+    "openDashboard": "Ouvrir le tableau de bord",
+    "loadFailed": "Impossible de charger cet aperçu.",
+    "updated": "Mis à jour {time}"
   }
 }

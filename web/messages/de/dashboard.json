@@ -109,7 +109,16 @@
     "duplicatePayments": "Doppelte Zahlungen",
     "duplicatePaymentsHint": "{value} gefährdet · {period}",
     "utilization": "Auslastung",
-    "overheadAbsorption": "Gemeinkostenabsorption"
+    "overheadAbsorption": "Gemeinkostenabsorption",
+    "spotlightFinancialHealth": "Spotlight Finanzielle Gesundheit",
+    "spotlightCashflow": "Spotlight Cashflow",
+    "spotlightReceivables": "Spotlight Forderungsanalyse",
+    "spotlightCustomers": "Spotlight Kundenanalyse",
+    "spotlightVendors": "Spotlight Lieferantenleistung",
+    "spotlightSpendVelocity": "Spotlight Ausgabendynamik",
+    "spotlightTrueCost": "Spotlight Vollkosten",
+    "spotlightUtilization": "Spotlight Auslastung",
+    "spotlightSentinel": "Spotlight Sentinel-Risikoanalyse"
   },
   "metricContext": {
     "today": "Heute gebucht",
@@ -149,7 +158,8 @@
     "admin": "Verwaltung",
     "ratios": "Finanzkennzahlen",
     "cash": "Liquidität",
-    "analytics": "Analytik"
+    "analytics": "Analytik",
+    "spotlight": "Analyse-Spotlights"
   },
   "catalog": {
     "operatingExpenses": "Betriebsaufwendungen seit Monatsbeginn ohne Umsatzkosten, aus der Gewinn- und Verlustrechnung.",
@@ -230,7 +240,16 @@
     "forensicRisk": "Sentinel-Risikowert mit Anzahl markierter Vorgänge und gefährdetem Betrag.",
     "duplicatePayments": "Doppelte Zahlungsgruppen und ihr gefährdeter Betrag.",
     "utilization": "Abrechenbare Unternehmens-% aus Auslastung, mit Anomalienzahl.",
-    "overheadAbsorption": "Absorbierte Gemeinkosten vs. Gesamt aus True Cost, mit Lücke."
+    "overheadAbsorption": "Absorbierte Gemeinkosten vs. Gesamt aus True Cost, mit Lücke.",
+    "spotlightFinancialHealth": "Umsatz, Margen, Gesundheitswert und GuV-Brücke aus Finanzielle Gesundheit — erweitern für Erkenntnisse.",
+    "spotlightCashflow": "Prognostizierte Liquidität, Reichweite und Wochenprognose aus Cashflow — erweitern für Brücke und Altersstruktur.",
+    "spotlightReceivables": "Überfällige Beträge mit Handlungsbedarf, Zahlungsverhalten und Einzug aus der Forderungsanalyse.",
+    "spotlightCustomers": "Umsatzentwicklung, Segmente, Top-Kunden und gefährdete Konten aus der Kundenanalyse.",
+    "spotlightVendors": "Ausgabenentwicklung, pünktliche Zahlung und Top-Lieferanten aus der Lieferantenleistung.",
+    "spotlightSpendVelocity": "Monatsausgaben ggü. Vorjahr, Dynamik, Warnungen und Ausgabengesundheit aus der Ausgabendynamik.",
+    "spotlightTrueCost": "Gemeinkosten-Gesamtsatz, Deckung und Kategorienmix aus Vollkosten.",
+    "spotlightUtilization": "Abrechenbare Auslastung gegenüber Ziel, Entwicklung und Abteilungskosten aus der Auslastung.",
+    "spotlightSentinel": "Integritätsrisikowert, Detektortreffer und wichtigste Risikobereiche aus Sentinel."
   },
   "grid": {
     "customizing": "Dashboard wird angepasst",
@@ -256,7 +275,9 @@
     "close": "Schließen",
     "added": "Hinzugefügt",
     "empty": "Keine Widgets zum Hinzufügen verfügbar.",
-    "libraryCards": "Insight-Karten"
+    "libraryCards": "Insight-Karten",
+    "searchPlaceholder": "Widgets suchen",
+    "noMatches": "Keine Widgets passen zu „{query}“."
   },
   "customize": {
     "title": "Dashboard anpassen",
@@ -392,5 +413,11 @@
     "anomalies": "{count} Anomalien",
     "unscheduled": "{count} ohne Arbeitszeiten",
     "gap": "Lücke {amount}"
+  },
+  "spotlight": {
+    "expand": "{title} erweitern",
+    "openDashboard": "Dashboard öffnen",
+    "loadFailed": "Dieses Spotlight konnte nicht geladen werden.",
+    "updated": "Aktualisiert {time}"
   }
 }

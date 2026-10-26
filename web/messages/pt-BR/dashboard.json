@@ -109,7 +109,16 @@
     "duplicatePayments": "Pagamentos duplicados",
     "duplicatePaymentsHint": "{value} em risco · {period}",
     "utilization": "Utilização",
-    "overheadAbsorption": "Absorção de indiretos"
+    "overheadAbsorption": "Absorção de indiretos",
+    "spotlightFinancialHealth": "Destaque de saúde financeira",
+    "spotlightCashflow": "Destaque de fluxo de caixa",
+    "spotlightReceivables": "Destaque de contas a receber",
+    "spotlightCustomers": "Destaque de inteligência de clientes",
+    "spotlightVendors": "Destaque de desempenho de fornecedores",
+    "spotlightSpendVelocity": "Destaque de velocidade de gastos",
+    "spotlightTrueCost": "Destaque de custo real",
+    "spotlightUtilization": "Destaque de utilização",
+    "spotlightSentinel": "Destaque do Sentinel"
   },
   "metricContext": {
     "today": "Lançado hoje",
@@ -149,7 +158,8 @@
     "admin": "Administração",
     "ratios": "Índices financeiros",
     "cash": "Caixa",
-    "analytics": "Análises"
+    "analytics": "Análises",
+    "spotlight": "Destaques de análise"
   },
   "catalog": {
     "operatingExpenses": "Despesas operacionais do mês até hoje, sem o custo das vendas, da demonstração de resultados.",
@@ -230,7 +240,16 @@
     "forensicRisk": "Pontuação geral de risco do Sentinel, com a contagem sinalizada e o valor em risco.",
     "duplicatePayments": "Grupos de pagamentos duplicados e seu valor em risco.",
     "utilization": "% faturável da empresa desde Utilização, com a contagem de anomalias.",
-    "overheadAbsorption": "Carga absorvida frente ao total desde True Cost, com a diferença."
+    "overheadAbsorption": "Carga absorvida frente ao total desde True Cost, com a diferença.",
+    "spotlightFinancialHealth": "Receita, margens, pontuação de saúde e ponte do resultado da Saúde financeira — expanda para ver constatações.",
+    "spotlightCashflow": "Caixa projetado, autonomia e previsão semanal do Fluxo de caixa — expanda para a ponte e o aging.",
+    "spotlightReceivables": "Vencidos que requerem atenção, prazos de pagamento e recuperação das Contas a receber.",
+    "spotlightCustomers": "Tendência da receita, segmentos, principais clientes e contas em risco da Inteligência de clientes.",
+    "spotlightVendors": "Tendência de gastos, pagamento pontual e principais fornecedores do Desempenho de fornecedores.",
+    "spotlightSpendVelocity": "Gastos mensais vs. ano anterior, velocidade, alertas e saúde dos gastos da Velocidade de gastos.",
+    "spotlightTrueCost": "Taxa composta de overhead, absorção e composição por categoria do Custo real.",
+    "spotlightUtilization": "Utilização faturável vs. meta, sua tendência e custo por departamento da Utilização.",
+    "spotlightSentinel": "Pontuação de risco de integridade, contagens dos detectores e principais áreas de risco do Sentinel."
   },
   "grid": {
     "customizing": "Personalizando seu painel",
@@ -256,7 +275,9 @@
     "close": "Fechar",
     "added": "Adicionado",
     "empty": "Nenhum widget disponível para adicionar.",
-    "libraryCards": "Cartões de insight"
+    "libraryCards": "Cartões de insight",
+    "searchPlaceholder": "Pesquisar widgets",
+    "noMatches": "Nenhum widget corresponde a “{query}”."
   },
   "customize": {
     "title": "Personalizar painel",
@@ -392,5 +413,11 @@
     "anomalies": "{count} anomalias",
     "unscheduled": "{count} sem escalas",
     "gap": "diferença {amount}"
+  },
+  "spotlight": {
+    "expand": "Expandir {title}",
+    "openDashboard": "Abrir painel",
+    "loadFailed": "Não foi possível carregar este destaque.",
+    "updated": "Atualizado {time}"
   }
 }

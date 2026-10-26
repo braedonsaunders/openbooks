@@ -4552,5 +4552,31 @@
     "noPaymentHistory": "此观察窗口没有带日期的现金核销记录。",
     "noReminders": "此窗口没有提醒送达证据。",
     "noComparableHistory": "可比客户付款历史不足，无法绘图。"
+  },
+  "spotlight": {
+    "billedShare": "已计费 {pct}",
+    "changeVsPrior": "较上期变化",
+    "customersOverdue": "{count} 位客户需要关注",
+    "days": "{days} 天",
+    "empty": "此期间没有可显示的内容。",
+    "findings": "发现",
+    "grade": "等级 {grade}",
+    "grossMarginTrend": "毛利率趋势",
+    "hours": "{hours} 小时",
+    "noFindings": "此期间没有发现。",
+    "oldestDays": "最早项目 {days} 天",
+    "openingOverdue": "期初逾期",
+    "otherChanges": "其他变动",
+    "outstanding": "未结",
+    "points": "{points} 个百分点",
+    "recovered": "已收回",
+    "revenueAndOperatingIncome": "收入与营业利润",
+    "revenueTrend": "收入趋势",
+    "spendByGrade": "按评分等级划分的支出",
+    "spendHealth": "支出健康度",
+    "stillOverdue": "仍逾期",
+    "utilizationTrend": "可计费比例趋势",
+    "weeks": "{weeks} 周",
+    "yoy": "同比 {pct}"
   }
 }

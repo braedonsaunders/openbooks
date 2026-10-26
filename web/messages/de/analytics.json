@@ -4552,5 +4552,31 @@
     "noPaymentHistory": "Keine datierten Zahlungszuordnungen in diesem Zeitraum.",
     "noReminders": "Keine Mahnungszustellnachweise in diesem Zeitraum.",
     "noComparableHistory": "Nicht genügend vergleichbare Zahlungshistorie für das Diagramm."
+  },
+  "spotlight": {
+    "billedShare": "{pct} abgerechnet",
+    "changeVsPrior": "Veränderung zur Vorperiode",
+    "customersOverdue": "{count, plural, one {# Kunde} other {# Kunden}} mit Handlungsbedarf",
+    "days": "{days} Tage",
+    "empty": "Für diesen Zeitraum gibt es nichts anzuzeigen.",
+    "findings": "Erkenntnisse",
+    "grade": "Note {grade}",
+    "grossMarginTrend": "Entwicklung der Bruttomarge",
+    "hours": "{hours} Std.",
+    "noFindings": "Keine Erkenntnisse für diesen Zeitraum.",
+    "oldestDays": "Ältester Posten {days, plural, one {# Tag} other {# Tage}}",
+    "openingOverdue": "Überfällig zu Beginn",
+    "otherChanges": "Sonstige Änderungen",
+    "outstanding": "Offen",
+    "points": "{points} Pkt.",
+    "recovered": "Eingezogen",
+    "revenueAndOperatingIncome": "Umsatz und Betriebsergebnis",
+    "revenueTrend": "Umsatzentwicklung",
+    "spendByGrade": "Ausgaben nach Bewertungsnote",
+    "spendHealth": "Ausgabengesundheit",
+    "stillOverdue": "Weiterhin überfällig",
+    "utilizationTrend": "Entwicklung der abrechenbaren Quote",
+    "weeks": "{weeks} Wo.",
+    "yoy": "ggü. Vorjahr {pct}"
   }
 }

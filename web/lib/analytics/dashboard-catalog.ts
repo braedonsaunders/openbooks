@@ -64,3 +64,40 @@ export type AnalyticsPreviewChart =
   | { kind: 'donut'; label: string; slices: { name: string; value: number }[] }
   | { kind: 'gauge'; label: string; value: number; goodWhenHigh: boolean }
 export interface AnalyticsPreview { chart?: AnalyticsPreviewChart; periodLabel: string; metrics: { label: string; value: string }[]; observedAt: string; notice?: string }
+
+/**
+ * A home-dashboard spotlight: a projection of one Analytics dashboard's own
+ * default-view read. Figures arrive formatted in the viewer's locale and the
+ * payload's currency; chart series are chart numbers crossed at the
+ * projection boundary. Nothing here is computed again from source rows.
+ */
+export type SpotlightTone = 'positive' | 'caution' | 'negative' | 'neutral'
+export type SpotlightFormat = 'money' | 'count' | 'percent'
+export interface SpotlightFigure { label: string; value: string; detail?: string; tone?: SpotlightTone }
+/** Series roles map to the shared analytics palette on the client; `signed` bars color each point by its sign. */
+export type SpotlightSeriesRole = 'primary' | 'secondary' | 'positive' | 'negative' | 'caution' | 'muted' | 'signed'
+/** Percent series carry values on the 0–100 scale. */
+export interface SpotlightSeries { name: string; values: (number | null)[]; style: 'line' | 'area' | 'bar' | 'dashed'; role?: SpotlightSeriesRole }
+export interface SpotlightRankRow { name: string; value: string; /** Bar length on the 0–1 scale of the panel's largest row. */ share: number; detail?: string; tone?: SpotlightTone }
+export type SpotlightPanel =
+  | { kind: 'trend'; title: string; labels: string[]; series: SpotlightSeries[]; format: SpotlightFormat; reference?: { value: number; label: string } }
+  | { kind: 'donut'; title: string; format: SpotlightFormat; slices: { name: string; value: number; display: string; tone?: SpotlightTone; color?: string }[]; center?: SpotlightFigure }
+  | { kind: 'gauge'; title: string; score: number; display: string; caption: string; goodWhenHigh: boolean; bands: { excellent: number; good: number; average: number } | null; breakdown?: { label: string; score: number | null }[] }
+  | { kind: 'ranking'; title: string; rows: SpotlightRankRow[]; empty: string }
+  | { kind: 'bridge'; title: string; steps: { label: string; amount: string; kind: 'start' | 'deduct' | 'subtotal' | 'total'; tone?: SpotlightTone }[] }
+  | { kind: 'insights'; title: string; items: { tone: SpotlightTone; title: string; detail?: string }[]; empty: string }
+export interface AnalyticsSpotlight {
+  slug: string
+  periodLabel: string
+  observedAt: string
+  /** Currency every money figure and series is stated in. */
+  currency: string
+  headline?: SpotlightFigure
+  /** The first three ride the compact card; the expanded view shows all. */
+  figures: SpotlightFigure[]
+  /** The compact card's chart; the expanded view draws it at full width. */
+  feature?: SpotlightPanel
+  panels: SpotlightPanel[]
+  /** A refusal or caveat from the owning dashboard, stated in its words. */
+  notice?: string
+}

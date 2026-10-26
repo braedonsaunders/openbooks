@@ -43,6 +43,8 @@ const pct = (n: number) => `${(n * 100).toFixed(1)}%`
 
 const baseGrid = { left: 8, right: 12, top: 24, bottom: 8, containLabel: true }
 const tooltip = { trigger: 'axis' as const, backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 } }
+/** The shared chart vocabulary, for analytics surfaces that compose their own options. */
+export const CHART_THEME = { axis: AXIS, split: SPLIT, tooltip, positive: POS, negative: NEG } as const
 
 function catAxis(data: string[], maxTicks?: number): EChartsOption {
   const axisLabel: Record<string, unknown> = { color: AXIS, fontSize: 10 }

@@ -4552,5 +4552,31 @@
     "noPaymentHistory": "No dated cash applications in this observation window.",
     "noReminders": "No reminder delivery evidence in this window.",
     "noComparableHistory": "Not enough comparable customer payment history to plot."
+  },
+  "spotlight": {
+    "billedShare": "{pct} billed",
+    "changeVsPrior": "Change vs prior period",
+    "customersOverdue": "{count, plural, one {# customer} other {# customers}} needing attention",
+    "days": "{days} days",
+    "empty": "Nothing to show for this period.",
+    "findings": "Findings",
+    "grade": "Grade {grade}",
+    "grossMarginTrend": "Gross Margin Trend",
+    "hours": "{hours} hrs",
+    "noFindings": "No findings for this period.",
+    "oldestDays": "Oldest item {days, plural, one {# day} other {# days}}",
+    "openingOverdue": "Opening overdue",
+    "otherChanges": "Other changes",
+    "outstanding": "Outstanding",
+    "points": "{points} pts",
+    "recovered": "Recovered",
+    "revenueAndOperatingIncome": "Revenue & Operating Income",
+    "revenueTrend": "Revenue Trend",
+    "spendByGrade": "Spend by Scorecard Grade",
+    "spendHealth": "Spend Health",
+    "stillOverdue": "Still overdue",
+    "utilizationTrend": "Billable % Trend",
+    "weeks": "{weeks} wks",
+    "yoy": "YoY {pct}"
   }
 }

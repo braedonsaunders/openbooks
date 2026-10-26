@@ -4552,5 +4552,31 @@
     "noPaymentHistory": "No hay aplicaciones de efectivo fechadas en esta ventana.",
     "noReminders": "No hay evidencia de entrega de recordatorios en esta ventana.",
     "noComparableHistory": "No hay suficiente historial de pagos comparable para el gráfico."
+  },
+  "spotlight": {
+    "billedShare": "{pct} facturado",
+    "changeVsPrior": "Cambio frente al período anterior",
+    "customersOverdue": "{count, plural, one {# cliente requiere} other {# clientes requieren}} atención",
+    "days": "{days} días",
+    "empty": "No hay nada que mostrar para este período.",
+    "findings": "Hallazgos",
+    "grade": "Calificación {grade}",
+    "grossMarginTrend": "Tendencia del margen bruto",
+    "hours": "{hours} h",
+    "noFindings": "No hay hallazgos para este período.",
+    "oldestDays": "Partida más antigua: {days, plural, one {# día} other {# días}}",
+    "openingOverdue": "Vencido inicial",
+    "otherChanges": "Otros cambios",
+    "outstanding": "Pendiente",
+    "points": "{points} puntos",
+    "recovered": "Recuperado",
+    "revenueAndOperatingIncome": "Ingresos y resultado operativo",
+    "revenueTrend": "Tendencia de ingresos",
+    "spendByGrade": "Gasto por calificación",
+    "spendHealth": "Salud del gasto",
+    "stillOverdue": "Aún vencido",
+    "utilizationTrend": "Tendencia del % facturable",
+    "weeks": "{weeks} sem.",
+    "yoy": "Interanual {pct}"
   }
 }

@@ -109,7 +109,16 @@
     "duplicatePayments": "重複支払",
     "duplicatePaymentsHint": "{value} のリスク額 · {period}",
     "utilization": "稼働率",
-    "overheadAbsorption": "間接費吸収"
+    "overheadAbsorption": "間接費吸収",
+    "spotlightFinancialHealth": "財務健全性スポットライト",
+    "spotlightCashflow": "キャッシュフロースポットライト",
+    "spotlightReceivables": "売掛金インテリジェンススポットライト",
+    "spotlightCustomers": "顧客インテリジェンススポットライト",
+    "spotlightVendors": "仕入先パフォーマンススポットライト",
+    "spotlightSpendVelocity": "支出ベロシティスポットライト",
+    "spotlightTrueCost": "真のコストスポットライト",
+    "spotlightUtilization": "稼働率スポットライト",
+    "spotlightSentinel": "Sentinel スポットライト"
   },
   "metricContext": {
     "today": "本日記帳済み",
@@ -149,7 +158,8 @@
     "admin": "管理",
     "ratios": "財務比率",
     "cash": "資金",
-    "analytics": "分析"
+    "analytics": "分析",
+    "spotlight": "分析スポットライト"
   },
   "catalog": {
     "operatingExpenses": "損益計算書に基づく当月の営業費用。売上原価は含みません。",
@@ -230,7 +240,16 @@
     "forensicRisk": "Sentinelの総合リスクスコア。フラグ件数とリスク額付き。",
     "duplicatePayments": "重複支払グループとそのリスク額。",
     "utilization": "稼働率ダッシュボードの全社請求可能率と異常件数。",
-    "overheadAbsorption": "True Costの吸収間接費と総額、および差額。"
+    "overheadAbsorption": "True Costの吸収間接費と総額、および差額。",
+    "spotlightFinancialHealth": "財務健全性の売上高、利益率、健全性スコア、損益ブリッジ。展開すると検出事項を表示します。",
+    "spotlightCashflow": "キャッシュフローの予測残高、ランウェイ、週次予測。展開するとブリッジと年齢分析を表示します。",
+    "spotlightReceivables": "売掛金インテリジェンスの要対応延滞額、支払タイミング、回収状況。",
+    "spotlightCustomers": "顧客インテリジェンスの売上推移、セグメント、上位顧客、リスク顧客。",
+    "spotlightVendors": "仕入先パフォーマンスの支出推移、期日内支払、上位仕入先。",
+    "spotlightSpendVelocity": "支出ベロシティの前年比月次支出、ベロシティ、アラート、支出の健全性。",
+    "spotlightTrueCost": "真のコストの総合間接費率、配賦率、カテゴリ構成。",
+    "spotlightUtilization": "稼働率の目標比請求可能稼働率、推移、部門別コスト。",
+    "spotlightSentinel": "Sentinel の整合性リスクスコア、検出件数、主なリスク領域。"
   },
   "grid": {
     "customizing": "ダッシュボードをカスタマイズ中",
@@ -256,7 +275,9 @@
     "close": "閉じる",
     "added": "追加済み",
     "empty": "追加できるウィジェットはありません。",
-    "libraryCards": "インサイトカード"
+    "libraryCards": "インサイトカード",
+    "searchPlaceholder": "ウィジェットを検索",
+    "noMatches": "「{query}」に一致するウィジェットはありません。"
   },
   "customize": {
     "title": "ダッシュボードをカスタマイズ",
@@ -392,5 +413,11 @@
     "anomalies": "異常 {count}件",
     "unscheduled": "スケジュールなし {count}名",
     "gap": "差額 {amount}"
+  },
+  "spotlight": {
+    "expand": "{title} を展開",
+    "openDashboard": "ダッシュボードを開く",
+    "loadFailed": "このスポットライトを読み込めませんでした。",
+    "updated": "{time} 更新"
   }
 }

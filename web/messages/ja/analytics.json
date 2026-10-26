@@ -4552,5 +4552,31 @@
     "noPaymentHistory": "この観測期間に日付のある入金充当はありません。",
     "noReminders": "この期間に督促の送信証拠はありません。",
     "noComparableHistory": "グラフに表示できる比較可能な支払履歴が不足しています。"
+  },
+  "spotlight": {
+    "billedShare": "請求済み {pct}",
+    "changeVsPrior": "前期比の変化",
+    "customersOverdue": "対応が必要な顧客 {count} 件",
+    "days": "{days}日",
+    "empty": "この期間に表示するデータはありません。",
+    "findings": "検出事項",
+    "grade": "評価 {grade}",
+    "grossMarginTrend": "売上総利益率の推移",
+    "hours": "{hours} 時間",
+    "noFindings": "この期間の検出事項はありません。",
+    "oldestDays": "最古の明細 {days}日",
+    "openingOverdue": "期首の延滞額",
+    "otherChanges": "その他の変動",
+    "outstanding": "未決済",
+    "points": "{points} ポイント",
+    "recovered": "回収済み",
+    "revenueAndOperatingIncome": "売上高と営業利益",
+    "revenueTrend": "売上高の推移",
+    "spendByGrade": "評価別の支出",
+    "spendHealth": "支出の健全性",
+    "stillOverdue": "未回収の延滞額",
+    "utilizationTrend": "請求可能率の推移",
+    "weeks": "{weeks}週",
+    "yoy": "前年比 {pct}"
   }
 }

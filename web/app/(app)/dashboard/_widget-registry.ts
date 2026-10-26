@@ -8,6 +8,7 @@ export type WidgetCategory =
   | 'ratios'
   | 'cash'
   | 'analytics'
+  | 'spotlight'
   | 'personal'
   | 'admin'
 
@@ -754,6 +755,88 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     maxSize: { w: 6, h: 4 },
     analyticsSource: 'sentinel',
   },
+  // ── Analytics spotlights: one expandable summary per shipped dashboard ──
+  'spotlight-financial-health': {
+    id: 'spotlight-financial-health',
+    category: 'spotlight',
+    labelKey: 'widgets.spotlightFinancialHealth',
+    descriptionKey: 'catalog.spotlightFinancialHealth',
+    defaultSize: { w: 6, h: 8 },
+    minSize: { w: 4, h: 7 },
+    analyticsSource: 'financial-health',
+  },
+  'spotlight-cashflow': {
+    id: 'spotlight-cashflow',
+    category: 'spotlight',
+    labelKey: 'widgets.spotlightCashflow',
+    descriptionKey: 'catalog.spotlightCashflow',
+    defaultSize: { w: 6, h: 8 },
+    minSize: { w: 4, h: 7 },
+    analyticsSource: 'cashflow',
+  },
+  'spotlight-receivables-intelligence': {
+    id: 'spotlight-receivables-intelligence',
+    category: 'spotlight',
+    labelKey: 'widgets.spotlightReceivables',
+    descriptionKey: 'catalog.spotlightReceivables',
+    defaultSize: { w: 6, h: 8 },
+    minSize: { w: 4, h: 7 },
+    analyticsSource: 'receivables-intelligence',
+  },
+  'spotlight-customer-intelligence': {
+    id: 'spotlight-customer-intelligence',
+    category: 'spotlight',
+    labelKey: 'widgets.spotlightCustomers',
+    descriptionKey: 'catalog.spotlightCustomers',
+    defaultSize: { w: 6, h: 8 },
+    minSize: { w: 4, h: 7 },
+    analyticsSource: 'customer-intelligence',
+  },
+  'spotlight-vendor-performance': {
+    id: 'spotlight-vendor-performance',
+    category: 'spotlight',
+    labelKey: 'widgets.spotlightVendors',
+    descriptionKey: 'catalog.spotlightVendors',
+    defaultSize: { w: 6, h: 8 },
+    minSize: { w: 4, h: 7 },
+    analyticsSource: 'vendor-performance',
+  },
+  'spotlight-spend-velocity': {
+    id: 'spotlight-spend-velocity',
+    category: 'spotlight',
+    labelKey: 'widgets.spotlightSpendVelocity',
+    descriptionKey: 'catalog.spotlightSpendVelocity',
+    defaultSize: { w: 6, h: 8 },
+    minSize: { w: 4, h: 7 },
+    analyticsSource: 'spend-velocity',
+  },
+  'spotlight-true-cost': {
+    id: 'spotlight-true-cost',
+    category: 'spotlight',
+    labelKey: 'widgets.spotlightTrueCost',
+    descriptionKey: 'catalog.spotlightTrueCost',
+    defaultSize: { w: 6, h: 8 },
+    minSize: { w: 4, h: 7 },
+    analyticsSource: 'true-cost',
+  },
+  'spotlight-utilization': {
+    id: 'spotlight-utilization',
+    category: 'spotlight',
+    labelKey: 'widgets.spotlightUtilization',
+    descriptionKey: 'catalog.spotlightUtilization',
+    defaultSize: { w: 6, h: 8 },
+    minSize: { w: 4, h: 7 },
+    analyticsSource: 'utilization',
+  },
+  'spotlight-sentinel': {
+    id: 'spotlight-sentinel',
+    category: 'spotlight',
+    labelKey: 'widgets.spotlightSentinel',
+    descriptionKey: 'catalog.spotlightSentinel',
+    defaultSize: { w: 6, h: 8 },
+    minSize: { w: 4, h: 7 },
+    analyticsSource: 'sentinel',
+  },
 }
 
 export const CATEGORY_LABEL_KEYS: Record<WidgetCategory, string> = {
@@ -764,8 +847,14 @@ export const CATEGORY_LABEL_KEYS: Record<WidgetCategory, string> = {
   ratios: 'categories.ratios',
   cash: 'categories.cash',
   analytics: 'categories.analytics',
+  spotlight: 'categories.spotlight',
   personal: 'categories.personal',
   admin: 'categories.admin',
+}
+
+/** Spotlights fetch their own dashboard projection; they render live in the editor too. */
+export function isSpotlightWidget(id: string): boolean {
+  return WIDGETS[id]?.category === 'spotlight'
 }
 
 export function widgetsForRole(role: RoleTier): WidgetMeta[] {
