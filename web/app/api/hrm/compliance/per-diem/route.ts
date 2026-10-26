@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@openbooks/engine/platform/db";
 import {
   approveEntry,
@@ -12,11 +12,7 @@ import {
   voidEntry,
 } from "@openbooks/engine/hrm/construction/per-diem";
 import { constructionErrorResponse } from "../_lib";
-import {
-  computeWeekBody,
-  createPerDiemPolicyBody,
-  entryActionBody,
-} from "../bodies";
+import { computeWeekBody, createPerDiemPolicyBody, entryActionBody } from "../bodies";
 /** Per-diem policies: org-declared computation rules per basis. */
 export const GET = defineRoute({
   permission: "hrm.construction.read",
@@ -43,27 +39,34 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "hrm.construction.manage",
   feature: "hrmConstructionCompliance",
-  handler: async ({ request: req, authz: gate }) => {
+  body: ({ request }) => {
+    const action = new URL(request.url).searchParams.get("action");
+    return action === "compute"
+      ? computeWeekBody
+      : action === "entry"
+        ? entryActionBody
+        : createPerDiemPolicyBody;
+  },
+  handler: async ({ request: req, authz: gate, body }) => {
     const url = new URL(req.url);
     const action = url.searchParams.get("action");
     if (action === "compute") {
-      const parsedBody = await parseJsonBody(req, computeWeekBody);
-      if (!parsedBody.ok) return parsedBody.response;
+      const parsedBody = body as z.output<typeof computeWeekBody>;
       try {
         const entries =
-          parsedBody.data.kind === "travel"
+          parsedBody.kind === "travel"
             ? await computeTravelForWeek(db, {
                 orgId: gate.user.orgId,
                 actorId: gate.user.id,
-                employmentId: parsedBody.data.employmentId,
-                weekStart: parsedBody.data.weekStart,
-                mode: parsedBody.data.travelMode ?? "hourly",
+                employmentId: parsedBody.employmentId,
+                weekStart: parsedBody.weekStart,
+                mode: parsedBody.travelMode ?? "hourly",
               })
             : await computeForWeek(db, {
                 orgId: gate.user.orgId,
                 actorId: gate.user.id,
-                employmentId: parsedBody.data.employmentId,
-                weekStart: parsedBody.data.weekStart,
+                employmentId: parsedBody.employmentId,
+                weekStart: parsedBody.weekStart,
               });
         return NextResponse.json({ entries }, { status: 201 });
       } catch (e) {
@@ -71,37 +74,34 @@ export const POST = defineRoute({
       }
     }
     if (action === "entry") {
-      const parsedBody = await parseJsonBody(req, entryActionBody);
-      if (!parsedBody.ok) return parsedBody.response;
+      const parsedBody = body as z.output<typeof entryActionBody>;
       try {
         const entry =
-          parsedBody.data.action === "approve"
+          parsedBody.action === "approve"
             ? await approveEntry(db, {
                 orgId: gate.user.orgId,
                 actorId: gate.user.id,
-                entryId: parsedBody.data.entryId,
-                kind: parsedBody.data.kind,
+                entryId: parsedBody.entryId,
+                kind: parsedBody.kind,
               })
             : await voidEntry(db, {
                 orgId: gate.user.orgId,
                 actorId: gate.user.id,
-                entryId: parsedBody.data.entryId,
-                kind: parsedBody.data.kind,
-                reason:
-                  parsedBody.data.reason ?? "voided from the Compliance page",
+                entryId: parsedBody.entryId,
+                kind: parsedBody.kind,
+                reason: parsedBody.reason ?? "voided from the Compliance page",
               });
         return NextResponse.json({ entry });
       } catch (e) {
         return constructionErrorResponse(e);
       }
     }
-    const parsedBody = await parseJsonBody(req, createPerDiemPolicyBody);
-    if (!parsedBody.ok) return parsedBody.response;
+    const parsedBody = body as z.output<typeof createPerDiemPolicyBody>;
     try {
       const policy = await createPolicy(db, {
         orgId: gate.user.orgId,
         actorId: gate.user.id,
-        ...parsedBody.data,
+        ...parsedBody,
       });
       return NextResponse.json({ policy }, { status: 201 });
     } catch (e) {
