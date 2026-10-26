@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { civilDateParams } from '../../../../lib/format'
+import { getLocale, getTranslations } from "next-intl/server";
+import { civilDateParams } from "../../../../lib/format";
 import {
   filterBar,
   page,
@@ -10,25 +10,33 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { dimensionOptions, projectProfitability, projectProfitabilityCustomerOptions } from '../../../../lib/reports'
-import { isUnassignedProjectGroup } from '../../../../lib/reports/projects'
+} from "@braedonsaunders/appkit-viewspec";
+import {
+  dimensionOptions,
+  projectProfitability,
+  projectProfitabilityCustomerOptions,
+} from "../../../../lib/reports";
+import { isUnassignedProjectGroup } from "../../../../lib/reports/projects";
 import {
   baseCurrencyNotice,
   hasBaseCurrency,
   type BaseCurrencyNotice,
-} from '../../../../lib/reports/base-currency'
-import { orgInfo } from '../../../../lib/data'
-import { reportSubsidiaryView, type CurrencyBasisNotice } from '../../../../lib/consolidation'
-import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
-import { resolvePeriod } from '../../../../lib/periods'
-import { parseReportQuery, REPORT_PARAM_KEYS, toSearchParams } from '../../../../lib/report-filters'
-import { orgBranding } from '../../../../lib/report-pdf'
-import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
-import { requirePermission } from '../../../../lib/authz'
-import type { ReportDrillTarget } from '../../../../lib/report-drill'
-import type { ProjectProfitabilityGroup } from './ProjectProfitabilityTable'
-import { requireProjectsFeature } from '../../../../lib/projects-gate'
+} from "../../../../lib/reports/base-currency";
+import { orgInfo } from "../../../../lib/data";
+import { reportSubsidiaryView, type CurrencyBasisNotice } from "../../../../lib/consolidation";
+import { ReportCurrencyBasisError } from "../../../../lib/reports/currency-basis";
+import { resolvePeriod } from "../../../../lib/periods";
+import {
+  parseReportQuery,
+  REPORT_PARAM_KEYS,
+  toSearchParams,
+} from "../../../../lib/report-filters";
+import { orgBranding } from "../../../../lib/report-pdf";
+import { reportScheduleAnchor, scheduleParamsFrom } from "../../../../lib/report-schedule-anchor";
+import { requirePermission } from "../../../../lib/authz";
+import type { ProjectProfitabilityGroup } from "./ProjectProfitabilityTable";
+import type { ProfitDrillBase } from "./drills";
+import { requireProjectsFeature } from "../../../../lib/projects-gate";
 
 /**
  * Project profitability, split into a loader and a spec.
@@ -55,90 +63,95 @@ import { requireProjectsFeature } from '../../../../lib/projects-gate'
  */
 
 export interface ProjectProfitabilityData {
-  title: string
-  backHref: string
-  backLabel: string
-  searchPlaceholder: string
+  title: string;
+  backHref: string;
+  backLabel: string;
+  searchPlaceholder: string;
   primaryFilter: {
-    paramKey: string
-    label: string
-    value: string
-    options: { value: string; label: string }[]
-  }
-  showSections: boolean
-  hideSections: boolean
-  dateRange: { from: string; to: string }
-  customers: { id: string; name: string }[]
-  dimensions: unknown
-  scheduleDefId: string | null
-  scheduleParams: Record<string, string>
-  exportParams: Record<string, string | undefined>
-  company: string
-  periodPhrase: string
-  emptyLabel: string
-  emptyHint: string
-  currency: string
-  subsidiaries: unknown
+    paramKey: string;
+    label: string;
+    value: string;
+    options: { value: string; label: string }[];
+  };
+  showSections: boolean;
+  hideSections: boolean;
+  dateRange: { from: string; to: string };
+  customers: { id: string; name: string }[];
+  dimensions: unknown;
+  scheduleDefId: string | null;
+  scheduleParams: Record<string, string>;
+  exportParams: Record<string, string | undefined>;
+  company: string;
+  periodPhrase: string;
+  emptyLabel: string;
+  emptyHint: string;
+  currency: string;
+  subsidiaries: unknown;
   /**
    * Set exactly when the org has no base currency: the page renders the
    * named refusal (with the Company settings link) instead of numbers or
    * a generic 500 — the boundary swallows thrown messages, so the refusal
    * is data, not an exception. Mirrors the trial-balance ratesBlocked pair.
    */
-  baseCurrencyNotice: BaseCurrencyNotice | null
+  baseCurrencyNotice: BaseCurrencyNotice | null;
   /** Set when the viewed set spans more than one functional currency: the
    * page renders the named refusal (whose remedy is the subsidiary picker
    * beside it) instead of numbers or a generic error page. */
-  currencyBasisBlocked: CurrencyBasisNotice | null
+  currencyBasisBlocked: CurrencyBasisNotice | null;
   /** False when either refusal is set; the table hides with either. */
-  baseCurrencyReady: boolean
-  columns: string[]
-  groups: ProjectProfitabilityGroup[]
-  totalLabel: string
-  totals: ProjectProfitabilityGroup['values']
-  totalDrills: ProjectProfitabilityGroup['drills']
+  baseCurrencyReady: boolean;
+  columns: string[];
+  groups: ProjectProfitabilityGroup[];
+  totalLabel: string;
+  totals: ProjectProfitabilityGroup["values"];
+  totalScope: ProjectProfitabilityGroup["drillScope"];
+  drillBase: ProfitDrillBase | null;
 }
 
 export async function loadProjectProfitability(
   sp: Record<string, string | undefined>,
 ): Promise<ProjectProfitabilityData> {
-  const t = await getTranslations('reports')
-  const locale = await getLocale()
-  const authz = await requirePermission('reports.read')
-  await requireProjectsFeature(authz.user.orgId)
-  const scheduleDefId = await reportScheduleAnchor('project-profitability')
-  const search = sp.q?.trim() || undefined
-  const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
+  const t = await getTranslations("reports");
+  const locale = await getLocale();
+  const authz = await requirePermission("reports.read");
+  await requireProjectsFeature(authz.user.orgId);
+  const scheduleDefId = await reportScheduleAnchor("project-profitability");
+  const search = sp.q?.trim() || undefined;
+  const q = parseReportQuery(sp);
+  const period = await resolvePeriod(q.period, {
+    customFrom: q.from,
+    customTo: q.to,
+    orgId: authz.user.orgId,
+  });
   // Legal-entity scope resolves through the subsidiary view — the same
   // contract as the statement pages: a restricted reader's view resolves to
   // the subsidiaries they may see, and the picker offers the
   // single-currency choice a multi-currency viewed set refuses with.
-  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to);
   const dims = {
     ...q.dims,
     subsidiaryIds: subView.subsidiary?.ids,
     // Unrestricted root-covering views read root-owned (null subsidiary)
     // projects alongside attributed ones; restricted views stay fail-closed.
     includeNullSubsidiary: subView.subsidiary?.includeNullSubsidiary === true,
-  }
+  };
   // The base currency gates every money figure below: refuse before the
   // expensive report queries run, never after them, and never by throwing —
   // the app boundary renders a generic failure for exceptions.
-  const org = await orgInfo(authz.user.orgId)
+  const org = await orgInfo(authz.user.orgId);
   if (!org || !hasBaseCurrency(org.base_currency)) {
     return {
-      title: t('projectProfitability.title'),
-      backHref: '/reports',
-      backLabel: t('hub.title'),
-      searchPlaceholder: t('projectProfitability.searchPlaceholder'),
+      title: t("projectProfitability.title"),
+      backHref: "/reports",
+      backLabel: t("hub.title"),
+      searchPlaceholder: t("projectProfitability.searchPlaceholder"),
       primaryFilter: {
         paramKey: REPORT_PARAM_KEYS.projectScope,
-        label: t('projectProfitability.projectScope'),
+        label: t("projectProfitability.projectScope"),
         value: q.projectScope,
         options: [
-          { value: 'active', label: t('projectProfitability.activeProjects') },
-          { value: 'all', label: t('projectProfitability.allProjects') },
+          { value: "active", label: t("projectProfitability.activeProjects") },
+          { value: "all", label: t("projectProfitability.allProjects") },
         ],
       },
       showSections: false,
@@ -150,43 +163,47 @@ export async function loadProjectProfitability(
       scheduleDefId: scheduleDefId ?? null,
       scheduleParams: scheduleParamsFrom(sp),
       exportParams: sp,
-      company: '',
-      periodPhrase: '',
-      emptyLabel: '',
-      emptyHint: '',
-      currency: '',
+      company: "",
+      periodPhrase: "",
+      emptyLabel: "",
+      emptyHint: "",
+      currency: "",
       baseCurrencyNotice: baseCurrencyNotice({
-        title: t('baseCurrency.title'),
-        description: t('baseCurrency.description'),
-        actionLabel: t('baseCurrency.action'),
+        title: t("baseCurrency.title"),
+        description: t("baseCurrency.description"),
+        actionLabel: t("baseCurrency.action"),
       }),
       currencyBasisBlocked: null,
       baseCurrencyReady: false,
       columns: [],
       groups: [],
-      totalLabel: '',
+      totalLabel: "",
       // Dead when refused (the table hides with the notice) but typed:
       // the refusal is the rendered state, never an exception.
-      totals: { revenue: '0', cogs: '0', grossProfit: '0', expenses: '0', net: '0', margin: null, hours: 0 },
-      totalDrills: {
-        revenue: null,
-        cogs: null,
-        grossProfit: null,
-        expenses: null,
-        net: null,
+      totals: {
+        revenue: "0",
+        cogs: "0",
+        grossProfit: "0",
+        expenses: "0",
+        net: "0",
         margin: null,
-        hours: null,
+        hours: 0,
       },
-    }
+      totalScope: null,
+      drillBase: null,
+    };
   }
-  const optsPromise = dimensionOptions(authz.user.orgId, undefined, dims.subsidiaryIds)
-  const customersPromise = projectProfitabilityCustomerOptions(authz.user.orgId, authz.allowedSubsidiaryIds)
-  const brandingPromise = orgBranding(authz.user.orgId)
+  const optsPromise = dimensionOptions(authz.user.orgId, undefined, dims.subsidiaryIds);
+  const customersPromise = projectProfitabilityCustomerOptions(
+    authz.user.orgId,
+    authz.allowedSubsidiaryIds,
+  );
+  const brandingPromise = orgBranding(authz.user.orgId);
   // A multi-currency viewed set is a NAMED refusal, not a defect: the
   // banner carries the remedy (choose a single-currency subsidiary view)
   // and the filter-bar picker beside it offers that choice.
-  let result: Awaited<ReturnType<typeof projectProfitability>> | null = null
-  let currencyBasisBlocked: CurrencyBasisNotice | null = null
+  let result: Awaited<ReturnType<typeof projectProfitability>> | null = null;
+  let currencyBasisBlocked: CurrencyBasisNotice | null = null;
   try {
     result = await projectProfitability(period.from, period.to, {
       dims,
@@ -194,124 +211,95 @@ export async function loadProjectProfitability(
       search,
       projectScope: q.projectScope,
       orgId: authz.user.orgId,
-    })
+    });
   } catch (e) {
-    if (!(e instanceof ReportCurrencyBasisError)) throw e
+    if (!(e instanceof ReportCurrencyBasisError)) throw e;
     currencyBasisBlocked = {
-      code: 'multi-currency-basis',
-      title: t('statement.currencyBasisBlockedTitle'),
+      code: "multi-currency-basis",
+      title: t("statement.currencyBasisBlockedTitle"),
       description: e.message,
-    }
+    };
   }
-  const [opts, customers, branding] = await Promise.all([optsPromise, customersPromise, brandingPromise])
+  const [opts, customers, branding] = await Promise.all([
+    optsPromise,
+    customersPromise,
+    brandingPromise,
+  ]);
 
   // Each project drills into the P&L filtered on that project (period + basis +
   // other dims preserved). Link only the project-name cell.
   const pnlHref = (projectId: string) =>
-    `/reports/pnl?${toSearchParams({ ...q, customerId: undefined, dims: { ...q.dims, projectId } }).toString()}`
+    `/reports/pnl?${toSearchParams({ ...q, customerId: undefined, dims: { ...q.dims, projectId } }).toString()}`;
 
-  const profitDrills = (
-    label: string,
-    scope: { projectId?: string; customerId?: string; unassignedCustomer?: boolean; search?: string } = {},
-  ) => {
-    const ledger = (accountTypes: string[], profitSigned = false): ReportDrillTarget => ({
-      kind: 'ledger', label, accountTypes, from: period.from, to: period.to, mode: 'flow',
-      dims: scope.projectId ? { ...dims, projectId: scope.projectId } : dims,
-      projectCustomerId: scope.customerId,
-      unassignedProjectCustomer: scope.unassignedCustomer,
-      projectSearch: scope.search,
-      activeProjectsOnly: q.projectScope === 'active' && !scope.projectId,
-      profitSigned,
-      basis: q.basis,
-    })
-    const revenue = ['income', 'income_other']
-    const expenses = ['expense', 'expense_other', 'expense_deferred']
-    const net = ledger([...revenue, 'cogs', ...expenses], true)
-    return {
-      revenue: ledger(revenue),
-      cogs: ledger(['cogs']),
-      grossProfit: ledger([...revenue, 'cogs'], true),
-      expenses: ledger(expenses),
-      net,
-      margin: net,
-      hours: {
-        kind: 'time', label, from: period.from, to: period.to,
-        projectId: scope.projectId,
-        projectCustomerId: scope.customerId,
-        unassignedProjectCustomer: scope.unassignedCustomer,
-        projectSearch: scope.search,
-        activeProjectsOnly: q.projectScope === 'active' && !scope.projectId,
-      } satisfies ReportDrillTarget,
-    }
-  }
+  // Every metric cell drills into the ledger (or time) for its row. The
+  // shared base travels once; each row carries only what narrows it, and the
+  // table builds the targets where it renders them.
+  const drillBase: ProfitDrillBase = {
+    from: period.from,
+    to: period.to,
+    dims,
+    basis: q.basis,
+    activeProjects: q.projectScope === "active",
+  };
 
-  // Metric cells with no drill target render as plain text (see ValueCells).
+  // Metric cells with no drill scope render as plain text (see ValueCells).
   // The Unassigned tie-out row cannot drill or link: a project-is-null scope
   // is expressible in neither the drill URL nor the P&L project filter.
-  const noDrills: ProjectProfitabilityGroup['drills'] = {
-    revenue: null,
-    cogs: null,
-    grossProfit: null,
-    expenses: null,
-    net: null,
-    margin: null,
-    hours: null,
-  }
   // Null exactly when the multi-currency refusal is set; the table hides
   // with it, so these read as the same empty shape the refused path uses.
   const groups: ProjectProfitabilityGroup[] = (result?.customers ?? []).map((customer) => {
     if (isUnassignedProjectGroup(customer)) {
-      const name = t('projectProfitability.unassignedProject')
+      const name = t("projectProfitability.unassignedProject");
       return {
-        key: 'unassigned-project',
+        key: "unassigned-project",
         name,
-        expandLabel: t('projectProfitability.expandCustomer', { customer: name }),
-        collapseLabel: t('projectProfitability.collapseCustomer', { customer: name }),
+        expandLabel: t("projectProfitability.expandCustomer", { customer: name }),
+        collapseLabel: t("projectProfitability.collapseCustomer", { customer: name }),
         values: customer.totals,
-        drills: noDrills,
+        drillScope: null,
         projects: customer.rows.map((project) => ({
           id: project.projectId,
           name,
           pnlHref: null,
           values: project,
-          drills: noDrills,
+          drillScope: null,
         })),
-      }
+      };
     }
-    const name = customer.customerName ?? t('projectProfitability.noCustomer')
+    const name = customer.customerName ?? t("projectProfitability.noCustomer");
     const scope = customer.customerId
       ? { customerId: customer.customerId }
-      : { unassignedCustomer: true }
+      : { unassignedCustomer: true };
     return {
-      key: customer.customerId ?? 'unassigned',
+      key: customer.customerId ?? "unassigned",
       name,
-      expandLabel: t('projectProfitability.expandCustomer', { customer: name }),
-      collapseLabel: t('projectProfitability.collapseCustomer', { customer: name }),
+      expandLabel: t("projectProfitability.expandCustomer", { customer: name }),
+      collapseLabel: t("projectProfitability.collapseCustomer", { customer: name }),
       values: customer.totals,
-      drills: profitDrills(name, { ...scope, search }),
+      drillScope: { ...scope, search },
       projects: customer.rows.map((project) => ({
         id: project.projectId,
         name: project.projectName,
         pnlHref: pnlHref(project.projectId),
         values: project,
-        drills: profitDrills(project.projectName, { projectId: project.projectId }),
+        drillScope: { projectId: project.projectId },
       })),
-    }
-  })
-  const totalLabel = t('trialBalance.totals')
+    };
+  });
+  const totalLabel = t("trialBalance.totals");
 
   return {
-    title: t('projectProfitability.title'),
-    backHref: '/reports',
-    backLabel: t('hub.title'),
-    searchPlaceholder: t('projectProfitability.searchPlaceholder'),
+    title: t("projectProfitability.title"),
+    backHref: "/reports",
+    backLabel: t("hub.title"),
+    searchPlaceholder: t("projectProfitability.searchPlaceholder"),
     primaryFilter: {
       paramKey: REPORT_PARAM_KEYS.projectScope,
-      label: t('projectProfitability.projectScope'),
+      label: t("projectProfitability.projectScope"),
       value: q.projectScope,
       options: [
-        { value: 'active', label: t('projectProfitability.activeProjects') },
-        { value: 'all', label: t('projectProfitability.allProjects') },
+        { value: "active", label: t("projectProfitability.activeProjects") },
+        { value: "all", label: t("projectProfitability.allProjects") },
       ],
     },
     // The native bar shows the expand/collapse-all Options popover only when
@@ -326,9 +314,11 @@ export async function loadProjectProfitability(
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: sp,
     company: branding.orgName,
-    periodPhrase: t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale)),
-    emptyLabel: t('projectProfitability.empty'),
-    emptyHint: t('projectProfitability.emptyHint', { period: t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale)) }),
+    periodPhrase: t("pnl.dateRange", civilDateParams({ from: period.from, to: period.to }, locale)),
+    emptyLabel: t("projectProfitability.empty"),
+    emptyHint: t("projectProfitability.emptyHint", {
+      period: t("pnl.dateRange", civilDateParams({ from: period.from, to: period.to }, locale)),
+    }),
     // The VIEW's currency (the context node's functional currency), not the
     // org base — a foreign-functional subsidiary view states its own money.
     // Mirrors the P&L and balance sheet.
@@ -337,76 +327,92 @@ export async function loadProjectProfitability(
     currencyBasisBlocked,
     baseCurrencyReady: currencyBasisBlocked === null,
     columns: [
-      t('projectProfitability.columns.customerJob'),
-      t('projectProfitability.columns.revenue'),
-      t('projectProfitability.columns.cogs'),
-      t('projectProfitability.columns.grossProfit'),
-      t('projectProfitability.columns.expenses'),
-      t('projectProfitability.columns.net'),
-      t('projectProfitability.columns.margin'),
-      t('projectProfitability.columns.hours'),
+      t("projectProfitability.columns.customerJob"),
+      t("projectProfitability.columns.revenue"),
+      t("projectProfitability.columns.cogs"),
+      t("projectProfitability.columns.grossProfit"),
+      t("projectProfitability.columns.expenses"),
+      t("projectProfitability.columns.net"),
+      t("projectProfitability.columns.margin"),
+      t("projectProfitability.columns.hours"),
     ],
     groups,
     totalLabel,
     // Dead when refused (the table hides with the notice) but typed: the
     // refusal is the rendered state, never an exception.
-    totals: result?.totals ?? { revenue: '0', cogs: '0', grossProfit: '0', expenses: '0', net: '0', margin: null, hours: 0 },
-    totalDrills: profitDrills(totalLabel, { customerId: q.customerId, search }),
-  }
+    totals: result?.totals ?? {
+      revenue: "0",
+      cogs: "0",
+      grossProfit: "0",
+      expenses: "0",
+      net: "0",
+      margin: null,
+      hours: 0,
+    },
+    totalScope: { customerId: q.customerId, search },
+    drillBase,
+  };
 }
 
-const f = ref<ProjectProfitabilityData>()
+const f = ref<ProjectProfitabilityData>();
 
 export function projectProfitabilitySpec(data: ProjectProfitabilityData): PageSpec {
   const actions = [
     widget(
-      'schedule-report',
-      { definitionId: data.scheduleDefId ?? '', statementParams: data.scheduleParams },
-      f('scheduleDefId'),
+      "schedule-report",
+      { definitionId: data.scheduleDefId ?? "", statementParams: data.scheduleParams },
+      f("scheduleDefId"),
     ),
-    widget('save-view'),
-    widget('export-menu', { kind: 'project-profitability', params: data.exportParams }),
-  ]
+    widget("save-view"),
+    widget("export-menu", { kind: "project-profitability", params: data.exportParams }),
+  ];
   return page({
-    route: '/reports/project-profitability',
-    layout: 'list',
+    route: "/reports/project-profitability",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        back: { href: f('backHref'), label: f('backLabel') },
+        title: f("title"),
+        back: { href: f("backHref"), label: f("backLabel") },
       }),
       // Complementary pair: the native bar carries the sections (expand-all /
       // collapse-all) Options popover only when a group has projects.
       // `customers` binds on both bars already; the dropdown itself needs
       {
         ...filterBar(
-          { search: true, dateRange: true, customer: true, dimensions: true, subsidiary: true, sections: true },
           {
-            searchPlaceholder: f('searchPlaceholder'),
-            primaryFilter: f('primaryFilter'),
-            customers: f('customers'),
-            dimensions: f('dimensions'),
-            subsidiaries: f('subsidiaries'),
-            dateRange: f('dateRange'),
+            search: true,
+            dateRange: true,
+            customer: true,
+            dimensions: true,
+            subsidiary: true,
+            sections: true,
+          },
+          {
+            searchPlaceholder: f("searchPlaceholder"),
+            primaryFilter: f("primaryFilter"),
+            customers: f("customers"),
+            dimensions: f("dimensions"),
+            subsidiaries: f("subsidiaries"),
+            dateRange: f("dateRange"),
             actions,
           },
         ),
-        when: f('showSections'),
+        when: f("showSections"),
       },
       {
         ...filterBar(
           { search: true, dateRange: true, customer: true, dimensions: true, subsidiary: true },
           {
-            searchPlaceholder: f('searchPlaceholder'),
-            primaryFilter: f('primaryFilter'),
-            customers: f('customers'),
-            dimensions: f('dimensions'),
-            subsidiaries: f('subsidiaries'),
-            dateRange: f('dateRange'),
+            searchPlaceholder: f("searchPlaceholder"),
+            primaryFilter: f("primaryFilter"),
+            customers: f("customers"),
+            dimensions: f("dimensions"),
+            subsidiaries: f("subsidiaries"),
+            dateRange: f("dateRange"),
             actions,
           },
         ),
-        when: f('hideSections'),
+        when: f("hideSections"),
       },
     ],
     body: [
@@ -417,16 +423,16 @@ export function projectProfitabilitySpec(data: ProjectProfitabilityData): PageSp
       ...(data.baseCurrencyNotice
         ? [
             {
-              ...widgetBlock('empty-state', {
-                title: data.baseCurrencyNotice?.title ?? '',
+              ...widgetBlock("empty-state", {
+                title: data.baseCurrencyNotice?.title ?? "",
                 description: data.baseCurrencyNotice?.description,
-                action: 'link-button',
+                action: "link-button",
                 actionProps: {
-                  href: data.baseCurrencyNotice?.actionHref ?? '/admin/setup/company',
-                  label: data.baseCurrencyNotice?.actionLabel ?? '',
+                  href: data.baseCurrencyNotice?.actionHref ?? "/admin/setup/company",
+                  label: data.baseCurrencyNotice?.actionLabel ?? "",
                 },
               }),
-              when: f('baseCurrencyNotice'),
+              when: f("baseCurrencyNotice"),
             },
           ]
         : []),
@@ -436,18 +442,18 @@ export function projectProfitabilitySpec(data: ProjectProfitabilityData): PageSp
       ...(data.currencyBasisBlocked
         ? [
             {
-              ...widgetBlock('empty-state', {
-                title: data.currencyBasisBlocked?.title ?? '',
+              ...widgetBlock("empty-state", {
+                title: data.currencyBasisBlocked?.title ?? "",
                 description: data.currencyBasisBlocked?.description,
               }),
-              when: f('currencyBasisBlocked'),
+              when: f("currencyBasisBlocked"),
             },
           ]
         : []),
       // The profitability table stays whole: collapse state, subtotal rows,
       // per-cell drills and the project-name P&L link live in the component.
       {
-        ...widgetBlock('project-profitability-table', {
+        ...widgetBlock("project-profitability-table", {
           company: data.company,
           title: data.title,
           periodPhrase: data.periodPhrase,
@@ -458,10 +464,11 @@ export function projectProfitabilitySpec(data: ProjectProfitabilityData): PageSp
           groups: data.groups,
           totalLabel: data.totalLabel,
           totals: data.totals,
-          totalDrills: data.totalDrills,
+          totalScope: data.totalScope,
+          drillBase: data.drillBase,
         }),
-        when: f('baseCurrencyReady'),
+        when: f("baseCurrencyReady"),
       },
     ],
-  })
+  });
 }
