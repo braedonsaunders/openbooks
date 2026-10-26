@@ -18,12 +18,12 @@ export const POST = defineRoute({
     return hr instanceof NextResponse ? await guardPermission("hrm.self.request") : hr;
   },
   feature: "hrm",
-  params: z.object({ id: z.string() }),
+  params: z.object({
+    id: z.string().refine(isUuid, { message: "request id must be a uuid" }),
+  }),
   body: withdrawChangeRequestBody,
   handler: async ({ params, body, authz: gate }) => {
     const { id } = params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "request id must be a uuid" }, { status: 400 });
     try {
       const request = await withdrawChangeRequest({
         orgId: gate.user.orgId,
