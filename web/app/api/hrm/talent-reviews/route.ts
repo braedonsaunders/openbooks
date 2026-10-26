@@ -16,8 +16,7 @@ export const runtime = "nodejs";
 
 async function gated(orgId: string): Promise<boolean> {
   return (
-    (await isFeatureEnabled(orgId, "hrm")) &&
-    (await isFeatureEnabled(orgId, "hrmPerformance"))
+    (await isFeatureEnabled(orgId, "hrm")) && (await isFeatureEnabled(orgId, "hrmPerformance"))
   );
 }
 
@@ -28,25 +27,17 @@ async function gated(orgId: string): Promise<boolean> {
  */
 export const GET = defineRoute({
   public: "session",
+  feature: "hrmPerformance",
   handler: async ({ request: req, authz: authz }) => {
-    if (!(await gated(authz.user.orgId))) {
-      return notFound("record");
-    }
     const params = new URL(req.url).searchParams;
     const cycleId = params.get("cycleId");
     if (cycleId !== null && !isUuid(cycleId)) {
-      return NextResponse.json(
-        { error: "cycleId must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "cycleId must be a uuid" }, { status: 400 });
     }
     try {
       if (params.get("view") === "ninebox") {
         if (!cycleId)
-          return NextResponse.json(
-            { error: "cycleId is required for the 9-box" },
-            { status: 400 },
-          );
+          return NextResponse.json({ error: "cycleId is required for the 9-box" }, { status: 400 });
         const nineBox = await nineBoxForCycle({
           orgId: authz.user.orgId,
           actorId: authz.user.id,
