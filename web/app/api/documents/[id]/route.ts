@@ -2,16 +2,14 @@ import { z } from "zod";
 import { documentEditBodySchema } from "@/lib/api/document-edit-schema";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
-import { parseJsonBody } from "@/lib/api/json";
 import { isDocumentRevisionToken } from "@/lib/api/registry-data";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { withOrgTransaction } from "@openbooks/engine/platform/db";
 import { deleteDocument, DeleteError } from "@openbooks/engine/ledger/document-delete";
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { checkFlowLock, userRoleKeys } from "@openbooks/engine/flows/module";
-import { getAuthz, can, guardSubsidiaryScope, subsidiariesInScope } from "../../../../lib/authz";
-import { isUuid } from "../../../../lib/list-params";
+import { getAuthz, can, guardSubsidiaryScope, subsidiariesInScope, type Authz } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
 import { isDocKindEnabled } from "@openbooks/engine/documents/write";
 import {
   editDocumentInLockedScope,
@@ -21,37 +19,32 @@ import {
   DOCUMENT_EDIT_VERSION_REQUIRED,
   DocumentEditError,
 } from "@openbooks/engine/records/document-edit-policy";
-import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
 import { loadDocument } from "@openbooks/engine/ledger/document-service";
-import { DOC_KINDS, createPermission } from "../../../../lib/document-kinds.ts";
-import { canReadDocumentKind } from "../../../../lib/flow-subject-authz.ts";
-import { lockedDocumentScopeDenied } from "../../../../lib/document-scope.ts";
-import {
-  type DocumentEditCurrent,
-  type DocumentEditInput,
-} from "@openbooks/engine/ledger/document-input";
+import { DOC_KINDS, createPermission } from "@/lib/document-kinds.ts";
+import { canReadDocumentKind } from "@/lib/flow-subject-authz.ts";
+import { lockedDocumentScopeDenied } from "@/lib/document-scope.ts";
+import { type DocumentEditInput } from "@openbooks/engine/ledger/document-input";
+import { loadDocumentEditCurrent, loadDocumentKindScope } from "@openbooks/engine/ledger/document-edit-queries";
 import { notFound } from "@/lib/api/responses";
-import { customFieldViewerFor } from "../../../../lib/custom-fields";
+import { customFieldViewerFor } from "@/lib/custom-fields";
 // An absent body is an empty edit; it is refused in the handler after the
 // existence, scope and permission gates so an unreadable or unknown id keeps
 // its 404 contract.
 const PATCHBodySchema1 = documentEditBodySchema.default({});
+const deleteBodySchema = z.object({
+  reason: z.string().optional(),
+  expectedUpdatedAt: z.string().min(1).optional(),
+});
+const authorizedDeleteIds = new WeakMap<Authz, string>();
 
 export const runtime = "nodejs";
 
 export const GET = defineRoute({
   public: "session",
-  handler: async ({ params: routeParams }) => {
-    const params = Promise.resolve(routeParams as { id: string });
-    const authz = await getAuthz();
-    if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    const { id } = await params;
+  handler: async ({ params: routeParams, authz }) => {
+    const { id } = routeParams as { id: string };
     if (!isUuid(id)) return notFound("record");
-    const owned = await db.execute<{ kind: string; subsidiaryId: string | null }>(
-      sql`select kind, subsidiary_id as "subsidiaryId" from documents where id = ${id} and org_id = ${authz.user.orgId}`,
-      "objects",
-    );
-    const row = owned[0];
+    const row = await loadDocumentKindScope(authz.user.orgId, id);
     if (!row) return notFound("record");
     const denied = guardSubsidiaryScope(authz, row.subsidiaryId);
     if (denied) return denied;
@@ -75,31 +68,69 @@ export const GET = defineRoute({
 /**
  * Save a posting document. Auth + status/lock guards live here; the locked
  * scope recheck, header + lines write, GL re-materialization, transaction
- * audit, and on_update flows are the engine's document editing service (the
- * same edit core the REST API, MCP and assistant use), so the write paths can
- * never diverge.
+ * audit, and on_update flows are the engine's document editing service, so
+ * the write paths can never diverge.
  */
 export const PATCH = defineRoute({
   public: "session",
   body: PATCHBodySchema1,
+  opaque: {
+    expectedUpdatedAt:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    lines:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    subsidiaryId:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    partyId:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    paymentCardId:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    documentDate:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    dueDate:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    referenceNumber:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    memo: "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    postingDate:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    departmentId:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    projectId:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    locationId:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    classId:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    extraDims:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    expectedPayDate:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    workCompletedOn:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    paymentHoldReason:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    internalNotes:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    billingMethod:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    isFinalInvoice:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    currency:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    explicitFx:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    custom:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+    unsplitDistributionGroups:
+      "Partial edits accept independent fields; empty edits are refused after document authorization.",
+  },
   invalidBodyStatus: 422,
-  handler: async ({ params: routeParams, body: routeBody }) => {
-    const params = Promise.resolve(routeParams as { id: string });
-    const authz = await getAuthz();
-    if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  handler: async ({ params: routeParams, authz, body: routeBody }) => {
     const user = authz.user;
-    const { id } = await params;
+    const { id } = routeParams as { id: string };
     if (!isUuid(id)) return notFound("record");
-    const owned = await db.execute<DocumentEditCurrent & { subsidiaryId: string | null }>(
-      sql`select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
-                   document_date as "documentDate",
-                   custom,
-                   ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt",
-                   subsidiary_id as "subsidiaryId"
-              from documents where id = ${id} and org_id = ${user.orgId}`,
-      "objects",
-    );
-    const row = owned[0];
+    const row = await loadDocumentEditCurrent(user.orgId, id);
     if (!row) return notFound("record");
     const denied = guardSubsidiaryScope(authz, row.subsidiaryId);
     if (denied) return denied;
@@ -153,8 +184,8 @@ export const PATCH = defineRoute({
     if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
       return NextResponse.json({ error: DOCUMENT_EDIT_VERSION_REQUIRED }, { status: 409 });
     }
-    // A new line item whose kind's feature is off reads as missing; items
-    // already on the draft stay editable.
+    // New lines whose item kind is gated by a disabled feature read as
+    // missing; items already on this draft remain editable.
     if (
       Array.isArray(body.lines) &&
       (await linesUseDisabledItemKinds(user.orgId, body.lines, id))
@@ -190,18 +221,14 @@ export const PATCH = defineRoute({
 
 /** Delete a document (guarded: open period, no applied payments, no downstream conversion). */
 export const DELETE = defineRoute({
-  public: "session",
-  handler: async ({ request: req, params: routeParams }) => {
-    const params = Promise.resolve(routeParams as { id: string });
+  authorize: async ({ params }) => {
     const authz = await getAuthz();
     if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    const { id } = await params;
+    const rawId = (params as { id?: unknown } | undefined)?.id;
+    if (typeof rawId !== "string") return notFound("record");
+    const id = rawId;
     if (!isUuid(id)) return notFound("record");
-    const owned = await db.execute<{ kind: string; subsidiaryId: string | null }>(
-      sql`select kind, subsidiary_id as "subsidiaryId" from documents where id = ${id} and org_id = ${authz.user.orgId}`,
-      "objects",
-    );
-    const row = owned[0];
+    const row = await loadDocumentKindScope(authz.user.orgId, id);
     if (!row) return notFound("record");
     const denied = guardSubsidiaryScope(authz, row.subsidiaryId);
     if (denied) return denied;
@@ -236,17 +263,27 @@ export const DELETE = defineRoute({
         );
       }
     }
+    authorizedDeleteIds.set(authz, id);
+    return authz;
+  },
+  feature: {
+    none: "Deletion checks the selected document kind feature and edit permission before reading its body.",
+  },
+  params: z.object({ id: z.string() }),
+  body: deleteBodySchema,
+  opaque: {
+    reason:
+      "Deletion reason is optional; the revision token is checked after document authorization.",
+    expectedUpdatedAt:
+      "Deletion reason is optional; the revision token is checked after document authorization.",
+  },
+  handler: async ({ authz, body }) => {
+    const id = authorizedDeleteIds.get(authz);
+    if (!id) return notFound("record");
     try {
       // An omitted token is missing input, not a state conflict: it refuses
       // as a bad request, while a supplied token that is not the current
       // revision keeps the conflict refusal below.
-      const routeBodySchema2 = z.object({
-        reason: z.string().optional(),
-        expectedUpdatedAt: z.string().min(1).optional(),
-      });
-      const parsedBody2 = await parseJsonBody(req, routeBodySchema2);
-      if (!parsedBody2.ok) return parsedBody2.response;
-      const body = parsedBody2.data as { reason?: string; expectedUpdatedAt?: string };
       if (body.expectedUpdatedAt === undefined) {
         return NextResponse.json({ error: DOCUMENT_EDIT_VERSION_REQUIRED }, { status: 400 });
       }
