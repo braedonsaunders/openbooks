@@ -1,19 +1,24 @@
 import { defineRoute } from "@/lib/api/route";
+import type { Authz } from "@/lib/authz";
 
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { db } from '@openbooks/engine/platform/db'
-import { guardPermission } from '../../../../lib/authz'
-import { isUuid } from '../../../../lib/list-params'
-import { pgTextArrayLiteral } from '../../../../lib/pg-array'
-import { subsidiaryDeclaredTypeIds } from '../../../../lib/records'
-import { lintRecordFields, recordTypeLintBody, slugifyTypeKey, typeKeyError } from '../../../../lib/record-schema'
-import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../../lib/api/idempotency'
-import { auditSetupChange } from '../../../../lib/setup/audit'
-import { formSectionSchema } from '@openbooks/forms-core'
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "@openbooks/engine/platform/db";
+import { isUuid } from "@/lib/list-params";
+import { pgTextArrayLiteral } from "@/lib/pg-array";
+import { subsidiaryDeclaredTypeIds } from "@/lib/records";
+import {
+  lintRecordFields,
+  recordTypeLintBody,
+  slugifyTypeKey,
+  typeKeyError,
+} from "@/lib/record-schema";
+import { claimIdempotentCreate, resolveIdempotentReplay } from "@/lib/api/idempotency";
+import { auditSetupChange } from "@/lib/setup/audit";
+import { formSectionSchema } from "@openbooks/forms-core";
 
-const ICON_KEY_RE = /^[a-z0-9-]{1,32}$/
+const ICON_KEY_RE = /^[a-z0-9-]{1,32}$/;
 
 const createTypeBodySchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -25,45 +30,49 @@ const createTypeBodySchema = z.object({
   showInNav: z.boolean().optional(),
   allowedRoles: z.string().array().nullable().optional(),
   sortOrder: z.number().optional(),
-})
+});
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /** All of the org's record types (builder data source). */
-async function legacyGET() {
-  const gate = await guardPermission('records.manage_types')
-  if (gate instanceof NextResponse) return gate
+async function legacyGET(gate: Authz) {
   // A subsidiary-restricted type manager sees only the records their fence
   // admits: types that declare subsidiary_id count in-fence rows; field-less
   // types stay org-visible unless a row still carries a JSON subsidiary_id
   // outside the fence (dropping the field must not unscope those rows).
-  const fence = gate.allowedSubsidiaryIds
+  const fence = gate.allowedSubsidiaryIds;
   const scopedTypeIds =
     fence === null
       ? null
       : subsidiaryDeclaredTypeIds(
-          await db.execute<{ id: string; name: string; fields: unknown }>(sql`
-              select id, name, fields from custom_record_types where org_id = ${gate.user.orgId}`, 'objects'),
-        )
+          await db.execute<{ id: string; name: string; fields: unknown }>(
+            sql`
+              select id, name, fields from custom_record_types where org_id = ${gate.user.orgId}`,
+            "objects",
+          ),
+        );
   const countScope =
     fence === null || scopedTypeIds === null
       ? sql``
       : sql`and (
-          cr.data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...fence])}::text[])
+          cr.data ->> ${"subsidiary_id"} = any(${pgTextArrayLiteral([...fence])}::text[])
           or (
-            not (t.id = any(${`{${scopedTypeIds.join(',')}}`}::uuid[]))
-            and cr.data ->> ${'subsidiary_id'} is null
+            not (t.id = any(${`{${scopedTypeIds.join(",")}}`}::uuid[]))
+            and cr.data ->> ${"subsidiary_id"} is null
           )
-        )`
-  const r = ((await db.execute(sql`
+        )`;
+  const r = await db.execute(
+    sql`
     select t.id, t.key, t.name, t.plural_name, t.icon_key, t.description, t.fields,
            t.status, t.show_in_nav, t.allowed_roles, t.sort_order, t.updated_at,
            (select count(*) from custom_records cr where cr.type_id = t.id ${countScope}) as record_count
       from custom_record_types t
      where t.org_id = ${gate.user.orgId}
      order by t.sort_order, t.name
-  `, 'objects')))
-  return NextResponse.json({ types: r })
+  `,
+    "objects",
+  );
+  return NextResponse.json({ types: r });
 }
 
 /**
@@ -73,7 +82,6 @@ async function legacyGET() {
  * the same request returns the same type without a duplicate insert or
  * duplicate audit event. Cancel/close writes nothing — there is no draft.
  */
-
 
 async function createType(
   requestId: string,
@@ -93,18 +101,19 @@ async function createType(
   const outcome = await db.transaction(async (tx) => {
     const claim = await claimIdempotentCreate(tx, {
       orgId,
-      table: 'custom_record_types',
+      table: "custom_record_types",
       key: requestId,
-    })
-    if (claim === 'exists') {
+    });
+    if (claim === "exists") {
       return resolveIdempotentReplay(tx, {
         orgId,
-        table: 'custom_record_types',
+        table: "custom_record_types",
         key: requestId,
         match,
-      })
+      });
     }
-    const inserted = (await tx.execute<{ id: string }>(sql`
+    const inserted = await tx.execute<{ id: string }>(
+      sql`
       insert into custom_record_types
         (id, org_id, key, name, plural_name, icon_key, description, fields,
          status, show_in_nav, allowed_roles, sort_order, created_by, updated_by)
@@ -116,132 +125,144 @@ async function createType(
       -- A retry resolves the existing audited payload below; conflicting input is refused.
       on conflict (id) do nothing
       returning id
-    `, 'objects'))
+    `,
+      "objects",
+    );
     if (!inserted[0]) {
       return resolveIdempotentReplay(tx, {
         orgId,
-        table: 'custom_record_types',
+        table: "custom_record_types",
         key: requestId,
         match,
-      })
+      });
     }
     await auditSetupChange(
       {
         orgId,
-        table: 'custom_record_types',
+        table: "custom_record_types",
         rowId: requestId,
-        action: 'insert',
+        action: "insert",
         changes: { before: null, after: snapshot },
         actorId: userId,
         requestId,
       },
       tx,
-    )
-    return 'fresh' as const
-  })
-  if (outcome === 'conflict') {
-    return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+    );
+    return "fresh" as const;
+  });
+  if (outcome === "conflict") {
+    return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 409 });
   }
-  return NextResponse.json({ id: requestId }, { status: outcome === 'fresh' ? 201 : 200 })
+  return NextResponse.json({ id: requestId }, { status: outcome === "fresh" ? 201 : 200 });
 }
 
 export const GET = defineRoute({
   permission: "records.manage_types",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  handler: async () => legacyGET(),
+  feature: {
+    none: "Custom record types are an administrative registry with no organization feature switch.",
+  },
+  handler: async ({ authz }) => legacyGET(authz),
 });
 
 export const POST = defineRoute({
   permission: "records.manage_types",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "Custom record types are an administrative registry with no organization feature switch.",
+  },
   body: createTypeBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ request, body, authz: routeAuthz }) => {
+    const gate = routeAuthz;
 
-    const gate = routeAuthz
+    const { user } = gate;
 
-    const { user } = gate
-
-    const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
+    const requestId = request.headers.get("Idempotency-Key")?.trim() ?? "";
     if (!isUuid(requestId)) {
-      return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
+      return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 400 });
     }
 
-
-
-
-
-    const name = body.name?.trim() ?? ''
+    const name = body.name?.trim() ?? "";
     if (!name || name.length > 200) {
-      return NextResponse.json({ error: 'Name must be 1–200 characters' }, { status: 422 })
+      return NextResponse.json({ error: "Name must be 1–200 characters" }, { status: 422 });
     }
-    const pluralName = body.pluralName?.trim() ?? `${name}s`
+    const pluralName = body.pluralName?.trim() ?? `${name}s`;
     if (!pluralName || pluralName.length > 200) {
-      return NextResponse.json({ error: 'Plural name must be 1–200 characters' }, { status: 422 })
+      return NextResponse.json({ error: "Plural name must be 1–200 characters" }, { status: 422 });
     }
-    const iconKey = body.iconKey ?? 'grid'
+    const iconKey = body.iconKey ?? "grid";
     if (!ICON_KEY_RE.test(iconKey)) {
-      return NextResponse.json({ error: 'Invalid icon key' }, { status: 422 })
+      return NextResponse.json({ error: "Invalid icon key" }, { status: 422 });
     }
-    const description = body.description?.trim() || null
+    const description = body.description?.trim() || null;
     if (description !== null && description.length > 2000) {
-      return NextResponse.json({ error: 'Description must be at most 2,000 characters' }, { status: 422 })
+      return NextResponse.json(
+        { error: "Description must be at most 2,000 characters" },
+        { status: 422 },
+      );
     }
-    const allowedRoles = body.allowedRoles ?? null
+    const allowedRoles = body.allowedRoles ?? null;
     if (
       allowedRoles !== null &&
       (allowedRoles.length > 50 ||
-        allowedRoles.some((r) => typeof r !== 'string' || r.length === 0 || r.length > 100))
+        allowedRoles.some((r) => typeof r !== "string" || r.length === 0 || r.length > 100))
     ) {
-      return NextResponse.json({ error: 'Invalid allowed roles' }, { status: 422 })
+      return NextResponse.json({ error: "Invalid allowed roles" }, { status: 422 });
     }
-    const sortOrder = body.sortOrder ?? 0
+    const sortOrder = body.sortOrder ?? 0;
     if (!Number.isInteger(sortOrder) || Math.abs(sortOrder) > 100_000) {
-      return NextResponse.json({ error: 'Invalid sort order' }, { status: 422 })
+      return NextResponse.json({ error: "Invalid sort order" }, { status: 422 });
     }
-    if (body.showInNav !== undefined && typeof body.showInNav !== 'boolean') {
-      return NextResponse.json({ error: 'Invalid show in nav flag' }, { status: 422 })
+    if (body.showInNav !== undefined && typeof body.showInNav !== "boolean") {
+      return NextResponse.json({ error: "Invalid show in nav flag" }, { status: 422 });
     }
-    const showInNav = body.showInNav === true
+    const showInNav = body.showInNav === true;
 
-    const lint = lintRecordFields(body.fields ?? [], name)
+    const lint = lintRecordFields(body.fields ?? [], name);
     if (!lint.success) {
-      return NextResponse.json(recordTypeLintBody(lint.issues), { status: 422 })
+      return NextResponse.json(recordTypeLintBody(lint.issues), { status: 422 });
     }
 
     // A caller-supplied key is pinned exactly (clash is a 409, as on PATCH);
     // an omitted key derives from the name with the same -2/-3 suffix walk the
     // old draft factory used, so explicit Save never needs a placeholder.
-    let key: string
+    let key: string;
     if (body.key !== undefined) {
-      const keyIssue = typeKeyError(body.key)
-      if (keyIssue) return NextResponse.json({ error: keyIssue }, { status: 422 })
+      const keyIssue = typeKeyError(body.key);
+      if (keyIssue) return NextResponse.json({ error: keyIssue }, { status: 422 });
       // The row's own id is excluded so an exact retry (same key, same id)
       // replays instead of tripping over itself.
-      const clash = (await db.execute(sql`
+      const clash = await db.execute(
+        sql`
         select 1 from custom_record_types
          where org_id = ${user.orgId} and key = ${body.key} and id <> ${requestId}
-      `, 'objects'))
+      `,
+        "objects",
+      );
       if (clash.length > 0) {
         return NextResponse.json(
           { error: `A record type with key "${body.key}" already exists` },
           { status: 409 },
-        )
+        );
       }
-      key = body.key
+      key = body.key;
     } else {
-      const base = slugifyTypeKey(name) || 'new-record-type'
+      const base = slugifyTypeKey(name) || "new-record-type";
       const taken = new Set(
-        (await db.execute<{ key: string }>(sql`
+        (
+          await db.execute<{ key: string }>(
+            sql`
             select key from custom_record_types
              where org_id = ${user.orgId} and id <> ${requestId}
-               and (key = ${base} or key like ${base + '-%'})
-          `, 'objects')).map((r) => r.key),
-      )
-      key = base
-      for (let n = 2; taken.has(key); n++) key = `${base}-${n}`
-      const derivedIssue = typeKeyError(key)
-      if (derivedIssue) return NextResponse.json({ error: derivedIssue }, { status: 422 })
+               and (key = ${base} or key like ${base + "-%"})
+          `,
+            "objects",
+          )
+        ).map((r) => r.key),
+      );
+      key = base;
+      for (let n = 2; taken.has(key); n++) key = `${base}-${n}`;
+      const derivedIssue = typeKeyError(key);
+      if (derivedIssue) return NextResponse.json({ error: derivedIssue }, { status: 422 });
     }
 
     // Full immutable create image for the audit event; the retry matcher is
@@ -258,7 +279,7 @@ export const POST = defineRoute({
       show_in_nav: showInNav,
       allowed_roles: allowedRoles,
       sort_order: sortOrder,
-    }
+    };
     const match = {
       key,
       name,
@@ -269,11 +290,25 @@ export const POST = defineRoute({
       show_in_nav: showInNav,
       allowed_roles: allowedRoles,
       sort_order: sortOrder,
-    }
+    };
 
     // One transaction for claim/insert/audit, following POST /api/accounts:
     // every statement carries org_id, so tenant isolation holds on the shared
     // pool exactly as the sibling PATCH/DELETE predicates do.
-    return createType(requestId, user.orgId, user.id, key, pluralName, iconKey, description, showInNav, allowedRoles, sortOrder, lint.sections, snapshot, match)
+    return createType(
+      requestId,
+      user.orgId,
+      user.id,
+      key,
+      pluralName,
+      iconKey,
+      description,
+      showInNav,
+      allowedRoles,
+      sortOrder,
+      lint.sections,
+      snapshot,
+      match,
+    );
   },
 });
