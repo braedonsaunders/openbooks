@@ -1,16 +1,18 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import {
+  advanceScheduledScriptCursor,
+  findUserScriptForRun,
+} from "@openbooks/engine/scripting/admin";
 import {
   computeScheduledScriptNextRunAt,
   InvalidScheduledScriptCronError,
   INVALID_SCHEDULED_SCRIPT_CRON_CODE,
   runBulkScript,
   runScheduledScript,
-} from '@openbooks/engine/scripting/scripting'
+} from "@openbooks/engine/scripting/scripting";
 import {
   bulkRunClientKey,
   bulkRunIdempotencyScope,
@@ -18,10 +20,10 @@ import {
   claimBulkRunKey,
   completeBulkRunKey,
   releaseAbandonedBulkRunKey,
-} from '@openbooks/engine/scripting/bulk-run-claim'
+} from "@openbooks/engine/scripting/bulk-run-claim";
 
-import { unexpectedServerError } from '../../../../../../lib/api/unexpected'
-import { isUuid } from '../../../../../../lib/list-params'
+import { unexpectedServerError } from "../../../../../../lib/api/unexpected";
+import { isUuid } from "@/lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
 // The bulk key's domain validator supplies the stable SCRIPT_RUN_KEY_INVALID
@@ -30,15 +32,13 @@ import { notFound } from "@/lib/api/responses";
 // refusing it before the handler's id and key checks run.
 const requestBodySchema = z.strictObject({ idempotencyKey: z.json().optional() }).default({});
 
-
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 function invalidCronResponse(error: InvalidScheduledScriptCronError): Promise<NextResponse> {
   return apiErrorResponse(error, {
     safeStatus: 422,
-    details: { code: INVALID_SCHEDULED_SCRIPT_CRON_CODE, field: 'cron' },
-  })
+    details: { code: INVALID_SCHEDULED_SCRIPT_CRON_CODE, field: "cron" },
+  });
 }
 
 /**
@@ -53,32 +53,39 @@ function invalidCronResponse(error: InvalidScheduledScriptCronError): Promise<Ne
  * indistinguishable from system automation.
  */
 
-
 export const POST = defineRoute({
   permission: "scripts.manage",
   feature: "scripts",
-  params: z.object({ "id": z.string() }),
+  params: z.object({ id: z.string() }),
   body: requestBodySchema,
   handler: async ({ params, authz: routeAuthz, body }) => {
+    const gate = routeAuthz;
 
-    const gate = routeAuthz
-
-    const user = gate.user
-    const { id } = params
+    const user = gate.user;
+    const { id } = params;
     // A malformed id names no script: same answer as an unknown one, never a
     // PostgreSQL uuid cast error escaping as a 500.
-    if (!isUuid(id)) return notFound("record")
+    if (!isUuid(id)) return notFound("record");
 
-    const existing = (await db.execute<{ trigger_point: string; cron: string | null; is_active: boolean; cursor: string | null }>(sql`
-      select trigger_point, cron, is_active, next_run_at::text as cursor from user_scripts where id = ${id} and org_id = ${user.orgId}
-    `, 'objects'))
-    if (!existing[0]) return notFound("record")
-    const kind = existing[0].trigger_point
-    if (!existing[0].is_active) return NextResponse.json({ error: 'Activate this script before running it.', code: 'SCRIPT_INACTIVE' }, { status: 409 })
-    if (kind !== 'scheduled' && kind !== 'bulk') return NextResponse.json({ error: 'Run now is available only for scheduled and bulk scripts.', code: 'SCRIPT_TRIGGER_NOT_RUNNABLE' }, { status: 422 })
+    const existing = await findUserScriptForRun(user.orgId, id);
+    if (!existing) return notFound("record");
+    const kind = existing.trigger_point;
+    if (!existing.is_active)
+      return NextResponse.json(
+        { error: "Activate this script before running it.", code: "SCRIPT_INACTIVE" },
+        { status: 409 },
+      );
+    if (kind !== "scheduled" && kind !== "bulk")
+      return NextResponse.json(
+        {
+          error: "Run now is available only for scheduled and bulk scripts.",
+          code: "SCRIPT_TRIGGER_NOT_RUNNABLE",
+        },
+        { status: 422 },
+      );
 
     try {
-      if (kind === 'bulk') {
+      if (kind === "bulk") {
         // E02: a bulk Run-now is a non-idempotent money-moving execution, so
         // it carries the caller's run key plus a durable claim. A double-click
         // reuses the key: the second request either replays the recorded
@@ -87,47 +94,74 @@ export const POST = defineRoute({
         // retry could not be recognized as the same run. The queue id is
         // deterministic in the key, so live duplicates collapse in BullMQ; the
         // worker re-checks the claim because BullMQ dedupe only covers live jobs.
-        let runKey: string
+        let runKey: string;
         try {
-          runKey = bulkRunClientKey(body.idempotencyKey)
+          runKey = bulkRunClientKey(body.idempotencyKey);
         } catch {
           return NextResponse.json(
-            { error: 'A valid idempotencyKey is required; retry this run with the same client key.', code: 'SCRIPT_RUN_KEY_INVALID' },
+            {
+              error: "A valid idempotencyKey is required; retry this run with the same client key.",
+              code: "SCRIPT_RUN_KEY_INVALID",
+            },
             { status: 400 },
-          )
+          );
         }
-        const queueJobId = bulkScriptQueueJobId(id, runKey)
-        const claim = await claimBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey })
-        if (claim.status === 'completed') {
-          return NextResponse.json({ ...(claim.response as Record<string, unknown>), deduped: true })
+        const queueJobId = bulkScriptQueueJobId(id, runKey);
+        const claim = await claimBulkRunKey({
+          orgId: user.orgId,
+          actorId: user.id,
+          scriptId: id,
+          key: runKey,
+        });
+        if (claim.status === "completed") {
+          return NextResponse.json({
+            ...(claim.response as Record<string, unknown>),
+            deduped: true,
+          });
         }
-        if (claim.status === 'inflight') {
+        if (claim.status === "inflight") {
           // Recovery from worker loss: attempts=1 leaves a failed job retained,
           // and the claim would otherwise answer 409 forever. Release it only
           // on proof the script never started (failed without processing); a
           // job that may have executed keeps its claim because a retry would
           // double-post, and that refusal names the remedy.
-          let failedBeforeStart = false
-          let failedAfterStart = false
+          let failedBeforeStart = false;
+          let failedAfterStart = false;
           try {
-            const { getScriptsQueue } = await import('@openbooks/jobs')
-            const job = await getScriptsQueue().getJob(queueJobId)
-            if (job && (await job.getState()) === 'failed') {
-              if (job.processedOn == null) failedBeforeStart = true
-              else failedAfterStart = true
+            const { getScriptsQueue } = await import("@openbooks/jobs");
+            const job = await getScriptsQueue().getJob(queueJobId);
+            if (job && (await job.getState()) === "failed") {
+              if (job.processedOn == null) failedBeforeStart = true;
+              else failedAfterStart = true;
             }
           } catch {
-            failedBeforeStart = false
+            failedBeforeStart = false;
           }
           if (failedBeforeStart) {
-            const released = await releaseAbandonedBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey })
+            const released = await releaseAbandonedBulkRunKey({
+              orgId: user.orgId,
+              actorId: user.id,
+              scriptId: id,
+              key: runKey,
+            });
             if (released) {
-              const fresh = await claimBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey })
-              if (fresh.status === 'claimed') {
+              const fresh = await claimBulkRunKey({
+                orgId: user.orgId,
+                actorId: user.id,
+                scriptId: id,
+                key: runKey,
+              });
+              if (fresh.status === "claimed") {
                 try {
-                  const { getScriptsQueue } = await import('@openbooks/jobs')
-                  await getScriptsQueue().getJob(queueJobId).then((job) => job?.retry())
-                  return NextResponse.json({ queued: true, jobId: queueJobId, idempotencyKey: runKey })
+                  const { getScriptsQueue } = await import("@openbooks/jobs");
+                  await getScriptsQueue()
+                    .getJob(queueJobId)
+                    .then((job) => job?.retry());
+                  return NextResponse.json({
+                    queued: true,
+                    jobId: queueJobId,
+                    idempotencyKey: runKey,
+                  });
                 } catch {
                   // The job left the failed state (a rival recovered first) or
                   // Redis failed: the fresh claim stays live and a later POST
@@ -140,74 +174,96 @@ export const POST = defineRoute({
           return NextResponse.json(
             {
               error: failedAfterStart
-                ? 'A run with this key failed after starting; verify whether it posted, then retry with a new idempotency key.'
-                : 'A run with this key is already in progress.',
-              code: 'SCRIPT_RUN_IN_PROGRESS',
+                ? "A run with this key failed after starting; verify whether it posted, then retry with a new idempotency key."
+                : "A run with this key is already in progress.",
+              code: "SCRIPT_RUN_IN_PROGRESS",
             },
             { status: 409 },
-          )
+          );
         }
-        if (claim.status === 'mismatched') {
+        if (claim.status === "mismatched") {
           return NextResponse.json(
-            { error: 'This run key is already in use by a different script.', code: 'SCRIPT_RUN_KEY_MISMATCH' },
+            {
+              error: "This run key is already in use by a different script.",
+              code: "SCRIPT_RUN_KEY_MISMATCH",
+            },
             { status: 409 },
-          )
+          );
         }
-        const payload = { orgId: user.orgId, scriptId: id, kind: 'bulk' as const, actorId: user.id, idempotencyKey: runKey }
+        const payload = {
+          orgId: user.orgId,
+          scriptId: id,
+          kind: "bulk" as const,
+          actorId: user.id,
+          idempotencyKey: runKey,
+        };
         try {
-          const { enqueueScriptRun } = await import('@openbooks/jobs')
-          const job = await enqueueScriptRun(payload, { jobId: queueJobId })
-          return NextResponse.json({ queued: true, jobId: job.id, idempotencyKey: runKey })
+          const { enqueueScriptRun } = await import("@openbooks/jobs");
+          const job = await enqueueScriptRun(payload, { jobId: queueJobId });
+          return NextResponse.json({ queued: true, jobId: job.id, idempotencyKey: runKey });
         } catch {
           // The enqueue reply may be lost after Redis accepted the job: only
           // run inline on provable non-acceptance, mirroring the report and
           // close delivery settlement. A kept job proceeds down the normal
           // queued path; the worker completes the claim.
-          let accepted = false
+          let accepted = false;
           try {
-            const { getScriptsQueue } = await import('@openbooks/jobs')
-            accepted = (await getScriptsQueue().getJob(queueJobId)) != null
+            const { getScriptsQueue } = await import("@openbooks/jobs");
+            accepted = (await getScriptsQueue().getJob(queueJobId)) != null;
           } catch {
-            accepted = false
+            accepted = false;
           }
-          if (accepted) return NextResponse.json({ queued: true, jobId: queueJobId, idempotencyKey: runKey })
+          if (accepted)
+            return NextResponse.json({ queued: true, jobId: queueJobId, idempotencyKey: runKey });
           // Redis unavailable — run inline so "Run now" still works in dev,
           // under the same authenticated actor as the queued path, completing
           // the same claim the worker would have completed. The inline run
           // shares the claim's stable journal scope, so a queued duplicate
           // racing it replays instead of double-posting.
-          const outcome = await runBulkScript(id, user.orgId, { actorId: user.id, idempotencyScope: bulkRunIdempotencyScope(runKey) })
-          const response = { queued: false, ...outcome }
-          await completeBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey, response })
-          return NextResponse.json(response)
+          const outcome = await runBulkScript(id, user.orgId, {
+            actorId: user.id,
+            idempotencyScope: bulkRunIdempotencyScope(runKey),
+          });
+          const response = { queued: false, ...outcome };
+          await completeBulkRunKey({
+            orgId: user.orgId,
+            actorId: user.id,
+            scriptId: id,
+            key: runKey,
+            response,
+          });
+          return NextResponse.json(response);
         }
       }
 
       // Parse before the execution boundary: an invalid legacy schedule returns
       // a repairable client error without running source or mutating its cursor.
-      let next: Date | null = null
-      if (kind === 'scheduled') {
+      let next: Date | null = null;
+      if (kind === "scheduled") {
         try {
-          next = computeScheduledScriptNextRunAt(existing[0].cron)
+          next = computeScheduledScriptNextRunAt(existing.cron);
         } catch (error) {
-          if (!(error instanceof InvalidScheduledScriptCronError)) throw error
-          return invalidCronResponse(error)
+          if (!(error instanceof InvalidScheduledScriptCronError)) throw error;
+          return invalidCronResponse(error);
         }
       }
 
-      const outcome = await runScheduledScript(id, user.orgId, { actorId: user.id })
+      const outcome = await runScheduledScript(id, user.orgId, { actorId: user.id });
       // Source runs outside a transaction. Advance only the captured scheduling
       // policy/cursor; a concurrent editor or scheduler tick owns its new value.
       if (next) {
-        await db.execute(sql`update user_scripts set next_run_at = ${next}
-          where id = ${id} and org_id = ${user.orgId} and trigger_point = 'scheduled' and is_active
-            and cron is not distinct from ${existing[0].cron}
-            and next_run_at is not distinct from ${existing[0].cursor}::timestamptz`)
+        await advanceScheduledScriptCursor({
+          orgId: user.orgId,
+          id,
+          cron: existing.cron,
+          cursor: existing.cursor,
+          nextRunAt: next,
+        });
       }
-      return NextResponse.json(outcome)
+      return NextResponse.json(outcome);
     } catch (e) {
-      if (e instanceof InvalidScheduledScriptCronError) return invalidCronResponse(e)
-      return unexpectedServerError('admin/scripts/run', e)
+      if (e instanceof InvalidScheduledScriptCronError) return invalidCronResponse(e);
+      return unexpectedServerError("admin/scripts/run", e);
     }
   },
 });

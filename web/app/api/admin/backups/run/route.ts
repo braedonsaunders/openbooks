@@ -1,10 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
-import { s3Enabled } from "@openbooks/engine/platform/file-storage";
-import { enqueueBackupRun } from "@openbooks/jobs";
-import { guardPermission } from "../../../../../lib/authz";
+import type { Authz } from "@/lib/authz";
+import { queueManualBackup } from "@/lib/backup-queue";
 
 export const runtime = "nodejs";
 
@@ -13,86 +10,35 @@ export const runtime = "nodejs";
  * recorded immediately (status 'queued') so the UI can track it; the worker
  * claims and executes it. Manual runs count toward retention like any other.
  */
-async function legacyPOST() {
-  const gate = await guardPermission("admin.backups.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyPOST(gate: Authz) {
   const actor = gate.user;
   const { orgId } = actor;
 
-  if (!s3Enabled) {
+  const result = await queueManualBackup(orgId, actor.id);
+  if (result.kind === "storage_unavailable") {
     return NextResponse.json(
-      { error: "S3 object storage is not configured on this deployment — stored backups are unavailable" },
+      {
+        error:
+          "S3 object storage is not configured on this deployment — stored backups are unavailable",
+      },
       { status: 400 },
     );
   }
-
-  // The partial unique index on backup_runs is the single in-flight guard.
-  // Relying on a preceding SELECT would leave a check-then-insert race between
-  // concurrent requests and the scheduler.
-  let run: { rows: { id: string }[] };
-  try {
-    run = (await db.execute<{ id: string }>(sql`
-      insert into backup_runs (org_id, kind, status, actor_id)
-      values (${orgId}, 'manual', 'queued', ${actor.id})
-      returning id`));
-  } catch (error) {
-    // db.execute rejects with a DrizzleQueryError wrapper: the Postgres code
-    // and constraint live on its cause, so reading them off the wrapper
-    // directly never matches and the 409 below would stay dead.
-    const wrapped = error as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };
-    const code = wrapped.code ?? wrapped.cause?.code;
-    const constraint = wrapped.constraint ?? wrapped.cause?.constraint;
-    if (code === "23505" && constraint === "backup_runs_one_inflight_per_org") {
-      return NextResponse.json({ error: "a backup is already in progress" }, { status: 409 });
-    }
-    throw error;
+  if (result.kind === "already_running") {
+    return NextResponse.json({ error: "a backup is already in progress" }, { status: 409 });
   }
-  const runId = run.rows[0]!.id;
-
-  try {
-    await enqueueBackupRun({ op: "run", runId, orgId }, { jobId: runId });
-  } catch (error) {
-    const message = ((error as Error).message || String(error)).slice(0, 2000);
-    // Redis can fail after the ledger insert has committed. Mark the row
-    // terminal so it releases the partial unique in-flight guard. Keep the
-    // status predicate: an enqueue response may be ambiguous, and a worker
-    // could already have claimed the run while the producer observed an error.
-    try {
-      const outcome = await withOrgTransaction(orgId, async () => {
-        const transitioned = await db.execute<{ id: string }>(sql`
-          update backup_runs
-             set status = 'failed', error = ${message}, completed_at = now(), updated_at = now()
-           where id = ${runId} and org_id = ${orgId} and status = 'queued'
-          returning id`, "objects");
-        if (transitioned.length !== 1) {
-          const current = await db.execute<{ status: string }>(sql`
-            select status from backup_runs where id = ${runId} and org_id = ${orgId}`, "objects");
-          if (current[0] && current[0].status !== "queued") return "accepted";
-          throw new Error(`backup run ${runId} was not queued when enqueue failure cleanup ran`);
-        }
-        await db.execute(sql`
-          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'backup_runs', ${runId}, 'update',
-                  jsonb_build_object('event', 'backup_enqueue_failed', 'status', jsonb_build_object('before', 'queued', 'after', 'failed'), 'error', ${message}),
-                  ${actor.id})`);
-        return "failed";
-      });
-      if (outcome === "accepted") return NextResponse.json({ ok: true, runId });
-    } catch (cleanupError) {
-      console.error(
-        `[backup] run ${runId}: enqueue failure cleanup failed:`,
-        (cleanupError as Error).message,
-      );
-    }
+  if (result.kind === "queue_failed") {
     return NextResponse.json({ error: "could not queue backup" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, runId });
+  return NextResponse.json({ ok: true, runId: result.runId });
 }
 
 export const POST = defineRoute({
   permission: "admin.backups.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "Manual backup runs are governed by backup management permission and organization-wide backup policy.",
+  },
   scope: "unrestricted",
-  handler: async () => legacyPOST(),
+  handler: async ({ authz }) => legacyPOST(authz),
 });

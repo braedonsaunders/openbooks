@@ -1,42 +1,25 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
 import { auditBackupEvent } from "@openbooks/engine/backup/backup";
-import { guardPermission } from "../../../../../../lib/authz";
-import { contentDisposition } from "../../../../../../lib/export";
-import { isUuid } from "../../../../../../lib/list-params";
+import { findStoredBackupManifest } from "@openbooks/engine/backup/backup-read";
+import type { Authz } from "@/lib/authz";
+import { contentDisposition } from "@/lib/export";
+import { isUuid } from "@/lib/list-params";
 import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
 /** Restore-CLI-compatible authenticated evidence for one stored archive. */
-async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("admin.backups.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyGET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+  gate: Authz,
+) {
   const { id } = await params;
   if (!isUuid(id)) return notFound("record");
 
-  const result = (await db.execute<{
-      id: string;
-      org_id: string;
-      file_name: string | null;
-      status: string;
-      purged_at: string | null;
-      sha256: string | null;
-      byte_size: string | null;
-      table_count: number | null;
-      row_count: string | null;
-      created_at: Date | string;
-    }>(sql`
-    select id, org_id, file_name, status, purged_at, sha256,
-           byte_size::text as byte_size, table_count, row_count::text as row_count,
-           created_at
-      from backup_runs
-     where id = ${id} and org_id = ${gate.user.orgId}`, "objects"));
-  const run = result[0];
+  const run = await findStoredBackupManifest(gate.user.orgId, id);
   if (!run || run.status !== "completed" || run.purged_at || !run.sha256 || !run.file_name) {
     return NextResponse.json({ error: "backup not found" }, { status: 404 });
   }
@@ -46,7 +29,10 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
     (byteSize !== null && !Number.isSafeInteger(byteSize)) ||
     (rowCount !== undefined && !Number.isSafeInteger(rowCount))
   ) {
-    return NextResponse.json({ error: "backup counts exceed manifest numeric limits" }, { status: 500 });
+    return NextResponse.json(
+      { error: "backup counts exceed manifest numeric limits" },
+      { status: 500 },
+    );
   }
   const manifest = {
     format: "openbooks-local-backup-manifest",
@@ -80,8 +66,11 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
 
 export const GET = defineRoute({
   permission: "admin.backups.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "Backup manifests are governed by backup management permission and organization-wide backup policy.",
+  },
   scope: "unrestricted",
-  params: z.object({ "id": z.string() }),
-  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params) }, authz),
 });

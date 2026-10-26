@@ -1,16 +1,11 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
-import {
-  BackupStorageDeleteError,
-  purgeBackupRun,
-} from "@openbooks/engine/backup/backup";
-import { guardPermission } from "../../../../../lib/authz";
-import { isUuid } from "../../../../../lib/list-params";
+import { BackupStorageDeleteError, purgeBackupRun } from "@openbooks/engine/backup/backup";
+import { findStoredBackupForPurge } from "@openbooks/engine/backup/backup-read";
+import type { Authz } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
 import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -19,33 +14,26 @@ export const runtime = "nodejs";
  * ledger row is stamped (purged_at, purge_reason='deleted') — the row is kept
  * as evidence. In-progress runs can't be deleted.
  */
-async function legacyDELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("admin.backups.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyDELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+  gate: Authz,
+) {
   const actor = gate.user;
   const { orgId } = actor;
   const { id } = await params;
   if (!isUuid(id)) return notFound("record");
 
-  const res = (await db.execute<{
-      id: string;
-      file_name: string | null;
-      object_key: string | null;
-      status: string;
-      kind: string;
-      byte_size: number | null;
-      sha256: string | null;
-      purged_at: string | null;
-    }>(sql`
-    select id, file_name, object_key, status, kind, byte_size, sha256, purged_at
-      from backup_runs where id = ${id} and org_id = ${orgId}`, "objects"));
-  const run = res[0];
+  const run = await findStoredBackupForPurge(orgId, id);
   if (!run) return NextResponse.json({ error: "backup not found" }, { status: 404 });
   if (run.purged_at) {
     return NextResponse.json({ error: "backup was already purged" }, { status: 409 });
   }
   if (run.status === "queued" || run.status === "running") {
-    return NextResponse.json({ error: "cannot delete a backup while it is in progress" }, { status: 409 });
+    return NextResponse.json(
+      { error: "cannot delete a backup while it is in progress" },
+      { status: 409 },
+    );
   }
 
   let purged: boolean;
@@ -79,8 +67,11 @@ async function legacyDELETE(_req: Request, { params }: { params: Promise<{ id: s
 
 export const DELETE = defineRoute({
   permission: "admin.backups.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "Backup deletion is governed by backup management permission and organization-wide retention policy.",
+  },
   scope: "unrestricted",
-  params: z.object({ "id": z.string() }),
-  handler: async ({ request, params }) => legacyDELETE(request as never, { params: Promise.resolve(params as never) } as never),
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, params, authz }) =>
+    legacyDELETE(request, { params: Promise.resolve(params) }, authz),
 });

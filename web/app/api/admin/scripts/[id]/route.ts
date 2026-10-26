@@ -1,56 +1,47 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
-import { isUuid } from '../../../../../lib/list-params'
+import { NextResponse } from "next/server";
+import { deleteUserScript } from "@openbooks/engine/scripting/admin";
+import type { Authz } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /** DELETE — remove only scripts without execution evidence. Scripts with run
  * history must be deactivated instead so their audit trail remains intact. */
-async function legacyDELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('scripts.manage', 'scripts')
-  if (gate instanceof NextResponse) return gate
-  const user = gate.user
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
+async function legacyDELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+  gate: Authz,
+) {
+  const user = gate.user;
+  const { id } = await params;
+  if (!isUuid(id)) return notFound("record");
 
-  const missing = await db.transaction(async (tx) => {
-    if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return notFound("record")
-    // Snapshot the whole row first: a hard delete leaves no other trace of a
-    // script that could fire on future documents.
-    const existing = (await tx.execute<Record<string, unknown>>(sql`
-      select * from user_scripts where id = ${id} and org_id = ${user.orgId} for update
-    `, 'objects'))
-    if (!existing[0]) return true
-    const history = await tx.execute(sql`select id from script_runs where script_id = ${id} and org_id = ${user.orgId} limit 1`, 'objects')
-    if (history.length) return NextResponse.json({
-      error: 'This script has run history and cannot be deleted. Deactivate it instead to preserve its audit history.',
-      code: 'SCRIPT_HAS_RUN_HISTORY',
-    }, { status: 409 })
-    await tx.execute(sql`delete from user_scripts where id = ${id} and org_id = ${user.orgId}`)
-    await tx.execute(sql`
-      insert into audit_log
-        (org_id, table_name, row_id, action, changes, actor_id, request_id)
-      values
-        (${user.orgId}, 'user_scripts', ${id}, 'delete',
-         ${JSON.stringify({ before: existing[0] })}::jsonb, ${user.id}, ${req.headers.get('X-Request-Id')})
-    `)
-    return false
-  })
-  if (missing instanceof NextResponse) return missing
-  if (missing) return notFound("record")
-  return NextResponse.json({ ok: true })
+  const result = await deleteUserScript({
+    orgId: user.orgId,
+    actorId: user.id,
+    requestId: req.headers.get("X-Request-Id"),
+    id,
+  });
+  if (result.kind === "feature_disabled" || result.kind === "missing") return notFound("record");
+  if (result.kind === "history")
+    return NextResponse.json(
+      {
+        error:
+          "This script has run history and cannot be deleted. Deactivate it instead to preserve its audit history.",
+        code: "SCRIPT_HAS_RUN_HISTORY",
+      },
+      { status: 409 },
+    );
+  return NextResponse.json({ ok: true });
 }
 
 export const DELETE = defineRoute({
   permission: "scripts.manage",
   feature: "scripts",
-  params: z.object({ "id": z.string() }),
-  handler: async ({ request, params }) => legacyDELETE(request as never, { params: Promise.resolve(params as never) } as never),
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, params, authz }) =>
+    legacyDELETE(request, { params: Promise.resolve(params) }, authz),
 });
