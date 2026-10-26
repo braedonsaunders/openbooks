@@ -25,6 +25,7 @@ test("the first request through the route factory installs the posting hooks in 
     const handler = defineRoute({
       authorize: async () => NextResponse.json({ error: "unauthorized" }, { status: 401 }),
       feature: { none: "Regression probe for request-graph seam installation." },
+      handler: () => NextResponse.json({ ok: true }),
     });
     const response = await handler(new Request("http://localhost/probe"));
     assert.equal(response.status, 401);
