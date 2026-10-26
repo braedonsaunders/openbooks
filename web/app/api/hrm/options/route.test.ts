@@ -28,6 +28,10 @@ const mockSources = new Map<string, string>([
       export async function getAuthz() { return { user: { id: 'user-1', orgId: 'org-1' } } }
       export async function guardPermission() { return state.gate }
       export function guardRootSubsidiaryScope() { return null }; export function guardUnrestrictedScope() { return null }
+      export async function isFeatureEnabled(_orgId, key) {
+        if (key !== 'hrm') throw new Error('unexpected feature ' + key)
+        return state.featureOn
+      }
     `,
   ],
   [
@@ -136,10 +140,13 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmOptionsNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmOptionsNextResponse =
+  NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/feature-gates", "mock:feature-gates"],
+  ["@/lib/feature-gates", "mock:feature-gates"],
+  ["@/lib/features", "mock:authz"],
   ["@openbooks/engine/hrm/authorization", "mock:authz-engine"],
   ["@openbooks/engine/hrm/employment-read", "mock:service"],
   ["@openbooks/engine/hrm/positions-read", "mock:service"],
@@ -148,7 +155,8 @@ const mockUrls = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" ? "mock:authz" : undefined);
+    const mocked =
+      mockUrls.get(specifier) ?? (specifier === "@/lib/authz" ? "mock:authz" : undefined);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier);
   },
@@ -172,167 +180,176 @@ function getRequest(params: string): Request {
   return new Request(`http://openbooks.test/api/hrm/options${params}`);
 }
 
-function errors(): { EmploymentReadError: new (message: string) => Error; HrmAuthorizationError: new (message: string) => Error } {
-  return (globalThis as typeof globalThis & Record<string, unknown>)
-    .openbooksHrmOptionsErrors as {
+function errors(): {
+  EmploymentReadError: new (message: string) => Error;
+  HrmAuthorizationError: new (message: string) => Error;
+} {
+  return (globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmOptionsErrors as {
     EmploymentReadError: new (message: string) => Error;
     HrmAuthorizationError: new (message: string) => Error;
   };
 }
 
 test("a missing feature flag 404s before the service runs", async () => {
-    reset();
-    routeState.featureOn = false;
-    const response = await optionsRoute!.GET(getRequest("?source=employments"));
-    assert.equal(response.status, 404);
-    assert.deepEqual(routeState.calls, []);
+  reset();
+  routeState.featureOn = false;
+  const response = await optionsRoute!.GET(getRequest("?source=employments"));
+  assert.equal(response.status, 404);
+  assert.deepEqual(routeState.calls, []);
 });
 
 test("an unauthenticated caller never reaches the service", async () => {
-    reset();
-    routeState.gate = { status: 401 };
-    const response = await optionsRoute!.GET(getRequest("?source=employments"));
-    assert.equal(response.status, 401);
-    assert.deepEqual(routeState.calls, []);
+  reset();
+  routeState.gate = { status: 401 };
+  const response = await optionsRoute!.GET(getRequest("?source=employments"));
+  assert.equal(response.status, 401);
+  assert.deepEqual(routeState.calls, []);
 });
 
 test("an unknown source is refused before the service runs", async () => {
-    reset();
-    assert.equal((await optionsRoute!.GET(getRequest(""))).status, 400);
-    assert.equal((await optionsRoute!.GET(getRequest("?source=roster"))).status, 400);
-    assert.deepEqual(routeState.calls, []);
+  reset();
+  assert.equal((await optionsRoute!.GET(getRequest(""))).status, 400);
+  assert.equal((await optionsRoute!.GET(getRequest("?source=roster"))).status, 400);
+  assert.deepEqual(routeState.calls, []);
 });
 
 test("a non-integer limit and a non-uuid include are refused", async () => {
-    reset();
-    assert.equal((await optionsRoute!.GET(getRequest("?source=employments&limit=many"))).status, 400);
-    assert.equal((await optionsRoute!.GET(getRequest("?source=locations&include=nope"))).status, 400);
-    assert.deepEqual(routeState.calls, []);
+  reset();
+  assert.equal((await optionsRoute!.GET(getRequest("?source=employments&limit=many"))).status, 400);
+  assert.equal((await optionsRoute!.GET(getRequest("?source=locations&include=nope"))).status, 400);
+  assert.deepEqual(routeState.calls, []);
 });
 
-  test("employments forwards org, actor, search, page, and pin, then 200s", async () => {
-    reset();
-    const include = "00000000-0000-4000-8000-000000000031";
-    const response = await optionsRoute!.GET(
-      getRequest(`?source=employments&q=ali&limit=10&include=${include}`),
-    );
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
-      options: [{ employmentId: "employment-1", label: "Alice Holder · Main · Cashier" }],
-    });
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "employments",
-        args: {
-          orgId: "org-1",
-          actorId: "user-1",
-          q: "ali",
-          limit: 10,
-          includeEmploymentId: include,
-        },
+test("employments forwards org, actor, search, page, and pin, then 200s", async () => {
+  reset();
+  const include = "00000000-0000-4000-8000-000000000031";
+  const response = await optionsRoute!.GET(
+    getRequest(`?source=employments&q=ali&limit=10&include=${include}`),
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    options: [{ employmentId: "employment-1", label: "Alice Holder · Main · Cashier" }],
+  });
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "employments",
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        q: "ali",
+        limit: 10,
+        includeEmploymentId: include,
       },
-    ]);
-  });
+    },
+  ]);
+});
 
-  test("locations forwards the pin under its own key", async () => {
-    reset();
-    const include = "00000000-0000-4000-8000-000000000032";
-    const response = await optionsRoute!.GET(getRequest(`?source=locations&include=${include}`));
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
-      options: [{ locationId: "location-1", label: "HQ · Headquarters" }],
-    });
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "locations",
-        args: { orgId: "org-1", actorId: "user-1", q: undefined, includeLocationId: include },
+test("locations forwards the pin under its own key", async () => {
+  reset();
+  const include = "00000000-0000-4000-8000-000000000032";
+  const response = await optionsRoute!.GET(getRequest(`?source=locations&include=${include}`));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    options: [{ locationId: "location-1", label: "HQ · Headquarters" }],
+  });
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "locations",
+      args: { orgId: "org-1", actorId: "user-1", q: undefined, includeLocationId: include },
+    },
+  ]);
+});
+
+test("an authorization refusal is a 403 carrying the uniform message", async () => {
+  reset();
+  routeState.serviceThrow = new (errors().HrmAuthorizationError)(
+    "Employment access requires the hrm.employment.read permission",
+  );
+  const response = await optionsRoute!.GET(getRequest("?source=employments"));
+  assert.equal(response.status, 403);
+  assert.match(((await response.json()) as { error: string }).error, /hrm\.employment\.read/);
+});
+
+test("a computed refusal is a 422 carrying the remedy", async () => {
+  reset();
+  routeState.serviceThrow = new (errors().EmploymentReadError)(
+    "options limit must be an integer from 1 to 100 — the picker pages, it never dumps the roster",
+  );
+  const response = await optionsRoute!.GET(getRequest("?source=locations&limit=500"));
+  assert.equal(response.status, 422);
+  assert.match(((await response.json()) as { error: string }).error, /pages/);
+});
+
+test("positions forwards the pin under its own key behind the position grant", async () => {
+  reset();
+  const include = "00000000-0000-4000-8000-000000000033";
+  const response = await optionsRoute!.GET(
+    getRequest(`?source=positions&q=eng&limit=10&include=${include}`),
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    options: [{ positionId: "position-1", label: "ENG-1042 · Engineer · open" }],
+  });
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "positions",
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        q: "eng",
+        limit: 10,
+        includePositionId: include,
       },
-    ]);
-  });
+    },
+  ]);
+});
 
-  test("an authorization refusal is a 403 carrying the uniform message", async () => {
-    reset();
-    routeState.serviceThrow = new (errors().HrmAuthorizationError)("Employment access requires the hrm.employment.read permission");
-    const response = await optionsRoute!.GET(getRequest("?source=employments"));
-    assert.equal(response.status, 403);
-    assert.match((await response.json() as { error: string }).error, /hrm\.employment\.read/);
+test("leave-filing-employments sits behind the manage grant and projects to id/label", async () => {
+  reset();
+  const include = "00000000-0000-4000-8000-000000000034";
+  const response = await optionsRoute!.GET(
+    getRequest(`?source=leave-filing-employments&q=qui&limit=10&include=${include}`),
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    options: [{ id: "employment-9", label: "Quinn Vidal · Main · Nurse" }],
   });
-
-  test("a computed refusal is a 422 carrying the remedy", async () => {
-    reset();
-    routeState.serviceThrow = new (errors().EmploymentReadError)(
-      "options limit must be an integer from 1 to 100 — the picker pages, it never dumps the roster",
-    );
-    const response = await optionsRoute!.GET(getRequest("?source=locations&limit=500"));
-    assert.equal(response.status, 422);
-    assert.match((await response.json() as { error: string }).error, /pages/);
-  });
-
-  test("positions forwards the pin under its own key behind the position grant", async () => {
-    reset();
-    const include = "00000000-0000-4000-8000-000000000033";
-    const response = await optionsRoute!.GET(
-      getRequest(`?source=positions&q=eng&limit=10&include=${include}`),
-    );
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
-      options: [{ positionId: "position-1", label: "ENG-1042 · Engineer · open" }],
-    });
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "positions",
-        args: {
-          orgId: "org-1",
-          actorId: "user-1",
-          q: "eng",
-          limit: 10,
-          includePositionId: include,
-        },
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "leave-filing-employments",
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        q: "qui",
+        limit: 10,
+        includeEmploymentId: include,
       },
-    ]);
-  });
+    },
+  ]);
+});
 
-  test("leave-filing-employments sits behind the manage grant and projects to id/label", async () => {
-    reset();
-    const include = "00000000-0000-4000-8000-000000000034";
-    const response = await optionsRoute!.GET(
-      getRequest(`?source=leave-filing-employments&q=qui&limit=10&include=${include}`),
-    );
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
-      options: [{ id: "employment-9", label: "Quinn Vidal · Main · Nurse" }],
-    });
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "leave-filing-employments",
-        args: {
-          orgId: "org-1",
-          actorId: "user-1",
-          q: "qui",
-          limit: 10,
-          includeEmploymentId: include,
-        },
-      },
-    ]);
+test("leave-own-employments projects the caller's employments to id/label", async () => {
+  reset();
+  const response = await optionsRoute!.GET(getRequest("?source=leave-own-employments"));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    options: [{ id: "employment-1", label: "Quinn Vidal · Main · Nurse" }],
   });
+  assert.deepEqual(routeState.calls, [
+    { fn: "leave-own-employments", args: { orgId: "org-1", actorId: "user-1" } },
+  ]);
+});
 
-  test("leave-own-employments projects the caller's employments to id/label", async () => {
-    reset();
-    const response = await optionsRoute!.GET(getRequest("?source=leave-own-employments"));
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
-      options: [{ id: "employment-1", label: "Quinn Vidal · Main · Nurse" }],
-    });
-    assert.deepEqual(routeState.calls, [{ fn: "leave-own-employments", args: { orgId: "org-1", actorId: "user-1" } }]);
-  });
-
-  test("leave option sources without their grants never reach the service", async () => {
-    reset();
-    routeState.gate = { status: 403 };
-    assert.equal((await optionsRoute!.GET(getRequest("?source=leave-filing-employments"))).status, 403);
-    assert.equal((await optionsRoute!.GET(getRequest("?source=leave-own-employments"))).status, 403);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("leave option sources without their grants never reach the service", async () => {
+  reset();
+  routeState.gate = { status: 403 };
+  assert.equal(
+    (await optionsRoute!.GET(getRequest("?source=leave-filing-employments"))).status,
+    403,
+  );
+  assert.equal((await optionsRoute!.GET(getRequest("?source=leave-own-employments"))).status, 403);
+  assert.deepEqual(routeState.calls, []);
+});
 
 test("people forwards the pin under its own key for the exit-interviewer picker", async () => {
   reset();
@@ -353,7 +370,9 @@ test("people forwards the pin under its own key for the exit-interviewer picker"
 test("hireable-people forwards the pin under its own key for the Hire person picker", async () => {
   reset();
   const include = "00000000-0000-4000-8000-000000000039";
-  const response = await optionsRoute!.GET(getRequest(`?source=hireable-people&include=${include}`));
+  const response = await optionsRoute!.GET(
+    getRequest(`?source=hireable-people&include=${include}`),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     options: [{ partyId: "party-9", label: "No Employment Yet" }],
@@ -369,7 +388,9 @@ test("hireable-people forwards the pin under its own key for the Hire person pic
 test("employable-people forwards the pin under its own key for the existing-person picker", async () => {
   reset();
   const include = "00000000-0000-4000-8000-000000000047";
-  const response = await optionsRoute!.GET(getRequest(`?source=employable-people&include=${include}`));
+  const response = await optionsRoute!.GET(
+    getRequest(`?source=employable-people&include=${include}`),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     options: [{ partyId: "party-7", label: "Vendor Val", hasEmployeeRole: false }],
@@ -385,7 +406,9 @@ test("employable-people forwards the pin under its own key for the existing-pers
 test("employer-subsidiaries forwards the pin under its own key for the Hire employer picker", async () => {
   reset();
   const include = "00000000-0000-4000-8000-000000000041";
-  const response = await optionsRoute!.GET(getRequest(`?source=employer-subsidiaries&include=${include}`));
+  const response = await optionsRoute!.GET(
+    getRequest(`?source=employer-subsidiaries&include=${include}`),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     options: [{ subsidiaryId: "sub-1", label: "Main Co" }],
@@ -398,16 +421,20 @@ test("employer-subsidiaries forwards the pin under its own key for the Hire empl
   ]);
 });
 
-
-test('active-only employment browsing forwards the policy for both search and pinned selections', async () => {
-  reset()
-  const include = '00000000-0000-4000-8000-000000000031'
-  const response = await optionsRoute!.GET(getRequest(`?source=employments&active=true&include=${include}`))
-  assert.equal(response.status, 200)
-  const args = routeState.calls[0]!.args as Record<string, unknown>
-  assert.equal(args.activeOnly, true)
-  assert.equal(args.includeEmploymentId, include)
-  reset()
-  assert.equal((await optionsRoute!.GET(getRequest('?source=employments&active=maybe'))).status, 400)
-  assert.deepEqual(routeState.calls, [])
-})
+test("active-only employment browsing forwards the policy for both search and pinned selections", async () => {
+  reset();
+  const include = "00000000-0000-4000-8000-000000000031";
+  const response = await optionsRoute!.GET(
+    getRequest(`?source=employments&active=true&include=${include}`),
+  );
+  assert.equal(response.status, 200);
+  const args = routeState.calls[0]!.args as Record<string, unknown>;
+  assert.equal(args.activeOnly, true);
+  assert.equal(args.includeEmploymentId, include);
+  reset();
+  assert.equal(
+    (await optionsRoute!.GET(getRequest("?source=employments&active=maybe"))).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
