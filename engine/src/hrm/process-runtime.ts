@@ -77,17 +77,25 @@ export async function loadStepForUpdate(
   orgId: string,
   stepId: string,
 ): Promise<StepRow> {
-  const identity = (await exec.execute<{ process_id: string }>(
-      sql`select process_id from hrm_process_steps where org_id=${orgId} and id=${stepId}`, "objects",
-    ))[0];
+  const identity = (
+    await exec.execute<{ process_id: string }>(
+      sql`select process_id from hrm_process_steps where org_id=${orgId} and id=${stepId}`,
+      "objects",
+    )
+  )[0];
   if (identity) await loadProcessForUpdate(exec, orgId, identity.process_id);
-  const row = (await exec.execute<StepRow>(sql`
+  const row = (
+    await exec.execute<StepRow>(
+      sql`
     select ${STEP_COLUMNS}
       from hrm_process_steps s
       join hrm_processes p on p.org_id = s.org_id and p.id = s.process_id
       join worker_employments e on e.org_id = s.org_id and e.id = p.employment_id
      where s.org_id = ${orgId} and s.id = ${stepId} for update of s
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement).
   if (!row) {
@@ -104,13 +112,18 @@ export async function loadProcessForUpdate(
   orgId: string,
   processId: string,
 ): Promise<ProcessRow> {
-  const row = (await exec.execute<ProcessRow>(sql`
+  const row = (
+    await exec.execute<ProcessRow>(
+      sql`
     select id, org_id, template_id, employment_id, kind,
            effective_date::text as effective_date, status,
            opened_by_change_id, completed_at, cancelled_at, cancel_reason
       from hrm_processes
      where org_id = ${orgId} and id = ${processId} for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new HrmProcessError(
       "NOT_FOUND",
@@ -139,10 +152,15 @@ export async function resolveStepActor(
     // Permission alone is not scope: the manager must also see the employer.
     const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
     if (allowed !== null) {
-      const employer = (await exec.execute<{ employer_subsidiary_id: string }>(sql`
+      const employer = (
+        await exec.execute<{ employer_subsidiary_id: string }>(
+          sql`
         select employer_subsidiary_id from worker_employments
          where org_id = ${orgId} and id = ${step.employment_id}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!employer || !allowed.has(employer.employer_subsidiary_id)) {
         return "stranger";
       }
@@ -184,7 +202,9 @@ export async function assertAttachmentReadable(
     );
   }
   const canReadApCapture = await actorHasPermission(exec, orgId, actorId, "ap.read");
-  const readable = (await exec.execute<{ readable: boolean }>(sql`
+  const readable = (
+    await exec.execute<{ readable: boolean }>(
+      sql`
     with recursive capture_folders as (
       select id from folders where org_id = ${orgId} and system_kind = 'ap_capture'
       union
@@ -225,7 +245,10 @@ export async function assertAttachmentReadable(
                             or (g.principal_type = 'role' and g.principal_id in (
                                   select role_id from role_assignments
                                    where org_id = ${orgId} and user_id = ${actorId})))))) as readable
-  `, "objects"))[0]?.readable;
+  `,
+      "objects",
+    )
+  )[0]?.readable;
   if (!readable) {
     throw new HrmProcessError(
       "UNREADABLE_ATTACHMENT",

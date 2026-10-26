@@ -1,5 +1,9 @@
 /** Opening HR processes directly, in a caller's transaction, and from approved changes. */
-import { checklistDocumentSchema, includedChecklistSteps, emptyStepDesign } from "@openbooks/forms-core";
+import {
+  checklistDocumentSchema,
+  includedChecklistSteps,
+  emptyStepDesign,
+} from "@openbooks/forms-core";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
@@ -8,9 +12,24 @@ import { HRM_FEATURE_KEY } from "./employment-read.ts";
 import { snapshotTemplateSteps, summarizeProgress } from "./process-math.ts";
 import { parseCivilDate } from "./temporal.ts";
 import { isUniqueViolation } from "./field-time/errors.ts";
-import { HrmProcessError, type ProcessKind, requireKind, requireOrgId, requireActorId, requireId, mathRefusal, assertHrmFeatureOn } from "./process-core.ts";
+import {
+  HrmProcessError,
+  type ProcessKind,
+  requireKind,
+  requireOrgId,
+  requireActorId,
+  requireId,
+  mathRefusal,
+  assertHrmFeatureOn,
+} from "./process-core.ts";
 import { type ProcessDTO, auditChecklist } from "./process-runtime.ts";
-import { type TemplateStepRow, loadOpeningEmploymentContext, assertLiveVersionOn, type TemplateChoice, resolveTemplateChoice } from "./process-templates.ts";
+import {
+  type TemplateStepRow,
+  loadOpeningEmploymentContext,
+  assertLiveVersionOn,
+  type TemplateChoice,
+  resolveTemplateChoice,
+} from "./process-templates.ts";
 
 // --- Open a process ----------------------------------------------------------
 
@@ -84,12 +103,17 @@ export async function openProcessInTx(
 ): Promise<ProcessDTO> {
   const { orgId, actorId, employmentId, kind, effectiveDate, templateId, openedByChangeId } = args;
   await assertLiveVersionOn(exec, orgId, employmentId, effectiveDate);
-  const dupe = (await exec.execute(sql`
+  const dupe = (
+    await exec.execute(
+      sql`
     select id from hrm_processes
      where org_id = ${orgId} and employment_id = ${employmentId}
        and kind = ${kind} and status = 'open'
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (dupe) {
     throw new HrmProcessError(
       "DUPLICATE_OPEN",
@@ -139,9 +163,12 @@ export async function openProcessInTx(
     );
   }
   choice.steps = choice.steps.filter((step) => included.some((item) => item.id === step.id));
-  const publication = (await exec.execute<{ published_version: number }>(
-      sql`select published_version from hrm_process_templates where org_id = ${orgId} and id = ${choice.template.id} for share`, "objects",
-    ))[0];
+  const publication = (
+    await exec.execute<{ published_version: number }>(
+      sql`select published_version from hrm_process_templates where org_id = ${orgId} and id = ${choice.template.id} for share`,
+      "objects",
+    )
+  )[0];
   let snapshots;
   try {
     snapshots = snapshotTemplateSteps(
@@ -164,13 +191,18 @@ export async function openProcessInTx(
   }
   let processId: string;
   try {
-    const inserted = (await exec.execute<{ id: string }>(sql`
+    const inserted = (
+      await exec.execute<{ id: string }>(
+        sql`
       insert into hrm_processes
         (org_id, template_id, employment_id, kind, effective_date, opened_by_change_id, created_by, updated_by, template_version)
       values (${orgId}, ${choice.template.id}, ${employmentId}, ${kind},
               ${effectiveDate}::date, ${openedByChangeId}, ${actorId}, ${actorId}, ${publication?.published_version ?? 0})
       returning id
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!inserted) {
       throw new HrmProcessError(
         "REFUSED",
@@ -188,7 +220,8 @@ export async function openProcessInTx(
     throw error;
   }
   for (const snapshot of snapshots) {
-    const stored = await exec.execute(sql`
+    const stored = await exec.execute(
+      sql`
       insert into hrm_process_steps
         (org_id, process_id, template_step_id, position, title, description,
          owner_kind, owner_party_id, due_on, required, evidence_kind, created_by, updated_by, design)
@@ -197,7 +230,9 @@ export async function openProcessInTx(
               ${snapshot.ownerPartyId}, ${snapshot.dueOn}::date,
               ${snapshot.required}, ${snapshot.evidenceKind}, ${actorId}, ${actorId}, ${JSON.stringify(choice.steps.find((step) => step.id === snapshot.templateStepId)?.design ?? emptyStepDesign())}::jsonb)
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (stored.length !== 1) {
       throw new HrmProcessError(
         "REFUSED",
@@ -241,10 +276,13 @@ async function readProgress(
   orgId: string,
   processId: string,
 ): Promise<ProcessDTO["progress"]> {
-  const rows = await exec.execute<{ required: boolean; status: string }>(sql`
+  const rows = await exec.execute<{ required: boolean; status: string }>(
+    sql`
     select required, status from hrm_process_steps
      where org_id = ${orgId} and process_id = ${processId}
-  `, "objects");
+  `,
+    "objects",
+  );
   try {
     const summary = summarizeProgress(rows);
     return {

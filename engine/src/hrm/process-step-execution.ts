@@ -1,5 +1,9 @@
 /** Completing and skipping process steps; completing and cancelling processes. */
-import { checklistStepDesignSchema, withComputedFormulas, CHECKLIST_STEP_SUBJECT_KIND } from "@openbooks/forms-core";
+import {
+  checklistStepDesignSchema,
+  withComputedFormulas,
+  CHECKLIST_STEP_SUBJECT_KIND,
+} from "@openbooks/forms-core";
 import { cancelDispatchRuns } from "../flows/dispatch-result.ts";
 import { lockApprovalSubject } from "../platform/approval-routing.ts";
 import { sql } from "drizzle-orm";
@@ -7,9 +11,25 @@ import { db, withOrgTransaction } from "../platform/db.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
 import { requireHrmEmploymentManage, requireHrmProcessManage } from "./authorization.ts";
-import { HrmProcessError, requireOrgId, requireActorId, requireId, requireNonBlank, assertHrmFeatureOn } from "./process-core.ts";
-import { loadStepForUpdate, loadProcessForUpdate, resolveStepActor, assertAttachmentReadable, auditChecklist } from "./process-runtime.ts";
-import { validateDesignedCompletion, submitChecklistStepApproval } from "./process-step-approvals.ts";
+import {
+  HrmProcessError,
+  requireOrgId,
+  requireActorId,
+  requireId,
+  requireNonBlank,
+  assertHrmFeatureOn,
+} from "./process-core.ts";
+import {
+  loadStepForUpdate,
+  loadProcessForUpdate,
+  resolveStepActor,
+  assertAttachmentReadable,
+  auditChecklist,
+} from "./process-runtime.ts";
+import {
+  validateDesignedCompletion,
+  submitChecklistStepApproval,
+} from "./process-step-approvals.ts";
 
 // --- Complete / skip a step --------------------------------------------------
 
@@ -65,36 +85,43 @@ export async function completeProcessStep(
         "this step is owned by someone else — ask its owner or a manager to complete it, or hold hrm.process.manage in the employer's scope",
       );
     }
-    let reviewed = (await db.execute<{
+    let reviewed = (
+      await db.execute<{
         design: unknown;
         approval_status: string;
         response: Record<string, unknown> | null;
         attachment_id: string | null;
       }>(
-        sql`select design,approval_status,response,attachment_id from hrm_process_steps where org_id=${orgId} and id=${stepId}`, "objects",
-      ))[0];
+        sql`select design,approval_status,response,attachment_id from hrm_process_steps where org_id=${orgId} and id=${stepId}`,
+        "objects",
+      )
+    )[0];
     const design = checklistStepDesignSchema.parse(reviewed?.design ?? {});
     if (design.form && query.response)
       query = { ...query, response: withComputedFormulas(design.form.sections, query.response) };
-    if (
-      reviewed?.approval_status !== "approved" &&
-      reviewed?.approval_status !== "pending"
-    ) {
+    if (reviewed?.approval_status !== "approved" && reviewed?.approval_status !== "pending") {
       await submitChecklistStepApproval(query);
-      reviewed = (await db.execute<{
-        design: unknown;
-        approval_status: string;
-        response: Record<string, unknown> | null;
-        attachment_id: string | null;
-      }>(sql`
-        select design,approval_status,response,attachment_id from hrm_process_steps where org_id=${orgId} and id=${stepId}`, "objects"))[0];
+      reviewed = (
+        await db.execute<{
+          design: unknown;
+          approval_status: string;
+          response: Record<string, unknown> | null;
+          attachment_id: string | null;
+        }>(
+          sql`
+        select design,approval_status,response,attachment_id from hrm_process_steps where org_id=${orgId} and id=${stepId}`,
+          "objects",
+        )
+      )[0];
     }
-    if (reviewed?.approval_status === "pending")
-      return { status: "pending_approval" as const };
+    if (reviewed?.approval_status === "pending") return { status: "pending_approval" as const };
     if (reviewed?.approval_status === "approved") {
-      const matches = (await db.execute<{ matches: boolean }>(
-          sql`select response is not distinct from ${JSON.stringify(query.response ?? null)}::jsonb and attachment_id is not distinct from ${query.attachmentId ?? null}::uuid as matches from hrm_process_steps where org_id=${orgId} and id=${stepId}`, "objects",
-        ))[0]?.matches;
+      const matches = (
+        await db.execute<{ matches: boolean }>(
+          sql`select response is not distinct from ${JSON.stringify(query.response ?? null)}::jsonb and attachment_id is not distinct from ${query.attachmentId ?? null}::uuid as matches from hrm_process_steps where org_id=${orgId} and id=${stepId}`,
+          "objects",
+        )
+      )[0]?.matches;
       if (!matches)
         throw new HrmProcessError(
           "REFUSED",
@@ -118,13 +145,16 @@ export async function completeProcessStep(
         `this step takes ${step.evidence_kind} evidence — drop the attachment to complete it`,
       );
     }
-    const done = await db.execute(sql`
+    const done = await db.execute(
+      sql`
       update hrm_process_steps
          set status = 'done', done_by = ${actorId}, done_at = now(),
              attachment_id = ${attachmentId}, response = ${JSON.stringify(query.response ?? null)}::jsonb, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${stepId} and status = 'pending'
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (done.length !== 1) {
       throw new HrmProcessError(
         "REFUSED",
@@ -204,20 +234,24 @@ export async function skipProcessStep(query: SkipStepQuery): Promise<void> {
       }
     }
     const waitingRuns = await db.execute<{ id: string }>(
-        sql`select id from flow_runs where org_id=${orgId} and subject_kind=${CHECKLIST_STEP_SUBJECT_KIND} and subject_id=${stepId} and status in ('running','waiting')`, "objects",
-      );
+      sql`select id from flow_runs where org_id=${orgId} and subject_kind=${CHECKLIST_STEP_SUBJECT_KIND} and subject_id=${stepId} and status in ('running','waiting')`,
+      "objects",
+    );
     await cancelDispatchRuns(
       orgId,
       waitingRuns.map((r) => r.id),
       { actorId },
     );
-    const skipped = await db.execute(sql`
+    const skipped = await db.execute(
+      sql`
       update hrm_process_steps
          set status = 'skipped', skip_reason = ${reason},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${stepId} and status = 'pending'
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (skipped.length !== 1) {
       throw new HrmProcessError(
         "REFUSED",
@@ -258,12 +292,15 @@ export async function completeProcess(query: {
       );
     }
     await requireHrmProcessManage(db, orgId, actorId, process.employment_id);
-    const pending = await db.execute<{ title: string }>(sql`
+    const pending = await db.execute<{ title: string }>(
+      sql`
       select title from hrm_process_steps
        where org_id = ${orgId} and process_id = ${processId}
          and required and status = 'pending'
        order by position
-    `, "objects");
+    `,
+      "objects",
+    );
     if (pending.length > 0) {
       const names = pending
         .slice(0, 3)
@@ -275,13 +312,16 @@ export async function completeProcess(query: {
         `${pending.length} required step(s) still pending (${names}${more}) — complete or skip them before completing the process`,
       );
     }
-    const completed = await db.execute(sql`
+    const completed = await db.execute(
+      sql`
       update hrm_processes
          set status = 'completed', completed_at = now(),
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${processId} and status = 'open'
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (completed.length !== 1) {
       throw new HrmProcessError(
         "REFUSED",
@@ -315,8 +355,9 @@ export async function cancelProcess(query: {
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     const stepIds = await db.execute<{ id: string }>(
-        sql`select id from hrm_process_steps where org_id=${orgId} and process_id=${processId} order by id`, "objects",
-      );
+      sql`select id from hrm_process_steps where org_id=${orgId} and process_id=${processId} order by id`,
+      "objects",
+    );
     for (const step of stepIds)
       await lockApprovalSubject(orgId, CHECKLIST_STEP_SUBJECT_KIND, step.id);
     const process = await loadProcessForUpdate(db, orgId, processId);
@@ -328,20 +369,24 @@ export async function cancelProcess(query: {
     }
     await requireHrmProcessManage(db, orgId, actorId, process.employment_id);
     const runs = await db.execute<{ id: string }>(
-        sql`select id from flow_runs where org_id=${orgId} and subject_kind=${CHECKLIST_STEP_SUBJECT_KIND} and subject_id in (select id from hrm_process_steps where org_id=${orgId} and process_id=${processId}) and status in ('running','waiting')`, "objects",
-      );
+      sql`select id from flow_runs where org_id=${orgId} and subject_kind=${CHECKLIST_STEP_SUBJECT_KIND} and subject_id in (select id from hrm_process_steps where org_id=${orgId} and process_id=${processId}) and status in ('running','waiting')`,
+      "objects",
+    );
     await cancelDispatchRuns(
       orgId,
       runs.map((r) => r.id),
       { actorId },
     );
-    const cancelled = await db.execute(sql`
+    const cancelled = await db.execute(
+      sql`
       update hrm_processes
          set status = 'cancelled', cancelled_at = now(), cancel_reason = ${reason},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${processId} and status = 'open'
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (cancelled.length !== 1) {
       throw new HrmProcessError(
         "REFUSED",

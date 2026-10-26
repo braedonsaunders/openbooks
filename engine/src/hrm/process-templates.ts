@@ -3,11 +3,24 @@ import { checklistStepDesignSchema, type ChecklistStepDesign } from "@openbooks/
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
-import { requireHrmProcessConfig, requireHrmProcessManage, requireUnrestrictedHrmScope } from "./authorization.ts";
+import {
+  requireHrmProcessConfig,
+  requireHrmProcessManage,
+  requireUnrestrictedHrmScope,
+} from "./authorization.ts";
 import { resolveTemplateForEmployment, type MatchableTemplate } from "./process-math.ts";
 import { parseCivilDate } from "./temporal.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { HrmProcessError, type ProcessKind, requireKind, requireOrgId, requireActorId, requireId, mathRefusal, assertHrmFeatureOn } from "./process-core.ts";
+import {
+  HrmProcessError,
+  type ProcessKind,
+  requireKind,
+  requireOrgId,
+  requireActorId,
+  requireId,
+  mathRefusal,
+  assertHrmFeatureOn,
+} from "./process-core.ts";
 
 // --- Template rows and DTOs --------------------------------------------------
 
@@ -140,7 +153,8 @@ export async function listProcessTemplates(query: {
     } else {
       await requireHrmProcessConfig(db, orgId, actorId);
     }
-    const rows = await db.execute<TemplateRow & { step_count: number }>(sql`
+    const rows = await db.execute<TemplateRow & { step_count: number }>(
+      sql`
       select t.id, t.org_id, t.kind, t.name, t.applies_to, t.is_active,
              t.created_at, t.created_by, t.updated_at, t.updated_by,
              count(s.id)::int as step_count
@@ -152,7 +166,9 @@ export async function listProcessTemplates(query: {
          ${kind ? sql`and t.kind = ${kind}` : sql``}
        group by t.id
        order by t.kind, t.name, t.id
-    `, "objects");
+    `,
+      "objects",
+    );
     // The catalogue lists only what the actor may see: B-targeted rows
     // are invisible to an A-restricted reader, exactly as the write path
     // refuses them as not-found.
@@ -188,12 +204,17 @@ export async function getProcessTemplate(query: {
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
-    const row = (await db.execute<TemplateRow>(sql`
+    const row = (
+      await db.execute<TemplateRow>(
+        sql`
       select id, org_id, kind, name, applies_to, is_active,
              created_at, created_by, updated_at, updated_by
         from hrm_process_templates
        where org_id = ${orgId} and id = ${templateId} for share
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!row) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -279,10 +300,13 @@ export async function scopeTemplateRows<T extends Pick<TemplateRow, "applies_to"
   ];
   const departmentOwner = new Map<string, string | null>();
   if (departmentIds.length > 0) {
-    const owners = await exec.execute<{ id: string; subsidiary_id: string | null }>(sql`
+    const owners = await exec.execute<{ id: string; subsidiary_id: string | null }>(
+      sql`
       select id::text as id, subsidiary_id::text as subsidiary_id from departments
        where org_id = ${orgId} and id = any (${`{${departmentIds.join(",")}}`}::uuid[])
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const owner of owners) departmentOwner.set(owner.id, owner.subsidiary_id);
   }
   return rows.filter((row) => {
@@ -323,11 +347,16 @@ export async function assertAppliesToTargets(
     // One scoped-existence check covers unknown, cross-org, and
     // out-of-scope subsidiaries identically: a B subsidiary reads to an
     // A-scoped actor exactly like a fabricated id.
-    const found = (await exec.execute(sql`
+    const found = (
+      await exec.execute(
+        sql`
       select 1 as one from subsidiaries
        where org_id = ${orgId} and id = ${appliesTo.employerSubsidiaryId}
          ${allowed === null ? sql`` : sql`and id = any (${`{${[...allowed].join(",")}}`}::uuid[])`}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!found) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -336,14 +365,19 @@ export async function assertAppliesToTargets(
     }
   }
   if (appliesTo.departmentId !== null) {
-    const department = (await exec.execute<{ subsidiary_id: string | null; owner_exists: boolean }>(sql`
+    const department = (
+      await exec.execute<{ subsidiary_id: string | null; owner_exists: boolean }>(
+        sql`
       select d.subsidiary_id,
              (d.subsidiary_id is null or s.id is not null) as owner_exists
         from departments d
         left join subsidiaries s on s.org_id = d.org_id and s.id = d.subsidiary_id
        where d.org_id = ${orgId} and d.id = ${appliesTo.departmentId}
        for update of d
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (
       !department?.owner_exists ||
       (department.subsidiary_id !== null &&
@@ -384,9 +418,14 @@ export async function assertOwnerParty(
       `owner party ${JSON.stringify(ownerPartyId)} is not a uuid — name a party of this organization`,
     );
   }
-  const found = (await exec.execute(sql`
+  const found = (
+    await exec.execute(
+      sql`
     select 1 as one from parties where org_id = ${orgId} and id = ${ownerPartyId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!found) {
     throw new HrmProcessError(
       "REFUSED",
@@ -437,17 +476,24 @@ export async function loadOpeningEmploymentContext(
   employmentId: string,
   effectiveDate: string,
 ): Promise<OpeningEmploymentContext> {
-  const stable = (await exec.execute<{ employer_subsidiary_id: string }>(sql`
+  const stable = (
+    await exec.execute<{ employer_subsidiary_id: string }>(
+      sql`
     select employer_subsidiary_id from worker_employments
      where org_id = ${orgId} and id = ${employmentId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!stable) {
     throw new HrmProcessError(
       "NOT_FOUND",
       "employment not found in this organization — check the employment id",
     );
   }
-  const assignment = (await exec.execute<{ department_id: string | null }>(sql`
+  const assignment = (
+    await exec.execute<{ department_id: string | null }>(
+      sql`
     select av.department_id::text as department_id
       from employment_assignment_versions av
      where av.org_id = ${orgId} and av.employment_id = ${employmentId}
@@ -456,7 +502,10 @@ export async function loadOpeningEmploymentContext(
        and (av.effective_to is null or av.effective_to > ${effectiveDate}::date)
      order by av.is_primary desc, av.version_no desc
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return {
     employerSubsidiaryId: stable.employer_subsidiary_id,
     departmentId: assignment?.department_id ?? null,
@@ -474,14 +523,19 @@ export async function assertLiveVersionOn(
   employmentId: string,
   effectiveDate: string,
 ): Promise<void> {
-  const live = (await exec.execute(sql`
+  const live = (
+    await exec.execute(
+      sql`
     select 1 as one from worker_employment_versions
      where org_id = ${orgId} and employment_id = ${employmentId}
        and recorded_until is null
        and effective_from <= ${effectiveDate}::date
        and (effective_to is null or effective_to > ${effectiveDate}::date)
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!live) {
     throw new HrmProcessError(
       "NO_LIVE_VERSION",
@@ -501,12 +555,17 @@ export async function resolveTemplateChoice(
   templateId: string | null,
 ): Promise<{ template: TemplateChoice; steps: TemplateStepRow[] }> {
   if (templateId !== null) {
-    const row = (await exec.execute<TemplateRow>(sql`
+    const row = (
+      await exec.execute<TemplateRow>(
+        sql`
       select id, org_id, kind, name, applies_to, is_active,
              created_at, created_by, updated_at, updated_by
         from hrm_process_templates
        where org_id = ${orgId} and id = ${templateId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!row) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -545,12 +604,15 @@ export async function resolveTemplateChoice(
     return { template: { id: row.id, kind, name: row.name }, steps };
   }
   const context = await loadOpeningEmploymentContext(exec, orgId, employmentId, effectiveDate);
-  const candidates = await exec.execute<TemplateRow>(sql`
+  const candidates = await exec.execute<TemplateRow>(
+    sql`
     select id, org_id, kind, name, applies_to, is_active,
            created_at, created_by, updated_at, updated_by
       from hrm_process_templates
      where org_id = ${orgId} and kind = ${kind} and is_active for share
-  `, "objects");
+  `,
+    "objects",
+  );
   let matchables: MatchableTemplate[];
   try {
     matchables = candidates.map((row) => ({
@@ -577,11 +639,14 @@ export async function loadTemplateSteps(
   templateId: string,
   includeRetired = false,
 ): Promise<TemplateStepRow[]> {
-  return await exec.execute<TemplateStepRow>(sql`
+  return await exec.execute<TemplateStepRow>(
+    sql`
     select id, org_id, template_id, position, title, description, owner_kind, owner_party_id,
            due_offset_days, required, evidence_kind, design
       from hrm_process_template_steps
      where org_id = ${orgId} and template_id = ${templateId} ${includeRetired ? sql`` : sql`and is_current`}
      order by position
-  `, "objects");
+  `,
+    "objects",
+  );
 }

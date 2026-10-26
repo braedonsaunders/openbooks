@@ -1,5 +1,12 @@
 /** Checklist designer drafts, publication, coverage preview, reminders and versions. */
-import { checklistDocumentSchema, checklistIssues, checklistConditionPredicates, includedChecklistSteps, emptyStepDesign, type ChecklistDocument } from "@openbooks/forms-core";
+import {
+  checklistDocumentSchema,
+  checklistIssues,
+  checklistConditionPredicates,
+  includedChecklistSteps,
+  emptyStepDesign,
+  type ChecklistDocument,
+} from "@openbooks/forms-core";
 import { businessToday } from "../platform/business-date.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
@@ -8,9 +15,33 @@ import { requireHrmProcessConfig, requireHrmProcessManage } from "./authorizatio
 import { HRM_FEATURE_KEY } from "./employment-read.ts";
 import { addOffsetDays } from "./process-math.ts";
 import { parseCivilDate } from "./temporal.ts";
-import { HrmProcessError, requireOrgId, requireActorId, requireId, requireNonBlank, assertHrmFeatureOn } from "./process-core.ts";
-import { loadStepForUpdate, loadProcessForUpdate, resolveStepActor, auditChecklist } from "./process-runtime.ts";
-import { type TemplateRow, listProcessTemplates, getProcessTemplate, assertTemplateWriteScope, templateAppliesTo, scopeTemplateRows, assertAppliesToTargets, assertOwnerParty, loadOpeningEmploymentContext, assertLiveVersionOn, loadTemplateSteps } from "./process-templates.ts";
+import {
+  HrmProcessError,
+  requireOrgId,
+  requireActorId,
+  requireId,
+  requireNonBlank,
+  assertHrmFeatureOn,
+} from "./process-core.ts";
+import {
+  loadStepForUpdate,
+  loadProcessForUpdate,
+  resolveStepActor,
+  auditChecklist,
+} from "./process-runtime.ts";
+import {
+  type TemplateRow,
+  listProcessTemplates,
+  getProcessTemplate,
+  assertTemplateWriteScope,
+  templateAppliesTo,
+  scopeTemplateRows,
+  assertAppliesToTargets,
+  assertOwnerParty,
+  loadOpeningEmploymentContext,
+  assertLiveVersionOn,
+  loadTemplateSteps,
+} from "./process-templates.ts";
 
 export interface ChecklistDesignerValue {
   id: string;
@@ -29,14 +60,19 @@ export async function getChecklistDesigner(query: {
 }): Promise<ChecklistDesignerValue> {
   return withOrgTransaction(query.orgId, async () => {
     const detail = await getProcessTemplate(query);
-    const row = (await db.execute<{
+    const row = (
+      await db.execute<{
         draft_document: unknown;
         draft_revision: number;
         published_version: number;
         published_revision: number;
         is_active: boolean;
-      }>(sql`
-      select draft_document, draft_revision, published_version, published_revision, is_active from hrm_process_templates where org_id = ${query.orgId} and id = ${detail.id}`, "objects"))[0];
+      }>(
+        sql`
+      select draft_document, draft_revision, published_version, published_revision, is_active from hrm_process_templates where org_id = ${query.orgId} and id = ${detail.id}`,
+        "objects",
+      )
+    )[0];
     if (!row)
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -66,13 +102,14 @@ export async function getChecklistDesigner(query: {
         "Checklist draft is not visible in this organization and legal-entity scope.",
       );
     const versions = await db.execute<{
-        version: number;
-        publishedAt: string;
-        publishedBy: string;
-        reason: string;
-      }>(
-        sql`select v.version,v.published_at::text as "publishedAt",u.name as "publishedBy",v.reason from hrm_process_template_versions v join users u on u.org_id=v.org_id and u.id=v.published_by where v.org_id=${query.orgId} and v.template_id=${detail.id} order by v.version desc limit 50`, "objects",
-      );
+      version: number;
+      publishedAt: string;
+      publishedBy: string;
+      reason: string;
+    }>(
+      sql`select v.version,v.published_at::text as "publishedAt",u.name as "publishedBy",v.reason from hrm_process_template_versions v join users u on u.org_id=v.org_id and u.id=v.published_by where v.org_id=${query.orgId} and v.template_id=${detail.id} order by v.version desc limit 50`,
+      "objects",
+    );
     return {
       versions,
       id: detail.id,
@@ -116,7 +153,8 @@ export async function saveChecklistDraft(query: {
     await db.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${orgId + ":checklist:" + id},0))`,
     );
-    const current = (await db.execute<{
+    const current = (
+      await db.execute<{
         applies_to: TemplateRow["applies_to"];
         kind: string;
         draft_revision: number;
@@ -124,8 +162,12 @@ export async function saveChecklistDraft(query: {
         published_version: number;
         published_revision: number;
         is_active: boolean;
-      }>(sql`
-      select applies_to, kind, draft_revision, draft_document, published_version, published_revision, is_active from hrm_process_templates where org_id = ${orgId} and id = ${id} for update`, "objects"))[0];
+      }>(
+        sql`
+      select applies_to, kind, draft_revision, draft_document, published_version, published_revision, is_active from hrm_process_templates where org_id = ${orgId} and id = ${id} for update`,
+        "objects",
+      )
+    )[0];
     if (current) {
       await assertTemplateWriteScope(db, orgId, actorId, templateAppliesTo(current.applies_to));
       if (current.kind !== document.kind)
@@ -136,9 +178,12 @@ export async function saveChecklistDraft(query: {
       if (current.draft_revision !== query.revision) {
         if (
           current.draft_revision === query.revision + 1 &&
-          (await db.execute<{ matches: boolean }>(
-              sql`select draft_document = ${JSON.stringify(document)}::jsonb as matches from hrm_process_templates where org_id=${orgId} and id=${id}`, "objects",
-            ))[0]?.matches
+          (
+            await db.execute<{ matches: boolean }>(
+              sql`select draft_document = ${JSON.stringify(document)}::jsonb as matches from hrm_process_templates where org_id=${orgId} and id=${id}`,
+              "objects",
+            )
+          )[0]?.matches
         )
           return {
             id,
@@ -162,8 +207,9 @@ export async function saveChecklistDraft(query: {
       sql`select pg_advisory_xact_lock(hashtextextended(${orgId + ":checklist-name:" + document.kind + ":" + document.name.trim()},0))`,
     );
     const duplicateName = await db.execute(
-        sql`select id from hrm_process_templates where org_id=${orgId} and kind=${document.kind} and id<>${id} and (name=${document.name.trim()} or draft_document->>'name'=${document.name.trim()}) limit 1`, "objects",
-      );
+      sql`select id from hrm_process_templates where org_id=${orgId} and kind=${document.kind} and id<>${id} and (name=${document.name.trim()} or draft_document->>'name'=${document.name.trim()}) limit 1`,
+      "objects",
+    );
     if (duplicateName.length)
       throw new HrmProcessError(
         "REFUSED",
@@ -174,11 +220,15 @@ export async function saveChecklistDraft(query: {
       if (step.ownerPartyId) await assertOwnerParty(db, orgId, step.ownerPartyId);
     const revision = query.revision + 1;
     const rows = current
-      ? (await db.execute(
-            sql`update hrm_process_templates set draft_document = ${JSON.stringify(document)}::jsonb, draft_revision = ${revision}, designer_managed = true, updated_by = ${actorId}, updated_at = now() where org_id = ${orgId} and id = ${id} and draft_revision = ${query.revision} returning id`, "objects",
-          ))
-      : (await db.execute(sql`insert into hrm_process_templates(id,org_id,kind,name,applies_to,is_active,designer_managed,draft_document,draft_revision,created_by,updated_by)
-          values(${id},${orgId},${document.kind},${document.name.trim()},${JSON.stringify({ employer_subsidiary_id: document.appliesTo.employerSubsidiaryId, department_id: document.appliesTo.departmentId })}::jsonb,false,true,${JSON.stringify(document)}::jsonb,${revision},${actorId},${actorId}) returning id`, "objects"));
+      ? await db.execute(
+          sql`update hrm_process_templates set draft_document = ${JSON.stringify(document)}::jsonb, draft_revision = ${revision}, designer_managed = true, updated_by = ${actorId}, updated_at = now() where org_id = ${orgId} and id = ${id} and draft_revision = ${query.revision} returning id`,
+          "objects",
+        )
+      : await db.execute(
+          sql`insert into hrm_process_templates(id,org_id,kind,name,applies_to,is_active,designer_managed,draft_document,draft_revision,created_by,updated_by)
+          values(${id},${orgId},${document.kind},${document.name.trim()},${JSON.stringify({ employer_subsidiary_id: document.appliesTo.employerSubsidiaryId, department_id: document.appliesTo.departmentId })}::jsonb,false,true,${JSON.stringify(document)}::jsonb,${revision},${actorId},${actorId}) returning id`,
+          "objects",
+        );
     if (rows.length !== 1)
       throw new HrmProcessError(
         "REFUSED",
@@ -239,8 +289,9 @@ export async function retireChecklistTemplate(query: {
     if (!current.isActive) return current;
     await db.execute(sql`select set_config('app.checklist_publish',${id},true)`);
     const updated = await db.execute(
-        sql`update hrm_process_templates set is_active=false,updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} and is_active returning id`, "objects",
-      );
+      sql`update hrm_process_templates set is_active=false,updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} and is_active returning id`,
+      "objects",
+    );
     if (updated.length !== 1)
       throw new HrmProcessError(
         "REFUSED",
@@ -288,9 +339,12 @@ export async function publishChecklistDraft(query: {
         "REFUSED",
         "The draft changed before publication — review and publish the latest revision.",
       );
-    const marker = (await db.execute<{ published_revision: number }>(
-        sql`select published_revision from hrm_process_templates where org_id=${orgId} and id=${id}`, "objects",
-      ))[0];
+    const marker = (
+      await db.execute<{ published_revision: number }>(
+        sql`select published_revision from hrm_process_templates where org_id=${orgId} and id=${id}`,
+        "objects",
+      )
+    )[0];
     if (
       marker?.published_revision === query.revision &&
       locked.publishedVersion > 0 &&
@@ -300,8 +354,9 @@ export async function publishChecklistDraft(query: {
     const document = locked.document,
       issues = checklistIssues(document);
     const foreignIdentities = await db.execute(
-        sql`select id from hrm_process_template_steps where id in(select value::uuid from jsonb_array_elements_text(${JSON.stringify(document.steps.map((s) => s.id))}::jsonb) as ids(value)) and (org_id<>${orgId} or template_id<>${id}) limit 1`, "objects",
-      );
+      sql`select id from hrm_process_template_steps where id in(select value::uuid from jsonb_array_elements_text(${JSON.stringify(document.steps.map((s) => s.id))}::jsonb) as ids(value)) and (org_id<>${orgId} or template_id<>${id}) limit 1`,
+      "objects",
+    );
     if (foreignIdentities.length)
       throw new HrmProcessError(
         "REFUSED",
@@ -312,8 +367,9 @@ export async function publishChecklistDraft(query: {
       sql`select pg_advisory_xact_lock(hashtextextended(${orgId + ":checklist-name:" + document.kind + ":" + document.name.trim()},0))`,
     );
     const duplicateName = await db.execute(
-        sql`select id from hrm_process_templates where org_id=${orgId} and kind=${document.kind} and id<>${id} and (name=${document.name.trim()} or draft_document->>'name'=${document.name.trim()}) limit 1`, "objects",
-      );
+      sql`select id from hrm_process_templates where org_id=${orgId} and kind=${document.kind} and id<>${id} and (name=${document.name.trim()} or draft_document->>'name'=${document.name.trim()}) limit 1`,
+      "objects",
+    );
     if (duplicateName.length)
       throw new HrmProcessError(
         "REFUSED",
@@ -371,12 +427,14 @@ export async function publishChecklistDraft(query: {
       const existing = currentSteps.some((s) => s.id === step.id);
       const design = JSON.stringify(step.design);
       const rows = existing
-        ? (await db.execute(
-              sql`update hrm_process_template_steps set is_current=true,position=${position},title=${step.title.trim()},description=${step.description},owner_kind=${step.ownerKind},owner_party_id=${step.ownerPartyId},due_offset_days=${step.dueOffsetDays},required=${step.required},evidence_kind=${step.evidenceKind},design=${design}::jsonb,updated_by=${actorId},updated_at=now() where org_id=${orgId} and template_id=${id} and id=${step.id} returning id`, "objects",
-            ))
-        : (await db.execute(
-              sql`insert into hrm_process_template_steps(id,org_id,template_id,position,title,description,owner_kind,owner_party_id,due_offset_days,required,evidence_kind,design,created_by,updated_by) values(${step.id},${orgId},${id},${position},${step.title.trim()},${step.description},${step.ownerKind},${step.ownerPartyId},${step.dueOffsetDays},${step.required},${step.evidenceKind},${design}::jsonb,${actorId},${actorId}) returning id`, "objects",
-            ));
+        ? await db.execute(
+            sql`update hrm_process_template_steps set is_current=true,position=${position},title=${step.title.trim()},description=${step.description},owner_kind=${step.ownerKind},owner_party_id=${step.ownerPartyId},due_offset_days=${step.dueOffsetDays},required=${step.required},evidence_kind=${step.evidenceKind},design=${design}::jsonb,updated_by=${actorId},updated_at=now() where org_id=${orgId} and template_id=${id} and id=${step.id} returning id`,
+            "objects",
+          )
+        : await db.execute(
+            sql`insert into hrm_process_template_steps(id,org_id,template_id,position,title,description,owner_kind,owner_party_id,due_offset_days,required,evidence_kind,design,created_by,updated_by) values(${step.id},${orgId},${id},${position},${step.title.trim()},${step.description},${step.ownerKind},${step.ownerPartyId},${step.dueOffsetDays},${step.required},${step.evidenceKind},${design}::jsonb,${actorId},${actorId}) returning id`,
+            "objects",
+          );
       if (rows.length !== 1)
         throw new HrmProcessError(
           "REFUSED",
@@ -387,8 +445,9 @@ export async function publishChecklistDraft(query: {
     // definitions are excluded from future snapshots, never detached from history.
     for (const old of currentSteps.filter((s) => !document.steps.some((n) => n.id === s.id))) {
       const removed = await db.execute(
-          sql`update hrm_process_template_steps set is_current=false,updated_by=${actorId},updated_at=now() where org_id=${orgId} and template_id=${id} and id=${old.id} returning id`, "objects",
-        );
+        sql`update hrm_process_template_steps set is_current=false,updated_by=${actorId},updated_at=now() where org_id=${orgId} and template_id=${id} and id=${old.id} returning id`,
+        "objects",
+      );
       if (removed.length !== 1)
         throw new HrmProcessError(
           "REFUSED",
@@ -397,16 +456,18 @@ export async function publishChecklistDraft(query: {
     }
     const version = locked.publishedVersion + 1;
     const stored = await db.execute(
-        sql`insert into hrm_process_template_versions(org_id,template_id,version,document,published_by,reason) values(${orgId},${id},${version},${JSON.stringify(document)}::jsonb,${actorId},${reason}) returning id`, "objects",
-      );
+      sql`insert into hrm_process_template_versions(org_id,template_id,version,document,published_by,reason) values(${orgId},${id},${version},${JSON.stringify(document)}::jsonb,${actorId},${reason}) returning id`,
+      "objects",
+    );
     if (stored.length !== 1)
       throw new HrmProcessError(
         "REFUSED",
         "Publication evidence was not stored — nothing was published.",
       );
     const updated = await db.execute(
-        sql`update hrm_process_templates set name=${document.name.trim()},applies_to=${JSON.stringify({ employer_subsidiary_id: scope.employerSubsidiaryId, department_id: scope.departmentId })}::jsonb,is_active=true,designer_managed=true,published_version=${version},published_revision=${query.revision},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} returning id`, "objects",
-      );
+      sql`update hrm_process_templates set name=${document.name.trim()},applies_to=${JSON.stringify({ employer_subsidiary_id: scope.employerSubsidiaryId, department_id: scope.departmentId })}::jsonb,is_active=true,designer_managed=true,published_version=${version},published_revision=${query.revision},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} returning id`,
+      "objects",
+    );
     if (updated.length !== 1)
       throw new HrmProcessError(
         "REFUSED",
@@ -494,20 +555,25 @@ export async function runChecklistReminders(orgId: string): Promise<number> {
     if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) return 0;
     const today = await businessToday(orgId);
     const candidates = await db.execute<{ id: string; process_id: string }>(
-        sql`select s.id,s.process_id from hrm_process_steps s join hrm_processes p on p.org_id=s.org_id and p.id=s.process_id where s.org_id=${orgId} and p.status='open' and s.status='pending' and s.design->>'reminderDays' is not null and s.due_on + (s.design->>'reminderDays')::int <= ${today}::date and (s.reminder_sent_on is null or s.reminder_sent_on<${today}::date) order by s.process_id,s.id limit 100`, "objects",
-      );
+      sql`select s.id,s.process_id from hrm_process_steps s join hrm_processes p on p.org_id=s.org_id and p.id=s.process_id where s.org_id=${orgId} and p.status='open' and s.status='pending' and s.design->>'reminderDays' is not null and s.due_on + (s.design->>'reminderDays')::int <= ${today}::date and (s.reminder_sent_on is null or s.reminder_sent_on<${today}::date) order by s.process_id,s.id limit 100`,
+      "objects",
+    );
     const users = await db.execute<{ id: string }>(
-        sql`select id from users where org_id=${orgId} and is_active order by id`, "objects",
-      );
+      sql`select id from users where org_id=${orgId} and is_active order by id`,
+      "objects",
+    );
     let sent = 0;
     for (const candidate of candidates) {
       const process = await loadProcessForUpdate(db, orgId, candidate.process_id);
       if (process.status !== "open") continue;
       const step = await loadStepForUpdate(db, orgId, candidate.id);
       if (step.status !== "pending") continue;
-      const current = (await db.execute<{ sent: boolean }>(
-          sql`select reminder_sent_on>=${today}::date as sent from hrm_process_steps where org_id=${orgId} and id=${step.id}`, "objects",
-        ))[0];
+      const current = (
+        await db.execute<{ sent: boolean }>(
+          sql`select reminder_sent_on>=${today}::date as sent from hrm_process_steps where org_id=${orgId} and id=${step.id}`,
+          "objects",
+        )
+      )[0];
       if (current?.sent) continue;
       const recipients: { userId: string; href: string }[] = [];
       for (const user of users) {
@@ -524,8 +590,9 @@ export async function runChecklistReminders(orgId: string): Promise<number> {
       if (!recipients.length) continue;
       for (const { userId, href } of recipients) {
         const notification = await db.execute(
-            sql`insert into notifications(org_id,user_id,kind,title,body,href) values(${orgId},${userId},'hrm_checklist',${`Checklist step due: ${step.title}`},${`This ${step.process_kind} checklist step was due ${step.due_on}. Open the task to review its instructions and complete the outstanding work.`},${href}) returning id`, "objects",
-          );
+          sql`insert into notifications(org_id,user_id,kind,title,body,href) values(${orgId},${userId},'hrm_checklist',${`Checklist step due: ${step.title}`},${`This ${step.process_kind} checklist step was due ${step.due_on}. Open the task to review its instructions and complete the outstanding work.`},${href}) returning id`,
+          "objects",
+        );
         if (notification.length !== 1)
           throw new HrmProcessError(
             "REFUSED",
@@ -533,8 +600,9 @@ export async function runChecklistReminders(orgId: string): Promise<number> {
           );
       }
       const changed = await db.execute(
-          sql`update hrm_process_steps set reminder_sent_on=${today}::date where org_id=${orgId} and id=${step.id} and (reminder_sent_on is null or reminder_sent_on<${today}::date) returning id`, "objects",
-        );
+        sql`update hrm_process_steps set reminder_sent_on=${today}::date where org_id=${orgId} and id=${step.id} and (reminder_sent_on is null or reminder_sent_on<${today}::date) returning id`,
+        "objects",
+      );
       if (changed.length !== 1)
         throw new HrmProcessError(
           "REFUSED",
@@ -557,9 +625,12 @@ export async function getChecklistVersion(query: {
     throw new HrmProcessError("REFUSED", "Choose a published version from checklist history.");
   return withOrgTransaction(query.orgId, async () => {
     await getChecklistDesigner(query);
-    const row = (await db.execute<{ document: unknown }>(
-        sql`select document from hrm_process_template_versions where org_id=${query.orgId} and template_id=${query.templateId} and version=${query.version}`, "objects",
-      ))[0];
+    const row = (
+      await db.execute<{ document: unknown }>(
+        sql`select document from hrm_process_template_versions where org_id=${query.orgId} and template_id=${query.templateId} and version=${query.version}`,
+        "objects",
+      )
+    )[0];
     if (!row)
       throw new HrmProcessError(
         "NOT_FOUND",

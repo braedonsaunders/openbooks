@@ -3,8 +3,29 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { requireHrmProcessConfig } from "./authorization.ts";
 import { isUniqueViolation } from "./field-time/errors.ts";
-import { HrmProcessError, requireKind, requireOrgId, requireActorId, requireId, requireNonBlank, assertHrmFeatureOn } from "./process-core.ts";
-import { type TemplateRow, type ProcessTemplateDTO, type TemplateStepRow, type ProcessTemplateStepDTO, toTemplateDTO, toTemplateStepDTO, assertTemplateWriteScope, templateAppliesTo, assertAppliesToTargets, assertOwnerParty, requireOwnerKind, requireEvidenceKind } from "./process-templates.ts";
+import {
+  HrmProcessError,
+  requireKind,
+  requireOrgId,
+  requireActorId,
+  requireId,
+  requireNonBlank,
+  assertHrmFeatureOn,
+} from "./process-core.ts";
+import {
+  type TemplateRow,
+  type ProcessTemplateDTO,
+  type TemplateStepRow,
+  type ProcessTemplateStepDTO,
+  toTemplateDTO,
+  toTemplateStepDTO,
+  assertTemplateWriteScope,
+  templateAppliesTo,
+  assertAppliesToTargets,
+  assertOwnerParty,
+  requireOwnerKind,
+  requireEvidenceKind,
+} from "./process-templates.ts";
 
 // --- Template CRUD (configuration; Setup registry pattern) -------------------
 
@@ -36,7 +57,8 @@ export async function createProcessTemplate(
     await assertAppliesToTargets(db, orgId, actorId, appliesTo);
     let inserted: TemplateRow[];
     try {
-      inserted = (await db.execute<TemplateRow>(sql`
+      inserted = (await db.execute<TemplateRow>(
+        sql`
         insert into hrm_process_templates (org_id, kind, name, applies_to, created_by, updated_by)
         values (${orgId}, ${kind}, ${name},
                 ${JSON.stringify({ employer_subsidiary_id: appliesTo.employerSubsidiaryId, department_id: appliesTo.departmentId })}::jsonb,
@@ -46,7 +68,9 @@ export async function createProcessTemplate(
                   is_active as "is_active",
                   created_at as "created_at", created_by as "created_by",
                   updated_at as "updated_at", updated_by as "updated_by"
-      `, "objects")) as TemplateRow[];
+      `,
+        "objects",
+      )) as TemplateRow[];
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new HrmProcessError(
@@ -85,12 +109,17 @@ export async function updateProcessTemplate(
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
-    const current = (await db.execute<TemplateRow>(sql`
+    const current = (
+      await db.execute<TemplateRow>(
+        sql`
       select id, org_id, kind, name, applies_to, is_active,
              created_at, created_by, updated_at, updated_by
         from hrm_process_templates
        where org_id = ${orgId} and id = ${templateId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!current) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -124,7 +153,8 @@ export async function updateProcessTemplate(
     await assertAppliesToTargets(db, orgId, actorId, appliesTo);
     let updated: TemplateRow[];
     try {
-      updated = (await db.execute<TemplateRow>(sql`
+      updated = (await db.execute<TemplateRow>(
+        sql`
         update hrm_process_templates
            set name = ${name},
                applies_to = ${JSON.stringify({ employer_subsidiary_id: appliesTo.employerSubsidiaryId, department_id: appliesTo.departmentId })}::jsonb,
@@ -132,7 +162,9 @@ export async function updateProcessTemplate(
          where org_id = ${orgId} and id = ${templateId}
         returning id, org_id, kind, name, applies_to, is_active,
                   created_at, created_by, updated_at, updated_by
-      `, "objects")) as TemplateRow[];
+      `,
+        "objects",
+      )) as TemplateRow[];
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new HrmProcessError(
@@ -150,9 +182,14 @@ export async function updateProcessTemplate(
       );
     }
     const count =
-      (await db.execute<{ n: number }>(sql`
+      (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from hrm_process_template_steps where org_id = ${orgId} and template_id = ${templateId}
-    `, "objects"))[0]?.n ?? 0;
+    `,
+          "objects",
+        )
+      )[0]?.n ?? 0;
     return toTemplateDTO(row, count);
   });
 }
@@ -173,12 +210,17 @@ export async function deleteProcessTemplate(query: {
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
-    const current = (await db.execute<TemplateRow>(sql`
+    const current = (
+      await db.execute<TemplateRow>(
+        sql`
       select id, org_id, kind, name, applies_to, is_active,
              created_at, created_by, updated_at, updated_by
         from hrm_process_templates
        where org_id = ${orgId} and id = ${templateId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!current) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -189,13 +231,21 @@ export async function deleteProcessTemplate(query: {
     // locked-row scope as updating.
     await assertTemplateWriteScope(db, orgId, actorId, templateAppliesTo(current.applies_to));
     const opened =
-      (await db.execute<{ n: number }>(sql`
+      (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from hrm_processes where org_id = ${orgId} and template_id = ${templateId}
-    `, "objects"))[0]?.n ?? 0;
+    `,
+          "objects",
+        )
+      )[0]?.n ?? 0;
     const versions =
-      (await db.execute<{ n: number }>(
-          sql`select count(*)::int as n from hrm_process_template_versions where org_id=${orgId} and template_id=${templateId}`, "objects",
-        ))[0]?.n ?? 0;
+      (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from hrm_process_template_versions where org_id=${orgId} and template_id=${templateId}`,
+          "objects",
+        )
+      )[0]?.n ?? 0;
     if (versions > 0)
       throw new HrmProcessError(
         "REFUSED",
@@ -207,9 +257,12 @@ export async function deleteProcessTemplate(query: {
         `${opened} process(es) were opened from this template and it is retained as history — set is_active = false to retire it instead of deleting it`,
       );
     }
-    const deleted = await db.execute(sql`
+    const deleted = await db.execute(
+      sql`
       delete from hrm_process_templates where org_id = ${orgId} and id = ${templateId} returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (deleted.length !== 1) {
       throw new HrmProcessError(
         "REFUSED",
@@ -267,12 +320,17 @@ export async function upsertProcessTemplateStep(
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
-    const template = (await db.execute<TemplateRow>(sql`
+    const template = (
+      await db.execute<TemplateRow>(
+        sql`
       select id, org_id, kind, name, applies_to, is_active,
              created_at, created_by, updated_at, updated_by
         from hrm_process_templates
        where org_id = ${orgId} and id = ${templateId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!template) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -289,7 +347,9 @@ export async function upsertProcessTemplateStep(
     let row: TemplateStepRow | undefined;
     if (query.stepId === undefined) {
       try {
-        row = (await db.execute<TemplateStepRow>(sql`
+        row = (
+          await db.execute<TemplateStepRow>(
+            sql`
           insert into hrm_process_template_steps
             (org_id, template_id, position, title, description, owner_kind, owner_party_id,
              due_offset_days, required, evidence_kind, created_by, updated_by)
@@ -297,7 +357,10 @@ export async function upsertProcessTemplateStep(
                   ${dueOffsetDays}, ${required}, ${evidenceKind}, ${actorId}, ${actorId})
           returning id, org_id, template_id, position, title, description, owner_kind, owner_party_id,
                     due_offset_days, required, evidence_kind
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
       } catch (error) {
         if (isUniqueViolation(error)) {
           throw new HrmProcessError(
@@ -309,7 +372,9 @@ export async function upsertProcessTemplateStep(
       }
     } else {
       try {
-        row = (await db.execute<TemplateStepRow>(sql`
+        row = (
+          await db.execute<TemplateStepRow>(
+            sql`
           update hrm_process_template_steps
              set position = ${position}, title = ${title}, description = ${description},
                  owner_kind = ${ownerKind}, owner_party_id = ${ownerPartyId},
@@ -318,7 +383,10 @@ export async function upsertProcessTemplateStep(
            where org_id = ${orgId} and id = ${query.stepId} and template_id = ${templateId}
           returning id, org_id, template_id, position, title, description, owner_kind, owner_party_id,
                     due_offset_days, required, evidence_kind
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
       } catch (error) {
         if (isUniqueViolation(error)) {
           throw new HrmProcessError(
@@ -357,10 +425,15 @@ export async function reorderProcessTemplateSteps(query: {
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
-    const template = (await db.execute<{ id: string; applies_to: TemplateRow["applies_to"] }>(sql`
+    const template = (
+      await db.execute<{ id: string; applies_to: TemplateRow["applies_to"] }>(
+        sql`
       select id, applies_to from hrm_process_templates
        where org_id = ${orgId} and id = ${templateId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!template) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -371,9 +444,14 @@ export async function reorderProcessTemplateSteps(query: {
     // same locked-template scope as every other step write.
     await assertTemplateWriteScope(db, orgId, actorId, templateAppliesTo(template.applies_to));
     await refuseLegacyDesignerEdit(db, orgId, templateId);
-    const current = (await db.execute<{ id: string }>(sql`
+    const current = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from hrm_process_template_steps where org_id = ${orgId} and template_id = ${templateId}
-    `, "objects")).map((row) => row.id);
+    `,
+        "objects",
+      )
+    ).map((row) => row.id);
     const wanted = [...query.orderedStepIds];
     if (
       wanted.length !== current.length ||
@@ -387,12 +465,15 @@ export async function reorderProcessTemplateSteps(query: {
     }
     // Step aside through negative positions so no two rows share one.
     for (let index = 0; index < wanted.length; index += 1) {
-      const moved = await db.execute(sql`
+      const moved = await db.execute(
+        sql`
         update hrm_process_template_steps
            set position = ${-(index + 1)}, updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${wanted[index]} and template_id = ${templateId}
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (moved.length !== 1) {
         throw new HrmProcessError(
           "REFUSED",
@@ -401,12 +482,15 @@ export async function reorderProcessTemplateSteps(query: {
       }
     }
     for (let index = 0; index < wanted.length; index += 1) {
-      const moved = await db.execute(sql`
+      const moved = await db.execute(
+        sql`
         update hrm_process_template_steps
            set position = ${index}, updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${wanted[index]} and template_id = ${templateId}
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (moved.length !== 1) {
         throw new HrmProcessError(
           "REFUSED",
@@ -414,13 +498,16 @@ export async function reorderProcessTemplateSteps(query: {
         );
       }
     }
-    const rows = await db.execute<TemplateStepRow>(sql`
+    const rows = await db.execute<TemplateStepRow>(
+      sql`
       select id, org_id, template_id, position, title, description, owner_kind, owner_party_id,
              due_offset_days, required, evidence_kind
         from hrm_process_template_steps
        where org_id = ${orgId} and template_id = ${templateId}
        order by position
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map(toTemplateStepDTO);
   });
 }
@@ -438,10 +525,15 @@ export async function deleteProcessTemplateStep(query: {
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
-    const template = (await db.execute<{ id: string; applies_to: TemplateRow["applies_to"] }>(sql`
+    const template = (
+      await db.execute<{ id: string; applies_to: TemplateRow["applies_to"] }>(
+        sql`
       select id, applies_to from hrm_process_templates
        where org_id = ${orgId} and id = ${templateId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!template) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -454,11 +546,14 @@ export async function deleteProcessTemplateStep(query: {
     await refuseLegacyDesignerEdit(db, orgId, templateId);
     // Opened processes hold snapshots, so deleting a template step never
     // rewrites history — lineage on copied steps simply clears (SET NULL).
-    const deleted = await db.execute(sql`
+    const deleted = await db.execute(
+      sql`
       delete from hrm_process_template_steps
        where org_id = ${orgId} and id = ${stepId} and template_id = ${templateId}
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (deleted.length !== 1) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -473,9 +568,12 @@ async function refuseLegacyDesignerEdit(
   orgId: string,
   templateId: string,
 ): Promise<void> {
-  const row = (await exec.execute<{ designer_managed: boolean }>(
-      sql`select designer_managed from hrm_process_templates where org_id=${orgId} and id=${templateId}`, "objects",
-    ))[0];
+  const row = (
+    await exec.execute<{ designer_managed: boolean }>(
+      sql`select designer_managed from hrm_process_templates where org_id=${orgId} and id=${templateId}`,
+      "objects",
+    )
+  )[0];
   if (row?.designer_managed)
     throw new HrmProcessError(
       "REFUSED",

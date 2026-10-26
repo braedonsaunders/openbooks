@@ -1,13 +1,31 @@
 /** Designed-step completion validation and checklist step approvals. */
-import { checklistStepDesignSchema, validateResponse, splitRecordData, withComputedFormulas, CHECKLIST_STEP_SUBJECT_KIND } from "@openbooks/forms-core";
+import {
+  checklistStepDesignSchema,
+  validateResponse,
+  splitRecordData,
+  withComputedFormulas,
+  CHECKLIST_STEP_SUBJECT_KIND,
+} from "@openbooks/forms-core";
 import { lockApprovalSubject } from "../platform/approval-routing.ts";
 import { completedGateAllowsSelfApproval } from "../flows/approval-decision-policy.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { requireHrmProcessManage } from "./authorization.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { HrmProcessError, requireOrgId, requireActorId, requireId, assertHrmFeatureOn } from "./process-core.ts";
-import { type StepRow, loadStepForUpdate, resolveStepActor, assertAttachmentReadable, auditChecklist } from "./process-runtime.ts";
+import {
+  HrmProcessError,
+  requireOrgId,
+  requireActorId,
+  requireId,
+  assertHrmFeatureOn,
+} from "./process-core.ts";
+import {
+  type StepRow,
+  loadStepForUpdate,
+  resolveStepActor,
+  assertAttachmentReadable,
+  auditChecklist,
+} from "./process-runtime.ts";
 import { type CompleteStepQuery } from "./process-step-execution.ts";
 
 export async function validateDesignedCompletion(
@@ -18,9 +36,12 @@ export async function validateDesignedCompletion(
   query: CompleteStepQuery,
   submitting = false,
 ) {
-  const row = (await exec.execute<{ design: unknown; approval_status: string }>(
-      sql`select design,approval_status from hrm_process_steps where org_id=${orgId} and id=${step.id}`, "objects",
-    ))[0];
+  const row = (
+    await exec.execute<{ design: unknown; approval_status: string }>(
+      sql`select design,approval_status from hrm_process_steps where org_id=${orgId} and id=${step.id}`,
+      "objects",
+    )
+  )[0];
   if (!row)
     throw new HrmProcessError(
       "NOT_FOUND",
@@ -28,11 +49,15 @@ export async function validateDesignedCompletion(
     );
   const design = checklistStepDesignSchema.parse(row.design ?? {});
   const pending = await exec.execute<{ title: string }>(
-      sql`select title from hrm_process_steps where org_id=${orgId} and process_id=${step.process_id} and template_step_id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify(design.dependencies)}::jsonb) as deps(value)) and status='pending' order by position`, "objects",
-    );
-  const dependencyCount = (await exec.execute<{ count: number }>(
-      sql`select count(*)::int as count from hrm_process_steps where org_id=${orgId} and process_id=${step.process_id} and template_step_id in(select value::uuid from jsonb_array_elements_text(${JSON.stringify(design.dependencies)}::jsonb) as ids(value))`, "objects",
-    ))[0]?.count;
+    sql`select title from hrm_process_steps where org_id=${orgId} and process_id=${step.process_id} and template_step_id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify(design.dependencies)}::jsonb) as deps(value)) and status='pending' order by position`,
+    "objects",
+  );
+  const dependencyCount = (
+    await exec.execute<{ count: number }>(
+      sql`select count(*)::int as count from hrm_process_steps where org_id=${orgId} and process_id=${step.process_id} and template_step_id in(select value::uuid from jsonb_array_elements_text(${JSON.stringify(design.dependencies)}::jsonb) as ids(value))`,
+      "objects",
+    )
+  )[0]?.count;
   if (dependencyCount !== design.dependencies.length)
     throw new HrmProcessError(
       "REFUSED",
@@ -68,9 +93,12 @@ export async function validateDesignedCompletion(
               "EVIDENCE_REQUIRED",
               `Choose a valid reference for ${field.label} from its picker.`,
             );
-          const target = (await exec.execute(
-              sql`select id from ${sql.identifier(field.type === "party" ? "parties" : "accounts")} where org_id=${orgId} and id=${value} and is_active`, "objects",
-            ))[0];
+          const target = (
+            await exec.execute(
+              sql`select id from ${sql.identifier(field.type === "party" ? "parties" : "accounts")} where org_id=${orgId} and id=${value} and is_active`,
+              "objects",
+            )
+          )[0];
           if (!target)
             throw new HrmProcessError(
               "EVIDENCE_REQUIRED",
@@ -95,9 +123,7 @@ export async function validateDesignedCompletion(
     );
 }
 
-export async function submitChecklistStepApproval(
-  query: CompleteStepQuery,
-): Promise<void> {
+export async function submitChecklistStepApproval(query: CompleteStepQuery): Promise<void> {
   const orgId = requireOrgId(query.orgId),
     actorId = requireActorId(query.actorId),
     id = requireId(query.stepId, "stepId");
@@ -115,14 +141,17 @@ export async function submitChecklistStepApproval(
         "BAD_STATE",
         "Only a pending step on an open checklist can be submitted.",
       );
-    const row = (await db.execute<{
+    const row = (
+      await db.execute<{
         design: unknown;
         approval_status: string;
         response: unknown;
         attachment_id: string | null;
       }>(
-        sql`select design,approval_status,response,attachment_id from hrm_process_steps where org_id=${orgId} and id=${id}`, "objects",
-      ))[0];
+        sql`select design,approval_status,response,attachment_id from hrm_process_steps where org_id=${orgId} and id=${id}`,
+        "objects",
+      )
+    )[0];
     if (!row)
       throw new HrmProcessError("NOT_FOUND", "Checklist step not found — reload the checklist.");
     const design = checklistStepDesignSchema.parse(row.design);
@@ -149,15 +178,15 @@ export async function submitChecklistStepApproval(
       await assertAttachmentReadable(db, orgId, actorId, query.attachmentId);
     }
     const prepared = await db.execute(
-        sql`update hrm_process_steps set submitted_by=${actorId},submitted_at=now(),response=${JSON.stringify(query.response ?? null)}::jsonb,attachment_id=${query.attachmentId ?? null},approval_status='pending',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} and status='pending' returning id`, "objects",
-      );
+      sql`update hrm_process_steps set submitted_by=${actorId},submitted_at=now(),response=${JSON.stringify(query.response ?? null)}::jsonb,attachment_id=${query.attachmentId ?? null},approval_status='pending',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} and status='pending' returning id`,
+      "objects",
+    );
     if (prepared.length !== 1)
       throw new HrmProcessError(
         "REFUSED",
         "The step changed during submission — reload and retry.",
       );
-    const { routeSubjectSubmission } =
-      await import("../flows/submission-policy.ts");
+    const { routeSubjectSubmission } = await import("../flows/submission-policy.ts");
     const { policy, dispatch, submissionId } = await routeSubjectSubmission({
       orgId,
       actorId,
@@ -166,8 +195,9 @@ export async function submitChecklistStepApproval(
     });
     const gated = dispatch.runs.find((run) => run.gatesCreated > 0);
     const stored = await db.execute(
-        sql`update hrm_process_steps set flow_run_id=${gated?.runId ?? null},approval_status=${policy.kind === "gated" ? "pending" : "approved"} where org_id=${orgId} and id=${id} and approval_status='pending' returning id`, "objects",
-      );
+      sql`update hrm_process_steps set flow_run_id=${gated?.runId ?? null},approval_status=${policy.kind === "gated" ? "pending" : "approved"} where org_id=${orgId} and id=${id} and approval_status='pending' returning id`,
+      "objects",
+    );
     if (stored.length !== 1)
       throw new HrmProcessError(
         "REFUSED",
@@ -212,9 +242,12 @@ export async function releaseChecklistStepApproval(args: {
   await assertHrmFeatureOn(db, orgId);
   const step = await loadStepForUpdate(db, orgId, args.subjectId);
   await requireHrmProcessManage(db, orgId, actorId, step.employment_id);
-  const row = (await db.execute<{ approval_status: string; submitted_by: string; flow_run_id: string | null }>(
-      sql`select approval_status,submitted_by,flow_run_id from hrm_process_steps where org_id=${orgId} and id=${step.id}`, "objects",
-    ))[0];
+  const row = (
+    await db.execute<{ approval_status: string; submitted_by: string; flow_run_id: string | null }>(
+      sql`select approval_status,submitted_by,flow_run_id from hrm_process_steps where org_id=${orgId} and id=${step.id}`,
+      "objects",
+    )
+  )[0];
   if (row?.approval_status !== "pending") return;
   if (step.process_status !== "open" || step.status !== "pending")
     throw new HrmProcessError(
@@ -224,8 +257,12 @@ export async function releaseChecklistStepApproval(args: {
   if (
     row.submitted_by === actorId &&
     !(await completedGateAllowsSelfApproval(db, {
-      orgId, subjectKind: CHECKLIST_STEP_SUBJECT_KIND, subjectId: step.id,
-      approvalRunId: args.approvalRunId, actorId, outcome: args.outcome,
+      orgId,
+      subjectKind: CHECKLIST_STEP_SUBJECT_KIND,
+      subjectId: step.id,
+      approvalRunId: args.approvalRunId,
+      actorId,
+      outcome: args.outcome,
     }))
   )
     throw new HrmProcessError(
@@ -233,8 +270,9 @@ export async function releaseChecklistStepApproval(args: {
       "The submitted Flow policy requires another authorized approver for this checklist evidence.",
     );
   const changed = await db.execute(
-      sql`update hrm_process_steps set approval_status=${args.outcome},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${step.id} and approval_status='pending' returning id`, "objects",
-    );
+    sql`update hrm_process_steps set approval_status=${args.outcome},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${step.id} and approval_status='pending' returning id`,
+    "objects",
+  );
   if (changed.length !== 1)
     throw new HrmProcessError(
       "REFUSED",
