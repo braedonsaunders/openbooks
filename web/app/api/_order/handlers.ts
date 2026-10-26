@@ -37,6 +37,7 @@ import {
   QUOTE_SUBJECT_TABLE,
   voidSignatureRequestsForSubject,
 } from "@openbooks/engine/billing/quote-to-cash";
+export { assignWarehouseBody, jsonObject } from "@/lib/api/json";
 export type { OrderHandlerConfig } from "../../../lib/order-draft-edit";
 
 export const orderEditServices: OrderEditServices = {

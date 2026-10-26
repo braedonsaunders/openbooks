@@ -1,6 +1,5 @@
-import { makeAssignWarehousePOST } from "../../../_order/handlers";
+import { assignWarehouseBody, makeAssignWarehousePOST } from "../../../_order/handlers";
 import { defineRoute } from "@/lib/api/route";
-import { assignWarehouseBody } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
 import { z } from "zod";
 

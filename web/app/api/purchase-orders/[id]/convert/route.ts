@@ -1,6 +1,5 @@
-import { makeConvertPOST } from "../../../_order/handlers";
+import { jsonObject, makeConvertPOST } from "../../../_order/handlers";
 import { guardFeaturePermission } from "@/lib/feature-gates";
-import { jsonObject } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/list-params";
 import { conversionWouldCopyInventoryKinds } from "@/lib/order-cycle";
