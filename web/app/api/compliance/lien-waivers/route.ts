@@ -1,74 +1,88 @@
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { defineRoute } from '@/lib/api/route'
-import { parseJsonBody } from '@/lib/api/json'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
+import { guardPermission } from "@/lib/authz";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { nextNumber } from "@openbooks/engine/payments/payment-documents";
-import '@/lib/authz';
-import { complianceSubsidiaryFilter, guardLienWaiverFeature, loadLienWaivers } from '@/lib/compliance'
-import { complianceWriteFailure } from '@/lib/compliance-errors'
-import { isUuid, pickString } from '@/lib/list-params'
-import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
-import { isIso4217CurrencyCode } from '@openbooks/engine/fx/currencies'
-import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
-import { normalizeSubdivisionCode } from '@openbooks/engine/compliance/lien-jurisdictions'
-import { canonicalDecimal } from '@/lib/exact-decimal'
-import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
+import {
+  complianceSubsidiaryFilter,
+  guardLienWaiverFeature,
+  loadLienWaivers,
+} from "@/lib/compliance";
+import { complianceWriteFailure } from "@/lib/compliance-errors";
+import { isUuid, pickString } from "@/lib/list-params";
+import { normalizeMoney, wholeDigits } from "@openbooks/engine/money";
+import { isIso4217CurrencyCode } from "@openbooks/engine/fx/currencies";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { normalizeSubdivisionCode } from "@openbooks/engine/compliance/lien-jurisdictions";
+import { canonicalDecimal } from "@/lib/exact-decimal";
+import { moneyRefusal } from "@/lib/payroll-decimal-refusal";
 
 const requestBodySchema = z.object({
   // Amount and currency stay shape-only here on purpose: the route below owns
   // the refusal vocabulary (normalizeMoney's decimal-point remedy, the whole-
   // digit range guard, the shared ISO 4217 gate), and schema-level refinements
   // would shadow those named 422s with field-blind 400s.
-  amount: z.union([
-    z.string(),
-    z.literal(''),
-    z.null(),
-  ]).optional(),
-  billDocumentId: uuidString({ error: 'billDocumentId must be a valid bill id' }).nullable().optional(),
+  amount: z.union([z.string(), z.literal(""), z.null()]).optional(),
+  billDocumentId: uuidString({ error: "billDocumentId must be a valid bill id" })
+    .nullable()
+    .optional(),
   currency: z.string().optional(),
-  direction: z.enum(['received', 'issued']).optional(),
+  direction: z.enum(["received", "issued"]).optional(),
   jurisdiction: z.string().trim().max(20).nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
-  partyId: uuidString({ error: 'partyId must be a valid vendor id' }),
-  payApplicationId: uuidString({ error: 'payApplicationId must be a valid application id' }).nullable().optional(),
-  projectId: uuidString({ error: 'projectId must be a valid project id' }),
-  throughDate: z.string().refine(isIsoCalendarDate, 'throughDate must be a real calendar date (YYYY-MM-DD)'),
-  waiverType: z.enum(['conditional_progress', 'unconditional_progress', 'conditional_final', 'unconditional_final']).optional(),
-})
+  partyId: uuidString({ error: "partyId must be a valid vendor id" }),
+  payApplicationId: uuidString({ error: "payApplicationId must be a valid application id" })
+    .nullable()
+    .optional(),
+  projectId: uuidString({ error: "projectId must be a valid project id" }),
+  throughDate: z
+    .string()
+    .refine(isIsoCalendarDate, "throughDate must be a real calendar date (YYYY-MM-DD)"),
+  waiverType: z
+    .enum([
+      "conditional_progress",
+      "unconditional_progress",
+      "conditional_final",
+      "unconditional_final",
+    ])
+    .optional(),
+});
 
+async function authorizeLienWaiver(permission: string) {
+  const gate = await guardPermission(permission);
+  if (gate instanceof NextResponse) return gate;
+  return (await guardLienWaiverFeature(gate.user.orgId)) ?? gate;
+}
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const WAIVER_TYPES = new Set([
-  'conditional_progress',
-  'unconditional_progress',
-  'conditional_final',
-  'unconditional_final'
-])
+  "conditional_progress",
+  "unconditional_progress",
+  "conditional_final",
+  "unconditional_final",
+]);
 
 export const GET = defineRoute({
-  permission: 'compliance.read',
-  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  authorize: () => authorizeLienWaiver("compliance.read"),
+  feature: "subcontractorCompliance",
   handler: async ({ request: req, authz: gate }) => {
-    const blocked = await guardLienWaiverFeature(gate.user.orgId)
-    if (blocked) return blocked
-    const url = new URL(req.url)
-    const direction = pickString(url.searchParams.get('direction') ?? undefined)
+    const url = new URL(req.url);
+    const direction = pickString(url.searchParams.get("direction") ?? undefined);
     const waivers = await loadLienWaivers({
       orgId: gate.user.orgId,
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      direction: direction === 'received' || direction === 'issued' ? direction : null,
-      status: pickString(url.searchParams.get('status') ?? undefined) ?? null,
-      projectId: pickString(url.searchParams.get('projectId') ?? undefined) ?? null,
-      partyId: pickString(url.searchParams.get('partyId') ?? undefined) ?? null
-    })
-    return NextResponse.json({ waivers })
-
+      direction: direction === "received" || direction === "issued" ? direction : null,
+      status: pickString(url.searchParams.get("status") ?? undefined) ?? null,
+      projectId: pickString(url.searchParams.get("projectId") ?? undefined) ?? null,
+      partyId: pickString(url.searchParams.get("partyId") ?? undefined) ?? null,
+    });
+    return NextResponse.json({ waivers });
   },
-})
+});
 
 /**
  * Create a lien waiver.
@@ -79,132 +93,179 @@ export const GET = defineRoute({
  * covers rather than being retyped.
  */
 export const POST = defineRoute({
-  permission: 'compliance.manage',
-  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
-  handler: async ({ request: req, authz: gate }) => {
-    const blocked = await guardLienWaiverFeature(gate.user.orgId)
-    if (blocked) return blocked
-    const { orgId, id: actorId } = gate.user
+  authorize: () => authorizeLienWaiver("compliance.manage"),
+  feature: "subcontractorCompliance",
+  body: requestBodySchema,
+  handler: async ({ authz: gate, body }) => {
+    const { orgId, id: actorId } = gate.user;
 
-    const parsedBody = await parseJsonBody(req, requestBodySchema)
-    if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data
-    if (body.direction !== undefined && body.direction !== 'received' && body.direction !== 'issued') {
-      return NextResponse.json({ error: 'direction must be "received" or "issued"' }, { status: 400 })
+    if (
+      body.direction !== undefined &&
+      body.direction !== "received" &&
+      body.direction !== "issued"
+    ) {
+      return NextResponse.json(
+        { error: 'direction must be "received" or "issued"' },
+        { status: 400 },
+      );
     }
-    const direction = body.direction === 'issued' ? 'issued' : 'received'
-    if (!isUuid(body.partyId ?? '')) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
-    if (!isUuid(body.projectId ?? '')) {
-      return NextResponse.json({ error: 'a lien waiver is always against a project' }, { status: 400 })
+    const direction = body.direction === "issued" ? "issued" : "received";
+    if (!isUuid(body.partyId ?? ""))
+      return NextResponse.json({ error: "partyId is required" }, { status: 400 });
+    if (!isUuid(body.projectId ?? "")) {
+      return NextResponse.json(
+        { error: "a lien waiver is always against a project" },
+        { status: 400 },
+      );
     }
-    if (!body.throughDate) return NextResponse.json({ error: 'throughDate is required' }, { status: 400 })
+    if (!body.throughDate)
+      return NextResponse.json({ error: "throughDate is required" }, { status: 400 });
     // through_date is a date column and this verb's catch surfaces the driver
     // text, so refuse anything that is not a real calendar day here with a
     // named 400 before any write is attempted.
     if (!isIsoCalendarDate(body.throughDate)) {
-      return NextResponse.json({ error: 'throughDate must be a real calendar date (YYYY-MM-DD)' }, { status: 400 })
+      return NextResponse.json(
+        { error: "throughDate must be a real calendar date (YYYY-MM-DD)" },
+        { status: 400 },
+      );
     }
 
-    const [org] = await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`, 'objects')
-    const party = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+    const [org] = await db.execute<{ base_currency: string }>(
+      sql`select base_currency from orgs where id = ${orgId}`,
+      "objects",
+    );
+    const party = (
+      await db.execute<{ id: string; subsidiaryId: string | null }>(
+        sql`
       select id, subsidiary_id as "subsidiaryId"
         from parties
        where org_id = ${orgId} and id = ${body.partyId} and is_active
          ${complianceSubsidiaryFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-    `, 'objects'))[0]
-    if (!party) return NextResponse.json({ error: 'party not found' }, { status: 404 })
+    `,
+        "objects",
+      )
+    )[0];
+    if (!party) return NextResponse.json({ error: "party not found" }, { status: 404 });
     const project = await db.execute<{
-      id: string
-      class_default: string | null
-      subsidiaryId: string | null
-    }>(sql`
+      id: string;
+      class_default: string | null;
+      subsidiaryId: string | null;
+    }>(
+      sql`
       select p.id, p.subsidiary_id as "subsidiaryId", cls.default_lien_waiver_type as class_default
         from projects p
         left join vendor_roles vr on vr.org_id = p.org_id and vr.party_id = ${body.partyId}
         left join compliance_classes cls on cls.id = vr.compliance_class_id and cls.org_id = p.org_id
        where p.org_id = ${orgId} and p.id = ${body.projectId} and p.is_active
          ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}
-    `, 'objects')
-    if (project.length === 0) return NextResponse.json({ error: 'project not found' }, { status: 404 })
+    `,
+      "objects",
+    );
+    if (project.length === 0)
+      return NextResponse.json({ error: "project not found" }, { status: 404 });
 
-    const waiverType = body.waiverType ?? project[0]!.class_default ?? 'unconditional_progress'
+    const waiverType = body.waiverType ?? project[0]!.class_default ?? "unconditional_progress";
     if (!WAIVER_TYPES.has(waiverType)) {
-      return NextResponse.json({ error: 'unknown lien waiver type' }, { status: 400 })
+      return NextResponse.json({ error: "unknown lien waiver type" }, { status: 400 });
     }
     // The release is effective under the law of the project's site, so the
     // jurisdiction is an ISO 3166-2 subdivision code, not free text. A waiver
     // for the wrong subdivision can never release this project's bills (the
     // evaluator matches it against the project's site), so refuse an unknown
     // code here with its remedy instead of storing unusable text.
-    let jurisdiction: string | null = null
-    if (body.jurisdiction != null && body.jurisdiction !== '') {
-      const canonical = normalizeSubdivisionCode(body.jurisdiction)
+    let jurisdiction: string | null = null;
+    if (body.jurisdiction != null && body.jurisdiction !== "") {
+      const canonical = normalizeSubdivisionCode(body.jurisdiction);
       if (!canonical) {
         return NextResponse.json(
-          { error: `unknown jurisdiction ${JSON.stringify(body.jurisdiction)} — use an ISO 3166-2 subdivision code (e.g. US-CA)` },
+          {
+            error: `unknown jurisdiction ${JSON.stringify(body.jurisdiction)} — use an ISO 3166-2 subdivision code (e.g. US-CA)`,
+          },
           { status: 422 },
-        )
+        );
       }
-      jurisdiction = canonical
+      jurisdiction = canonical;
     }
 
     // Default the amount from the bill being released, so the released figure and
     // the money it releases cannot drift apart through a typo.
-    let amount = body.amount == null || body.amount === '' ? null : canonicalDecimal(body.amount, 4)
-    if (body.amount != null && body.amount !== '' && amount === null) {
-      return NextResponse.json({ error: moneyRefusal('Amount', body.amount) }, { status: 422 })
+    let amount =
+      body.amount == null || body.amount === "" ? null : canonicalDecimal(body.amount, 4);
+    if (body.amount != null && body.amount !== "" && amount === null) {
+      return NextResponse.json({ error: moneyRefusal("Amount", body.amount) }, { status: 422 });
     }
     // amount is numeric(19,4): a wider figure would die in Postgres, surfacing
     // the full INSERT through the catch below. Refuse it with a named 422.
     if (amount !== null && wholeDigits(amount) > 15) {
-      return NextResponse.json({ error: 'amount is out of range — at most 15 whole digits fit the ledger' }, { status: 422 })
+      return NextResponse.json(
+        { error: "amount is out of range — at most 15 whole digits fit the ledger" },
+        { status: 422 },
+      );
     }
-    let currency = body.currency ?? org?.base_currency ?? 'USD'
+    let currency = body.currency ?? org?.base_currency ?? "USD";
     if (body.billDocumentId != null && !isUuid(body.billDocumentId)) {
-      return NextResponse.json({ error: 'invalid billDocumentId' }, { status: 400 })
+      return NextResponse.json({ error: "invalid billDocumentId" }, { status: 400 });
     }
     if (body.payApplicationId != null && !isUuid(body.payApplicationId)) {
-      return NextResponse.json({ error: 'invalid payApplicationId' }, { status: 400 })
+      return NextResponse.json({ error: "invalid payApplicationId" }, { status: 400 });
     }
     if (body.payApplicationId) {
-      const payApplication = (await db.execute<{ projectId: string }>(sql`
+      const payApplication = (
+        await db.execute<{ projectId: string }>(
+          sql`
         select project_id as "projectId"
           from pay_applications
          where org_id = ${orgId} and id = ${body.payApplicationId}
-      `, 'objects'))[0]
-      if (!payApplication) return NextResponse.json({ error: 'pay application not found' }, { status: 404 })
+      `,
+          "objects",
+        )
+      )[0];
+      if (!payApplication)
+        return NextResponse.json({ error: "pay application not found" }, { status: 404 });
       if (payApplication.projectId !== body.projectId) {
-        return NextResponse.json({ error: 'that pay application belongs to a different project' }, { status: 422 })
+        return NextResponse.json(
+          { error: "that pay application belongs to a different project" },
+          { status: 422 },
+        );
       }
     }
     if (body.billDocumentId) {
       const bill = await db.execute<{
-        amount: string
-        currency: string
-        party_id: string | null
-        project_id: string | null
-        subsidiaryId: string | null
-      }>(sql`
+        amount: string;
+        currency: string;
+        party_id: string | null;
+        project_id: string | null;
+        subsidiaryId: string | null;
+      }>(
+        sql`
         select coalesce(open_balance, total) as amount, currency, party_id,
                project_id, subsidiary_id as "subsidiaryId"
           from documents
          where org_id = ${orgId} and id = ${body.billDocumentId}
            and kind in ('vendor_bill', 'expense_report')
            ${complianceSubsidiaryFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
-      `, 'objects')
-      const row = bill[0]
-      if (!row) return NextResponse.json({ error: 'bill not found' }, { status: 404 })
+      `,
+        "objects",
+      );
+      const row = bill[0];
+      if (!row) return NextResponse.json({ error: "bill not found" }, { status: 404 });
       if (row.party_id !== body.partyId) {
-        return NextResponse.json({ error: 'that bill belongs to a different vendor' }, { status: 422 })
+        return NextResponse.json(
+          { error: "that bill belongs to a different vendor" },
+          { status: 422 },
+        );
       }
       if (row.project_id !== body.projectId) {
-        return NextResponse.json({ error: 'that bill belongs to a different project' }, { status: 422 })
+        return NextResponse.json(
+          { error: "that bill belongs to a different project" },
+          { status: 422 },
+        );
       }
-      amount = amount ?? row.amount
-      currency = body.currency ?? row.currency
+      amount = amount ?? row.amount;
+      currency = body.currency ?? row.currency;
     }
-    if (amount === null) return NextResponse.json({ error: 'amount is required' }, { status: 400 })
-    amount = normalizeMoney(amount)
+    if (amount === null) return NextResponse.json({ error: "amount is required" }, { status: 400 });
+    amount = normalizeMoney(amount);
     // A waiver denominated in an unknown code would settle against money it
     // cannot name: refuse through the shared ISO 4217 gate (the same registry
     // the payables capture and ledger posting boundaries refuse through) with
@@ -213,14 +274,20 @@ export const POST = defineRoute({
     // the enforcement point — for an explicitly supplied code and for the
     // bill/org fallbacks alike.
     if (!isIso4217CurrencyCode(currency)) {
-      return NextResponse.json({ error: `unknown currency ${JSON.stringify(currency)} — use a 3-letter ISO 4217 code in uppercase (e.g. USD)` }, { status: 422 })
+      return NextResponse.json(
+        {
+          error: `unknown currency ${JSON.stringify(currency)} — use a 3-letter ISO 4217 code in uppercase (e.g. USD)`,
+        },
+        { status: 422 },
+      );
     }
 
     try {
       return NextResponse.json(
         await withOrgTransaction(orgId, async () => {
-          const waiverNumber = await nextNumber(orgId, 'lien_waiver', 'LW-')
-          const inserted = await db.execute<{ id: string }>(sql`
+          const waiverNumber = await nextNumber(orgId, "lien_waiver", "LW-");
+          const inserted = await db.execute<{ id: string }>(
+            sql`
           insert into lien_waivers
             (org_id, waiver_number, direction, party_id, project_id, waiver_type, status,
              through_date, amount, currency, jurisdiction, bill_document_id, pay_application_id,
@@ -230,19 +297,20 @@ export const POST = defineRoute({
                   ${jurisdiction}, ${body.billDocumentId ?? null},
                   ${body.payApplicationId ?? null}, ${body.notes ?? null}, ${actorId}, ${actorId})
           returning id
-        `, 'objects')
-          const id = inserted[0]!.id
+        `,
+            "objects",
+          );
+          const id = inserted[0]!.id;
           await db.execute(sql`
           insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'lien_waivers', ${id}, 'insert',
                   ${JSON.stringify({ after: { waiverNumber, direction, waiverType, amount, currency, ...body } })}::jsonb,
-                  ${actorId})`)
-          return { id, waiverNumber }
-        })
-      )
+                  ${actorId})`);
+          return { id, waiverNumber };
+        }),
+      );
     } catch (e) {
-      return complianceWriteFailure(e)
+      return complianceWriteFailure(e);
     }
-
   },
-})
+});
