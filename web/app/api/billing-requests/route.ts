@@ -10,7 +10,6 @@ import { isUuid } from "../../../lib/list-params";
 import { createBillingRequest, listBillingRequests } from "@/lib/billing-requests";
 import { canonicalDecimal } from "@/lib/exact-decimal";
 import { moneyRefusal } from "@/lib/payroll-decimal-refusal";
-import { guardProjectsFeature } from "@/lib/projects-gate";
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.object({
@@ -49,15 +48,10 @@ export const GET = defineRoute({
 
 export const POST = defineRoute({
   permission: "projects.manage",
-  feature: {
-    none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks.",
-  },
+  feature: "projects",
   body: requestBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
     const gate = routeAuthz;
-
-    const feature = await guardProjectsFeature(gate.user.orgId);
-    if (feature) return feature;
 
     const projectId = String(body?.projectId ?? "");
     if (!body?.projectId || !isUuid(projectId)) {
