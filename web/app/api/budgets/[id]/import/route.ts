@@ -1,24 +1,30 @@
-import { z } from 'zod';
-import { defineRoute } from '@/lib/api/route';
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { fromUnits, toUnits } from '@openbooks/engine/money/money'
-import { subsidiariesInScope } from '../../../../../lib/authz'
-import { isUuid } from '../../../../../lib/list-params'
-import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
-import { ImportParseError, parseImportFile } from '../../../../../lib/data-io/parse'
-import type { ImportFormat } from '../../../../../lib/data-io/types'
-import { BudgetMutationError, normalizeBudgetAmount, type BudgetCellInput } from '../../../../../lib/budget-mutations'
-import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from '../../../../../lib/budget-scope'
-import { PNL_TYPES } from '../../../../../lib/account-types'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { fromUnits, toUnits } from "@openbooks/engine/money/money";
+import { subsidiariesInScope } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
+import { ImportParseError, parseImportFile } from "@/lib/data-io/parse";
+import type { ImportFormat } from "@/lib/data-io/types";
+import {
+  BudgetMutationError,
+  normalizeBudgetAmount,
+  type BudgetCellInput,
+} from "@/lib/budget-mutations";
+import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from "@/lib/budget-scope";
+import { PNL_TYPES } from "@/lib/account-types";
 import { notFound } from "@/lib/api/responses";
-import { effectiveExtraDimsSql, loadBudgetSegments, resolveBudgetExtraDims } from '@openbooks/engine/budgets/dimensions'
+import {
+  effectiveExtraDimsSql,
+  loadBudgetSegments,
+  resolveBudgetExtraDims,
+} from "@openbooks/engine/budgets/dimensions";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * The import drawer keys its duplicate-headers remedy on the
@@ -27,24 +33,26 @@ export const runtime = 'nodejs'
  * the parser text rides in details.
  */
 class DuplicateColumnsRefusal extends Error {
-  readonly status = 422
-  readonly detail: string
+  readonly status = 422;
+  readonly detail: string;
   constructor(error: ImportParseError) {
-    super('duplicate_columns')
-    this.name = 'DuplicateColumnsRefusal'
-    this.detail = error.message
+    super("duplicate_columns");
+    this.name = "DuplicateColumnsRefusal";
+    this.detail = error.message;
   }
 }
 
-const FORMATS = ['csv', 'xlsx'] as const
+const FORMATS = ["csv", "xlsx"] as const;
 
-type Lookup = { id: string; key: string; name: string; type?: string }
+type Lookup = { id: string; key: string; name: string; type?: string };
 
 function norm(value: unknown) {
-  return String(value ?? '').trim().toLowerCase()
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
 }
 
-type ResolveOutcome = { id: string } | { ambiguous: string[] } | { unknown: true }
+type ResolveOutcome = { id: string } | { ambiguous: string[] } | { unknown: true };
 
 /**
  * Exact-then-folded name resolver. The old lookup() let later rows overwrite
@@ -55,332 +63,434 @@ type ResolveOutcome = { id: string } | { ambiguous: string[] } | { unknown: true
  * (Mirrors the subsidiary resolver below, which already works this way.)
  */
 function buildResolver(rows: Lookup[]) {
-  const display = (row: Lookup) => (row.key ? `${row.name} (${row.key})` : row.name)
-  const exact = new Map<string, Map<string, string>>()
-  const folded = new Map<string, Map<string, string>>()
+  const display = (row: Lookup) => (row.key ? `${row.name} (${row.key})` : row.name);
+  const exact = new Map<string, Map<string, string>>();
+  const folded = new Map<string, Map<string, string>>();
   const add = (map: Map<string, Map<string, string>>, variant: string, row: Lookup) => {
-    let bucket = map.get(variant)
+    let bucket = map.get(variant);
     if (!bucket) {
-      bucket = new Map<string, string>()
-      map.set(variant, bucket)
+      bucket = new Map<string, string>();
+      map.set(variant, bucket);
     }
-    if (!bucket.has(row.id)) bucket.set(row.id, display(row))
-  }
+    if (!bucket.has(row.id)) bucket.set(row.id, display(row));
+  };
   for (const row of rows) {
-    if (row.key) add(exact, row.key, row)
-    if (row.name) add(exact, row.name, row)
-    const variants = new Set([norm(row.key), norm(row.name)].filter((variant) => variant))
-    for (const variant of variants) add(folded, variant, row)
+    if (row.key) add(exact, row.key, row);
+    if (row.name) add(exact, row.name, row);
+    const variants = new Set([norm(row.key), norm(row.name)].filter((variant) => variant));
+    for (const variant of variants) add(folded, variant, row);
   }
   return (value: string): ResolveOutcome => {
-    const text = String(value ?? '').trim()
-    if (!text) return { unknown: true }
-    const direct = exact.get(text)
+    const text = String(value ?? "").trim();
+    if (!text) return { unknown: true };
+    const direct = exact.get(text);
     if (direct) {
-      if (direct.size > 1) return { ambiguous: [...direct.values()] }
-      return { id: [...direct.keys()][0]! }
+      if (direct.size > 1) return { ambiguous: [...direct.values()] };
+      return { id: [...direct.keys()][0]! };
     }
-    const bucket = folded.get(norm(text))
-    if (!bucket) return { unknown: true }
-    if (bucket.size > 1) return { ambiguous: [...bucket.values()] }
-    return { id: [...bucket.keys()][0]! }
-  }
+    const bucket = folded.get(norm(text));
+    if (!bucket) return { unknown: true };
+    if (bucket.size > 1) return { ambiguous: [...bucket.values()] };
+    return { id: [...bucket.keys()][0]! };
+  };
 }
 
 function first(row: Record<string, unknown>, ...headers: string[]) {
-  for (const header of headers) if (row[header] !== undefined) return row[header]
-  return ''
+  for (const header of headers) if (row[header] !== undefined) return row[header];
+  return "";
 }
 
+const budgetImportBody = z.object({
+  base64: z
+    .string()
+    .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/)
+    .optional(),
+  commit: z.boolean().optional(),
+  expectedRevision: z.number().int().positive(),
+  format: z.enum(["csv", "xlsx"]),
+  text: z.string().optional(),
+});
+
 export const POST = defineRoute({
-  permission: 'budgets.manage',
-  feature: 'budgets',
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams }) => {
-    const params = Promise.resolve(routeParams as { id: string });
-    const gate = routeAuthz;
-    const user = gate.user
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
-    const routeBodySchema1 = z.object({
-      base64: z.string().regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/).optional(),
-      commit: z.boolean().optional(), expectedRevision: z.number().int().positive(), format: z.enum(['csv', 'xlsx']), text: z.string().optional(),
-    });
-    const parsedBody = await parseJsonBody(req, routeBodySchema1, { maxBodyBytes: 10 * 1024 * 1024 });
-    if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as Record<string, unknown>
-    const format = FORMATS.includes(body.format as unknown as "csv" | "xlsx") ? body.format as ImportFormat : null
-    if (!format) return NextResponse.json({ error: 'invalid_format' }, { status: 422 })
-    const expectedRevision = Number(body.expectedRevision)
-    if (!Number.isInteger(expectedRevision)) return NextResponse.json({ error: 'invalid_revision' }, { status: 422 })
-    let parsed
+  permission: "budgets.manage",
+  feature: "budgets",
+  params: z.object({ id: z.string().refine(isUuid) }),
+  invalidParamsNotFound: "record",
+  body: budgetImportBody,
+  maxBodyBytes: 10 * 1024 * 1024,
+  handler: async ({ authz: gate, params, body }) => {
+    const user = gate.user;
+    const { id } = params;
+    const format = FORMATS.includes(body.format as unknown as "csv" | "xlsx")
+      ? (body.format as ImportFormat)
+      : null;
+    if (!format) return NextResponse.json({ error: "invalid_format" }, { status: 422 });
+    const expectedRevision = Number(body.expectedRevision);
+    if (!Number.isInteger(expectedRevision))
+      return NextResponse.json({ error: "invalid_revision" }, { status: 422 });
+    let parsed;
     try {
-        parsed = await parseImportFile(format, {
-          text: typeof body.text === 'string' ? body.text : undefined,
-          base64: typeof body.base64 === 'string' ? body.base64 : undefined,
-        })
-      } catch (error) {
-        if (error instanceof ImportParseError) {
-          const refusal = new DuplicateColumnsRefusal(error)
-          return apiErrorResponse(refusal, { details: { detail: refusal.detail } })
-        }
-        throw error
+      parsed = await parseImportFile(format, {
+        text: typeof body.text === "string" ? body.text : undefined,
+        base64: typeof body.base64 === "string" ? body.base64 : undefined,
+      });
+    } catch (error) {
+      if (error instanceof ImportParseError) {
+        const refusal = new DuplicateColumnsRefusal(error);
+        return apiErrorResponse(refusal, { details: { detail: refusal.detail } });
       }
-    if (parsed.rows.length === 0) return NextResponse.json({ error: 'file_has_no_rows' }, { status: 422 })
-    if (parsed.truncated) return NextResponse.json({ error: 'too_many_rows' }, { status: 422 })
-    const scenarioResult = (await db.execute<{ fiscal_year: number; status: string; revision: number }>(sql`
+      throw error;
+    }
+    if (parsed.rows.length === 0)
+      return NextResponse.json({ error: "file_has_no_rows" }, { status: 422 });
+    if (parsed.truncated) return NextResponse.json({ error: "too_many_rows" }, { status: 422 });
+    const scenarioResult = await db.execute<{
+      fiscal_year: number;
+      status: string;
+      revision: number;
+    }>(
+      sql`
         select fiscal_year, status, revision from budget_scenarios where id = ${id} and org_id = ${user.orgId}
-      `, 'objects'))
-    const scenario = scenarioResult[0]
-    if (!scenario) return notFound("record")
-    if (scenario.status !== 'draft') return NextResponse.json({ error: 'budget_is_locked' }, { status: 409 })
-    const outOfScope = await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)
+      `,
+      "objects",
+    );
+    const scenario = scenarioResult[0];
+    if (!scenario) return notFound("record");
+    if (scenario.status !== "draft")
+      return NextResponse.json({ error: "budget_is_locked" }, { status: 409 });
+    const outOfScope = await scenarioOutOfScopeSubsidiaryNames(
+      id,
+      user.orgId,
+      gate.allowedSubsidiaryIds,
+    );
     if (outOfScope.length > 0) {
-        const refusal = outOfScopeScenarioError(outOfScope)
-        return apiErrorResponse(refusal)
-      }
-    const [accountsResult, periodsResult, subsidiariesResult, departmentsResult, projectsResult, locationsResult, classesResult] = (await Promise.all([
-        db.execute<Lookup>(sql`
+      const refusal = outOfScopeScenarioError(outOfScope);
+      return apiErrorResponse(refusal);
+    }
+    const [
+      accountsResult,
+      periodsResult,
+      subsidiariesResult,
+      departmentsResult,
+      projectsResult,
+      locationsResult,
+      classesResult,
+    ] = await Promise.all([
+      db.execute<Lookup>(
+        sql`
           select a.id, coalesce(a.number, '') as key, a.name, a.type
             from accounts a
            where a.org_id = ${user.orgId} and a.is_active and not a.is_summary
-             ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds)}`, 'objects'),
-        // Periods resolve within the budget's pinned calendar only: the line
-        // guard admits default-calendar periods, so resolving a same-named
-        // period from another calendar would write a line the worksheet hides.
-        db.execute<Lookup>(sql`
+             ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds)}`,
+        "objects",
+      ),
+      // Periods resolve within the budget's pinned calendar only: the line
+      // guard admits default-calendar periods, so resolving a same-named
+      // period from another calendar would write a line the worksheet hides.
+      db.execute<Lookup>(
+        sql`
           select p.id, p.name as key, p.name
             from accounting_periods p
             join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
            where p.org_id = ${user.orgId} and p.fiscal_year = ${scenario.fiscal_year}
-             and not p.is_adjustment and fc.is_default`, 'objects'),
-        db.execute<Lookup & { parentId: string | null }>(sql`
+             and not p.is_adjustment and fc.is_default`,
+        "objects",
+      ),
+      db.execute<Lookup & { parentId: string | null }>(
+        sql`
           select id, name as key, name, parent_id as "parentId"
             from subsidiaries
            where org_id = ${user.orgId} and is_active and not is_elimination
-             ${subsidiaryVisibleFilter(sql`id`, gate.allowedSubsidiaryIds)}`, 'objects'),
-        db.execute<Lookup>(sql`
+             ${subsidiaryVisibleFilter(sql`id`, gate.allowedSubsidiaryIds)}`,
+        "objects",
+      ),
+      db.execute<Lookup>(
+        sql`
           select d.id, coalesce(d.code, '') as key, d.name
             from departments d
            where d.org_id = ${user.orgId} and d.is_active
-             ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}`, 'objects'),
-        db.execute<Lookup>(sql`
+             ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}`,
+        "objects",
+      ),
+      db.execute<Lookup>(
+        sql`
           select p.id, coalesce(p.code, '') as key, p.name
             from projects p
            where p.org_id = ${user.orgId} and p.is_active
-             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`, 'objects'),
-        db.execute<Lookup>(sql`
+             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`,
+        "objects",
+      ),
+      db.execute<Lookup>(
+        sql`
           select l.id, coalesce(l.code, '') as key, l.name
             from locations l
            where l.org_id = ${user.orgId} and l.is_active
-             ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, gate.allowedSubsidiaryIds)}`, 'objects'),
-        db.execute<Lookup>(sql`
+             ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, gate.allowedSubsidiaryIds)}`,
+        "objects",
+      ),
+      db.execute<Lookup>(
+        sql`
           select c.id, coalesce(c.code, '') as key, c.name
             from classes c
            where c.org_id = ${user.orgId} and c.is_active
-             ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, gate.allowedSubsidiaryIds)}`, 'objects'),
-      ]))
-    const resolveAccount = buildResolver(accountsResult)
-    const resolveAccountNumber = buildResolver(accountsResult.map((row) => ({ ...row, name: '' })))
-    const accountTypes = new Map(accountsResult.map((row) => [row.id, row.type ?? '']))
+             ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, gate.allowedSubsidiaryIds)}`,
+        "objects",
+      ),
+    ]);
+    const resolveAccount = buildResolver(accountsResult);
+    const resolveAccountNumber = buildResolver(accountsResult.map((row) => ({ ...row, name: "" })));
+    const accountTypes = new Map(accountsResult.map((row) => [row.id, row.type ?? ""]));
     const accountDisplays = new Map(
-        accountsResult.map((row) => [row.id, row.key ? `${row.name} (${row.key})` : row.name]),
-      )
-    const creditAccounts = new Set(accountsResult.filter((row) => row.type === 'income' || row.type === 'income_other').map((row) => row.id))
-    const resolvePeriod = buildResolver(periodsResult)
-    const subsidiaryIds = new Map(subsidiariesResult.map((row) => [row.id.toLowerCase(), row.id]))
-    const subsidiaryExactNames = new Map<string, string>()
-    const subsidiaryFoldedIds = new Map<string, Set<string>>()
+      accountsResult.map((row) => [row.id, row.key ? `${row.name} (${row.key})` : row.name]),
+    );
+    const creditAccounts = new Set(
+      accountsResult
+        .filter((row) => row.type === "income" || row.type === "income_other")
+        .map((row) => row.id),
+    );
+    const resolvePeriod = buildResolver(periodsResult);
+    const subsidiaryIds = new Map(subsidiariesResult.map((row) => [row.id.toLowerCase(), row.id]));
+    const subsidiaryExactNames = new Map<string, string>();
+    const subsidiaryFoldedIds = new Map<string, Set<string>>();
     for (const row of subsidiariesResult) {
-        const name = row.name.trim()
-        if (!subsidiaryExactNames.has(name)) subsidiaryExactNames.set(name, row.id)
-        const folded = norm(name)
-        const ids = subsidiaryFoldedIds.get(folded) ?? new Set<string>()
-        ids.add(row.id)
-        subsidiaryFoldedIds.set(folded, ids)
-      }
-    const rootSubsidiary = subsidiariesResult.find((row) => row.parentId === null)?.id ?? null
+      const name = row.name.trim();
+      if (!subsidiaryExactNames.has(name)) subsidiaryExactNames.set(name, row.id);
+      const folded = norm(name);
+      const ids = subsidiaryFoldedIds.get(folded) ?? new Set<string>();
+      ids.add(row.id);
+      subsidiaryFoldedIds.set(folded, ids);
+    }
+    const rootSubsidiary = subsidiariesResult.find((row) => row.parentId === null)?.id ?? null;
     const dimensions = {
-        departmentId: buildResolver(departmentsResult),
-        projectId: buildResolver(projectsResult),
-        locationId: buildResolver(locationsResult),
-        classId: buildResolver(classesResult),
-      }
+      departmentId: buildResolver(departmentsResult),
+      projectId: buildResolver(projectsResult),
+      locationId: buildResolver(locationsResult),
+      classId: buildResolver(classesResult),
+    };
     // Custom segments (fund included) import from a column named for the
     // segment (its name or key), resolved by value code or name. A row that
     // names no fund is imported under the default fund explicitly — the cell
     // budgetary control reads.
-    const segments = await loadBudgetSegments(db, user.orgId)
+    const segments = await loadBudgetSegments(db, user.orgId);
     const segmentResolvers = segments.map((segment) => ({
       segment,
-      resolve: buildResolver(segment.values.map((value) => ({ id: value.id, key: value.code ?? '', name: value.name }))),
-    }))
-    const errors: { row: number; field: string; message: string }[] = []
-    const cells: BudgetCellInput[] = []
-    const seen = new Set<string>()
+      resolve: buildResolver(
+        segment.values.map((value) => ({ id: value.id, key: value.code ?? "", name: value.name })),
+      ),
+    }));
+    const errors: { row: number; field: string; message: string }[] = [];
+    const cells: BudgetCellInput[] = [];
+    const seen = new Set<string>();
     parsed.rows.forEach((row, index) => {
-        const rowNumber = index + 2
-        // The export writes Account Number (blank when the account has none)
-        // alongside Account Name: a blank number falls back to the name instead
-        // of resolving nobody. A number cell resolves as a number only — it never
-        // guesses an account by name.
-        const accountNumberCell = first(row, 'Account Number', 'accountNumber')
-        const accountNameCell = first(row, 'Account Name', 'Account', 'account', 'accountName')
-        let accountId: string | null = null
-        const accountCellText = String(accountNumberCell ?? '').trim() || String(accountNameCell ?? '').trim()
-        if (String(accountNumberCell ?? '').trim()) {
-          const outcome = resolveAccountNumber(String(accountNumberCell))
-          if ('id' in outcome) accountId = outcome.id
-          else if ('ambiguous' in outcome) {
-            errors.push({ row: rowNumber, field: 'Account Number', message: `ambiguous_account: ${outcome.ambiguous.join(', ')}` })
-          } else {
-            errors.push({ row: rowNumber, field: 'Account Number', message: 'unknown_account' })
-          }
-        } else if (String(accountNameCell ?? '').trim()) {
-          const outcome = resolveAccount(String(accountNameCell))
-          if ('id' in outcome) accountId = outcome.id
-          else if ('ambiguous' in outcome) {
-            errors.push({ row: rowNumber, field: 'Account Number', message: `ambiguous_account: ${outcome.ambiguous.join(', ')}` })
-          } else {
-            errors.push({ row: rowNumber, field: 'Account Number', message: 'unknown_account' })
-          }
+      const rowNumber = index + 2;
+      // The export writes Account Number (blank when the account has none)
+      // alongside Account Name: a blank number falls back to the name instead
+      // of resolving nobody. A number cell resolves as a number only — it never
+      // guesses an account by name.
+      const accountNumberCell = first(row, "Account Number", "accountNumber");
+      const accountNameCell = first(row, "Account Name", "Account", "account", "accountName");
+      let accountId: string | null = null;
+      const accountCellText =
+        String(accountNumberCell ?? "").trim() || String(accountNameCell ?? "").trim();
+      if (String(accountNumberCell ?? "").trim()) {
+        const outcome = resolveAccountNumber(String(accountNumberCell));
+        if ("id" in outcome) accountId = outcome.id;
+        else if ("ambiguous" in outcome) {
+          errors.push({
+            row: rowNumber,
+            field: "Account Number",
+            message: `ambiguous_account: ${outcome.ambiguous.join(", ")}`,
+          });
         } else {
-          errors.push({ row: rowNumber, field: 'Account Number', message: 'unknown_account' })
+          errors.push({ row: rowNumber, field: "Account Number", message: "unknown_account" });
         }
-        // Budgets cover the P&L only (the worksheet, variances and the line
-        // guard agree): a balance-sheet account refuses by name, it never lands
-        // in a hidden-but-counted line.
-        if (accountId && !PNL_TYPES.includes(accountTypes.get(accountId) ?? '')) {
-          errors.push({ row: rowNumber, field: 'Account Number', message: `non_pnl_account: ${accountDisplays.get(accountId) ?? accountCellText}` })
-          accountId = null
-        }
-        const periodKey = first(row, 'Period', 'period')
-        let periodId: string | null = null
-        if (String(periodKey ?? '').trim()) {
-          const outcome = resolvePeriod(String(periodKey))
-          if ('id' in outcome) periodId = outcome.id
-          else if ('ambiguous' in outcome) {
-            errors.push({ row: rowNumber, field: 'Period', message: `ambiguous_period: ${outcome.ambiguous.join(', ')}` })
-          } else {
-            errors.push({ row: rowNumber, field: 'Period', message: 'unknown_period' })
-          }
+      } else if (String(accountNameCell ?? "").trim()) {
+        const outcome = resolveAccount(String(accountNameCell));
+        if ("id" in outcome) accountId = outcome.id;
+        else if ("ambiguous" in outcome) {
+          errors.push({
+            row: rowNumber,
+            field: "Account Number",
+            message: `ambiguous_account: ${outcome.ambiguous.join(", ")}`,
+          });
         } else {
-          errors.push({ row: rowNumber, field: 'Period', message: 'unknown_period' })
+          errors.push({ row: rowNumber, field: "Account Number", message: "unknown_account" });
         }
-
-        const subsidiaryRaw = first(row, 'Subsidiary', 'subsidiary', 'subsidiaryId')
-        const subsidiaryText = String(subsidiaryRaw ?? '').trim()
-        let subsidiaryId: string | null = null
-        if (!subsidiaryText) {
-          subsidiaryId = rootSubsidiary
-          if (!subsidiaryId) errors.push({ row: rowNumber, field: 'Subsidiary', message: 'invalid_subsidiary' })
-        } else {
-          subsidiaryId = subsidiaryIds.get(subsidiaryText.toLowerCase())
-            ?? subsidiaryExactNames.get(subsidiaryText)
-            ?? null
-          if (!subsidiaryId) {
-            const candidates = subsidiaryFoldedIds.get(norm(subsidiaryText))
-            if (!candidates) {
-              errors.push({ row: rowNumber, field: 'Subsidiary', message: 'unknown_subsidiary' })
-            } else if (candidates.size > 1) {
-              errors.push({ row: rowNumber, field: 'Subsidiary', message: 'ambiguous_subsidiary' })
-            } else {
-              subsidiaryId = [...candidates][0] ?? null
-            }
-          }
-        }
-        if (subsidiaryId && !subsidiariesInScope(gate, [subsidiaryId])) {
-          errors.push({ row: rowNumber, field: 'Subsidiary', message: 'invalid_subsidiary' })
-          subsidiaryId = null
-        }
-
-        const resolvedDims: Record<keyof typeof dimensions, string | null> = {
-          departmentId: null,
-          projectId: null,
-          locationId: null,
-          classId: null,
-        }
-        const dimHeaders: [keyof typeof dimensions, string][] = [
-          ['departmentId', 'Department'],
-          ['projectId', 'Project'],
-          ['locationId', 'Location'],
-          ['classId', 'Class'],
-        ]
-        for (const [key, header] of dimHeaders) {
-          const raw = first(row, header, header.toLowerCase(), key)
-          if (String(raw ?? '').trim()) {
-            const outcome = dimensions[key](String(raw))
-            if ('id' in outcome) resolvedDims[key] = outcome.id
-            else if ('ambiguous' in outcome) {
-              errors.push({ row: rowNumber, field: header, message: `ambiguous_dimension: ${outcome.ambiguous.join(', ')}` })
-            } else {
-              errors.push({ row: rowNumber, field: header, message: 'unknown_dimension' })
-            }
-          }
-        }
-        const pickedSegments: Record<string, string> = {}
-        for (const { segment, resolve } of segmentResolvers) {
-          const raw = first(row, segment.name, segment.key)
-          if (!String(raw ?? '').trim()) continue
-          const outcome = resolve(String(raw))
-          if ('id' in outcome) pickedSegments[segment.key] = outcome.id
-          else if ('ambiguous' in outcome) {
-            errors.push({ row: rowNumber, field: segment.name, message: `ambiguous_dimension: ${outcome.ambiguous.join(', ')}` })
-          } else {
-            errors.push({ row: rowNumber, field: segment.name, message: 'unknown_dimension' })
-          }
-        }
-        const extraDims = resolveBudgetExtraDims(segments, pickedSegments)
-        let amount = '0.0000'
-        try {
-          amount = normalizeBudgetAmount(first(row, 'Amount', 'amount'))
-          if (accountId && creditAccounts.has(accountId)) amount = fromUnits(-toUnits(amount))
-        } catch {
-          errors.push({ row: rowNumber, field: 'Amount', message: 'invalid_amount' })
-        }
-        if (accountId && periodId && subsidiaryId) {
-          const key = [accountId, periodId, subsidiaryId, ...Object.values(resolvedDims).map((value) => value ?? ''), JSON.stringify(extraDims)].join('|')
-          if (seen.has(key)) errors.push({ row: rowNumber, field: 'Account Number', message: 'duplicate_cell' })
-          seen.add(key)
-          cells.push({
-            accountId,
-            periodId,
-            subsidiaryId,
-            ...resolvedDims,
-            extraDims,
-            amount,
-            note: String(first(row, 'Note', 'note') ?? '').trim().slice(0, 2_000) || null,
-          })
-        }
-      })
-    if (body.commit !== true || errors.length > 0) {
-        return NextResponse.json({ valid: errors.length === 0, rows: parsed.rows.length, errors: errors.slice(0, 200), sample: cells.slice(0, 10) })
+      } else {
+        errors.push({ row: rowNumber, field: "Account Number", message: "unknown_account" });
       }
-    try {
-        const result = await db.transaction(async (tx) => {
-          const locked = (await tx.execute<{ status: string; revision: number }>(sql`
-            select status, revision from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
-          `, 'objects'))
-          const current = locked[0]
-          if (!current) throw new BudgetMutationError('not_found', 404)
-          if (current.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
-          if (Number(current.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
+      // Budgets cover the P&L only (the worksheet, variances and the line
+      // guard agree): a balance-sheet account refuses by name, it never lands
+      // in a hidden-but-counted line.
+      if (accountId && !PNL_TYPES.includes(accountTypes.get(accountId) ?? "")) {
+        errors.push({
+          row: rowNumber,
+          field: "Account Number",
+          message: `non_pnl_account: ${accountDisplays.get(accountId) ?? accountCellText}`,
+        });
+        accountId = null;
+      }
+      const periodKey = first(row, "Period", "period");
+      let periodId: string | null = null;
+      if (String(periodKey ?? "").trim()) {
+        const outcome = resolvePeriod(String(periodKey));
+        if ("id" in outcome) periodId = outcome.id;
+        else if ("ambiguous" in outcome) {
+          errors.push({
+            row: rowNumber,
+            field: "Period",
+            message: `ambiguous_period: ${outcome.ambiguous.join(", ")}`,
+          });
+        } else {
+          errors.push({ row: rowNumber, field: "Period", message: "unknown_period" });
+        }
+      } else {
+        errors.push({ row: rowNumber, field: "Period", message: "unknown_period" });
+      }
 
-          const rows = cells.map((cell) => ({
-            account_id: cell.accountId,
-            period_id: cell.periodId,
-            subsidiary_id: cell.subsidiaryId,
-            department_id: cell.departmentId,
-            project_id: cell.projectId,
-            location_id: cell.locationId,
-            class_id: cell.classId,
-            extra_dims: cell.extraDims ?? {},
-            amount: cell.amount,
-            note: cell.note ?? null,
-          }))
-          // A cell saved before fund accounting names no fund; it is the same
-          // cell as its default-fund spelling, so it is cleared before the
-          // explicit line is written rather than left to count twice.
-          await tx.execute(sql`
+      const subsidiaryRaw = first(row, "Subsidiary", "subsidiary", "subsidiaryId");
+      const subsidiaryText = String(subsidiaryRaw ?? "").trim();
+      let subsidiaryId: string | null = null;
+      if (!subsidiaryText) {
+        subsidiaryId = rootSubsidiary;
+        if (!subsidiaryId)
+          errors.push({ row: rowNumber, field: "Subsidiary", message: "invalid_subsidiary" });
+      } else {
+        subsidiaryId =
+          subsidiaryIds.get(subsidiaryText.toLowerCase()) ??
+          subsidiaryExactNames.get(subsidiaryText) ??
+          null;
+        if (!subsidiaryId) {
+          const candidates = subsidiaryFoldedIds.get(norm(subsidiaryText));
+          if (!candidates) {
+            errors.push({ row: rowNumber, field: "Subsidiary", message: "unknown_subsidiary" });
+          } else if (candidates.size > 1) {
+            errors.push({ row: rowNumber, field: "Subsidiary", message: "ambiguous_subsidiary" });
+          } else {
+            subsidiaryId = [...candidates][0] ?? null;
+          }
+        }
+      }
+      if (subsidiaryId && !subsidiariesInScope(gate, [subsidiaryId])) {
+        errors.push({ row: rowNumber, field: "Subsidiary", message: "invalid_subsidiary" });
+        subsidiaryId = null;
+      }
+
+      const resolvedDims: Record<keyof typeof dimensions, string | null> = {
+        departmentId: null,
+        projectId: null,
+        locationId: null,
+        classId: null,
+      };
+      const dimHeaders: [keyof typeof dimensions, string][] = [
+        ["departmentId", "Department"],
+        ["projectId", "Project"],
+        ["locationId", "Location"],
+        ["classId", "Class"],
+      ];
+      for (const [key, header] of dimHeaders) {
+        const raw = first(row, header, header.toLowerCase(), key);
+        if (String(raw ?? "").trim()) {
+          const outcome = dimensions[key](String(raw));
+          if ("id" in outcome) resolvedDims[key] = outcome.id;
+          else if ("ambiguous" in outcome) {
+            errors.push({
+              row: rowNumber,
+              field: header,
+              message: `ambiguous_dimension: ${outcome.ambiguous.join(", ")}`,
+            });
+          } else {
+            errors.push({ row: rowNumber, field: header, message: "unknown_dimension" });
+          }
+        }
+      }
+      const pickedSegments: Record<string, string> = {};
+      for (const { segment, resolve } of segmentResolvers) {
+        const raw = first(row, segment.name, segment.key);
+        if (!String(raw ?? "").trim()) continue;
+        const outcome = resolve(String(raw));
+        if ("id" in outcome) pickedSegments[segment.key] = outcome.id;
+        else if ("ambiguous" in outcome) {
+          errors.push({
+            row: rowNumber,
+            field: segment.name,
+            message: `ambiguous_dimension: ${outcome.ambiguous.join(", ")}`,
+          });
+        } else {
+          errors.push({ row: rowNumber, field: segment.name, message: "unknown_dimension" });
+        }
+      }
+      const extraDims = resolveBudgetExtraDims(segments, pickedSegments);
+      let amount = "0.0000";
+      try {
+        amount = normalizeBudgetAmount(first(row, "Amount", "amount"));
+        if (accountId && creditAccounts.has(accountId)) amount = fromUnits(-toUnits(amount));
+      } catch {
+        errors.push({ row: rowNumber, field: "Amount", message: "invalid_amount" });
+      }
+      if (accountId && periodId && subsidiaryId) {
+        const key = [
+          accountId,
+          periodId,
+          subsidiaryId,
+          ...Object.values(resolvedDims).map((value) => value ?? ""),
+          JSON.stringify(extraDims),
+        ].join("|");
+        if (seen.has(key))
+          errors.push({ row: rowNumber, field: "Account Number", message: "duplicate_cell" });
+        seen.add(key);
+        cells.push({
+          accountId,
+          periodId,
+          subsidiaryId,
+          ...resolvedDims,
+          extraDims,
+          amount,
+          note:
+            String(first(row, "Note", "note") ?? "")
+              .trim()
+              .slice(0, 2_000) || null,
+        });
+      }
+    });
+    if (body.commit !== true || errors.length > 0) {
+      return NextResponse.json({
+        valid: errors.length === 0,
+        rows: parsed.rows.length,
+        errors: errors.slice(0, 200),
+        sample: cells.slice(0, 10),
+      });
+    }
+    try {
+      const result = await db.transaction(async (tx) => {
+        const locked = await tx.execute<{ status: string; revision: number }>(
+          sql`
+            select status, revision from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
+          `,
+          "objects",
+        );
+        const current = locked[0];
+        if (!current) throw new BudgetMutationError("not_found", 404);
+        if (current.status !== "draft") throw new BudgetMutationError("budget_is_locked", 409);
+        if (Number(current.revision) !== expectedRevision)
+          throw new BudgetMutationError("revision_conflict", 409);
+
+        const rows = cells.map((cell) => ({
+          account_id: cell.accountId,
+          period_id: cell.periodId,
+          subsidiary_id: cell.subsidiaryId,
+          department_id: cell.departmentId,
+          project_id: cell.projectId,
+          location_id: cell.locationId,
+          class_id: cell.classId,
+          extra_dims: cell.extraDims ?? {},
+          amount: cell.amount,
+          note: cell.note ?? null,
+        }));
+        // A cell saved before fund accounting names no fund; it is the same
+        // cell as its default-fund spelling, so it is cleared before the
+        // explicit line is written rather than left to count twice.
+        await tx.execute(sql`
             delete from budget_lines bl using jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as x(
               account_id uuid, period_id uuid, subsidiary_id uuid, department_id uuid, project_id uuid,
               location_id uuid, class_id uuid, extra_dims jsonb
@@ -395,8 +505,8 @@ export const POST = defineRoute({
               and bl.extra_dims <> x.extra_dims
               and ${effectiveExtraDimsSql(sql`bl.extra_dims`, user.orgId)} = x.extra_dims
               ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-          `)
-          await tx.execute(sql`
+          `);
+        await tx.execute(sql`
             insert into budget_lines
               (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
                extra_dims, amount, note, created_by, updated_by)
@@ -410,11 +520,11 @@ export const POST = defineRoute({
             on conflict on constraint budget_lines_cell do update set
               amount = excluded.amount, note = excluded.note, updated_at = now(), updated_by = excluded.updated_by
             where budget_lines.org_id = ${user.orgId}
-          `)
-          // A zero-amount row clears exactly its own cell: the entity is part of
-          // the key, and rows outside the caller's visible subsidiaries are never
-          // touched — an import cannot clear what it was never allowed to see.
-          await tx.execute(sql`
+          `);
+        // A zero-amount row clears exactly its own cell: the entity is part of
+        // the key, and rows outside the caller's visible subsidiaries are never
+        // touched — an import cannot clear what it was never allowed to see.
+        await tx.execute(sql`
             delete from budget_lines bl using jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as x(
               account_id uuid, period_id uuid, subsidiary_id uuid, department_id uuid, project_id uuid,
               location_id uuid, class_id uuid, extra_dims jsonb, amount numeric(19,4), note text
@@ -429,24 +539,24 @@ export const POST = defineRoute({
               and bl.class_id is not distinct from x.class_id
               and ${effectiveExtraDimsSql(sql`bl.extra_dims`, user.orgId)} = x.extra_dims
               ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-          `)
-          const revision = expectedRevision + 1
-          await tx.execute(sql`
+          `);
+        const revision = expectedRevision + 1;
+        await tx.execute(sql`
             update budget_scenarios set revision = ${revision}, updated_at = now(), updated_by = ${user.id}
              where id = ${id} and org_id = ${user.orgId}
-          `)
-          await tx.execute(sql`
+          `);
+        await tx.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
               ${JSON.stringify({ source: `import:${format}`, revisionBefore: expectedRevision, revisionAfter: revision, cells: rows })}::jsonb,
               ${user.id})
-          `)
-          return { revision, imported: rows.length }
-        })
-        return NextResponse.json(result)
-      } catch (error) {
-        if (error instanceof BudgetMutationError) return apiErrorResponse(error)
-        throw error
-      }
+          `);
+        return { revision, imported: rows.length };
+      });
+      return NextResponse.json(result);
+    } catch (error) {
+      if (error instanceof BudgetMutationError) return apiErrorResponse(error);
+      throw error;
+    }
   },
 });

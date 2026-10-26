@@ -1,112 +1,127 @@
-import { z } from 'zod';
-import { uuidString } from '@openbooks/engine/platform/identifiers';
-import { defineRoute } from '@/lib/api/route';
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { subsidiariesInScope } from '../../../../../lib/authz'
-import { isUuid } from '../../../../../lib/list-params'
-import { BudgetMutationError, saveBudgetCells, type BudgetCellInput } from '../../../../../lib/budget-mutations'
-import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from '../../../../../lib/budget-scope'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { activeBudgetRootSubsidiaryId } from "@openbooks/engine/budgets/queries";
+import { subsidiariesInScope } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import { BudgetMutationError, saveBudgetCells, type BudgetCellInput } from "@/lib/budget-mutations";
+import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from "@/lib/budget-scope";
 import { notFound } from "@/lib/api/responses";
 const PATCHBodySchema1 = z.object({
   expectedRevision: z.number().int().positive(),
-  cells: z.array(z.object({
-    accountId: uuidString(), periodId: uuidString(), amount: z.string(), note: z.string().nullable().optional(),
-    subsidiaryId: uuidString().nullable().optional(), departmentId: uuidString().nullable().optional(),
-    projectId: uuidString().nullable().optional(), locationId: uuidString().nullable().optional(), classId: uuidString().nullable().optional(),
-    // Custom segment values (fund included) keyed by segment key; validated against the active segments on save.
-    extraDims: z.record(z.string(), z.string()).nullable().optional(),
-  })).min(1),
+  cells: z
+    .array(
+      z.object({
+        accountId: uuidString(),
+        periodId: uuidString(),
+        amount: z.string(),
+        note: z.string().nullable().optional(),
+        subsidiaryId: uuidString().nullable().optional(),
+        departmentId: uuidString().nullable().optional(),
+        projectId: uuidString().nullable().optional(),
+        locationId: uuidString().nullable().optional(),
+        classId: uuidString().nullable().optional(),
+        // Custom segment values (fund included) keyed by segment key; validated against the active segments on save.
+        extraDims: z.record(z.string(), z.string()).nullable().optional(),
+      }),
+    )
+    .min(1),
 });
 
-
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 export const PATCH = defineRoute({
-  permission: 'budgets.manage',
-  feature: 'budgets',
+  permission: "budgets.manage",
+  feature: "budgets",
   body: PATCHBodySchema1,
   handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
 
-    const body = (routeBody) as { expectedRevision?: number; cells?: Record<string, unknown>[] }
-    if (!Array.isArray(body.cells)) return NextResponse.json({ error: 'cells_required' }, { status: 422 })
-    const nullableUuid = (value: unknown) => value === null || value === undefined || value === ''
+    const body = routeBody as { expectedRevision?: number; cells?: Record<string, unknown>[] };
+    if (!Array.isArray(body.cells))
+      return NextResponse.json({ error: "cells_required" }, { status: 422 });
+    const nullableUuid = (value: unknown) =>
+      value === null || value === undefined || value === ""
         ? null
-        : typeof value === 'string' && isUuid(value)
+        : typeof value === "string" && isUuid(value)
           ? value
-          : 'invalid'
-    const cells: BudgetCellInput[] = []
+          : "invalid";
+    const cells: BudgetCellInput[] = [];
     for (const raw of body.cells) {
-        if (typeof raw.accountId !== 'string' || !isUuid(raw.accountId) || typeof raw.periodId !== 'string' || !isUuid(raw.periodId)) {
-          return NextResponse.json({ error: 'invalid_account_or_period' }, { status: 422 })
-        }
-        const departmentId = nullableUuid(raw.departmentId)
-        const projectId = nullableUuid(raw.projectId)
-        const locationId = nullableUuid(raw.locationId)
-        const classId = nullableUuid(raw.classId)
-        const subsidiaryId = nullableUuid(raw.subsidiaryId)
-        if ([departmentId, projectId, locationId, classId].includes('invalid')) {
-          return NextResponse.json({ error: 'invalid_dimension' }, { status: 422 })
-        }
-        if (subsidiaryId === 'invalid') {
-          return NextResponse.json({ error: 'invalid_subsidiary' }, { status: 422 })
-        }
-        cells.push({
-          accountId: raw.accountId,
-          periodId: raw.periodId,
-          subsidiaryId: subsidiaryId as string | null,
-          amount: String(raw.amount ?? ''),
-          note: typeof raw.note === 'string' ? raw.note : null,
-          departmentId: departmentId as string | null,
-          projectId: projectId as string | null,
-          locationId: locationId as string | null,
-          classId: classId as string | null,
-          extraDims: (raw.extraDims ?? undefined) as Record<string, string> | undefined,
-        })
+      if (
+        typeof raw.accountId !== "string" ||
+        !isUuid(raw.accountId) ||
+        typeof raw.periodId !== "string" ||
+        !isUuid(raw.periodId)
+      ) {
+        return NextResponse.json({ error: "invalid_account_or_period" }, { status: 422 });
       }
-    const explicitSubsidiaryIds = [...new Set(cells.map((cell) => cell.subsidiaryId).filter((id): id is string => !!id))]
+      const departmentId = nullableUuid(raw.departmentId);
+      const projectId = nullableUuid(raw.projectId);
+      const locationId = nullableUuid(raw.locationId);
+      const classId = nullableUuid(raw.classId);
+      const subsidiaryId = nullableUuid(raw.subsidiaryId);
+      if ([departmentId, projectId, locationId, classId].includes("invalid")) {
+        return NextResponse.json({ error: "invalid_dimension" }, { status: 422 });
+      }
+      if (subsidiaryId === "invalid") {
+        return NextResponse.json({ error: "invalid_subsidiary" }, { status: 422 });
+      }
+      cells.push({
+        accountId: raw.accountId,
+        periodId: raw.periodId,
+        subsidiaryId: subsidiaryId as string | null,
+        amount: String(raw.amount ?? ""),
+        note: typeof raw.note === "string" ? raw.note : null,
+        departmentId: departmentId as string | null,
+        projectId: projectId as string | null,
+        locationId: locationId as string | null,
+        classId: classId as string | null,
+        extraDims: (raw.extraDims ?? undefined) as Record<string, string> | undefined,
+      });
+    }
+    const explicitSubsidiaryIds = [
+      ...new Set(cells.map((cell) => cell.subsidiaryId).filter((id): id is string => !!id)),
+    ];
     if (explicitSubsidiaryIds.length > 0 && !subsidiariesInScope(gate, explicitSubsidiaryIds)) {
-        return NextResponse.json({ error: 'invalid_subsidiary' }, { status: 422 })
-      }
+      return NextResponse.json({ error: "invalid_subsidiary" }, { status: 422 });
+    }
     if (cells.some((cell) => cell.subsidiaryId === null) && gate.allowedSubsidiaryIds !== null) {
-        // An omitted entity resolves to the tenant root inside saveBudgetCells —
-        // the same default the import path documents — so a restricted caller
-        // whose scope excludes the root must be refused, not silently rooted.
-        const root = await db.execute<{ id: string }>(sql`
-          select id from subsidiaries
-           where org_id = ${gate.user.orgId}
-             and parent_id is null and is_active and not is_elimination
-           order by created_at, id
-           limit 1
-        `, 'objects')
-        const rootId = root[0]?.id
-        if (!rootId || !subsidiariesInScope(gate, [rootId])) {
-          return NextResponse.json({ error: 'invalid_subsidiary' }, { status: 422 })
-        }
+      // An omitted entity resolves to the tenant root inside saveBudgetCells —
+      // the same default the import path documents — so a restricted caller
+      // whose scope excludes the root must be refused, not silently rooted.
+      const rootId = await activeBudgetRootSubsidiaryId(gate.user.orgId);
+      if (!rootId || !subsidiariesInScope(gate, [rootId])) {
+        return NextResponse.json({ error: "invalid_subsidiary" }, { status: 422 });
       }
-    const outOfScope = await scenarioOutOfScopeSubsidiaryNames(id, gate.user.orgId, gate.allowedSubsidiaryIds)
+    }
+    const outOfScope = await scenarioOutOfScopeSubsidiaryNames(
+      id,
+      gate.user.orgId,
+      gate.allowedSubsidiaryIds,
+    );
     if (outOfScope.length > 0) {
-        const refusal = outOfScopeScenarioError(outOfScope)
-        return apiErrorResponse(refusal)
-      }
+      const refusal = outOfScopeScenarioError(outOfScope);
+      return apiErrorResponse(refusal);
+    }
     try {
-        return NextResponse.json(await saveBudgetCells({
+      return NextResponse.json(
+        await saveBudgetCells({
           scenarioId: id,
           orgId: gate.user.orgId,
           actorId: gate.user.id,
           expectedRevision: Number(body.expectedRevision),
           cells,
-        }))
-      } catch (error) {
-        if (error instanceof BudgetMutationError) return apiErrorResponse(error)
-        throw error
-      }
+        }),
+      );
+    } catch (error) {
+      if (error instanceof BudgetMutationError) return apiErrorResponse(error);
+      throw error;
+    }
   },
 });

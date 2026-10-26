@@ -1,114 +1,94 @@
-import { defineRoute } from '@/lib/api/route';
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
-import { reportResultToCsv, reportResultToXlsx, type ReportRunResult } from '@openbooks/office'
-import { xlsxMoneyContext } from '@/lib/xlsx-money'
-import { can } from '../../../../../lib/authz'
-import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
-import { csvResponse, xlsxResponse } from '../../../../../lib/export'
-import { isUuid } from '../../../../../lib/list-params'
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { loadBudgetExportData } from "@openbooks/engine/budgets/export-read";
+import { reportResultToCsv, reportResultToXlsx, type ReportRunResult } from "@openbooks/office";
+import { xlsxMoneyContext } from "@/lib/xlsx-money";
+import { can } from "@/lib/authz";
+import { csvResponse, xlsxResponse } from "@/lib/export";
+import { isUuid } from "@/lib/list-params";
 import { notFound } from "@/lib/api/responses";
-import { effectiveExtraDimsSql, loadBudgetSegments } from '@openbooks/engine/budgets/dimensions'
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 export const GET = defineRoute({
-  permission: 'budgets.read',
-  feature: 'budgets',
+  permission: "budgets.read",
+  feature: "budgets",
   handler: async ({ request: req, authz: routeAuthz, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
-    if (!can(gate, 'data.export')) return NextResponse.json({ error: 'missing permission: data.export' }, { status: 403 })
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
-    const format = new URL(req.url).searchParams.get('format') ?? 'xlsx'
-    if (!['csv', 'xlsx'].includes(format)) return NextResponse.json({ error: 'invalid_format' }, { status: 422 })
-    const scenario = (await db.execute<{ name: string; fiscal_year: number }>(sql`
-        select name, fiscal_year from budget_scenarios where id = ${id} and org_id = ${gate.user.orgId}
-      `, 'objects'))
-    if (!scenario[0]) return notFound("record")
-    if (gate.allowedSubsidiaryIds !== null) {
-        const visible = (await db.execute<{ n: string }>(sql`
-          select count(*) as n from budget_lines
-           where org_id = ${gate.user.orgId} and scenario_id = ${id}
-           ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
-        `, 'objects'))
-        if (Number(visible[0]?.n ?? 0) === 0) {
-          return notFound("record")
-        }
-      }
-    interface BudgetExportRow extends Record<string, unknown> {
-        number: string | null
-        account_name: string
-        period: string
-        subsidiary: string | null
-        department: string | null
-        project: string | null
-        location: string | null
-        class: string | null
-        amount: string
-        note: string | null
-        extra_dims: Record<string, string>
-      }
-    const lines = (await db.execute<BudgetExportRow>(sql`
-        select a.number, a.name as account_name, p.name as period,
-               s.name as subsidiary,
-               -- Dimensions export as code with a name fallback: a bare code
-               -- column emits blank for NULL codes, and the import reads blank as
-               -- "no dimension" — silently re-homing the line. Either form
-               -- resolves on import, so the round-trip is exact.
-               coalesce(d.code, d.name) as department,
-               coalesce(pr.code, pr.name) as project,
-               coalesce(loc.code, loc.name) as location,
-               coalesce(c.code, c.name) as class,
-               (case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end)::text as amount, bl.note,
-               ${effectiveExtraDimsSql(sql`bl.extra_dims`, gate.user.orgId)} as extra_dims
-          from budget_lines bl
-          join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
-          join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
-          left join subsidiaries s on s.id = bl.subsidiary_id and s.org_id = bl.org_id
-          left join departments d on d.id = bl.department_id and d.org_id = bl.org_id
-          left join projects pr on pr.id = bl.project_id and pr.org_id = bl.org_id
-          left join locations loc on loc.id = bl.location_id and loc.org_id = bl.org_id
-          left join classes c on c.id = bl.class_id and c.org_id = bl.org_id
-         where bl.org_id = ${gate.user.orgId} and bl.scenario_id = ${id}
-           ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-         order by a.number nulls last, a.name, p.period_number, s.name, d.code, pr.code, loc.code, c.code
-      `, 'objects'))
+    if (!can(gate, "data.export"))
+      return NextResponse.json({ error: "missing permission: data.export" }, { status: 403 });
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
+    const format = new URL(req.url).searchParams.get("format") ?? "xlsx";
+    if (!["csv", "xlsx"].includes(format))
+      return NextResponse.json({ error: "invalid_format" }, { status: 422 });
+    const data = await loadBudgetExportData({
+      orgId: gate.user.orgId,
+      scenarioId: id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    });
+    if (!data) return notFound("record");
+    const { scenario, lines, segments } = data;
     // Custom segments (fund included) export one column each, named for the
     // segment and holding the value's code (name when it has none), which is
     // what the import resolves — so a fund budget round-trips to its fund.
-    const segments = await loadBudgetSegments(db, gate.user.orgId)
     const segmentLabel = (key: string, valueId: string | undefined) => {
-      const value = valueId ? segments.find((segment) => segment.key === key)?.values.find((option) => option.id === valueId) : undefined
-      return value ? (value.code ?? value.name) : (valueId ?? '')
-    }
+      const value = valueId
+        ? segments
+            .find((segment) => segment.key === key)
+            ?.values.find((option) => option.id === valueId)
+        : undefined;
+      return value ? (value.code ?? value.name) : (valueId ?? "");
+    };
     const result: ReportRunResult = {
-        groups: [{
-          kind: 'results',
-          title: scenario[0].name,
-          columns: ['Account Number', 'Account Name', 'Period', 'Subsidiary', 'Department', 'Project', 'Location', 'Class',
-            ...segments.map((segment) => segment.name), 'Amount', 'Note'],
+      groups: [
+        {
+          kind: "results",
+          title: scenario.name,
+          columns: [
+            "Account Number",
+            "Account Name",
+            "Period",
+            "Subsidiary",
+            "Department",
+            "Project",
+            "Location",
+            "Class",
+            ...segments.map((segment) => segment.name),
+            "Amount",
+            "Note",
+          ],
           rows: lines.map((row) => [
-            row.number ?? '', row.account_name, row.period, row.subsidiary ?? '', row.department ?? '', row.project ?? '',
-            row.location ?? '', row.class ?? '', ...segments.map((segment) => segmentLabel(segment.key, row.extra_dims?.[segment.key])),
-            row.amount, row.note ?? '',
+            row.number ?? "",
+            row.account_name,
+            row.period,
+            row.subsidiary ?? "",
+            row.department ?? "",
+            row.project ?? "",
+            row.location ?? "",
+            row.class ?? "",
+            ...segments.map((segment) => segmentLabel(segment.key, row.extra_dims?.[segment.key])),
+            row.amount,
+            row.note ?? "",
           ]),
           isEmpty: lines.length === 0,
-        }],
-        summary: [],
-        rowCount: lines.length,
-      }
-    const stamp = await businessToday(gate.user.orgId)
-    const filename = `${scenario[0].name}-${scenario[0].fiscal_year}-${stamp}`
-    if (format === 'csv') return csvResponse(reportResultToCsv(result), filename)
-    return xlsxResponse(await reportResultToXlsx(result, {
-        reportName: scenario[0].name,
+        },
+      ],
+      summary: [],
+      rowCount: lines.length,
+    };
+    const stamp = await businessToday(gate.user.orgId);
+    const filename = `${scenario.name}-${scenario.fiscal_year}-${stamp}`;
+    if (format === "csv") return csvResponse(reportResultToCsv(result), filename);
+    return xlsxResponse(
+      await reportResultToXlsx(result, {
+        reportName: scenario.name,
         generatedAt: new Date(`${stamp}T00:00:00Z`),
         money: await xlsxMoneyContext(gate.user.orgId),
-      }), filename)
+      }),
+      filename,
+    );
   },
 });
