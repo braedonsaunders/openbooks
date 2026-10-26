@@ -290,7 +290,6 @@ export const PUT = defineRoute({
   feature: "payroll",
   scope: "root",
   body: requestBodySchema,
-  invalidBodyStatus: 422,
   handler: async ({ authz: gate, body }) => {
     const parsed = parseBody(body);
     if (typeof parsed === "string") return NextResponse.json({ error: parsed }, { status: 422 });
