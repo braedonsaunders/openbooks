@@ -139,7 +139,8 @@ export async function generalLedger(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
        and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-     where l.org_id = ${orgId} and e.posting_date >= ${from} and e.posting_date <= ${to}
+     where l.org_id = ${orgId} and l.posting_date >= ${from} and l.posting_date <= ${to}
+       and e.posting_date >= ${from} and e.posting_date <= ${to}
        and ${dimWhere(opts.dims)}${acctFilter}
      group by l.account_id
   `
@@ -159,7 +160,8 @@ export async function generalLedger(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
-     where l.org_id = ${orgId} and e.posting_date >= ${from} and e.posting_date <= ${to} and ${dimWhere(opts.dims)}${acctFilter}`
+     where l.org_id = ${orgId} and l.posting_date >= ${from} and l.posting_date <= ${to}
+       and e.posting_date >= ${from} and e.posting_date <= ${to} and ${dimWhere(opts.dims)}${acctFilter}`
   // Ledger order with tiebreakers, so pages never overlap or skip a line.
   const ledgerOrder = sql`number nulls last, name, account_id, date, entry_number, entry_id, line_no`
   const lineSource = opts.canSeePayroll === true

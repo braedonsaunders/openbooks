@@ -538,6 +538,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
           left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
           left join book_currency bc on bc.subsidiary_id = l.subsidiary_id
          where l.org_id = ${authz.user.orgId} and e.book_id = ${row.book_id}
+           and l.posting_date >= ${from} and l.posting_date <= ${to}
            and e.posting_date >= ${from} and e.posting_date <= ${to}
            and ${excludePeriodEndJournals(sql`e.origin`)}
            ${actualAccount} ${actualDims} ${actualSubsidiaryFilter}

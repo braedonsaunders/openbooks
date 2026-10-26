@@ -37,7 +37,8 @@ export async function journalMeasurementExportData(kind: 'statistical-journal' |
       join accounts a on a.org_id=l.org_id and a.id=l.account_id and a.type='statistical'
       join subsidiaries s on s.org_id=l.org_id and s.id=l.subsidiary_id
       left join departments d on d.org_id=l.org_id and d.id=l.department_id
-     where l.org_id=${input.orgId} and e.status in ('posted','reversed') and e.posting_date between ${input.from}::date and ${input.to}::date
+     where l.org_id=${input.orgId} and e.status in ('posted','reversed') and l.posting_date >= ${input.from}::date and l.posting_date <= ${input.to}::date
+       and e.posting_date between ${input.from}::date and ${input.to}::date
        and e.book_id in ${statementBookIdsExpr(input.orgId,input.bookId)}
        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`,input.allowedSubsidiaryIds)}
      order by e.posting_date,e.entry_number,l.line_number`, 'objects')).map(row => [row.entry,row.date,row.entity,row.account,row.quantity ?? '',row.unit ?? '',row.department ?? ''])

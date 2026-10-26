@@ -140,6 +140,7 @@ export async function cashFlow(
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
+         and l.posting_date >= ${from} and l.posting_date <= ${to}
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.book_id in ${book}
          and e.origin not in ('fx_revaluation','currency_adjustment')
@@ -195,6 +196,7 @@ export async function cashFlow(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
+       and l.posting_date >= ${from} and l.posting_date <= ${to}
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
        and e.origin in ('fx_revaluation','currency_adjustment') and a.type = 'asset_bank' and ${dimWhere(dims)}
@@ -241,6 +243,7 @@ export async function cashFlow(
       from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
       join accounts a on a.org_id=l.org_id and a.id=l.account_id
       where l.org_id=${resolvedOrgId} and e.status in ('posted','reversed') and a.type='asset_bank'
+        and l.posting_date >= ${from}::date and l.posting_date <= ${to}::date
         and e.posting_date between ${from}::date and ${to}::date
         and e.book_id in ${statementBookIdsExpr(resolvedOrgId,bookId)} and ${dimWhere(dims)}
         and ${excludePeriodEndJournals(sql`e.origin`)}

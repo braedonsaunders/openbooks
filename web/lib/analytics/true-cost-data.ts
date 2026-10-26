@@ -478,6 +478,7 @@ export async function trueCostData(
       where l.org_id = ${orgId} ${ledgerScope}
         and a.type in ('expense', 'expense_other', 'expense_deferred')
         and a.is_summary = false
+        and l.posting_date >= ${from} and l.posting_date <= ${to}
         and e.posting_date >= ${from} and e.posting_date <= ${to}
       group by 1, 2, 3, 4, 5, 6
     `),
@@ -551,7 +552,8 @@ export async function trueCostData(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
       where l.org_id = ${orgId} ${ledgerScope} and a.type in ('expense', 'expense_other', 'expense_deferred')
-        and a.is_summary = false and e.posting_date >= ${priorFrom} and e.posting_date <= ${priorTo}
+        and a.is_summary = false and l.posting_date >= ${priorFrom} and l.posting_date <= ${priorTo}
+        and e.posting_date >= ${priorFrom} and e.posting_date <= ${priorTo}
       group by 1, 2
     `) : Promise.resolve({rows:[]})),
     // Prior-window non-billable labour cost per functional: the scalar
@@ -577,6 +579,7 @@ export async function trueCostData(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
       where l.org_id = ${orgId} ${ledgerScope} and ${appliedFilter}
+        and l.posting_date >= ${from} and l.posting_date <= ${to}
         and e.posting_date >= ${from} and e.posting_date <= ${to}
       group by 1
     `),

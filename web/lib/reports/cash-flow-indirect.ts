@@ -162,6 +162,7 @@ export async function cashFlowIndirect(
          and l.account_id in (
                select id from accounts where org_id = ${resolvedOrgId} and type in ${IF_TYPES})
          and e.status in ('posted', 'reversed')
+         and l.posting_date >= ${from} and l.posting_date <= ${to}
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
          and ${excludePeriodEndJournals(sql`e.origin`)}
@@ -192,6 +193,7 @@ export async function cashFlowIndirect(
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
             join accounts a on a.id = l.account_id and a.org_id = l.org_id
            where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
+             and l.posting_date >= ${from} and l.posting_date <= ${to}
              and e.posting_date >= ${from} and e.posting_date <= ${to}
              and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
              and ${excludePeriodEndJournals(sql`e.origin`)}
@@ -210,6 +212,7 @@ export async function cashFlowIndirect(
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
+         and l.posting_date >= ${from} and l.posting_date <= ${to}
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
          and e.origin in ${CF_REMEASURE_PNL_ORIGINS} and a.type in ${PNL_TYPES} and ${dim}
@@ -233,6 +236,7 @@ export async function cashFlowIndirect(
          -- walks every line of these accounts ever and probes the entry pk
          -- per line (minutes at scale) instead of driving from the entry
          -- date index. Result-identical, plan-decisive.
+         and l.posting_date >= ${from} and l.posting_date <= ${to}
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
          and e.origin not in ${CF_REMEASURE_PNL_ORIGINS}
@@ -302,6 +306,7 @@ export async function cashFlowIndirect(
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
+         and l.posting_date >= ${from} and l.posting_date <= ${to}
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
          and l.account_id in (
@@ -355,6 +360,7 @@ export async function cashFlowIndirect(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
+       and l.posting_date >= ${from} and l.posting_date <= ${to}
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
        and e.origin in ${CF_FX_CASH_ORIGINS} and a.type = 'asset_bank' and ${dim}
@@ -407,6 +413,7 @@ export async function cashFlowIndirect(
       from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
       join accounts a on a.org_id=l.org_id and a.id=l.account_id
       where l.org_id=${resolvedOrgId} and e.status in ('posted','reversed') and a.type='asset_bank'
+        and l.posting_date >= ${from}::date and l.posting_date <= ${to}::date
         and e.posting_date between ${from}::date and ${to}::date
         and e.book_id in ${statementBookIdsExpr(resolvedOrgId,bookId)} and ${dimWhere(dims)}
         and ${excludePeriodEndJournals(sql`e.origin`)}

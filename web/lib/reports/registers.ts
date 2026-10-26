@@ -328,7 +328,8 @@ export async function partyRegister(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id ${sourceDocumentScope}
-     where a.type = ${acctType} and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
+     where a.type = ${acctType} and l.posting_date >= ${opts.from} and l.posting_date <= ${opts.to}
+       and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
      group by ${partyIdExpr}
   `))
@@ -373,7 +374,8 @@ export async function partyRegister(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties pt on pt.id = l.party_id and pt.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id ${sourceDocumentScope}
-     where a.type = ${acctType} and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
+     where a.type = ${acctType} and l.posting_date >= ${opts.from} and l.posting_date <= ${opts.to}
+       and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}${pagePartyFilter}
      order by ${partyNameExpr} nulls last, e.posting_date, e.entry_number, l.line_number
      limit ${maxLines + 1}
