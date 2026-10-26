@@ -257,11 +257,9 @@ export async function completeRequestedDocumentVoid(
         throw new DocumentVoidError(`a ${String(doc.status)} document cannot be voided`);
       }
 
-      // Downstream fence for every kind. A document that feeds a live
-      // downstream document cannot be voided out from under it. This guard
-      // used to run only inside `if (entryId)` below, so non-posting order
-      // documents (quotes, orders, shipments, receipts — never carrying a
-      // posted entry) skipped it entirely.
+      // Downstream fence for every kind, posting or not (quotes, orders,
+      // shipments and receipts carry no entry): a document that feeds a live
+      // downstream document cannot be voided out from under it.
       const downstream = await tx.execute<{ document_number: string }>(
         sql`
         select d2.document_number
@@ -493,11 +491,9 @@ export async function completeRequestedDocumentVoid(
         if (hasInventoryActivity || hasRevenueActivity) {
           // The queries above are existence-based: movement and obligation
           // rows survive a kernel reversal, so reversing the stock does not
-          // unblock the void — the document stays posted. Branch the refusal
-          // by the subledger actually present: the old combined text pointed
-          // every inventory case at the revenue cancellation screen, which
-          // cannot relieve stock. Every remedy named below exists today; no
-          // receipt-selection workflow is claimed.
+          // unblock the void — the document stays posted. The refusal names
+          // the remedy for the subledger actually present; revenue
+          // cancellation cannot relieve stock.
           const revenueRemedy =
             "revenue contracts cancel from Revenue → contract → Cancel recognition (POST /api/revenue/cancel-recognition)";
           if (!hasInventoryActivity) {
@@ -565,15 +561,13 @@ export async function completeRequestedDocumentVoid(
           throw new DocumentVoidError("the source journal entry is not posted");
         }
         const reversalDate = String(doc.void_reversal_date);
-        // Reversals are ordinary corrections, so the reversal period resolves
-        // through the shared covering-period resolver (the entry subsidiary's
-        // effective calendar, regular periods only): a void can no longer
-        // land in an adjustment period by date. An adjustment-period reversal
-        // names its period explicitly through the stored document override, revalidated here —
-        // the validation at request time fails fast, but this one is
-        // authoritative: the period may have closed or changed while gates
-        // waited. The openness fence below then applies to the override
-        // period exactly as it does to a date-resolved one.
+        // Reversals are ordinary corrections: the period resolves through the
+        // shared covering-period resolver (the entry subsidiary's effective
+        // calendar, regular periods only), so a date never lands a void in an
+        // adjustment period. An adjustment-period reversal names its period
+        // through the stored document override, revalidated here because the
+        // period may have closed or changed while gates waited; the openness
+        // fence below applies to it exactly as to a date-resolved period.
         const overridePeriodId = doc.void_reversal_period_id
           ? String(doc.void_reversal_period_id)
           : null;
@@ -836,7 +830,7 @@ export async function completeRequestedDocumentVoid(
       // A voided child returns its conversion/capture cover to the source
       // order lines, so the remainder is convertible and billable again. A
       // no-op for documents without that provenance (fulfillments, payments,
-      // standalone bills) and for legacy children converted before it existed.
+      // standalone bills) and for children converted without it.
       await releaseConvertedOrderQuantities(tx, orgId, documentId, {
         actorId: String(doc.void_requested_by),
         reason: String(doc.void_reason),
