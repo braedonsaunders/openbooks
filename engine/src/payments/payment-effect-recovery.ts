@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { ScopeNotFoundError } from "../organization/scope.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { replayTerminalPostingEffect } from "../ledger/posting-effects.ts";
 import { loadPaymentDocument, paymentDocumentScope } from "./payment-queries.ts";

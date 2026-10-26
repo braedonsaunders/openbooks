@@ -12,7 +12,7 @@ import { type PaymentKind } from "@openbooks/engine/payments/payment-contracts";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
 import { runPostDocumentEffects } from "@openbooks/engine/ledger/posting-dispatch";
 import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/organization/scope";
-import { can, guardSubsidiaryScope, type Authz } from "@/lib/authz";
+import { can, getAuthz, guardSubsidiaryScope, type Authz } from "@/lib/authz";
 import {
   DocumentEditError,
   requireDocumentEditRevision,
