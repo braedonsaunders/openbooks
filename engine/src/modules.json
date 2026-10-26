@@ -200,6 +200,7 @@
     "compliance": {
       "description": "Subcontractor compliance (COIs, lien waivers) and year-end information returns.",
       "dependsOn": [
+        "journal",
         "money",
         "organization",
         "platform"
@@ -443,7 +444,6 @@
       "dependsOn": [
         "allocations",
         "amortization",
-        "compliance",
         "contractor-withholding",
         "crm",
         "flows",

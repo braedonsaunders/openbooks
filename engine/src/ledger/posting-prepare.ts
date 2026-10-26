@@ -32,7 +32,7 @@ import { assertInvoiceIssuesPostable } from "../inventory/documents-sales.ts";
 import { assertVendorCreditInventoryReturnsPostable, resolveVendorCreditInventoryAccounts } from "../inventory/documents-vendor-credits.ts";
 import { assertCustomerCreditInventoryReturnsPostable } from "../inventory/documents-customer-credits.ts";
 
-import { assertBillPostingAllowed, ComplianceError } from "../compliance/compliance.ts";
+import { postingPreconditionHooks } from "../journal/posting-preconditions.ts";
 
 import { type KernelLine, type PostingDeps, PostingError, effectivePostingDate } from "../journal/posting-contracts.ts";
 import { resolveMarketplaceClearingForDocument, validateTaxControlAccounts } from "./posting-tax-policy.ts";
@@ -682,19 +682,13 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     (effectiveDoc.kind === "vendor_bill" ||
       effectiveDoc.kind === "expense_report")
   ) {
-    try {
-      await assertBillPostingAllowed({
-        orgId: doc.orgId,
-        partyId: effectiveDoc.partyId,
-        projectId: effectiveDoc.projectId ?? null,
-        documentNumber: effectiveDoc.documentNumber,
-        asOf: effectivePostingDate(effectiveDoc),
-      });
-    } catch (error) {
-      if (error instanceof ComplianceError)
-        throw new PostingError(error.message);
-      throw error;
-    }
+    await postingPreconditionHooks.require("compliance").assertBillPostingAllowed({
+      orgId: doc.orgId,
+      partyId: effectiveDoc.partyId,
+      projectId: effectiveDoc.projectId ?? null,
+      documentNumber: effectiveDoc.documentNumber,
+      asOf: effectivePostingDate(effectiveDoc),
+    });
   }
 
   if (
