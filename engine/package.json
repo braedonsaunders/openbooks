@@ -76,6 +76,7 @@
     "./assets/asset-cip": "./src/assets/asset-cip.ts",
     "./assets/asset-components": "./src/assets/asset-components.ts",
     "./assets/asset-creation-queries": "./src/assets/asset-creation-queries.ts",
+    "./assets/asset-route-queries": "./src/assets/asset-route-queries.ts",
     "./assets/asset-drafts": "./src/assets/asset-drafts.ts",
     "./assets/asset-insurance": "./src/assets/asset-insurance.ts",
     "./assets/asset-lifecycle": "./src/assets/asset-lifecycle.ts",
