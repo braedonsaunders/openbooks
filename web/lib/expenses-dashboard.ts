@@ -228,6 +228,7 @@ export async function expensesDashboard(
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
         and d.kind = 'expense_report'
         and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
+        and l.posting_date >= ${priorFrom} and l.posting_date <= ${to}
         and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}
       group by 1, 2
       order by 3 desc nulls last
@@ -253,6 +254,7 @@ export async function expensesDashboard(
           ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
           and d.kind = 'expense_report'
           and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
+          and l.posting_date >= ${priorFrom} and l.posting_date <= ${to}
           and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}
         group by l.account_id, a.name
       ) c
@@ -272,6 +274,7 @@ export async function expensesDashboard(
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
         and d.kind in ('expense_report', 'vendor_bill')
         and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
+        and l.posting_date >= ${from} and l.posting_date <= ${to}
         and e.posting_date >= ${from} and e.posting_date <= ${to}
       group by 1
       order by 1

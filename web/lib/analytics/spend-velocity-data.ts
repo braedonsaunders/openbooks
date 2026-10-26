@@ -682,6 +682,7 @@ export async function spendVelocityData(
         and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
         and d.kind in ('expense_report', 'vendor_bill')
         and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
+        and l.posting_date >= ${priorFrom} and l.posting_date <= ${to}
         and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}
       group by 1, 2, sub.base_currency
     `) : Promise.resolve({ rows: [] as ExpenseCategoryRow[] })),
