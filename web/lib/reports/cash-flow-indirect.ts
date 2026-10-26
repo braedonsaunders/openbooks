@@ -422,7 +422,7 @@ export async function cashFlowIndirect(
     cash_effect: string;
     missingHistorical: boolean;
   }>(sql`
-    with cash_entries as (
+    with cash_entries as materialized (
       -- Bank-touching entries by account id: joining accounts per line made
       -- the planner drive from accounts and probe the entry pk per line.
       select distinct l.entry_id as id
@@ -439,11 +439,13 @@ export async function cashFlowIndirect(
     )
     select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type, e.origin, -round(sum(${flowAmount}),4) as cash_effect
       ,bool_or((${flowAmount}) is null) as "missingHistorical"
-      from journal_lines l
+      from cash_entries ce
+      -- Driven from the bank-touching entries, so their lines are read by
+      -- entry and the account join stays a hash.
+      join journal_lines l on l.entry_id = ce.id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-     where e.id in (select id from cash_entries)
-       and l.org_id = ${resolvedOrgId}
+     where l.org_id = ${resolvedOrgId}
        -- Redundant by construction (every cash entry is in-window): lets the
        -- planner bound the outer scan by the entry date index instead of
        -- walking all history and probing the entry pk per line.

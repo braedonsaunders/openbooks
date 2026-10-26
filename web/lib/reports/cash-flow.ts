@@ -172,7 +172,7 @@ export async function cashFlow(
     disposal_gain: boolean;
     missingHistorical: boolean;
   }>(sql`
-    with cash_entries as (
+    with cash_entries as materialized (
       -- Bank-touching entries by account id: joining accounts per line made
       -- the planner drive from accounts and probe the entry pk per line.
       select distinct l.entry_id as id
@@ -196,11 +196,13 @@ export async function cashFlow(
            -- genuine operating flows too, and those must stay operating.
            (e.origin = 'disposal' and a.type in
              ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred')) as disposal_gain
-      from journal_lines l
+      from cash_entries ce
+      -- Driven from the bank-touching entries, so their lines are read by
+      -- entry and the account join stays a hash.
+      join journal_lines l on l.entry_id = ce.id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-     where e.id in (select id from cash_entries)
-       and e.book_id in ${book}
+     where e.book_id in ${book}
        and l.org_id = ${resolvedOrgId} and a.type <> 'asset_bank' and ${dimWhere(dims)}
      group by a.type,
            (e.origin = 'disposal' and a.type in
