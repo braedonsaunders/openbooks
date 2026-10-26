@@ -376,6 +376,7 @@
     "./ledger/document-input": "./src/ledger/document-input.ts",
     "./ledger/document-service": "./src/ledger/document-service.ts",
     "./ledger/document-void": "./src/ledger/document-void.ts",
+    "./ledger/expense-editing": "./src/ledger/expense-editing.ts",
     "./ledger/journal-instruction-validation": "./src/ledger/journal-instruction-validation.ts",
     "./ledger/journal-instructions": "./src/ledger/journal-instructions.ts",
     "./ledger/journal-reversals": "./src/ledger/journal-reversals.ts",
