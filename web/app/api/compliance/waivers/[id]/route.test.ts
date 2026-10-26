@@ -1,19 +1,19 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test, { after } from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test, { after } from "node:test";
 
 // Route boundary suite: waiver revocation and its mandatory audit evidence
 // must commit as one unit. The scripted database fake keeps writes pending
 // until the transaction callback succeeds, so an audit failure proves the
 // waiver update was rolled back rather than merely observing two calls.
-const stateKey = Symbol.for('openbooks.compliance-waiver-route-test')
+const stateKey = Symbol.for("openbooks.compliance-waiver-route-test");
 interface RouteState {
-  calls: Array<{ kind: 'execute' | 'tx-execute'; text: string }>
-  committed: string[]
-  pending: string[]
-  waiverAvailable: boolean
-  revoked: boolean
-  failAudit: boolean
+  calls: Array<{ kind: "execute" | "tx-execute"; text: string }>;
+  committed: string[];
+  pending: string[];
+  waiverAvailable: boolean;
+  revoked: boolean;
+  failAudit: boolean;
 }
 
 const routeState: RouteState = {
@@ -23,30 +23,31 @@ const routeState: RouteState = {
   waiverAvailable: true,
   revoked: false,
   failAudit: false,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 /** Flatten a drizzle SQL chunk into raw text for the scripted database fake. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksComplianceWaiverSqlText = sqlText
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksComplianceWaiverSqlText =
+  sqlText;
 
-const WAIVER_ID = '00000000-0000-4000-8000-00000000c001'
+const WAIVER_ID = "00000000-0000-4000-8000-00000000c001";
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.compliance-waiver-route-test')]
       const sqlText = globalThis.openbooksComplianceWaiverSqlText
@@ -97,7 +98,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `
       export async function guardPermission(permission) {
         if (permission !== 'compliance.waive') throw new Error('unexpected permission: ' + permission)
@@ -110,96 +111,117 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:compliance',
+    "mock:compliance",
     `
       export async function guardComplianceFeature() { return null }
     `,
   ],
-])
+  [
+    "mock:feature-gates",
+    `
+      export async function guardFeaturePermission(permission) {
+        const { guardPermission } = await import('@/lib/authz')
+        return guardPermission(permission)
+      }
+    `,
+  ],
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['@/lib/authz', 'mock:authz'],
-  ['@/lib/compliance', 'mock:compliance'],
-])
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@/lib/authz", "mock:authz"],
+  ["@/lib/compliance", "mock:compliance"],
+  ["@/lib/feature-gates", "mock:feature-gates"],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?compliance-waiver-revocation-test'
-const { DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
-after(() => hooks.deregister())
+const routeUrl = "./route.ts?compliance-waiver-revocation-test";
+const { DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
+after(() => hooks.deregister());
 
 function reset(): void {
-  routeState.calls.length = 0
-  routeState.committed.length = 0
-  routeState.pending.length = 0
-  routeState.waiverAvailable = true
-  routeState.revoked = false
-  routeState.failAudit = false
+  routeState.calls.length = 0;
+  routeState.committed.length = 0;
+  routeState.pending.length = 0;
+  routeState.waiverAvailable = true;
+  routeState.revoked = false;
+  routeState.failAudit = false;
 }
 
-function revoke(reason = 'documented policy exception'): Promise<Response> {
+function revoke(reason = "documented policy exception"): Promise<Response> {
   return DELETE(
     new Request(`http://openbooks.test/api/compliance/waivers/${WAIVER_ID}`, {
-      method: 'DELETE',
-      headers: { 'content-type': 'application/json' },
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ reason }),
     }),
     { params: Promise.resolve({ id: WAIVER_ID }) },
-  )
+  );
 }
 
-test('revocation and its audit evidence commit in one transaction', async () => {
-  reset()
+test("revocation and its audit evidence commit in one transaction", async () => {
+  reset();
 
-  const response = await revoke()
+  const response = await revoke();
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { id: WAIVER_ID })
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { id: WAIVER_ID });
   const writes = routeState.calls.filter(
-    (call) => call.text.includes('update compliance_waivers') || call.text.includes('insert into audit_log'),
-  )
-  assert.equal(writes.length, 2)
-  assert.equal(writes.every((call) => call.kind === 'tx-execute'), true)
-  assert.deepEqual(routeState.committed.map((text) => text.includes('update compliance_waivers') ? 'update' : 'audit'), [
-    'update',
-    'audit',
-  ])
-  assert.equal(routeState.revoked, true)
-})
+    (call) =>
+      call.text.includes("update compliance_waivers") ||
+      call.text.includes("insert into audit_log"),
+  );
+  assert.equal(writes.length, 2);
+  assert.equal(
+    writes.every((call) => call.kind === "tx-execute"),
+    true,
+  );
+  assert.deepEqual(
+    routeState.committed.map((text) =>
+      text.includes("update compliance_waivers") ? "update" : "audit",
+    ),
+    ["update", "audit"],
+  );
+  assert.equal(routeState.revoked, true);
+});
 
-test('an audit failure rolls back the waiver revocation', async () => {
-  reset()
-  routeState.failAudit = true
+test("an audit failure rolls back the waiver revocation", async () => {
+  reset();
+  routeState.failAudit = true;
 
-  await assert.rejects(() => revoke(), /forced audit failure/)
+  await assert.rejects(() => revoke(), /forced audit failure/);
 
   // The fence pre-read plus both writes inside the transaction.
-  assert.equal(routeState.calls.length, 3, 'the fence read ran, then both writes were attempted inside the transaction')
-  assert.equal(routeState.committed.length, 0, 'the waiver update did not commit without evidence')
-  assert.equal(routeState.revoked, false, 'the waiver remains active after the failed transaction')
-})
+  assert.equal(
+    routeState.calls.length,
+    3,
+    "the fence read ran, then both writes were attempted inside the transaction",
+  );
+  assert.equal(routeState.committed.length, 0, "the waiver update did not commit without evidence");
+  assert.equal(routeState.revoked, false, "the waiver remains active after the failed transaction");
+});
 
-test('an already-revoked waiver does not append another audit event', async () => {
-  reset()
-  routeState.revoked = true
+test("an already-revoked waiver does not append another audit event", async () => {
+  reset();
+  routeState.revoked = true;
 
-  const response = await revoke()
+  const response = await revoke();
 
-  assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found or already revoked' })
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "not found or already revoked" });
   // The fence pre-read ran, then the refused revocation; no audit followed.
-  assert.equal(routeState.calls.length, 2)
-  assert.equal(routeState.committed.length, 0)
-})
+  assert.equal(routeState.calls.length, 2);
+  assert.equal(routeState.committed.length, 0);
+});

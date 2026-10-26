@@ -1,23 +1,28 @@
-import assert from 'node:assert/strict'
-import { stubModules } from '../../../../../../testing/stub-modules'
-import test from 'node:test'
-import { NextResponse } from 'next/server'
+import assert from "node:assert/strict";
+import { stubModules } from "../../../../../../testing/stub-modules";
+import test from "node:test";
+import { NextResponse } from "next/server";
 
 // Party statements are scoped to the caller's subsidiary access, and rendering
 // requires report access in addition to the permission to send a statement.
 interface StatementState {
-  permissions: string[]
-  allowedSubsidiaryIds: Set<string> | null
-  party: { id: string; display_name: string | null; email: string | null; subsidiary_id: string | null } | null
-  contacts: { role: string | null; email: string | null; isPrimary: boolean; isActive: boolean }[]
-  executed: string[]
-  renderCalls: number
-  sendCalls: number
-  sentTo: string[]
-  reportParams: Record<string, string>
+  permissions: string[];
+  allowedSubsidiaryIds: Set<string> | null;
+  party: {
+    id: string;
+    display_name: string | null;
+    email: string | null;
+    subsidiary_id: string | null;
+  } | null;
+  contacts: { role: string | null; email: string | null; isPrimary: boolean; isActive: boolean }[];
+  executed: string[];
+  renderCalls: number;
+  sendCalls: number;
+  sentTo: string[];
+  reportParams: Record<string, string>;
 }
 
-const stateKey = Symbol.for('openbooks.statement-send-test')
+const stateKey = Symbol.for("openbooks.statement-send-test");
 const statementState: StatementState = {
   permissions: [],
   allowedSubsidiaryIds: null,
@@ -28,13 +33,14 @@ const statementState: StatementState = {
   sendCalls: 0,
   sentTo: [],
   reportParams: {},
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = statementState
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksStatementNextResponse = NextResponse
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = statementState;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksStatementNextResponse =
+  NextResponse;
 
-const PARTY_ID = '00000000-0000-4000-8000-00000000e001'
-const SUB_A = '00000000-0000-4000-8000-00000000e00a'
-const SUB_B = '00000000-0000-4000-8000-00000000e00b'
+const PARTY_ID = "00000000-0000-4000-8000-00000000e001";
+const SUB_A = "00000000-0000-4000-8000-00000000e00a";
+const SUB_B = "00000000-0000-4000-8000-00000000e00b";
 
 stubModules({
   navigation: false,
@@ -139,10 +145,27 @@ stubModules({
         if (!state.permissions.includes(perm)) return NextResponse.json({ error: 'missing permission: ' + perm }, { status: 403 })
         return currentAuthz()
       }
+      export function can(authz, perm) {
+        return authz.permissions.has(perm)
+      }
+      export function subsidiaryScopeAllows(scope, subsidiaryId, opts) {
+        if (scope === null || scope === undefined) return true
+        if (subsidiaryId === null || subsidiaryId === undefined || subsidiaryId === '') {
+          return (opts && opts.orgWideNull) === true
+        }
+        return scope.has(subsidiaryId)
+      }
       export function guardRootSubsidiaryScope() { return null }
       export function guardUnrestrictedScope() { return null }
     `,
     "../../../../../../lib/report-filters": `
+      const state = globalThis[Symbol.for('openbooks.statement-send-test')]
+      export function parseReportQuery(params) {
+        state.reportParams = Object.fromEntries(params.entries())
+        return { period: 'custom', from: params.get('from'), to: params.get('to') }
+      }
+    `,
+    "@/lib/report-filters": `
       const state = globalThis[Symbol.for('openbooks.statement-send-test')]
       export function parseReportQuery(params) {
         state.reportParams = Object.fromEntries(params.entries())
@@ -158,7 +181,15 @@ stubModules({
       }
     `,
     "../../../../../../lib/periods": `export async function resolvePeriod(_period, bounds) { return { from: bounds.customFrom, to: bounds.customTo } }`,
+    "@/lib/periods": `export async function resolvePeriod(_period, bounds) { return { from: bounds.customFrom, to: bounds.customTo } }`,
     "../../../../../../lib/report-run": `
+      const state = globalThis[Symbol.for('openbooks.statement-send-test')]
+      export async function resolveReport() {
+        state.renderCalls += 1
+        return { render: 'data', data: {} }
+      }
+    `,
+    "@/lib/report-run": `
       const state = globalThis[Symbol.for('openbooks.statement-send-test')]
       export async function resolveReport() {
         state.renderCalls += 1
@@ -170,110 +201,129 @@ stubModules({
       export async function orgBranding() { return { orgName: 'Test Org' } }
       export function resolveLayout() { return { page: {}, showSummary: false } }
     `,
+    "@/lib/report-pdf": `
+      export async function exportDataToPdf() { return new Uint8Array([1, 2, 3]) }
+      export async function orgBranding() { return { orgName: 'Test Org' } }
+      export function resolveLayout() { return { page: {}, showSummary: false } }
+    `,
     "../../../../../../lib/export": `export function safeName(name) { return name }`,
+    "@/lib/export": `export function safeName(name) { return name }`,
+    "@/lib/statement-batch": `
+      export function pickStatementEmail(contacts, partyEmail) {
+        const active = contacts.filter((contact) => contact.isActive)
+        const billing = active.filter((contact) => ['billing', 'statement'].includes((contact.role || '').trim().toLowerCase()))
+        const preferred = [...billing.filter((contact) => contact.isPrimary), ...billing.filter((contact) => !contact.isPrimary)]
+        return preferred.find((contact) => contact.email)?.email || active.find((contact) => contact.isPrimary && contact.email)?.email || partyEmail?.trim() || null
+      }
+    `,
     "next-intl/server": `export async function getLocale() { return "en" }; export async function getTranslations() { return (key) => key }`,
   },
-})
+});
 
-const routeUrl = './route.ts?statement-send-test'
-const { GET, POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?statement-send-test";
+const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset(overrides: Partial<StatementState>): void {
-  statementState.permissions = overrides.permissions ?? []
-  statementState.allowedSubsidiaryIds = overrides.allowedSubsidiaryIds ?? null
-  statementState.party = overrides.party ?? null
-  statementState.contacts = overrides.contacts ?? []
-  statementState.executed = []
-  statementState.renderCalls = 0
-  statementState.sendCalls = 0
-  statementState.sentTo = []
-  statementState.reportParams = {}
+  statementState.permissions = overrides.permissions ?? [];
+  statementState.allowedSubsidiaryIds = overrides.allowedSubsidiaryIds ?? null;
+  statementState.party = overrides.party ?? null;
+  statementState.contacts = overrides.contacts ?? [];
+  statementState.executed = [];
+  statementState.renderCalls = 0;
+  statementState.sendCalls = 0;
+  statementState.sentTo = [];
+  statementState.reportParams = {};
 }
 
 const bParty = {
   id: PARTY_ID,
-  display_name: 'Beta Corp',
-  email: 'billing@beta.test',
+  display_name: "Beta Corp",
+  email: "billing@beta.test",
   subsidiary_id: SUB_B,
-}
+};
 
 function get(): Promise<Response> {
-  return GET(
-    new Request(`http://openbooks.test/api/parties/${PARTY_ID}/statement/send?side=ar`),
-    { params: Promise.resolve({ id: PARTY_ID }) },
-  )
+  return GET(new Request(`http://openbooks.test/api/parties/${PARTY_ID}/statement/send?side=ar`), {
+    params: Promise.resolve({ id: PARTY_ID }),
+  });
 }
 
 function send(): Promise<Response> {
   return POST(
     new Request(`http://openbooks.test/api/parties/${PARTY_ID}/statement/send`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ side: 'ar', toDate: '2026-07-31' }),
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ side: "ar", toDate: "2026-07-31" }),
     }),
     { params: Promise.resolve({ id: PARTY_ID }) },
-  )
+  );
 }
 
-test('GET hides an out-of-scope party exactly like a missing one', async () => {
-  reset({ permissions: ['ar.read'], allowedSubsidiaryIds: new Set([SUB_A]), party: bParty })
-  const denied = await get()
-  assert.equal(denied.status, 404)
-  assert.deepEqual(await denied.json(), { error: 'not_found' })
+test("GET hides an out-of-scope party exactly like a missing one", async () => {
+  reset({ permissions: ["ar.read"], allowedSubsidiaryIds: new Set([SUB_A]), party: bParty });
+  const denied = await get();
+  assert.equal(denied.status, 404);
+  assert.deepEqual(await denied.json(), { error: "not_found" });
 
-  reset({ permissions: ['ar.read'], allowedSubsidiaryIds: new Set([SUB_A]), party: null })
-  const missing = await get()
-  assert.equal(missing.status, 404)
-  assert.deepEqual(await missing.json(), { error: 'not_found' })
-})
+  reset({ permissions: ["ar.read"], allowedSubsidiaryIds: new Set([SUB_A]), party: null });
+  const missing = await get();
+  assert.equal(missing.status, 404);
+  assert.deepEqual(await missing.json(), { error: "not_found" });
+});
 
-test('GET still prefills an in-scope party', async () => {
-  reset({ permissions: ['ar.read'], allowedSubsidiaryIds: new Set([SUB_B]), party: bParty })
-  const response = await get()
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { to: 'billing@beta.test', partyName: 'Beta Corp' })
-})
+test("GET still prefills an in-scope party", async () => {
+  reset({ permissions: ["ar.read"], allowedSubsidiaryIds: new Set([SUB_B]), party: bParty });
+  const response = await get();
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { to: "billing@beta.test", partyName: "Beta Corp" });
+});
 
-test('GET prefers the billing contact address over the party email', async () => {
+test("GET prefers the billing contact address over the party email", async () => {
   reset({
-    permissions: ['ar.read'],
+    permissions: ["ar.read"],
     allowedSubsidiaryIds: new Set([SUB_B]),
-    party: { ...bParty, email: 'general@beta.test' },
-    contacts: [{ role: 'billing', email: 'billing@beta.test', isPrimary: false, isActive: true }],
-  })
-  const response = await get()
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { to: 'billing@beta.test', partyName: 'Beta Corp' })
-})
+    party: { ...bParty, email: "general@beta.test" },
+    contacts: [{ role: "billing", email: "billing@beta.test", isPrimary: false, isActive: true }],
+  });
+  const response = await get();
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { to: "billing@beta.test", partyName: "Beta Corp" });
+});
 
-test('POST by a create-only sender names reports.read instead of rendering', async () => {
-  reset({ permissions: ['ar.create'], allowedSubsidiaryIds: null, party: bParty })
-  const response = await send()
-  assert.equal(response.status, 403)
-  assert.deepEqual(await response.json(), { error: 'missing permission: reports.read' })
-  assert.equal(statementState.renderCalls, 0)
-  assert.equal(statementState.sendCalls, 0)
-})
+test("POST by a create-only sender names reports.read instead of rendering", async () => {
+  reset({ permissions: ["ar.create"], allowedSubsidiaryIds: null, party: bParty });
+  const response = await send();
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "missing permission: reports.read" });
+  assert.equal(statementState.renderCalls, 0);
+  assert.equal(statementState.sendCalls, 0);
+});
 
-test('POST never sends an out-of-scope party its statement', async () => {
-  reset({ permissions: ['ar.create', 'reports.read'], allowedSubsidiaryIds: new Set([SUB_A]), party: bParty })
-  const response = await send()
-  assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not_found' })
-  assert.equal(statementState.renderCalls, 0)
-  assert.equal(statementState.sendCalls, 0)
-})
-
-test('POST sends to a billing contact and treats toDate alone as a one-day period', async () => {
+test("POST never sends an out-of-scope party its statement", async () => {
   reset({
-    permissions: ['ar.create', 'reports.read'],
+    permissions: ["ar.create", "reports.read"],
+    allowedSubsidiaryIds: new Set([SUB_A]),
+    party: bParty,
+  });
+  const response = await send();
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "not_found" });
+  assert.equal(statementState.renderCalls, 0);
+  assert.equal(statementState.sendCalls, 0);
+});
+
+test("POST sends to a billing contact and treats toDate alone as a one-day period", async () => {
+  reset({
+    permissions: ["ar.create", "reports.read"],
     allowedSubsidiaryIds: new Set([SUB_B]),
     party: { ...bParty, email: null },
-    contacts: [{ role: 'statement', email: 'statements@beta.test', isPrimary: true, isActive: true }],
-  })
-  const response = await send()
-  assert.equal(response.status, 200)
-  assert.deepEqual(statementState.sentTo, ['statements@beta.test'])
-  assert.equal(statementState.reportParams.from, '2026-07-31')
-  assert.equal(statementState.reportParams.to, '2026-07-31')
-})
+    contacts: [
+      { role: "statement", email: "statements@beta.test", isPrimary: true, isActive: true },
+    ],
+  });
+  const response = await send();
+  assert.equal(response.status, 200);
+  assert.deepEqual(statementState.sentTo, ["statements@beta.test"]);
+  assert.equal(statementState.reportParams.from, "2026-07-31");
+  assert.equal(statementState.reportParams.to, "2026-07-31");
+});
