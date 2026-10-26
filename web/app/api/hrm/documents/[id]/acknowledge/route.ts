@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { acknowledgeDocument } from "@openbooks/engine/hrm/documents/documents";
-import { guardPermission } from "../../../../../../lib/authz";
+import { guardPermission } from "@/lib/authz";
 import { hrmDocumentsErrorResponse } from "../../_lib";
 /**
  * POST /api/hrm/documents/[id]/acknowledge — acknowledge in-session:
@@ -11,16 +11,13 @@ import { hrmDocumentsErrorResponse } from "../../_lib";
  * itself and refuses anything but an unacknowledged document.
  */
 export const POST = defineRoute({
-  public: "session",
+  authorize: async () => {
+    const self = await guardPermission("hrm.self.read");
+    return self instanceof NextResponse ? await guardPermission("hrm.documents.read") : self;
+  },
   feature: "hrmDocuments",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: _req, params }) => {
-    const self = await guardPermission("hrm.self.read");
-    const actor =
-      self instanceof NextResponse
-        ? await guardPermission("hrm.documents.read")
-        : self;
-    if (actor instanceof NextResponse) return actor;
+  handler: async ({ authz: actor, params }) => {
     try {
       const { id } = params;
       const document = await acknowledgeDocument({
