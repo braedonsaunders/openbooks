@@ -32,8 +32,23 @@ async function legacyGET(
     allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
   });
   return NextResponse.json({
-    ...options,
+    expenseAccounts: options.expenseAccounts,
+    payComponents: options.payComponents,
+    accounts: options.accounts,
+    departments: options.departments,
+    locations: options.locations,
+    classes: options.classes,
+    projects: options.projects,
+    subsidiaries: options.subsidiaries,
+    books: options.books,
+    periods: options.periods,
+    rules: options.rules,
+    reports: options.reports,
+    flows: options.flows,
     measures: NATIVE_MEASURES.map((measure) => ({ id: measure, label: measure })),
+    parties: options.parties,
+    items: options.items,
+    segments: options.segments,
   });
 }
 
