@@ -18,10 +18,11 @@ import {
   listOwnLeaveEmploymentOptions,
 } from "@openbooks/engine/hrm/leave-read";
 import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
-import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
+import { hrmAuthorizationResponse } from "@/lib/api/record-not-found";
 import { db } from "@openbooks/engine/platform/db";
-import { guardFeaturePermission } from "../../../../lib/feature-gates";
-import { isUuid } from "../../../../lib/list-params";
+import { getAuthz } from "@/lib/authz";
+import { guardFeaturePermission } from "@/lib/feature-gates";
+import { isUuid } from "@/lib/list-params";
 /**
  * Authoring pickers for employment change requests. GET lists bounded,
  * org- and subsidiary-scoped option pages behind the HRM feature switch
@@ -56,66 +57,76 @@ import { isUuid } from "../../../../lib/list-params";
  * absent rather than leaking existence. GET carries no body, so no JSON
  * boundary parser runs here.
  */
+const HRM_OPTION_SOURCES = [
+  "employments",
+  "locations",
+  "positions",
+  "people",
+  "hireable-people",
+  "employable-people",
+  "employer-subsidiaries",
+  "leave-types",
+  "leave-filing-employments",
+  "leave-own-employments",
+] as const;
+
+type HrmOptionSource = (typeof HRM_OPTION_SOURCES)[number];
+
+const HRM_OPTION_SOURCE_ERROR =
+  "source must be one of employments, locations, positions, people, hireable-people, employable-people, employer-subsidiaries, leave-types, leave-filing-employments, leave-own-employments";
+
+function isHrmOptionSource(value: string | null): value is HrmOptionSource {
+  return value !== null && (HRM_OPTION_SOURCES as readonly string[]).includes(value);
+}
+
+/**
+ * One gate per source. An unknown source is a 400 before any grant, so a
+ * caller learns the query contract without a permission probe. Leave types
+ * admit either the read or the request grant; the read denial is the one
+ * reported when neither is held.
+ */
+async function authorizeHrmOptions(request: Request) {
+  const session = await getAuthz();
+  if (!session) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const source = new URL(request.url).searchParams.get("source");
+  if (!isHrmOptionSource(source)) {
+    return NextResponse.json({ error: HRM_OPTION_SOURCE_ERROR }, { status: 400 });
+  }
+  if (source === "leave-types") return guardLeaveOptions();
+  if (source === "leave-filing-employments") {
+    return guardFeaturePermission("hrm.leave.manage", "hrm");
+  }
+  if (source === "leave-own-employments") {
+    return guardFeaturePermission("hrm.leave.request", "hrm");
+  }
+  return guardFeaturePermission(
+    source === "positions" ? "hrm.position.read" : "hrm.employment.read",
+    "hrm",
+  );
+}
+
 export const GET = defineRoute({
-  public: "session",
-  handler: async ({ request: req }) => {
+  authorize: ({ request }) => authorizeHrmOptions(request),
+  feature: "hrm",
+  handler: async ({ request: req, authz: gate }) => {
     const url = new URL(req.url);
     const source = url.searchParams.get("source");
-    if (
-      source !== "employments" &&
-      source !== "locations" &&
-      source !== "positions" &&
-      source !== "people" &&
-      source !== "hireable-people" &&
-      source !== "employable-people" &&
-      source !== "employer-subsidiaries" &&
-      source !== "leave-types" &&
-      source !== "leave-filing-employments" &&
-      source !== "leave-own-employments"
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "source must be one of employments, locations, positions, people, hireable-people, employable-people, employer-subsidiaries, leave-types, leave-filing-employments, leave-own-employments",
-        },
-        { status: 400 },
-      );
+    if (!isHrmOptionSource(source)) {
+      return NextResponse.json({ error: HRM_OPTION_SOURCE_ERROR }, { status: 400 });
     }
-    // One gate per source: the establishment behind its own read grant, leave
-    // types behind the request grant (the filer's), the on-behalf employment
-    // picker behind the manage grant (the manager's), everything else behind
-    // the employment read grant.
-    const gate =
-      source === "leave-types"
-        ? await guardLeaveOptions()
-        : source === "leave-filing-employments"
-          ? await guardFeaturePermission("hrm.leave.manage", "hrm")
-          : source === "leave-own-employments"
-            ? await guardFeaturePermission("hrm.leave.request", "hrm")
-            : await guardFeaturePermission(
-                source === "positions"
-                  ? "hrm.position.read"
-                  : "hrm.employment.read",
-                "hrm",
-              );
-    if (gate instanceof NextResponse) return gate;
     const rawLimit = url.searchParams.get("limit");
     if (rawLimit !== null && !/^\d+$/.test(rawLimit)) {
-      return NextResponse.json(
-        { error: "limit must be a positive integer" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "limit must be a positive integer" }, { status: 400 });
     }
     const include = url.searchParams.get("include");
     if (include !== null && !isUuid(include)) {
-      return NextResponse.json(
-        { error: "include must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "include must be a uuid" }, { status: 400 });
     }
-    const active = url.searchParams.get('active');
-    if (active !== null && active !== 'true' && active !== 'false') {
-      return NextResponse.json({ error: 'active must be true or false' }, { status: 400 });
+    const active = url.searchParams.get("active");
+    if (active !== null && active !== "true" && active !== "false") {
+      return NextResponse.json({ error: "active must be true or false" }, { status: 400 });
     }
     const base = {
       orgId: gate.user.orgId,
@@ -158,14 +169,16 @@ export const GET = defineRoute({
         source === "employments"
           ? await listEmploymentOptions(
               include === null
-                ? { ...base, ...(active === null ? {} : { activeOnly: active === 'true' }) }
-                : { ...base, includeEmploymentId: include, ...(active === null ? {} : { activeOnly: active === 'true' }) },
+                ? { ...base, ...(active === null ? {} : { activeOnly: active === "true" }) }
+                : {
+                    ...base,
+                    includeEmploymentId: include,
+                    ...(active === null ? {} : { activeOnly: active === "true" }),
+                  },
             )
           : source === "locations"
             ? await listLocationOptions(
-                include === null
-                  ? base
-                  : { ...base, includeLocationId: include },
+                include === null ? base : { ...base, includeLocationId: include },
               )
             : source === "people"
               ? // Directory people with an employment, keyed by
@@ -173,8 +186,12 @@ export const GET = defineRoute({
                 // grant and subsidiary scope as the employment picker.
                 await listPeopleOptions(
                   include === null
-                    ? { ...base, ...(active === null ? {} : { activeOnly: active === 'true' }) }
-                    : { ...base, includePartyId: include, ...(active === null ? {} : { activeOnly: active === 'true' }) },
+                    ? { ...base, ...(active === null ? {} : { activeOnly: active === "true" }) }
+                    : {
+                        ...base,
+                        includePartyId: include,
+                        ...(active === null ? {} : { activeOnly: active === "true" }),
+                      },
                 )
               : source === "hireable-people"
                 ? // Employee parties with no employment at all, keyed by
@@ -183,27 +200,25 @@ export const GET = defineRoute({
                   await listHireablePeopleOptions(
                     include === null ? base : { ...base, includePartyId: include },
                   )
-              : source === "employable-people"
-                ? // Active people with no live active employment, any role
-                  // or none, keyed by party for the New-employee form's
-                  // existing-person picker — the same read grant and
-                  // party-side scope as the hireable picker.
-                  await listEmployablePeopleOptions(
-                    include === null ? base : { ...base, includePartyId: include },
-                  )
-                : source === "employer-subsidiaries"
-                  ? // Active legal entities for the Hire drawer's employer
-                    // picker — the employment read grant plus employer
-                    // scope, so the drawer can never offer an entity the
-                    // hire refusal would reject.
-                    await listEmployerSubsidiaryOptions(
-                      include === null ? base : { ...base, includeSubsidiaryId: include },
+                : source === "employable-people"
+                  ? // Active people with no live active employment, any role
+                    // or none, keyed by party for the New-employee form's
+                    // existing-person picker — the same read grant and
+                    // party-side scope as the hireable picker.
+                    await listEmployablePeopleOptions(
+                      include === null ? base : { ...base, includePartyId: include },
                     )
-              : await listPositionOptions(
-                  include === null
-                    ? base
-                    : { ...base, includePositionId: include },
-                );
+                  : source === "employer-subsidiaries"
+                    ? // Active legal entities for the Hire drawer's employer
+                      // picker — the employment read grant plus employer
+                      // scope, so the drawer can never offer an entity the
+                      // hire refusal would reject.
+                      await listEmployerSubsidiaryOptions(
+                        include === null ? base : { ...base, includeSubsidiaryId: include },
+                      )
+                    : await listPositionOptions(
+                        include === null ? base : { ...base, includePositionId: include },
+                      );
       return NextResponse.json({ options });
     } catch (e) {
       if (e instanceof HrmAuthorizationError) {
