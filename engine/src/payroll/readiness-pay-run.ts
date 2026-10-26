@@ -2,21 +2,48 @@ import { getTableColumns, sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { canonicalPeriodLabelSql } from "../periods/period-policy.ts";
 import { PayrollError } from "./error.ts";
-import { payrollPaymentMethodSettings, resolvePayrollPaymentMethod, type ResolvedPaymentMethod } from "./payment-method.ts";
+import {
+  payrollPaymentMethodSettings,
+  resolvePayrollPaymentMethod,
+  type ResolvedPaymentMethod,
+} from "./payment-method.ts";
 import { leavePayrollInputProblems } from "./leave-payroll-inputs.ts";
 import { allowancePayrollInputProblem } from "./allowance-payroll-inputs.ts";
 import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
 import { payrollSettings } from "./run-setup.ts";
 import { type PayrollSubsidiaryScope } from "./scope.ts";
-import { employerLevyProgramKeys, jurisdictionKey, labourJurisdictionProblem, packSlotState, packWarnsOnMissingIdentifier, payrollJurisdictionDeclared, PAYROLL_COUNTRY_PACKS } from "./packs.ts";
+import {
+  employerLevyProgramKeys,
+  jurisdictionKey,
+  labourJurisdictionProblem,
+  packSlotState,
+  packWarnsOnMissingIdentifier,
+  payrollJurisdictionDeclared,
+  PAYROLL_COUNTRY_PACKS,
+} from "./packs.ts";
 import { undeclaredJurisdictionHolidayConflict } from "./holidays.ts";
 import { UNDECIDED_WORKER_COMP_DETAIL } from "./employee-worker-comp.ts";
 import { payrollTaxYearProblem } from "./packs.ts";
 import { employeeFactsFor, missingEmployeeFacts, packPayableProblem } from "./employee-facts.ts";
 import { employeePayrollProfiles } from "@openbooks/schema";
 import { laborCostingSettings } from "../projects/labor-costing.ts";
-import { CONTROL_ACCOUNTS_HREF, regionsByCountry, runContext, scope, installedPayrollCountries, type ReadinessSeverity, type ReadinessItem, type PayRunReadiness, type ScopeRow } from "./readiness-context.ts";
-import { unconfiguredRatesForRun, flagRetiredCertificateAnswers, flagMissingOpeningBalances, flagMissingEntitlementOpenings } from "./readiness-statutory-gaps.ts";
+import {
+  CONTROL_ACCOUNTS_HREF,
+  regionsByCountry,
+  runContext,
+  scope,
+  installedPayrollCountries,
+  type ReadinessSeverity,
+  type ReadinessItem,
+  type PayRunReadiness,
+  type ScopeRow,
+} from "./readiness-context.ts";
+import {
+  unconfiguredRatesForRun,
+  flagRetiredCertificateAnswers,
+  flagMissingOpeningBalances,
+  flagMissingEntitlementOpenings,
+} from "./readiness-statutory-gaps.ts";
 
 /** Pay-run readiness: blockers and warnings that must be seen before a run calculates. */
 
@@ -33,7 +60,8 @@ export async function payRunReadiness(
     extra: { detail?: string; href?: string; action?: string } = {},
   ) => {
     items.push({
-      severity, code,
+      severity,
+      code,
       employees: employees.map((e) => ({ partyId: e.employee_party_id, name: e.name })),
       ...extra,
     });
@@ -86,22 +114,30 @@ export async function payRunReadiness(
   let installed: string[] = [];
   try {
     settings = await payrollSettings(orgId, allowedSubsidiaryIds);
-    if (!settings.wageExpenseAccountId) flag("blocker", "setup.wageExpense", [], { href: setupHref });
+    if (!settings.wageExpenseAccountId)
+      flag("blocker", "setup.wageExpense", [], { href: setupHref });
     if (!settings.netPayAccountId) flag("blocker", "setup.netPay", [], { href: setupHref });
     if (settings.wagesTo === "labor_clearing") {
-      const clearing = (await db.execute<{ id: string | null }>(sql`
+      const clearing = await db.execute<{ id: string | null }>(
+        sql`
         select settings->'controlAccounts'->>'laborClearing' as id from orgs where id = ${orgId}
-      `, "objects"));
-      if (!clearing[0]?.id) flag("blocker", "setup.laborClearing", [], { href: CONTROL_ACCOUNTS_HREF });
+      `,
+        "objects",
+      );
+      if (!clearing[0]?.id)
+        flag("blocker", "setup.laborClearing", [], { href: CONTROL_ACCOUNTS_HREF });
     } else if ((await laborCostingSettings(orgId)).mode === "post") {
       flag("warning", "setup.laborWashMode", [], { href: `${setupHref}?tab=accounts` });
     }
 
     // Every statutory slot of every pack the run's people belong to must resolve
     // to a liability account, or the commit has nowhere to credit withholdings.
-    const blob = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
+    const blob = await db.execute<{ p: Record<string, unknown> | null }>(
+      sql`
       select settings->'payroll' as p from orgs where id = ${orgId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     payrollPolicy = blob[0]?.p ?? {};
     installed = await installedPayrollCountries(orgId, payrollPolicy, allowedSubsidiaryIds);
     const countriesInRun = new Set(people.map((p) => p.country));
@@ -143,7 +179,8 @@ export async function payRunReadiness(
       if (!problem || taxYearFailures.has(problem.operatorMessage)) continue;
       taxYearFailures.add(problem.operatorMessage);
       flag(
-        "blocker", "statutory.taxYear",
+        "blocker",
+        "statutory.taxYear",
         people.filter((p) => p.country === country && (region === null || p.province === region)),
         // Operator text: the packs tab shows each pack's published coverage
         // but offers no action that loads an unpublished year, so the detail
@@ -166,7 +203,8 @@ export async function payRunReadiness(
       const payableProblem = packPayableProblem(pack);
       if (!payableProblem) continue;
       flag(
-        "blocker", "pack.notPayable",
+        "blocker",
+        "pack.notPayable",
         people.filter((p) => p.country === country),
         { detail: payableProblem, href: `${setupHref}?tab=packs` },
       );
@@ -190,8 +228,9 @@ export async function payRunReadiness(
       for (const person of people) {
         for (const fact of employeeFactsFor(person.country)) {
           if (
-            fact.required && fact.producer.kind === "profile_column"
-            && storedColumns.has(fact.producer.column)
+            fact.required &&
+            fact.producer.kind === "profile_column" &&
+            storedColumns.has(fact.producer.column)
           ) {
             wanted.add(fact.producer.column);
           }
@@ -200,21 +239,33 @@ export async function payRunReadiness(
       if (wanted.size > 0) {
         const columns = [...wanted].sort().map((column) => sql.identifier(column));
         const partyIds = [...new Set(people.map((p) => p.employee_party_id))];
-        const factRows = (await db.execute<Record<string, string | null>>(sql`
+        const factRows = await db.execute<Record<string, string | null>>(
+          sql`
           select prof.employee_party_id, ${sql.join(columns, sql`, `)}
             from employee_payroll_profiles prof
            where prof.org_id = ${orgId}
-             and prof.employee_party_id in (${sql.join(partyIds.map((id) => sql`${id}`), sql`, `)})
-        `, "objects"));
+             and prof.employee_party_id in (${sql.join(
+               partyIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+        `,
+          "objects",
+        );
         const factsByEmployee = new Map<string, Record<string, string | null>>(
           factRows.map((row) => [String(row.employee_party_id), row]),
         );
-        const missingByFact = new Map<string, { fact: string; label: string; people: ScopeRow[] }>();
+        const missingByFact = new Map<
+          string,
+          { fact: string; label: string; people: ScopeRow[] }
+        >();
         for (const person of people) {
           const emp = factsByEmployee.get(person.employee_party_id) ?? {};
           for (const fact of missingEmployeeFacts(person.country, emp)) {
-            const entry = missingByFact.get(fact.key)
-              ?? { fact: fact.key, label: fact.label, people: [] };
+            const entry = missingByFact.get(fact.key) ?? {
+              fact: fact.key,
+              label: fact.label,
+              people: [],
+            };
             entry.people.push(person);
             missingByFact.set(fact.key, entry);
           }
@@ -230,9 +281,16 @@ export async function payRunReadiness(
 
     // --- Statutory rates the employer has to supply -------------------------
     for (const country of countriesInRun.size > 0 ? [...countriesInRun] : installed) {
-      for (const missing of await unconfiguredRatesForRun(orgId, country, run.tax_year, people, run.pay_date)) {
+      for (const missing of await unconfiguredRatesForRun(
+        orgId,
+        country,
+        run.tax_year,
+        people,
+        run.pay_date,
+      )) {
         flag(
-          "warning", "statutory.rateUnconfigured",
+          "warning",
+          "statutory.rateUnconfigured",
           people.filter((p) => missing.employees.some((e) => e.partyId === p.employee_party_id)),
           { detail: missing.message, href: `${setupHref}?tab=rates` },
         );
@@ -243,17 +301,19 @@ export async function payRunReadiness(
     // payroll configuration is rooted outside its scope. Omit those aggregate
     // checks rather than leaking settings or refusing authorized run data.
     if (
-      allowedSubsidiaryIds == null
-      || !(error instanceof PayrollError)
-      || error.message !== "payroll settings not found"
-    ) throw error;
+      allowedSubsidiaryIds == null ||
+      !(error instanceof PayrollError) ||
+      error.message !== "payroll settings not found"
+    )
+      throw error;
   }
 
   // --- Period control: posting into a closed period fails at post ---------
   // The lock read follows the same period the posting would resolve to
   // (default calendar, regular): with several calendars the covering row
   // would otherwise be whichever the database returns first.
-  const lock = (await db.execute<{ label: string; state: string }>(sql`
+  const lock = await db.execute<{ label: string; state: string }>(
+    sql`
     select ${canonicalPeriodLabelSql("p")} as label, coalesce(l.state, 'open') as state
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
@@ -266,13 +326,22 @@ export async function payRunReadiness(
        and p.is_adjustment = false
      order by (l.subsidiary_id is not null) desc, p.starts_on, p.ends_on, p.id
      limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   // Both period blockers resolve on the periods setup screen (generate the
   // missing period, or reopen the closed one) — the readiness panel promises
   // every item links to where it is fixed.
-  if (!lock[0]) flag("blocker", "period.missing", [], { detail: run.pay_date, href: "/admin/setup/period-close" });
+  if (!lock[0])
+    flag("blocker", "period.missing", [], {
+      detail: run.pay_date,
+      href: "/admin/setup/period-close",
+    });
   else if (lock[0].state !== "open") {
-    flag("blocker", "period.closed", [], { detail: lock[0].label, href: "/admin/setup/period-close" });
+    flag("blocker", "period.closed", [], {
+      detail: lock[0].label,
+      href: "/admin/setup/period-close",
+    });
   }
 
   // --- Population ---------------------------------------------------------
@@ -280,7 +349,11 @@ export async function payRunReadiness(
 
   const employeesHref = "/entities/employees";
   const noEmployment = people.filter((p) => !p.has_employment_link);
-  if (noEmployment.length) flag("blocker", "employee.noEmployment", noEmployment, { href: employeesHref, action: "payroll.resolve-employment-links" });
+  if (noEmployment.length)
+    flag("blocker", "employee.noEmployment", noEmployment, {
+      href: employeesHref,
+      action: "payroll.resolve-employment-links",
+    });
   const noWage = people.filter((p) => !p.has_wage);
   if (noWage.length) flag("blocker", "employee.noWage", noWage, { href: employeesHref });
 
@@ -291,9 +364,12 @@ export async function payRunReadiness(
   // accrued no premium, so the run cannot calculate until each named
   // employee is assigned a class or recorded exempt; calculateStub refuses
   // the same predicate, so the wizard names it first.
-  const noWorkerComp = people.filter((p) =>
-    employerLevyProgramKeys(p.country).includes("wcb")
-    && !p.worker_comp_group_id && !p.wcb_exempt);
+  const noWorkerComp = people.filter(
+    (p) =>
+      employerLevyProgramKeys(p.country).includes("wcb") &&
+      !p.worker_comp_group_id &&
+      !p.wcb_exempt,
+  );
   if (noWorkerComp.length) {
     flag("blocker", "employee.noWorkerComp", noWorkerComp, {
       detail: UNDECIDED_WORKER_COMP_DETAIL,
@@ -301,7 +377,9 @@ export async function payRunReadiness(
     });
   }
 
-  const zeroHours = people.filter((p) => p.pay_basis === "hourly" && Number(p.approved_hours) === 0);
+  const zeroHours = people.filter(
+    (p) => p.pay_basis === "hourly" && Number(p.approved_hours) === 0,
+  );
   if (zeroHours.length) flag("warning", "employee.zeroHours", zeroHours, { href: "/timesheets" });
 
   const paidTwice = people.filter((p) => p.paid_in_period);
@@ -387,7 +465,10 @@ export async function payRunReadiness(
     for (const [jurisdiction, employees] of byJurisdiction) {
       const country = employees[0]!.country;
       const conflict = undeclaredJurisdictionHolidayConflict({
-        country, jurisdiction, from: run.period_start, to: run.period_end,
+        country,
+        jurisdiction,
+        from: run.period_start,
+        to: run.period_end,
       });
       if (conflict) {
         flag("blocker", "holiday.undeclaredJurisdiction", employees, {

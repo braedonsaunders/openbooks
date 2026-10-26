@@ -1,9 +1,21 @@
 import { civilDateFromParts, endOfMonth } from "../platform/business-date.ts";
 import { add, cmp } from "../money/money.ts";
 import { filingAccountRef, type FilingAccountRef, type PayrollFilingAccount } from "./filing.ts";
-import { addBusinessDays, holidayDateSet, nextBusinessDay, resolveObservedHolidays } from "./holidays.ts";
+import {
+  addBusinessDays,
+  holidayDateSet,
+  nextBusinessDay,
+  resolveObservedHolidays,
+} from "./holidays.ts";
 import { PayrollError } from "./error.ts";
-import { allRemittanceSchedules, PAYROLL_COUNTRY_PACKS, remittanceFrequencyBand, remittanceScheduleInForce, type PayrollRemittanceFrequencyBand, type PayrollRemittanceSchedule } from "./packs.ts";
+import {
+  allRemittanceSchedules,
+  PAYROLL_COUNTRY_PACKS,
+  remittanceFrequencyBand,
+  remittanceScheduleInForce,
+  type PayrollRemittanceFrequencyBand,
+  type PayrollRemittanceSchedule,
+} from "./packs.ts";
 
 /** Remittance groups and their statutory schedules: grouping, frequencies, and due dates. */
 
@@ -293,16 +305,25 @@ export function groupRemittanceRows(input: {
   // country-first resolution the vendor declarations use.
   const countryByGroup = new Map<string, string>();
   const vendorKeysByGroup = new Map<string, Set<string>>();
-  const slicesByGroup = new Map<string, Map<string, {
-    components: RemittanceComponentLine[]; total: string; currencies: Set<string>;
-  }>>();
+  const slicesByGroup = new Map<
+    string,
+    Map<
+      string,
+      {
+        components: RemittanceComponentLine[];
+        total: string;
+        currencies: Set<string>;
+      }
+    >
+  >();
   for (const row of input.rows) {
     if (cmp(row.amount, "0") === 0) continue;
     const partyId = input.resolveParty(row);
     const key = groupKey(partyId, row.filing_account_id);
     const runContext = input.contextByAccount.get(row.filing_account_id ?? "");
     const group = groups.get(key) ?? {
-      partyId, partyName: null,
+      partyId,
+      partyName: null,
       filingAccount: filingAccountRef(row.filing_account_id, input.filingAccounts),
       hasUnknownFilingAccount: false,
       hasEntitylessAccruals: false,
@@ -310,7 +331,8 @@ export function groupRemittanceRows(input: {
       schedule: null,
       provinces: [],
       regionalCalendar: null,
-      components: [], total: "0",
+      components: [],
+      total: "0",
       // The stated currency resolves after the fold (below): the caller's
       // presentation currency when translated, else the rows' single native
       // currency. The placeholder is never observed — every group has a row.
@@ -330,17 +352,23 @@ export function groupRemittanceRows(input: {
     // while another stays payable.
     const rowAccount = input.resolveAccount(row);
     const existing = group.components.find(
-      (component) => component.componentId === row.component_id
-        && component.kind === row.kind
-        && component.liabilityAccountId === rowAccount,
+      (component) =>
+        component.componentId === row.component_id &&
+        component.kind === row.kind &&
+        component.liabilityAccountId === rowAccount,
     );
     if (existing) {
       existing.amount = add(existing.amount, row.amount);
     } else {
       group.components.push({
-        componentId: row.component_id, code: row.code, name: row.name, kind: row.kind,
-        systemKey: row.system_key, liabilityAccountId: rowAccount,
-        accountLabel: null, amount: row.amount,
+        componentId: row.component_id,
+        code: row.code,
+        name: row.name,
+        kind: row.kind,
+        systemKey: row.system_key,
+        liabilityAccountId: rowAccount,
+        accountLabel: null,
+        amount: row.amount,
         // Resolved after the fold with the group's stated currency: in a
         // translated scope the consolidated amount is presentation units.
         currency: "",
@@ -354,27 +382,42 @@ export function groupRemittanceRows(input: {
     if (row.subsidiary_id == null) {
       group.hasEntitylessAccruals = true;
     } else {
-      const slices = slicesByGroup.get(key) ?? new Map<string, {
-        components: RemittanceComponentLine[]; total: string; currencies: Set<string>;
-      }>();
+      const slices =
+        slicesByGroup.get(key) ??
+        new Map<
+          string,
+          {
+            components: RemittanceComponentLine[];
+            total: string;
+            currencies: Set<string>;
+          }
+        >();
       const slice = slices.get(row.subsidiary_id) ?? {
-        components: [], total: "0", currencies: new Set<string>(),
+        components: [],
+        total: "0",
+        currencies: new Set<string>(),
       };
       // The entity slice folds by the same identity: one line per
       // (component, historical liability account), so the bill writes one
       // document line per credited account and each clears exactly.
       const sliceExisting = slice.components.find(
-        (component) => component.componentId === row.component_id
-          && component.kind === row.kind
-          && component.liabilityAccountId === rowAccount,
+        (component) =>
+          component.componentId === row.component_id &&
+          component.kind === row.kind &&
+          component.liabilityAccountId === rowAccount,
       );
       if (sliceExisting) {
         sliceExisting.amount = add(sliceExisting.amount, row.sliceAmount);
       } else {
         slice.components.push({
-          componentId: row.component_id, code: row.code, name: row.name, kind: row.kind,
-          systemKey: row.system_key, liabilityAccountId: rowAccount,
-          accountLabel: null, amount: row.sliceAmount,
+          componentId: row.component_id,
+          code: row.code,
+          name: row.name,
+          kind: row.kind,
+          systemKey: row.system_key,
+          liabilityAccountId: rowAccount,
+          accountLabel: null,
+          amount: row.sliceAmount,
           // Slice currency resolves after the fold, beside the slice total.
           currency: "",
         });
@@ -473,11 +516,13 @@ export function remittanceMemo(
  */
 function scheduleCalendar(around: string, jurisdiction: string): ReadonlySet<string> {
   const year = Number(around.slice(0, 4));
-  return holidayDateSet(resolveObservedHolidays({
-    jurisdiction,
-    from: `${year - 1}-01-01`,
-    to: `${year + 1}-12-31`,
-  }));
+  return holidayDateSet(
+    resolveObservedHolidays({
+      jurisdiction,
+      from: `${year - 1}-01-01`,
+      to: `${year + 1}-12-31`,
+    }),
+  );
 }
 
 /** The `day`th of the month `offsetMonths` after the one `date` falls in. */
@@ -510,15 +555,17 @@ export function scheduledRemittanceFrequency(
     const frequency = filingAccount?.remitterType;
     if (!frequency || !remittanceFrequencyBand(schedule, frequency)) {
       throw new PayrollError(
-        `${schedule.authority} remittance refuses: this group has no filing account with a declared remitter type — `
-        + "assign a CRA filing account and set its remitter type in Payroll Setup → Filing accounts before dating the bill",
+        `${schedule.authority} remittance refuses: this group has no filing account with a declared remitter type — ` +
+          "assign a CRA filing account and set its remitter type in Payroll Setup → Filing accounts before dating the bill",
       );
     }
     return { frequency, source: "filing_account" };
   }
   const key = schedule.frequencySettingsKey;
   if (!key) {
-    throw new PayrollError(`${schedule.authority} remittance schedule has no organization frequency setting key`);
+    throw new PayrollError(
+      `${schedule.authority} remittance schedule has no organization frequency setting key`,
+    );
   }
   const configured = payrollSettings[key];
   if (typeof configured === "string" && remittanceFrequencyBand(schedule, configured)) {
@@ -546,8 +593,8 @@ export function scheduledRemittanceDueDateExplained(
   // The default is validated into the declaration (see allRemittanceSchedules),
   // so this fallback cannot itself miss.
   const band: PayrollRemittanceFrequencyBand =
-    remittanceFrequencyBand(schedule, frequency)
-    ?? remittanceFrequencyBand(schedule, schedule.defaultFrequency)!;
+    remittanceFrequencyBand(schedule, frequency) ??
+    remittanceFrequencyBand(schedule, schedule.defaultFrequency)!;
   const date = periodTo.slice(0, 10);
   const holidays = scheduleCalendar(date, schedule.calendar);
   const day = Number(date.slice(8, 10));
@@ -555,7 +602,8 @@ export function scheduledRemittanceDueDateExplained(
     case "month_day":
       return {
         dueDate: nextBusinessDay(
-          dayOfMonth(date, band.due.monthsAfterPeriodMonth, band.due.day), holidays,
+          dayOfMonth(date, band.due.monthsAfterPeriodMonth, band.due.day),
+          holidays,
         ),
         rule: band.rule,
       };
@@ -574,13 +622,15 @@ export function scheduledRemittanceDueDateExplained(
       return day <= band.due.cutoffDay
         ? {
             dueDate: nextBusinessDay(
-              dayOfMonth(date, band.due.firstDueMonthOffset, band.due.firstDueDay), holidays,
+              dayOfMonth(date, band.due.firstDueMonthOffset, band.due.firstDueDay),
+              holidays,
             ),
             rule: band.rule,
           }
         : {
             dueDate: nextBusinessDay(
-              dayOfMonth(date, band.due.secondDueMonthOffset, band.due.secondDueDay), holidays,
+              dayOfMonth(date, band.due.secondDueMonthOffset, band.due.secondDueDay),
+              holidays,
             ),
             rule: band.ruleSecondHalf ?? band.rule,
           };
@@ -589,10 +639,14 @@ export function scheduledRemittanceDueDateExplained(
       // month end; the deadline counts workingDays WORKING days from there on
       // the schedule's own calendar. Counting working days lands on a working
       // day by construction, so no weekend/holiday shift applies.
-      const periodEnd = day <= 7 ? dayOfMonth(date, 0, 7)
-        : day <= 14 ? dayOfMonth(date, 0, 14)
-        : day <= 21 ? dayOfMonth(date, 0, 21)
-        : endOfMonth(date);
+      const periodEnd =
+        day <= 7
+          ? dayOfMonth(date, 0, 7)
+          : day <= 14
+            ? dayOfMonth(date, 0, 14)
+            : day <= 21
+              ? dayOfMonth(date, 0, 21)
+              : endOfMonth(date);
       return {
         dueDate: addBusinessDays(periodEnd, band.due.workingDays, holidays),
         rule: band.rule,
@@ -635,21 +689,27 @@ export function scheduleForRemittanceGroup(input: {
     return schedules.flatMap((schedule) => {
       const configured = input.payrollSettings[schedule.vendorSettingsKey];
       if (typeof configured !== "string" || !configured || configured !== input.partyId) return [];
-      const inForce = remittanceScheduleInForce(schedule.vendorSettingsKey, input.periodTo, schedules);
+      const inForce = remittanceScheduleInForce(
+        schedule.vendorSettingsKey,
+        input.periodTo,
+        schedules,
+      );
       return inForce ? [{ vendorSettingsKey: schedule.vendorSettingsKey, schedule: inForce }] : [];
     });
   };
   const candidates = dated.length ? dated : byParty();
   if (candidates.length > 1) {
     throw new PayrollError(
-      `remittance group resolves to multiple declared destination schedules (${candidates.map((candidate) => candidate.vendorSettingsKey).join(", ")}) — `
-      + "correct the destination mapping in Payroll Setup → Accounts so the group has one authority",
+      `remittance group resolves to multiple declared destination schedules (${candidates.map((candidate) => candidate.vendorSettingsKey).join(", ")}) — ` +
+        "correct the destination mapping in Payroll Setup → Accounts so the group has one authority",
     );
   }
   const resolved = candidates[0] ?? null;
   if (!resolved || !resolved.schedule) return null;
   const { frequency, source } = scheduledRemittanceFrequency(
-    resolved.schedule, input.payrollSettings, input.filingAccount ?? null,
+    resolved.schedule,
+    input.payrollSettings,
+    input.filingAccount ?? null,
   );
   const schedule = input.regionalCalendar
     ? { ...resolved.schedule, calendar: input.regionalCalendar }
@@ -676,9 +736,11 @@ export function remittanceGroupDueDate(
   periodTo: string,
 ): string {
   if (group.schedule) return group.schedule.dueDate;
-  const destination = group.vendorKeys.length ? group.vendorKeys.join(", ") : "this remittance destination";
+  const destination = group.vendorKeys.length
+    ? group.vendorKeys.join(", ")
+    : "this remittance destination";
   throw new PayrollError(
-    `no remittance schedule is declared for ${destination} for period ${periodTo} — `
-    + "assign a pack-declared remittance destination in Payroll Setup → Accounts before dating the bill",
+    `no remittance schedule is declared for ${destination} for period ${periodTo} — ` +
+      "assign a pack-declared remittance destination in Payroll Setup → Accounts before dating the bill",
   );
 }

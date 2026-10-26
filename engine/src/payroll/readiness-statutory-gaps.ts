@@ -3,11 +3,34 @@ import { db } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
 import { type PayrollSubsidiaryScope } from "./scope.ts";
-import { jurisdictionKey, labourJurisdictionProblem, PayrollPackError, payrollPack, PAYROLL_COUNTRY_PACKS } from "./packs.ts";
-import { resolveStatutoryRates, unconfiguredStatutoryRates, type StatutoryRatePoint, type UnconfiguredStatutoryRate } from "./statutory-rates.ts";
+import {
+  jurisdictionKey,
+  labourJurisdictionProblem,
+  PayrollPackError,
+  payrollPack,
+  PAYROLL_COUNTRY_PACKS,
+} from "./packs.ts";
+import {
+  resolveStatutoryRates,
+  unconfiguredStatutoryRates,
+  type StatutoryRatePoint,
+  type UnconfiguredStatutoryRate,
+} from "./statutory-rates.ts";
 import { packRates } from "./packs.ts";
-import { declaredPayrollCertificates, resolveCertificate, retiredCertificateAnswerProblem, type PayrollCertificate, type StoredCertificate } from "./certificates.ts";
-import { scope, activePayrollPopulation, type ReadinessSeverity, type RateScopeRow, type ScopeRow, type RunRow } from "./readiness-context.ts";
+import {
+  declaredPayrollCertificates,
+  resolveCertificate,
+  retiredCertificateAnswerProblem,
+  type PayrollCertificate,
+  type StoredCertificate,
+} from "./certificates.ts";
+import {
+  activePayrollPopulation,
+  type ReadinessSeverity,
+  type RateScopeRow,
+  type ScopeRow,
+  type RunRow,
+} from "./readiness-context.ts";
 
 /** Statutory-rate, certificate, and opening-balance gaps surfaced by readiness. */
 
@@ -55,7 +78,13 @@ export async function unconfiguredRatesForRun(
     if (error instanceof PayrollPackError) return [];
     throw error;
   }
-  const points = new Map<string, StatutoryRatePoint & { subsidiaryId: string | null; employees: { partyId: string; name: string }[] }>();
+  const points = new Map<
+    string,
+    StatutoryRatePoint & {
+      subsidiaryId: string | null;
+      employees: { partyId: string; name: string }[];
+    }
+  >();
   for (const person of people) {
     if (person.country !== country) continue;
     const key = `${person.subsidiary_id ?? ""}:${person.province ?? ""}:${person.filing_account_id ?? ""}`;
@@ -79,16 +108,23 @@ export async function unconfiguredRatesForRun(
   if (!waive) return unconfiguredStatutoryRates(resolution, [...points.values()]);
   const found: UnconfiguredStatutoryRate[] = [];
   for (const point of points.values()) {
-    const waived = new Set(await waive(db, {
-      orgId, region: point.region, filingAccountId: point.filingAccountId, payDate: asOf,
-      subsidiaryId: point.subsidiaryId,
-    }));
-    found.push(...unconfiguredStatutoryRates(
-      waived.size === 0
-        ? resolution
-        : { ...resolution, slots: resolution.slots.filter((slot) => !waived.has(slot.key)) },
-      [point],
-    ));
+    const waived = new Set(
+      await waive(db, {
+        orgId,
+        region: point.region,
+        filingAccountId: point.filingAccountId,
+        payDate: asOf,
+        subsidiaryId: point.subsidiaryId,
+      }),
+    );
+    found.push(
+      ...unconfiguredStatutoryRates(
+        waived.size === 0
+          ? resolution
+          : { ...resolution, slots: resolution.slots.filter((slot) => !waived.has(slot.key)) },
+        [point],
+      ),
+    );
   }
   return found;
 }
@@ -117,27 +153,44 @@ export async function flagRetiredCertificateAnswers(args: {
   for (const country of new Set(people.map((person) => person.country))) {
     // A country with no certificate declaration has no retired fields; the
     // calculation and the tax-year blocker name a missing pack themselves.
-    const withRetired = (declaredPayrollCertificates().find((entry) => entry.country === country)?.certificates ?? [])
-      .filter((certificate) => (certificate.retiredFields ?? []).length > 0);
+    const withRetired = (
+      declaredPayrollCertificates().find((entry) => entry.country === country)?.certificates ?? []
+    ).filter((certificate) => (certificate.retiredFields ?? []).length > 0);
     if (withRetired.length > 0) declared.set(country, withRetired);
   }
   const subjects = people.filter((person) => declared.has(person.country));
   if (subjects.length === 0) return;
   const keys = [...new Set([...declared.values()].flat().map((certificate) => certificate.key))];
   const rows = await db.execute<{
-    employee_party_id: string; country: string; certificate_key: string;
-    answers: Record<string, string> | null; effective_from: string | null; superseded_on: string | null;
-  }>(sql`
+    employee_party_id: string;
+    country: string;
+    certificate_key: string;
+    answers: Record<string, string> | null;
+    effective_from: string | null;
+    superseded_on: string | null;
+  }>(
+    sql`
     select employee_party_id, country, certificate_key, answers,
            effective_from::text as effective_from, superseded_on::text as superseded_on
       from employee_tax_certificates
      where org_id = ${orgId}
-       and employee_party_id in (${sql.join(subjects.map((person) => sql`${person.employee_party_id}`), sql`, `)})
-       and certificate_key in (${sql.join(keys.map((key) => sql`${key}`), sql`, `)})
-  `, "objects");
+       and employee_party_id in (${sql.join(
+         subjects.map((person) => sql`${person.employee_party_id}`),
+         sql`, `,
+       )})
+       and certificate_key in (${sql.join(
+         keys.map((key) => sql`${key}`),
+         sql`, `,
+       )})
+  `,
+    "objects",
+  );
   for (const person of subjects) {
     const stored: StoredCertificate[] = rows
-      .filter((row) => row.employee_party_id === person.employee_party_id && row.country === person.country)
+      .filter(
+        (row) =>
+          row.employee_party_id === person.employee_party_id && row.country === person.country,
+      )
       .map((row) => ({
         certificateKey: row.certificate_key,
         answers: row.answers ?? {},
@@ -149,7 +202,11 @@ export async function flagRetiredCertificateAnswers(args: {
         resolveCertificate({ certificate, stored, asOf: run.pay_date }),
         person.name,
       );
-      if (problem) flag("blocker", "employee.missingFact", [person], { detail: problem, href: "/entities/employees" });
+      if (problem)
+        flag("blocker", "employee.missingFact", [person], {
+          detail: problem,
+          href: "/entities/employees",
+        });
     }
   }
 }
@@ -178,18 +235,24 @@ export async function flagMissingOpeningBalances(args: {
   // January is the start of the year regardless of when it is paid.
   if (run.period_start.slice(5, 7) === "01") return;
 
-  const prior = (await db.execute(sql`
+  const prior = await db.execute(
+    sql`
     select 1 from pay_runs other
      where other.org_id = ${orgId} and other.tax_year = ${run.tax_year}
        and other.run_status = 'committed' and other.document_id <> ${documentId}
      limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (prior.length > 0) return; // not the first committed run of the year
 
-  const entered = (await db.execute<{ employee_party_id: string }>(sql`
+  const entered = await db.execute<{ employee_party_id: string }>(
+    sql`
     select employee_party_id from payroll_opening_balances
      where org_id = ${orgId} and tax_year = ${run.tax_year}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const have = new Set(entered.map((r) => r.employee_party_id));
 
   // Someone hired on or after this period started cannot have been paid by
@@ -214,7 +277,8 @@ export async function flagMissingOpeningBalances(args: {
   // SECOND full annual limit and the excess is the employer's to unwind — which
   // is why it is worth a separate line rather than being folded into the row
   // warning that has already gone quiet.
-  const capped = (await db.execute<{ code: string; employee_party_id: string }>(sql`
+  const capped = await db.execute<{ code: string; employee_party_id: string }>(
+    sql`
     select distinct c.code, epc.employee_party_id
       from employee_pay_components epc
       join pay_components c on c.id = epc.component_id and c.org_id = epc.org_id
@@ -227,7 +291,9 @@ export async function flagMissingOpeningBalances(args: {
           where oc.org_id = epc.org_id and oc.component_id = epc.component_id
             and b.employee_party_id = epc.employee_party_id and b.tax_year = ${run.tax_year})
      order by c.code
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (capped.length > 0) {
     const byPerson = new Map(people.map((p) => [p.employee_party_id, p]));
     const byComponent = new Map<string, ScopeRow[]>();
@@ -266,7 +332,9 @@ function alternateDayCarryInApplies(person: ScopeRow): boolean {
   const scope = PAYROLL_COUNTRY_PACKS[person.country]?.alternateDayGrant?.jurisdictions;
   if (!scope) return true;
   if (labourJurisdictionProblem(person.country, person.labour_jurisdiction)) return false;
-  return scope.includes(jurisdictionKey(person.country, person.province, person.labour_jurisdiction));
+  return scope.includes(
+    jurisdictionKey(person.country, person.province, person.labour_jurisdiction),
+  );
 }
 
 /**
@@ -305,18 +373,27 @@ export async function flagMissingEntitlementOpenings(args: {
   if (people.length === 0) return;
 
   // Employees with a carry-in somewhere else: the adoption evidence.
-  const carried = (await db.execute<{ employee_party_id: string }>(sql`
+  const carried = await db.execute<{ employee_party_id: string }>(
+    sql`
     select b.employee_party_id from payroll_opening_balances b
      where b.org_id = ${orgId} and b.tax_year = ${run.tax_year}
     union
     select l.employee_party_id from entitlement_ledger l
      where l.org_id = ${orgId} and l.kind = 'opening'
-  `, "objects"));
+  `,
+    "objects",
+  );
   const adopted = new Set(carried.map((r) => r.employee_party_id));
   if (adopted.size === 0) return;
 
   // Plans no committed run has ever moved: this run is the plan's first.
-  const virgin = (await db.execute<{ id: string; code: string; name: string; system_key: string | null }>(sql`
+  const virgin = await db.execute<{
+    id: string;
+    code: string;
+    name: string;
+    system_key: string | null;
+  }>(
+    sql`
     select pl.id, pl.code, pl.name, pl.system_key from entitlement_plans pl
      where pl.org_id = ${orgId} and pl.is_active
        and not exists (
@@ -325,13 +402,18 @@ export async function flagMissingEntitlementOpenings(args: {
           where l.org_id = pl.org_id and l.plan_id = pl.id
             and r.run_status = 'committed' and l.pay_run_document_id <> ${documentId})
      order by pl.code
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (virgin.length === 0) return;
 
-  const openings = (await db.execute<{ plan_id: string; employee_party_id: string }>(sql`
+  const openings = await db.execute<{ plan_id: string; employee_party_id: string }>(
+    sql`
     select plan_id, employee_party_id from entitlement_ledger
      where org_id = ${orgId} and kind = 'opening'
-  `, "objects"));
+  `,
+    "objects",
+  );
   const have = new Set(openings.map((r) => `${r.plan_id}:${r.employee_party_id}`));
 
   for (const plan of virgin) {
@@ -344,7 +426,10 @@ export async function flagMissingEntitlementOpenings(args: {
         ? (person: ScopeRow) => alternateDayCarryInApplies(person)
         : () => true;
     const missing = people.filter(
-      (p) => applies(p) && adopted.has(p.employee_party_id) && !have.has(`${plan.id}:${p.employee_party_id}`),
+      (p) =>
+        applies(p) &&
+        adopted.has(p.employee_party_id) &&
+        !have.has(`${plan.id}:${p.employee_party_id}`),
     );
     if (missing.length === 0) continue;
     flag("warning", "employee.noOpeningEntitlement", missing, {

@@ -1,7 +1,31 @@
-import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, mulRatio, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
-import { holidayPayLookbackBasis, payrollJurisdiction, type PayrollHolidayDayCounting, type PayrollHolidayPayEdition, type PayrollHolidayPayRule, type PayrollWorkTriggeredHoliday } from "./packs.ts";
-import { describeWorkSchedule, normalWorkdayHours, scheduledHoursPerWeek, type ResolvedWorkSchedule } from "./work-schedules.ts";
-import { PayrollHolidayError, at, type ObservedHoliday } from "./holiday-calendar.ts";
+import {
+  add,
+  cmp,
+  fromUnits,
+  mul,
+  mulDecimal,
+  mulPercent,
+  mulRatio,
+  roundDiv,
+  roundMoney,
+  sum,
+  toUnits,
+} from "../money/money.ts";
+import {
+  holidayPayLookbackBasis,
+  payrollJurisdiction,
+  type PayrollHolidayDayCounting,
+  type PayrollHolidayPayEdition,
+  type PayrollHolidayPayRule,
+  type PayrollWorkTriggeredHoliday,
+} from "./packs.ts";
+import {
+  describeWorkSchedule,
+  normalWorkdayHours,
+  scheduledHoursPerWeek,
+  type ResolvedWorkSchedule,
+} from "./work-schedules.ts";
+import { PayrollHolidayError, type ObservedHoliday } from "./holiday-calendar.ts";
 
 /** Pure statutory holiday-pay computation over a resolved lookback context. */
 
@@ -45,22 +69,21 @@ export function statutoryHolidayPayRule(
   for (const edition of editions) {
     if (edition.effectiveFrom !== null && edition.effectiveFrom > date) continue;
     if (edition.effectiveTo !== null && edition.effectiveTo < date) continue;
-    if (
-      best === null
-      || (best.effectiveFrom ?? "") < (edition.effectiveFrom ?? "")
-    ) best = edition;
+    if (best === null || (best.effectiveFrom ?? "") < (edition.effectiveFrom ?? "")) best = edition;
   }
   if (best === null) {
     const known = editions
-      .map((edition) =>
-        `${edition.effectiveFrom ?? "the beginning"} – ${edition.effectiveTo ?? "current"}`)
+      .map(
+        (edition) =>
+          `${edition.effectiveFrom ?? "the beginning"} – ${edition.effectiveTo ?? "current"}`,
+      )
       .join("; ");
     throw new PayrollHolidayError(
-      `${declaration.name} declares no statutory holiday-pay formula in force on ${date} — `
-      + `the statute governing that date has not been transcribed (transcribed: ${known}). `
-      + "This date is not yet supported by the holiday-pay calendar; contact support, or run "
-      + "the period against a date the pack covers. This calculation will not apply a formula "
-      + "that was not the law at the time",
+      `${declaration.name} declares no statutory holiday-pay formula in force on ${date} — ` +
+        `the statute governing that date has not been transcribed (transcribed: ${known}). ` +
+        "This date is not yet supported by the holiday-pay calendar; contact support, or run " +
+        "the period against a date the pack covers. This calculation will not apply a formula " +
+        "that was not the law at the time",
     );
   }
   return best.rule;
@@ -77,7 +100,10 @@ export interface HolidayLookbackEarnings {
 }
 
 export const emptyLookbackEarnings = (): HolidayLookbackEarnings => ({
-  regular: "0", overtime: "0", vacationPay: "0", holidayPay: "0",
+  regular: "0",
+  overtime: "0",
+  vacationPay: "0",
+  holidayPay: "0",
 });
 
 export interface HolidayPayContext {
@@ -181,9 +207,12 @@ export interface HolidayPayResult {
  *  for a refusal an employee will read. */
 export function describeDayCounting(counting: PayrollHolidayDayCounting): string {
   switch (counting) {
-    case "worked": return "worked";
-    case "worked_or_earned_wages": return "worked or earned wages";
-    case "entitled_to_pay": return "was paid, or entitled to be paid";
+    case "worked":
+      return "worked";
+    case "worked_or_earned_wages":
+      return "worked or earned wages";
+    case "entitled_to_pay":
+      return "was paid, or entitled to be paid";
   }
 }
 
@@ -241,8 +270,12 @@ export function computeStatutoryHolidayPay(
     date: context.holiday.date,
   };
   const deny = (reason: string): HolidayPayResult => ({
-    ...shell, qualified: false, disqualifiedReason: reason,
-    holidayPay: "0", premiumPay: "0", basis: reason,
+    ...shell,
+    qualified: false,
+    disqualifiedReason: reason,
+    holidayPay: "0",
+    premiumPay: "0",
+    basis: reason,
   });
 
   if (!context.holiday.paid) {
@@ -255,9 +288,10 @@ export function computeStatutoryHolidayPay(
   // does not name runs the general rule below; the arms are special cases,
   // never a second general rule. (An UNANSWERED class never reaches here
   // from a real run: the resolver refuses it by name first.)
-  const excluded = context.occupationClass == null
-    ? undefined
-    : rule.excludedOccupations?.[context.occupationClass];
+  const excluded =
+    context.occupationClass == null
+      ? undefined
+      : rule.excludedOccupations?.[context.occupationClass];
   if (excluded !== undefined) {
     return deny(`${excluded.reason} (${excluded.citation})`);
   }
@@ -271,19 +305,19 @@ export function computeStatutoryHolidayPay(
    */
   let averagingAgreementApplied = false;
   if (
-    qualifying.minEmploymentDays !== undefined
-    && !(qualifying.minEmploymentDaysWhenUnworked && cmp(context.hoursWorked, "0") > 0)
+    qualifying.minEmploymentDays !== undefined &&
+    !(qualifying.minEmploymentDaysWhenUnworked && cmp(context.hoursWorked, "0") > 0)
   ) {
     if (context.employmentDays === null) {
       throw new PayrollHolidayError(
-        `${context.employee}: ${context.holiday.name} needs a hire date to test the `
-        + `${qualifying.minEmploymentDays}-day qualifying period — set it on the employee record`,
+        `${context.employee}: ${context.holiday.name} needs a hire date to test the ` +
+          `${qualifying.minEmploymentDays}-day qualifying period — set it on the employee record`,
       );
     }
     if (context.employmentDays < qualifying.minEmploymentDays) {
       return deny(
-        `employed ${context.employmentDays} of the ${qualifying.minEmploymentDays} calendar days `
-        + "the jurisdiction requires before the holiday",
+        `employed ${context.employmentDays} of the ${qualifying.minEmploymentDays} calendar days ` +
+          "the jurisdiction requires before the holiday",
       );
     }
   }
@@ -296,15 +330,18 @@ export function computeStatutoryHolidayPay(
       // where the rule declares it AND the caller asserts the agreement. An
       // unasserted agreement keeps the denial: the count is what the engine can
       // see, and the agreement is what it cannot.
-      if (qualifying.averagingAgreementAlternative === true && context.averagingAgreement === true) {
+      if (
+        qualifying.averagingAgreementAlternative === true &&
+        context.averagingAgreement === true
+      ) {
         averagingAgreementApplied = true;
       } else {
         // The reason quotes the jurisdiction's OWN sentence. An employee refused
         // in Nova Scotia was not "not working enough"; they were not entitled to
         // pay on enough days, which is a different fact and a different appeal.
         return deny(
-          `${describeDayCounting(counting)} on ${worked} of the ${ofDays} days before the `
-          + `holiday; ${days} are required`,
+          `${describeDayCounting(counting)} on ${worked} of the ${ofDays} days before the ` +
+            `holiday; ${days} are required`,
         );
       }
     }
@@ -336,35 +373,38 @@ export function computeStatutoryHolidayPay(
       // hours vary" is a RECORDABLE answer, not a missing one — which is why
       // this refusal is always actionable.
       throw new PayrollHolidayError(
-        `${context.employee}: ${context.holiday.name} pays the wages of the employee's normal `
-        + `working day, and no work schedule is in force on ${context.holiday.date} — record the `
-        + "hours and days they are normally scheduled to work, or record that their hours vary. "
-        + "This calculation will not assume a working day it has not been told about",
+        `${context.employee}: ${context.holiday.name} pays the wages of the employee's normal ` +
+          `working day, and no work schedule is in force on ${context.holiday.date} — record the ` +
+          "hours and days they are normally scheduled to work, or record that their hours vary. " +
+          "This calculation will not assume a working day it has not been told about",
       );
     }
     const perWeek = scheduledHoursPerWeek(schedule);
-    const belowStandard = rule.basis.minWeeklyHours !== undefined
-      && (perWeek === null || cmp(perWeek, String(rule.basis.minWeeklyHours)) < 0);
+    const belowStandard =
+      rule.basis.minWeeklyHours !== undefined &&
+      (perWeek === null || cmp(perWeek, String(rule.basis.minWeeklyHours)) < 0);
     const normalHours = normalWorkdayHours(schedule);
     if (belowStandard) {
-      irregularBecause = `the employee works ${perWeek ?? "irregular"} hours a week, less than the `
-        + `${rule.basis.minWeeklyHours} the jurisdiction treats as standard`;
+      irregularBecause =
+        `the employee works ${perWeek ?? "irregular"} hours a week, less than the ` +
+        `${rule.basis.minWeeklyHours} the jurisdiction treats as standard`;
     } else if (normalHours === null) {
       irregularBecause = `the employee's hours vary (${describeWorkSchedule(schedule)})`;
     } else if (context.paidOnCommission === true) {
       irregularBecause = "the employee is paid on commission, so their daily wages vary";
     } else if (cmp(context.hourlyRate, "0") <= 0) {
       throw new PayrollHolidayError(
-        `${context.employee}: ${context.holiday.name} pays the wages of their normal working day `
-        + "but no regular rate of pay is recorded — set the employee's pay rate before calculating",
+        `${context.employee}: ${context.holiday.name} pays the wages of their normal working day ` +
+          "but no regular rate of pay is recorded — set the employee's pay rate before calculating",
       );
     } else {
       // ONE normal working day, not the calendar day the holiday landed on: a
       // holiday falling on the employee's day off is a substitute day off with
       // pay, so the same day's wages are owed either way.
       holidayPay = roundMoney(mul(context.hourlyRate, normalHours), 2);
-      basis = `${normalHours} hours — one normal working day (${describeWorkSchedule(schedule)}) `
-        + `— × ${context.hourlyRate} regular rate`;
+      basis =
+        `${normalHours} hours — one normal working day (${describeWorkSchedule(schedule)}) ` +
+        `— × ${context.hourlyRate} regular rate`;
     }
   }
 
@@ -375,44 +415,47 @@ export function computeStatutoryHolidayPay(
   const basisRule = holidayPayLookbackBasis(rule.basis);
   const commission = basisRule?.kind === "fixed_divisor" ? basisRule.commission : undefined;
   const useCommission = Boolean(
-    commission
-    && context.paidOnCommission
-    && (context.employmentWeeks ?? 0) >= commission.minWeeksEmployed,
+    commission &&
+    context.paidOnCommission &&
+    (context.employmentWeeks ?? 0) >= commission.minWeeksEmployed,
   );
 
   if (holidayPay !== null) {
     // Already settled by the normal-day arm.
   } else if (!basisRule) {
     throw new PayrollHolidayError(
-      `${context.employee}: ${context.holiday.name} pays the wages of a normal working day, `
-      + "but this employee has no normal day and the governing statute states no fallback "
-      + "measure for that case — the run refuses rather than inventing a rate. Settle the day's "
-      + "pay as the statute provides, then file the answer",
+      `${context.employee}: ${context.holiday.name} pays the wages of a normal working day, ` +
+        "but this employee has no normal day and the governing statute states no fallback " +
+        "measure for that case — the run refuses rather than inventing a rate. Settle the day's " +
+        "pay as the statute provides, then file the answer",
     );
   } else if (basisRule.kind === "fixed_divisor" && useCommission && commission) {
     const earnings = context.commissionEarnings ?? context.earnings;
     const base = holidayPayBase(earnings, rule.include);
     holidayPay = divideExact(base, commission.divisor);
-    basis = `${base} earned in the ${commission.lookbackWeeks} weeks before the holiday `
-      + `÷ ${commission.divisor} (commission basis)`;
+    basis =
+      `${base} earned in the ${commission.lookbackWeeks} weeks before the holiday ` +
+      `÷ ${commission.divisor} (commission basis)`;
   } else if (basisRule.kind === "fixed_divisor") {
     const base = holidayPayBase(context.earnings, rule.include);
     holidayPay = divideExact(base, basisRule.divisor);
-    basis = `${base} earned in the ${basisRule.lookbackWeeks} weeks before the holiday `
-      + `÷ ${basisRule.divisor}`;
+    basis =
+      `${base} earned in the ${basisRule.lookbackWeeks} weeks before the holiday ` +
+      `÷ ${basisRule.divisor}`;
   } else if (basisRule.kind === "percent_of_earnings") {
     const base = holidayPayBase(context.earnings, rule.include);
     holidayPay = mulPercent(base, basisRule.percent, 2);
-    basis = `${basisRule.percent}% of ${base} earned in the `
-      + `${basisRule.lookbackWeeks} weeks before the holiday`;
+    basis =
+      `${basisRule.percent}% of ${base} earned in the ` +
+      `${basisRule.lookbackWeeks} weeks before the holiday`;
   } else {
     const base = holidayPayBase(context.earnings, rule.include);
-    const window = basisRule.kind === "average_day" && basisRule.lookbackDays !== undefined
-      ? `${basisRule.lookbackDays} days`
-      : `${basisRule.lookbackWeeks ?? 4} weeks`;
-    const counted = basisRule.kind === "average_hours_day"
-      ? "worked"
-      : describeDayCounting(basisRule.counting);
+    const window =
+      basisRule.kind === "average_day" && basisRule.lookbackDays !== undefined
+        ? `${basisRule.lookbackDays} days`
+        : `${basisRule.lookbackWeeks ?? 4} weeks`;
+    const counted =
+      basisRule.kind === "average_hours_day" ? "worked" : describeDayCounting(basisRule.counting);
     if (context.daysWorked <= 0) {
       // An average-day jurisdiction with a zero denominator is undefined, not
       // zero. Paying nothing here would be a real entitlement quietly lost, so
@@ -425,25 +468,25 @@ export function computeStatutoryHolidayPay(
         return deny(`no wages were earned in the ${window} before the holiday`);
       }
       throw new PayrollHolidayError(
-        `${context.employee}: ${context.holiday.name} pays an average day's wage but no days `
-        + `on which the employee ${counted} are recorded in the ${window} before it, while `
-        + `${base} was earned — the average is undefined; correct the timesheet before `
-        + "calculating",
+        `${context.employee}: ${context.holiday.name} pays an average day's wage but no days ` +
+          `on which the employee ${counted} are recorded in the ${window} before it, while ` +
+          `${base} was earned — the average is undefined; correct the timesheet before ` +
+          "calculating",
       );
     }
     if (basisRule.kind === "average_hours_day") {
       if (context.hoursWorkedInLookback === undefined) {
         throw new PayrollHolidayError(
-          `${context.employee}: ${context.holiday.name} needs approved hours worked in the `
-          + `${window} before the holiday to calculate the statutory average — correct the `
-          + "approved timesheets before calculating",
+          `${context.employee}: ${context.holiday.name} needs approved hours worked in the ` +
+            `${window} before the holiday to calculate the statutory average — correct the ` +
+            "approved timesheets before calculating",
         );
       }
       if (cmp(context.hourlyRate, "0") <= 0) {
         throw new PayrollHolidayError(
-          `${context.employee}: ${context.holiday.name} uses the current hourly rate for its `
-          + "average-hours holiday pay, but no current regular rate is recorded — set the "
-          + "employee's pay rate before calculating",
+          `${context.employee}: ${context.holiday.name} uses the current hourly rate for its ` +
+            "average-hours holiday pay, but no current regular rate is recorded — set the " +
+            "employee's pay rate before calculating",
         );
       }
       holidayPay = roundMoney(
@@ -454,12 +497,14 @@ export function computeStatutoryHolidayPay(
         ),
         2,
       );
-      basis = `${context.hourlyRate} current hourly rate × ${context.hoursWorkedInLookback} hours `
-        + `worked in the ${window} before the holiday ÷ ${context.daysWorked} days worked`;
+      basis =
+        `${context.hourlyRate} current hourly rate × ${context.hoursWorkedInLookback} hours ` +
+        `worked in the ${window} before the holiday ÷ ${context.daysWorked} days worked`;
     } else {
       holidayPay = divideExact(base, context.daysWorked);
-      basis = `${base} earned in the ${window} before the holiday ÷ ${context.daysWorked} `
-        + `days ${counted}`;
+      basis =
+        `${base} earned in the ${window} before the holiday ÷ ${context.daysWorked} ` +
+        `days ${counted}`;
     }
   }
   if (irregularBecause !== null) basis = `${irregularBecause}, so ${basis}`;
@@ -472,12 +517,14 @@ export function computeStatutoryHolidayPay(
   if (cmp(context.hoursWorked, "0") > 0 && cmp(context.hourlyRate, "0") > 0) {
     const { premium } = rule;
     const cap = premium.overtimeAfterHours;
-    const hoursAtBase = cap !== undefined && cmp(context.hoursWorked, String(cap)) > 0
-      ? String(cap)
-      : context.hoursWorked;
-    const hoursAbove = cap !== undefined && cmp(context.hoursWorked, String(cap)) > 0
-      ? fromUnits(toUnits(context.hoursWorked) - toUnits(String(cap)))
-      : "0";
+    const hoursAtBase =
+      cap !== undefined && cmp(context.hoursWorked, String(cap)) > 0
+        ? String(cap)
+        : context.hoursWorked;
+    const hoursAbove =
+      cap !== undefined && cmp(context.hoursWorked, String(cap)) > 0
+        ? fromUnits(toUnits(context.hoursWorked) - toUnits(String(cap)))
+        : "0";
     // (multiplier − 1): the hours are already paid at 1.0× by the timesheet.
     const uplift = (multiplier: string) => fromUnits(toUnits(multiplier) - toUnits("1"));
     premiumPay = roundMoney(
@@ -505,12 +552,14 @@ export function computeStatutoryHolidayPay(
     if (cmp(context.hoursWorked, "0") > 0 && cmp(context.hourlyRate, "0") > 0) {
       const { premium } = rule;
       const cap = premium.overtimeAfterHours;
-      const hoursAtBase = cap !== undefined && cmp(context.hoursWorked, String(cap)) > 0
-        ? String(cap)
-        : context.hoursWorked;
-      const hoursAbove = cap !== undefined && cmp(context.hoursWorked, String(cap)) > 0
-        ? fromUnits(toUnits(context.hoursWorked) - toUnits(String(cap)))
-        : "0";
+      const hoursAtBase =
+        cap !== undefined && cmp(context.hoursWorked, String(cap)) > 0
+          ? String(cap)
+          : context.hoursWorked;
+      const hoursAbove =
+        cap !== undefined && cmp(context.hoursWorked, String(cap)) > 0
+          ? fromUnits(toUnits(context.hoursWorked) - toUnits(String(cap)))
+          : "0";
       premiumPay = roundMoney(
         add(
           mulDecimal(mul(context.hourlyRate, hoursAtBase), premium.multiplier),
@@ -521,13 +570,15 @@ export function computeStatutoryHolidayPay(
         2,
       );
       holidayPay = "0";
-      basis = `${basis}; the period salary satisfies the day's pay, so only the premium is owed — `
-        + `${context.hoursWorked} hours worked at the full ${premium.multiplier}× statutory multiple `
-        + `(no 1.0× base was paid for these hours) (${treatment.citation})`;
+      basis =
+        `${basis}; the period salary satisfies the day's pay, so only the premium is owed — ` +
+        `${context.hoursWorked} hours worked at the full ${premium.multiplier}× statutory multiple ` +
+        `(no 1.0× base was paid for these hours) (${treatment.citation})`;
     } else {
       holidayPay = "0";
-      basis = `${basis}; satisfied by the period salary — no additional general holiday pay is owed `
-        + `to a salaried employee who did not work the holiday (${treatment.citation})`;
+      basis =
+        `${basis}; satisfied by the period salary — no additional general holiday pay is owed ` +
+        `to a salaried employee who did not work the holiday (${treatment.citation})`;
     }
   }
 
@@ -541,15 +592,20 @@ export function computeWorkTriggeredHolidayPay(
   context: HolidayPayContext,
 ): HolidayPayResult {
   if (cmp(context.hoursWorked, "0") <= 0) {
-    throw new PayrollHolidayError(`${context.employee}: ${event.name} payment requires hours worked on the date`);
+    throw new PayrollHolidayError(
+      `${context.employee}: ${event.name} payment requires hours worked on the date`,
+    );
   }
-  const result = computeStatutoryHolidayPay({
-    ...rule,
-    qualifying: {
-      ...rule.qualifying,
-      ...event.qualifying,
+  const result = computeStatutoryHolidayPay(
+    {
+      ...rule,
+      qualifying: {
+        ...rule.qualifying,
+        ...event.qualifying,
+      },
     },
-  }, { ...context, hoursWorked: "0", absentWithoutConsent: false });
+    { ...context, hoursWorked: "0", absentWithoutConsent: false },
+  );
   if (!result.qualified || event.payment.kind === "alternate_paid_day") return result;
   if (!context.schedule) {
     throw new PayrollHolidayError(
@@ -563,15 +619,17 @@ export function computeWorkTriggeredHolidayPay(
     );
   }
   const halfNormalDay = mulRatio(normalHours, 1n, 2n);
-  const overtimeHours = cmp(context.hoursWorked, halfNormalDay) >= 0
-    ? context.hoursWorked : halfNormalDay;
+  const overtimeHours =
+    cmp(context.hoursWorked, halfNormalDay) >= 0 ? context.hoursWorked : halfNormalDay;
   const requiredOvertimeWages = mulDecimal(
-    mul(context.hourlyRate, overtimeHours), event.payment.overtimeRate,
+    mul(context.hourlyRate, overtimeHours),
+    event.payment.overtimeRate,
   );
   const ordinaryWagesAlreadyPaid = mul(context.hourlyRate, context.hoursWorked);
-  const premiumPay = cmp(requiredOvertimeWages, ordinaryWagesAlreadyPaid) > 0
-    ? roundMoney(add(requiredOvertimeWages, fromUnits(-toUnits(ordinaryWagesAlreadyPaid))), 2)
-    : "0";
+  const premiumPay =
+    cmp(requiredOvertimeWages, ordinaryWagesAlreadyPaid) > 0
+      ? roundMoney(add(requiredOvertimeWages, fromUnits(-toUnits(ordinaryWagesAlreadyPaid))), 2)
+      : "0";
   return {
     ...result,
     premiumPay,

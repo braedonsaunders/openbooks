@@ -2,14 +2,18 @@ import { payrollEmploymentOverlapsPeriod } from "./employment-roster.ts";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
-import { parsePayRunCalculationSource, payRunCalculationSource, payRunCalculationSourceChanges, payRunCalculationSourceDigest } from "./run-calculation-evidence.ts";
+import {
+  parsePayRunCalculationSource,
+  payRunCalculationSource,
+  payRunCalculationSourceChanges,
+  payRunCalculationSourceDigest,
+} from "./run-calculation-evidence.ts";
 import { leavePayrollInputProblems } from "./leave-payroll-inputs.ts";
 import { allowancePayrollInputProblem } from "./allowance-payroll-inputs.ts";
 import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
 import { orgSettingsAuditAffectsCalculation } from "./settings-staleness.ts";
-import { scope } from "./readiness-context.ts";
 
 /** Pay-run staleness: inputs changed since calculation invalidate the calculated result. */
 
@@ -88,19 +92,35 @@ export async function payRunStaleness(
   executor: Pick<typeof db, "execute"> = db,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<PayRunStaleness> {
-  const rows = (await executor.execute<{
-      calculated_at: Date | string | null; never_calculated: boolean;
-      run_type: string; period_start: string; period_end: string;
-      calculation_source_snapshot: unknown; calculation_source_digest: string | null;
-      adjustments_changed: boolean; assertions_changed: boolean; time_changed: boolean;
-      wages_changed: boolean; schedule_changed: boolean; statutory_rates_changed: boolean;
-      union_fringes_changed: boolean;
-      roster_changed: boolean; employment_changed: boolean;
-      components_changed: boolean; component_definitions_changed: boolean;
-      derived_rules_changed: boolean; entitlements_changed: boolean;
-      worker_comp_changed: boolean; time_types_changed: boolean;
-      settings_changed: boolean; org_setting_changes: unknown[]; ytd_changed: boolean; opening_balances_changed: boolean;
-    }>(sql`
+  const rows = await executor.execute<{
+    calculated_at: Date | string | null;
+    never_calculated: boolean;
+    run_type: string;
+    period_start: string;
+    period_end: string;
+    calculation_source_snapshot: unknown;
+    calculation_source_digest: string | null;
+    adjustments_changed: boolean;
+    assertions_changed: boolean;
+    time_changed: boolean;
+    wages_changed: boolean;
+    schedule_changed: boolean;
+    statutory_rates_changed: boolean;
+    union_fringes_changed: boolean;
+    roster_changed: boolean;
+    employment_changed: boolean;
+    components_changed: boolean;
+    component_definitions_changed: boolean;
+    derived_rules_changed: boolean;
+    entitlements_changed: boolean;
+    worker_comp_changed: boolean;
+    time_types_changed: boolean;
+    settings_changed: boolean;
+    org_setting_changes: unknown[];
+    ytd_changed: boolean;
+    opening_balances_changed: boolean;
+  }>(
+    sql`
     select r.calculated_at, r.calculation_source_snapshot, r.calculation_source_digest,
            r.run_type, r.period_start::text as period_start, r.period_end::text as period_end,
            r.calculated_at is null as never_calculated,
@@ -385,7 +405,9 @@ export async function payRunStaleness(
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = rows[0];
   // A missing run is not a fresh run. Fail closed and say why.
   if (!row) return { stale: true, reasons: ["missing"], calculatedAt: null };
@@ -398,10 +420,14 @@ export async function payRunStaleness(
   // levies for this year, so years without them behave exactly as before.
   // An org-setting audit row stales the run only when it changed something a
   // calculation reads (posting-account and control-account edits do not).
-  const settingsChanged = row.settings_changed
-    || row.org_setting_changes.some((changes) => orgSettingsAuditAffectsCalculation(changes));
+  const settingsChanged =
+    row.settings_changed ||
+    row.org_setting_changes.some((changes) => orgSettingsAuditAffectsCalculation(changes));
   const employerLevyYtdChanged = await employerLevyRoomConsumed(
-    orgId, documentId, executor, allowedSubsidiaryIds,
+    orgId,
+    documentId,
+    executor,
+    allowedSubsidiaryIds,
   );
   let selectionChanged = false;
   let exactCompensationPackagesChanged = false;
@@ -419,7 +445,9 @@ export async function payRunStaleness(
   let exactLeaveInputsChanged = false;
   let exactAllowanceInputsChanged = false;
   if (PERIODIC_RUN_TYPES.has(row.run_type)) {
-    const parties = (await executor.execute<{ party_id: string }>(sql`
+    const parties = (
+      await executor.execute<{ party_id: string }>(
+        sql`
       select distinct employee_party_id::text as party_id
         from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}
       union
@@ -430,7 +458,10 @@ export async function payRunStaleness(
         ) error
        where r.org_id = ${orgId} and r.document_id = ${documentId}
          and error->>'employeePartyId' is not null
-    `, "objects")).map((entry) => entry.party_id);
+    `,
+        "objects",
+      )
+    ).map((entry) => entry.party_id);
     const problem = await leavePayrollInputProblems(executor, {
       orgId,
       runDocumentId: documentId,
@@ -449,12 +480,19 @@ export async function payRunStaleness(
     exactAllowanceInputsChanged = allowanceProblem !== null;
   }
   const storedSource = parsePayRunCalculationSource(row.calculation_source_snapshot);
-  if (!storedSource || !row.calculation_source_digest
-      || payRunCalculationSourceDigest(storedSource) !== row.calculation_source_digest) {
+  if (
+    !storedSource ||
+    !row.calculation_source_digest ||
+    payRunCalculationSourceDigest(storedSource) !== row.calculation_source_digest
+  ) {
     selectionChanged = true;
   } else {
     const currentSource = await payRunCalculationSource(
-      orgId, documentId, executor, false, allowedSubsidiaryIds,
+      orgId,
+      documentId,
+      executor,
+      false,
+      allowedSubsidiaryIds,
     );
     if (!currentSource) {
       selectionChanged = true;
@@ -472,12 +510,32 @@ export async function payRunStaleness(
       exactDeclaredVacationAccrualsChanged = changes.declaredVacationAccruals;
       exactCompensationPackagesChanged = changes.compensationPackages;
       exactComponentsChanged = changes.components;
-      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages && !changes.items && !changes.compensationPackages && !changes.components && !changes.roster && !changes.openingBalances && !changes.incomeTaxOverrides && !changes.bankCashInputs && !changes.declaredVacationAccruals && !changes.employerLevyAdjustments;
+      selectionChanged =
+        !changes.time &&
+        !changes.timeTypes &&
+        !changes.wages &&
+        !changes.items &&
+        !changes.compensationPackages &&
+        !changes.components &&
+        !changes.roster &&
+        !changes.openingBalances &&
+        !changes.incomeTaxOverrides &&
+        !changes.bankCashInputs &&
+        !changes.declaredVacationAccruals &&
+        !changes.employerLevyAdjustments;
     }
   }
   const reasons = [
     selectionChanged ? "selection" : null,
-    row.adjustments_changed || row.assertions_changed || exactIncomeTaxOverridesChanged || exactBankCashInputsChanged || exactDeclaredVacationAccrualsChanged || exactLevyAdjustmentsChanged || exactAllowanceInputsChanged ? "adjustments" : null,
+    row.adjustments_changed ||
+    row.assertions_changed ||
+    exactIncomeTaxOverridesChanged ||
+    exactBankCashInputsChanged ||
+    exactDeclaredVacationAccrualsChanged ||
+    exactLevyAdjustmentsChanged ||
+    exactAllowanceInputsChanged
+      ? "adjustments"
+      : null,
     row.time_changed || exactTimeChanged ? "time" : null,
     row.wages_changed || exactWagesChanged ? "wages" : null,
     row.schedule_changed ? "schedule" : null,
@@ -500,9 +558,10 @@ export async function payRunStaleness(
   return {
     stale: reasons.length > 0,
     reasons,
-    calculatedAt: row.calculated_at instanceof Date
-      ? row.calculated_at.toISOString()
-      : (row.calculated_at ?? null),
+    calculatedAt:
+      row.calculated_at instanceof Date
+        ? row.calculated_at.toISOString()
+        : (row.calculated_at ?? null),
   };
 }
 
@@ -536,10 +595,16 @@ async function employerLevyRoomConsumed(
   executor: Pick<typeof db, "execute">,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<boolean> {
-  const run = (await executor.execute<{
-    tax_year: number; calculated_at: Date | string | null;
-    period_start: string; period_end: string; run_type: string; pay_schedule_id: string; schedule_subsidiary_id: string | null;
-  }>(sql`
+  const run = await executor.execute<{
+    tax_year: number;
+    calculated_at: Date | string | null;
+    period_start: string;
+    period_end: string;
+    run_type: string;
+    pay_schedule_id: string;
+    schedule_subsidiary_id: string | null;
+  }>(
+    sql`
     select r.tax_year, r.calculated_at, r.period_start::text as period_start, r.period_end::text as period_end, r.run_type,
            r.pay_schedule_id, s.subsidiary_id as schedule_subsidiary_id
       from pay_runs r
@@ -547,7 +612,9 @@ async function employerLevyRoomConsumed(
       join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const info = run[0];
   if (!info || info.calculated_at === null) return false;
   // The run's affected employees: the population whose earnings claim room —
@@ -555,8 +622,11 @@ async function employerLevyRoomConsumed(
   // without recorded period coverage or scoped final-pay admission. Employees
   // outside this population neither claim room nor arm a country levy.
   const mine = await executor.execute<{
-    employee_party_id: string; country: string; province: string | null;
-  }>(sql`
+    employee_party_id: string;
+    country: string;
+    province: string | null;
+  }>(
+    sql`
     select prof.employee_party_id, prof.country, prof.province
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
@@ -564,14 +634,22 @@ async function employerLevyRoomConsumed(
      where prof.org_id = ${orgId} and prof.pay_schedule_id = ${info.pay_schedule_id}
        and prof.is_active and prof.country is not null
        and ${payrollEmploymentOverlapsPeriod({
-         org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
-         employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
-         periodStart: sql`${info.period_start}`, periodEnd: sql`${info.period_end}`,
-         runType: sql`${info.run_type}`, document: sql`${documentId}`,
+         org: sql`prof.org_id`,
+         employee: sql`p.id`,
+         employment: sql`prof.employment_id`,
+         employer: sql`p.subsidiary_id`,
+         hiredOn: sql`er.hired_on`,
+         terminatedOn: sql`er.terminated_on`,
+         periodStart: sql`${info.period_start}`,
+         periodEnd: sql`${info.period_end}`,
+         runType: sql`${info.run_type}`,
+         document: sql`${documentId}`,
        })}
        and (${info.schedule_subsidiary_id}::uuid is null
         or p.subsidiary_id = ${info.schedule_subsidiary_id}::uuid)
-  `, "objects");
+  `,
+    "objects",
+  );
   interface LevyArm {
     country: string;
     /** Phase-8 hook levies (CA EHT et al): employer room per province. */
@@ -588,7 +666,9 @@ async function employerLevyRoomConsumed(
   for (const row of mine) {
     const pack = PAYROLL_COUNTRY_PACKS[row.country];
     if (!pack) continue;
-    let arm = arms.find((a) => a.country === row.country && a.phase8 === (pack.applyEmployerLevies != null));
+    let arm = arms.find(
+      (a) => a.country === row.country && a.phase8 === (pack.applyEmployerLevies != null),
+    );
     if (!arm) {
       arm = {
         country: row.country,
@@ -616,7 +696,9 @@ async function employerLevyRoomConsumed(
       continue;
     }
     let levies: readonly {
-      timing: string; base?: { scope?: string }; allowance?: { kind?: string };
+      timing: string;
+      base?: { scope?: string };
+      allowance?: { kind?: string };
     }[];
     try {
       levies = pack.employerAggregateLevies?.(info.tax_year) ?? [];
@@ -634,9 +716,8 @@ async function employerLevyRoomConsumed(
     }
   }
   if (declaredArms.length === 0) return false;
-  const calculatedAt = info.calculated_at instanceof Date
-    ? info.calculated_at.toISOString()
-    : info.calculated_at;
+  const calculatedAt =
+    info.calculated_at instanceof Date ? info.calculated_at.toISOString() : info.calculated_at;
   // Room truth is caller-independent (the engines read committed history
   // org-wide with no subsidiary predicate), so the consumer match is scoped
   // by what the engines actually share: the pack, the levy's aggregation
@@ -644,7 +725,8 @@ async function employerLevyRoomConsumed(
   // for per-employee caps — the affected employees. A US-pack run, a run
   // with no employee in the levy's unit, and a terminated roster share no
   // room with this run and never stale it.
-  const armPredicates = declaredArms.map((arm) => sql`
+  const armPredicates = declaredArms.map(
+    (arm) => sql`
     exists (
       select 1
         from employee_payroll_profiles oprof
@@ -654,23 +736,41 @@ async function employerLevyRoomConsumed(
        where oprof.org_id = ${orgId} and oprof.pay_schedule_id = other.pay_schedule_id
          and oprof.is_active and oprof.country = ${arm.country}
          and ${payrollEmploymentOverlapsPeriod({
-           org: sql`oprof.org_id`, employee: sql`op.id`, employment: sql`oprof.employment_id`,
-           employer: sql`op.subsidiary_id`, hiredOn: sql`oer.hired_on`, terminatedOn: sql`oer.terminated_on`,
-           periodStart: sql`other.period_start`, periodEnd: sql`other.period_end`,
-           runType: sql`other.run_type`, document: sql`other.document_id`,
+           org: sql`oprof.org_id`,
+           employee: sql`op.id`,
+           employment: sql`oprof.employment_id`,
+           employer: sql`op.subsidiary_id`,
+           hiredOn: sql`oer.hired_on`,
+           terminatedOn: sql`oer.terminated_on`,
+           periodStart: sql`other.period_start`,
+           periodEnd: sql`other.period_end`,
+           runType: sql`other.run_type`,
+           document: sql`other.document_id`,
          })}
          and (osch.subsidiary_id is null or op.subsidiary_id = osch.subsidiary_id)
-         ${arm.regional || arm.phase8
-           ? arm.regionless
-             ? sql``
-             : sql`and oprof.province in (${sql.join(arm.regions.map((r) => sql`${r}`), sql`, `)})`
-           : sql``}
-         ${arm.perEmployeeCap
-           ? sql`and oprof.employee_party_id in (${sql.join(arm.employees.map((e) => sql`${e}`), sql`, `)})`
-           : sql``}
+         ${
+           arm.regional || arm.phase8
+             ? arm.regionless
+               ? sql``
+               : sql`and oprof.province in (${sql.join(
+                   arm.regions.map((r) => sql`${r}`),
+                   sql`, `,
+                 )})`
+             : sql``
+         }
+         ${
+           arm.perEmployeeCap
+             ? sql`and oprof.employee_party_id in (${sql.join(
+                 arm.employees.map((e) => sql`${e}`),
+                 sql`, `,
+               )})`
+             : sql``
+         }
     )
-  `);
-  const consumed = (await executor.execute<{ consumed: boolean }>(sql`
+  `,
+  );
+  const consumed = await executor.execute<{ consumed: boolean }>(
+    sql`
     select exists (
       select 1 from pay_runs other
        where other.org_id = ${orgId} and other.document_id <> ${documentId}
@@ -679,7 +779,9 @@ async function employerLevyRoomConsumed(
          and other.updated_at > ${calculatedAt}
          and (${sql.join(armPredicates, sql` or `)})
     ) as consumed
-  `, "objects"));
+  `,
+    "objects",
+  );
   return consumed[0]!.consumed;
 }
 
@@ -692,7 +794,9 @@ export const staleCalculationMessage = (
   reasons: readonly string[],
   documentStatus: string | null = null,
 ): string => {
-  const changed = reasons.map(reason => reason === "compensationPackages" ? "approved compensation terms" : reason).join(", ");
+  const changed = reasons
+    .map((reason) => (reason === "compensationPackages" ? "approved compensation terms" : reason))
+    .join(", ");
   // The remedy names the control the run's document state actually offers.
   // Calculation refuses any document that is not a draft, so an approved run
   // is recalculated through the approval withdrawal, and a run awaiting
@@ -734,11 +838,20 @@ export async function assertPayRunNotStale(
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<void> {
   const { stale, reasons, calculatedAt } = await payRunStaleness(
-    orgId, documentId, executor, allowedSubsidiaryIds,
+    orgId,
+    documentId,
+    executor,
+    allowedSubsidiaryIds,
   );
   if (!stale || calculatedAt === null) return;
-  const status = (await executor.execute<{ status: string }>(sql`
+  const status =
+    (
+      await executor.execute<{ status: string }>(
+        sql`
     select status from documents where org_id = ${orgId} and id = ${documentId}
-  `, "objects"))[0]?.status ?? null;
+  `,
+        "objects",
+      )
+    )[0]?.status ?? null;
   throw new PayrollError(staleCalculationMessage(reasons, status));
 }

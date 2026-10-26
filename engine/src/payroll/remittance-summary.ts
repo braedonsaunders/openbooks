@@ -1,12 +1,27 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { isIsoCalendarDate } from "../platform/business-date.ts";
-import { add, cmp, div, formatMoney, mulRate, neg, roundMoney, sum } from "../money/money.ts";
+import { add, cmp, div, formatMoney, mulRate, neg, roundMoney } from "../money/money.ts";
 import { type FilingAccountRef, type PayrollFilingAccount } from "./filing.ts";
 import { PayrollError } from "./error.ts";
-import { allRemittanceSchedules, PAYROLL_COUNTRY_PACKS, remittanceBandForAverage, statutoryRemittanceDeclaration, type PayrollRemittanceSchedule, type StatutoryRemittanceDeclaration } from "./packs.ts";
+import {
+  allRemittanceSchedules,
+  remittanceBandForAverage,
+  type PayrollRemittanceSchedule,
+} from "./packs.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
-import { groupKey, groupRemittanceRows, scheduledRemittanceFrequency, scheduleForRemittanceGroup, type RemittanceGroup, type RemittanceRow } from "./remittance-group-schedule.ts";
+import {
+  groupKey,
+  groupRemittanceRows,
+  scheduledRemittanceFrequency,
+  scheduleForRemittanceGroup,
+  type RemittanceGroup,
+  type RemittanceRow,
+} from "./remittance-group-schedule.ts";
+import {
+  makeRemittanceDestinationResolver,
+  remittancePeriodProblem,
+  type RemittanceResolvableRow,
+} from "./remittance-destination.ts";
 
 /** Remittance summary: committed accruals folded by destination, filing account, and legal entity. */
 
@@ -18,9 +33,10 @@ export async function rawPayrollSettings(
   orgId: string,
   executor: RemittanceExecutor = db,
 ): Promise<Record<string, unknown>> {
-  const r = (await executor.execute<{ p: Record<string, unknown> | null }>(
-    sql`select settings->'payroll' as p from orgs where id = ${orgId}`, "objects",
-  ));
+  const r = await executor.execute<{ p: Record<string, unknown> | null }>(
+    sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
+    "objects",
+  );
   return r[0]?.p ?? {};
 }
 
@@ -31,25 +47,33 @@ async function filingAccountsByIdIn(
   orgId: string,
   executor: RemittanceExecutor,
 ): Promise<Map<string, PayrollFilingAccount>> {
-  const rows = await executor.execute<Record<string, unknown>>(sql`
+  const rows = await executor.execute<Record<string, unknown>>(
+    sql`
     select id, country, program_type, account_number, name, remitter_type,
            subsidiary_id, state_code, is_default, is_active
       from payroll_filing_accounts
      where org_id = ${orgId}
      order by is_default desc, account_number
-  `, "objects");
-  return new Map(rows.map((row) => [String(row.id), {
-    id: String(row.id),
-    country: String(row.country),
-    programType: String(row.program_type),
-    accountNumber: String(row.account_number),
-    name: String(row.name),
-    remitterType: row.remitter_type as PayrollFilingAccount["remitterType"],
-    subsidiaryId: (row.subsidiary_id as string | null) ?? null,
-    stateCode: (row.state_code as string | null) ?? null,
-    isDefault: row.is_default === true,
-    isActive: row.is_active === true,
-  }]));
+  `,
+    "objects",
+  );
+  return new Map(
+    rows.map((row) => [
+      String(row.id),
+      {
+        id: String(row.id),
+        country: String(row.country),
+        programType: String(row.program_type),
+        accountNumber: String(row.account_number),
+        name: String(row.name),
+        remitterType: row.remitter_type as PayrollFilingAccount["remitterType"],
+        subsidiaryId: (row.subsidiary_id as string | null) ?? null,
+        stateCode: (row.state_code as string | null) ?? null,
+        isDefault: row.is_default === true,
+        isActive: row.is_active === true,
+      },
+    ]),
+  );
 }
 
 /**
@@ -80,15 +104,22 @@ async function derivedAverageRates(
   if (foreign.length === 0) return new Map();
   const periodIds = [...new Set(foreign.map((need) => need.periodId))];
   const currencies = [...new Set(foreign.map((need) => need.currency))];
-  const stored = (await executor.execute<{
-    period_id: string; currency: string; average_rate: string;
-  }>(sql`
+  const stored = await executor.execute<{
+    period_id: string;
+    currency: string;
+    average_rate: string;
+  }>(
+    sql`
     select period_id::text as period_id, from_currency as currency, average_rate::text as average_rate
       from consolidated_fx_rates
      where org_id = ${orgId} and to_currency = ${presentation}
        and period_id = any(${`{${periodIds.join(",")}}`}::uuid[])
-       and from_currency = any(${`{${currencies.join(",")}}`}::text[])`, "objects"));
-  const byKey = new Map(stored.map((row) => [`${row.currency}→${row.period_id}`, row.average_rate]));
+       and from_currency = any(${`{${currencies.join(",")}}`}::text[])`,
+    "objects",
+  );
+  const byKey = new Map(
+    stored.map((row) => [`${row.currency}→${row.period_id}`, row.average_rate]),
+  );
   for (const need of foreign) {
     if (!byKey.has(`${need.currency}→${need.periodId}`)) {
       throw new PayrollError(
@@ -126,7 +157,8 @@ async function mixedCurrencyAccruals(
   // join inline (set-based form of the shared covering-period resolver:
   // same predicate, same deterministic ordering), because a row-wise
   // helper call cannot serve a grouped query.
-  const dateless = (await executor.execute<{ pay_date: string; currency: string }>(sql`
+  const dateless = await executor.execute<{ pay_date: string; currency: string }>(
+    sql`
     select s.pay_date::text as pay_date, s.currency_code as currency
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
@@ -140,22 +172,36 @@ async function mixedCurrencyAccruals(
           where p.org_id = ${orgId} and not p.is_adjustment
             and p.starts_on <= s.pay_date and p.ends_on >= s.pay_date
        )
-     limit 1`, "objects"));
+     limit 1`,
+    "objects",
+  );
   if (dateless[0]) {
     throw new PayrollError(
       `cannot translate ${dateless[0].currency} payroll dated ${dateless[0].pay_date}: ` +
         `no regular accounting period covers that date, so no derived consolidated rate can exist for it`,
     );
   }
-  const slices = (await executor.execute<{
-      component_id: string; code: string; name: string;
-      kind: "deduction" | "employer_contribution" | "credit";
-      system_key: string | null; country: string | null; remittance_party_id: string | null;
-      component_party_id: string | null; covered_party_id: string | null;
-      liability_account_id: string | null; filing_account_id: string | null;
-      filingUnknown: boolean; province: string; subsidiary_id: string | null;
-      currency: string; period_id: string; period_end: string; amount: string;
-    }>(sql`
+  const slices = await executor.execute<{
+    component_id: string;
+    code: string;
+    name: string;
+    kind: "deduction" | "employer_contribution" | "credit";
+    system_key: string | null;
+    country: string | null;
+    remittance_party_id: string | null;
+    component_party_id: string | null;
+    covered_party_id: string | null;
+    liability_account_id: string | null;
+    filing_account_id: string | null;
+    filingUnknown: boolean;
+    province: string;
+    subsidiary_id: string | null;
+    currency: string;
+    period_id: string;
+    period_end: string;
+    amount: string;
+  }>(
+    sql`
     select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.country, l.remittance_party_id,
            c.remittance_party_id as component_party_id,
            (select cover_bill.party_id
@@ -196,11 +242,17 @@ async function mixedCurrencyAccruals(
               source_document.subsidiary_id,
               s.currency_code, period.id, period.ends_on
      order by c.sequence, c.code
-  `, "objects"));
-  const grossSlices = (await executor.execute<{
-      filing_account_id: string | null; currency: string;
-      period_id: string; period_end: string; gross: string;
-    }>(sql`
+  `,
+    "objects",
+  );
+  const grossSlices = await executor.execute<{
+    filing_account_id: string | null;
+    currency: string;
+    period_id: string;
+    period_end: string;
+    gross: string;
+  }>(
+    sql`
     select ${filingAccount} as filing_account_id, s.currency_code as currency,
            period.id as period_id, period.ends_on::text as period_end,
            sum(s.gross) as gross
@@ -218,13 +270,23 @@ async function mixedCurrencyAccruals(
      where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      group by ${filingAccount}, s.currency_code, period.id, period.ends_on
-  `, "objects"));
+  `,
+    "objects",
+  );
   const rates = await derivedAverageRates(
     orgId,
     presentation,
     [
-      ...slices.map((row) => ({ currency: row.currency, periodId: row.period_id, periodEnd: row.period_end })),
-      ...grossSlices.map((row) => ({ currency: row.currency, periodId: row.period_id, periodEnd: row.period_end })),
+      ...slices.map((row) => ({
+        currency: row.currency,
+        periodId: row.period_id,
+        periodEnd: row.period_end,
+      })),
+      ...grossSlices.map((row) => ({
+        currency: row.currency,
+        periodId: row.period_id,
+        periodEnd: row.period_end,
+      })),
     ],
     executor,
   );
@@ -263,9 +325,11 @@ async function mixedCurrencyAccruals(
       amount: translate(row.amount, row.currency, row.period_id),
     }))
     .map((row) => (row.kind === "credit" ? { ...row, amount: neg(row.amount) } : row));
-  const headcounts = (await executor.execute<{
-      filing_account_id: string | null; employees: number;
-    }>(sql`
+  const headcounts = await executor.execute<{
+    filing_account_id: string | null;
+    employees: number;
+  }>(
+    sql`
     select ${filingAccount} as filing_account_id,
            count(distinct s.employee_party_id)::int as employees
       from pay_stubs s
@@ -274,11 +338,16 @@ async function mixedCurrencyAccruals(
      where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      group by ${filingAccount}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const grossByAccount = new Map<string, string>();
   for (const slice of grossSlices) {
     const key = slice.filing_account_id ?? "";
-    grossByAccount.set(key, add(grossByAccount.get(key) ?? "0", translate(slice.gross, slice.currency, slice.period_id)));
+    grossByAccount.set(
+      key,
+      add(grossByAccount.get(key) ?? "0", translate(slice.gross, slice.currency, slice.period_id)),
+    );
   }
   const contextByAccount = new Map<string, { gross: string; employees: number }>(
     headcounts.map((row) => [
@@ -287,124 +356,6 @@ async function mixedCurrencyAccruals(
     ]),
   );
   return { rows, contextByAccount };
-}
-
-/**
- * The narrow row shape destination resolution reads — shared by the summary
- * (which folds grouped rows) and bill creation (which resolves individual
- * accrual lines for coverage), so the two can never disagree about who an
- * accrual remits to.
- */
-export interface RemittanceResolvableRow {
-  /** The stub line's commit-time destination snapshot (migration 0296). */
-  snapshotPartyId: string | null;
-  /**
-   * The component's CURRENT remittance vendor. Runs committed before a
-   * vendor was assigned carry a null snapshot; their unremitted liabilities
-   * resolve against this live assignment instead of surfacing unassigned.
-   */
-  componentPartyId: string | null;
-  /**
-   * The live (non-voided) remittance bill that consumed this line, or null
-   * while the liability is unremitted. A consumed line keeps its bill's
-   * vendor as history even when the component is reassigned afterwards;
-   * voiding the bill frees the line back to live resolution.
-   */
-  coveredPartyId: string | null;
-  systemKey: string | null;
-  country: string | null;
-  province: string;
-}
-
-/**
- * Destination resolution over commit-time snapshots, extracted so the summary
- * and the bill creator share one implementation. Country-first pack lookup
- * (two packs may give the same withholding the same system key, so the
- * country stamped on the component row picks the pack), exactly as the
- * summary always resolved.
- */
-export function makeRemittanceDestinationResolver(
-  payrollSettings: Record<string, unknown>,
-): {
-  resolveDestination: (row: RemittanceResolvableRow) => { partyId: string | null; vendorKey: string | null };
-  isInternalAccrual: (row: Pick<RemittanceResolvableRow, "systemKey" | "country">) => boolean;
-} {
-  const declarations = new Map<string, StatutoryRemittanceDeclaration | null>();
-  const declarationFor = (country: string | null): StatutoryRemittanceDeclaration | null => {
-    if (!country) return null;
-    const hit = declarations.get(country);
-    if (hit !== undefined) return hit;
-    const found = PAYROLL_COUNTRY_PACKS[country] ? statutoryRemittanceDeclaration(country) : null;
-    declarations.set(country, found);
-    return found;
-  };
-  const settingsVendor = (settingsKey: string): string | null => {
-    const vendor = payrollSettings[settingsKey];
-    return typeof vendor === "string" && vendor ? vendor : null;
-  };
-  return {
-    resolveDestination: (row) => {
-      const packDeclaration = row.systemKey ? declarationFor(row.country) : null;
-      const regionalKey = row.systemKey
-        ? packDeclaration?.regionalVendorSettingsKeyBySystemKey.get(row.systemKey)?.[row.province]
-        : undefined;
-      // The regional key is provenance even when the org has not configured
-      // the vendor yet: an unconfigured RQ destination is still an RQ
-      // destination — it surfaces unassigned under the RQ schedule, never
-      // under the CRA one.
-      if (regionalKey) return { partyId: settingsVendor(regionalKey), vendorKey: regionalKey };
-      // The SNAPSHOT, never the live component: a vendor stamped at commit
-      // cannot be re-pointed by editing the component afterwards.
-      if (row.snapshotPartyId) return { partyId: row.snapshotPartyId, vendorKey: null };
-      // A line an issued remittance bill consumed keeps that bill's vendor
-      // as its history, even when the component was assigned (or reassigned)
-      // after the bill. Unremitted lines never reach this branch.
-      if (row.coveredPartyId) return { partyId: row.coveredPartyId, vendorKey: null };
-      const vendorKey = row.systemKey
-        ? packDeclaration?.vendorSettingsKeyBySystemKey.get(row.systemKey)
-        : undefined;
-      if (!vendorKey) {
-        // No pack declaration for this component: unremitted liabilities
-        // resolve against the component's current vendor (runs committed
-        // before the assignment carry a null snapshot); genuinely
-        // vendorless rows stay unassigned for setup.
-        if (row.componentPartyId) return { partyId: row.componentPartyId, vendorKey: null };
-        return { partyId: null, vendorKey: null };
-      }
-      const configured = settingsVendor(vendorKey);
-      if (configured) return { partyId: configured, vendorKey };
-      // The pack declares the destination but the org never configured its
-      // vendor: the component's own vendor answers instead, keeping the pack
-      // key as schedule provenance so the declared timetable still dates
-      // the bill. Without a component vendor the row stays unassigned under
-      // the pack key, exactly as before.
-      if (row.componentPartyId) return { partyId: row.componentPartyId, vendorKey };
-      return { partyId: null, vendorKey };
-    },
-    isInternalAccrual: (row) =>
-      row.systemKey != null
-      && (declarationFor(row.country)?.internalAccrualSystemKeys.includes(row.systemKey) ?? false),
-  };
-}
-
-/**
- * The period's own validity, before any row is read. Shape alone admits
- * impossible dates ('2026-02-30', month 13) that PostgreSQL then refuses
- * with a driver error instead of a named refusal — so the range is proven a
- * real calendar date pair first, at every entry point that accepts one.
- * Pure, so the rule is verifiable without a database.
- */
-export function remittancePeriodProblem(from: unknown, to: unknown): string | null {
-  if (!isIsoCalendarDate(from)) {
-    return `invalid from (YYYY-MM-DD calendar date required) — got ${JSON.stringify(from) ?? "nothing"}`;
-  }
-  if (!isIsoCalendarDate(to)) {
-    return `invalid to (YYYY-MM-DD calendar date required) — got ${JSON.stringify(to) ?? "nothing"}`;
-  }
-  if (to < from) {
-    return `from "${from}" is after to "${to}" — the period must start on or before it ends`;
-  }
-  return null;
 }
 
 export async function payrollRemittanceSummary(
@@ -437,16 +388,27 @@ export async function payrollRemittanceSummary(
   // missing pair) and states the org's base with `translated` set. A
   // single-currency scope keeps the historical queries below verbatim, so
   // its figures stay byte-identical.
-  const presentation = (await executor.execute<{ base_currency: string }>(sql`
-    select base_currency from orgs where id = ${orgId}`, "objects"))[0]?.base_currency ?? null;
+  const presentation =
+    (
+      await executor.execute<{ base_currency: string }>(
+        sql`
+    select base_currency from orgs where id = ${orgId}`,
+        "objects",
+      )
+    )[0]?.base_currency ?? null;
   const scopeCurrencies = presentation
-    ? (await executor.execute<{ currency: string }>(sql`
+    ? (
+        await executor.execute<{ currency: string }>(
+          sql`
       select distinct s.currency_code as currency
         from pay_stubs s
         join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
         join documents source_document on source_document.id = r.document_id and source_document.org_id = r.org_id
        where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
-         ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}`, "objects")).map((row) => row.currency)
+         ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}`,
+          "objects",
+        )
+      ).map((row) => row.currency)
     : [];
   let rows: RemittanceRow[];
   let contextByAccount: Map<string, { gross: string; employees: number }>;
@@ -456,24 +418,39 @@ export async function payrollRemittanceSummary(
   let presentationCurrency: string | undefined;
   if (scopeCurrencies.length > 1 && presentation) {
     ({ rows, contextByAccount } = await mixedCurrencyAccruals(
-      orgId, range, allowedSubsidiaryIds, executor, presentation, sharedResolution.isInternalAccrual,
+      orgId,
+      range,
+      allowedSubsidiaryIds,
+      executor,
+      presentation,
+      sharedResolution.isInternalAccrual,
     ));
     presentationCurrency = presentation;
   } else {
-  // Grouped by the STUB's snapshot province as well as by component: a
-  // component whose pack declares a region-scoped remittance vendor (QPP and
-  // QPIP go to Revenu Québec for QC employment, to the CRA nowhere) splits by
-  // destination, and rows that resolve to the same vendor are re-merged per
-  // component in groupRemittanceRows.
-  const queried = (await executor.execute<{
-      component_id: string; code: string; name: string;
+    // Grouped by the STUB's snapshot province as well as by component: a
+    // component whose pack declares a region-scoped remittance vendor (QPP and
+    // QPIP go to Revenu Québec for QC employment, to the CRA nowhere) splits by
+    // destination, and rows that resolve to the same vendor are re-merged per
+    // component in groupRemittanceRows.
+    const queried = await executor.execute<{
+      component_id: string;
+      code: string;
+      name: string;
       kind: "deduction" | "employer_contribution" | "credit";
-      system_key: string | null; country: string | null; remittance_party_id: string | null;
-      component_party_id: string | null; covered_party_id: string | null;
-      liability_account_id: string | null; filing_account_id: string | null;
-      filingUnknown: boolean; province: string; subsidiary_id: string | null;
-      currency: string; amount: string;
-    }>(sql`
+      system_key: string | null;
+      country: string | null;
+      remittance_party_id: string | null;
+      component_party_id: string | null;
+      covered_party_id: string | null;
+      liability_account_id: string | null;
+      filing_account_id: string | null;
+      filingUnknown: boolean;
+      province: string;
+      subsidiary_id: string | null;
+      currency: string;
+      amount: string;
+    }>(
+      sql`
     select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.country, l.remittance_party_id,
            -- The component's CURRENT vendor: unremitted liabilities committed
            -- while the component named no vendor (null snapshot above) resolve
@@ -521,24 +498,34 @@ export async function payrollRemittanceSummary(
               l.liability_account_id, ${filingAccount}, s.province,
               source_document.subsidiary_id, s.currency_code
      order by c.sequence, c.code
-  `, "objects"));
-  // Internal accruals never remit, and each pack declares its own — so the
-  // exclusion is per component country, not per system key. Rows with no
-  // system key (user components) always stay in the summary.
-  // A `credit` row is money the employer reclaims from the destination, so it
-  // nets AGAINST the group's withholdings (F24 compensation): the summary's
-  // group total is what the employer actually sends, never the gross levy.
-  // The slice amount rides along natively: this path is single-currency, so
-  // it agrees with the consolidated amount by construction.
-  rows = queried
-    .filter((row) => !sharedResolution.isInternalAccrual({ systemKey: row.system_key, country: row.country }))
-    .map((row) => ({
-      ...row,
-      sliceAmount: row.kind === "credit" ? neg(row.amount) : row.amount,
-    }))
-    .map((row) => (row.kind === "credit" ? { ...row, amount: neg(row.amount) } : row));
+  `,
+      "objects",
+    );
+    // Internal accruals never remit, and each pack declares its own — so the
+    // exclusion is per component country, not per system key. Rows with no
+    // system key (user components) always stay in the summary.
+    // A `credit` row is money the employer reclaims from the destination, so it
+    // nets AGAINST the group's withholdings (F24 compensation): the summary's
+    // group total is what the employer actually sends, never the gross levy.
+    // The slice amount rides along natively: this path is single-currency, so
+    // it agrees with the consolidated amount by construction.
+    rows = queried
+      .filter(
+        (row) =>
+          !sharedResolution.isInternalAccrual({ systemKey: row.system_key, country: row.country }),
+      )
+      .map((row) => ({
+        ...row,
+        sliceAmount: row.kind === "credit" ? neg(row.amount) : row.amount,
+      }))
+      .map((row) => (row.kind === "credit" ? { ...row, amount: neg(row.amount) } : row));
 
-  const context = (await executor.execute<{ filing_account_id: string | null; gross: string; employees: number }>(sql`
+    const context = await executor.execute<{
+      filing_account_id: string | null;
+      gross: string;
+      employees: number;
+    }>(
+      sql`
     select ${filingAccount} as filing_account_id,
            coalesce(sum(s.gross), 0) as gross,
            count(distinct s.employee_party_id)::int as employees
@@ -548,14 +535,16 @@ export async function payrollRemittanceSummary(
      where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      group by ${filingAccount}
-  `, "objects"));
-  contextByAccount = new Map(
-    context.map((row) => [row.filing_account_id ?? "", row]),
-  );
+  `,
+      "objects",
+    );
+    contextByAccount = new Map(context.map((row) => [row.filing_account_id ?? "", row]));
   }
   if (rows.length === 0) return [];
-  if (rows.some(row => !row.liability_account_id && cmp(row.amount, "0") !== 0)) {
-    throw new PayrollError("Committed payroll has an unknown historical liability account. Reconcile its original payroll posting evidence before generating remittance reports or bills.");
+  if (rows.some((row) => !row.liability_account_id && cmp(row.amount, "0") !== 0)) {
+    throw new PayrollError(
+      "Committed payroll has an unknown historical liability account. Reconcile its original payroll posting evidence before generating remittance reports or bills.",
+    );
   }
   const filingAccounts = await filingAccountsByIdIn(orgId, executor);
 
@@ -579,25 +568,40 @@ export async function payrollRemittanceSummary(
     country: row.country,
     province: row.province,
   });
-  const resolveDestination = (row: (typeof rows)[number]): { partyId: string | null; vendorKey: string | null } =>
+  const resolveDestination = (
+    row: (typeof rows)[number],
+  ): { partyId: string | null; vendorKey: string | null } =>
     resolver.resolveDestination(toResolvable(row));
-  const resolveParty = (row: (typeof rows)[number]): string | null => resolveDestination(row).partyId;
-  const resolveVendorKey = (row: (typeof rows)[number]): string | null => resolveDestination(row).vendorKey;
-  const resolveAccount = (row: (typeof rows)[number]): string | null =>
-    row.liability_account_id;
+  const resolveParty = (row: (typeof rows)[number]): string | null =>
+    resolveDestination(row).partyId;
+  const resolveVendorKey = (row: (typeof rows)[number]): string | null =>
+    resolveDestination(row).vendorKey;
+  const resolveAccount = (row: (typeof rows)[number]): string | null => row.liability_account_id;
 
   // Slice labelling: every accrual names its entity, and the entity names
   // its currency. Read from the same snapshot as the rows above.
-  const subsidiaryRows = (await executor.execute<{ id: string; name: string | null; currency: string | null }>(sql`
+  const subsidiaryRows = await executor.execute<{
+    id: string;
+    name: string | null;
+    currency: string | null;
+  }>(
+    sql`
     select id::text as id, name, base_currency as currency from subsidiaries
      where org_id = ${orgId} and is_active
-  `, "objects"));
+  `,
+    "objects",
+  );
   const subsidiaries = new Map(
     subsidiaryRows.map((s) => [s.id, { name: s.name, currency: s.currency }]),
   );
 
   const groups = groupRemittanceRows({
-    rows, contextByAccount, filingAccounts, resolveParty, resolveAccount, resolveVendorKey,
+    rows,
+    contextByAccount,
+    filingAccounts,
+    resolveParty,
+    resolveAccount,
+    resolveVendorKey,
     subsidiaries,
     presentationCurrency,
   });
@@ -629,27 +633,46 @@ export async function payrollRemittanceSummary(
   // overlapping period. Loading the complete marker window lets callers show
   // that an accrual is already covered even when their requested range is
   // wider or narrower than the bill that consumed it.
-  const partyIds = [...new Set([...groups.values()].map((g) => g.partyId).filter(Boolean))] as string[];
-  const accountIds = [...new Set(
-    [...groups.values()].flatMap((g) => g.components.map((c) => c.liabilityAccountId)).filter(Boolean),
-  )] as string[];
+  const partyIds = [
+    ...new Set([...groups.values()].map((g) => g.partyId).filter(Boolean)),
+  ] as string[];
+  const accountIds = [
+    ...new Set(
+      [...groups.values()]
+        .flatMap((g) => g.components.map((c) => c.liabilityAccountId))
+        .filter(Boolean),
+    ),
+  ] as string[];
   // Run these reads sequentially when `executor` is a transaction. Drizzle's
   // transaction client is one PostgreSQL connection; Promise.all would queue
   // concurrent queries on that connection and can produce an overlapping
   // client.query warning while providing no snapshot benefit.
   const parties = partyIds.length
-    ? await executor.execute<{ id: string; display_name: string }>(sql`select id, display_name from parties
-                      where org_id = ${orgId} and id = any(${`{${partyIds.join(",")}}`}::uuid[])`, "objects")
+    ? await executor.execute<{ id: string; display_name: string }>(
+        sql`select id, display_name from parties
+                      where org_id = ${orgId} and id = any(${`{${partyIds.join(",")}}`}::uuid[])`,
+        "objects",
+      )
     : [];
   const accounts = accountIds.length
-    ? await executor.execute<{ id: string; number: string | null; name: string }>(sql`select id, number, name from accounts
-                      where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])`, "objects")
+    ? await executor.execute<{ id: string; number: string | null; name: string }>(
+        sql`select id, number, name from accounts
+                      where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])`,
+        "objects",
+      )
     : [];
   const bills = await executor.execute<{
-      id: string; document_number: string; status: string; total: string;
-      party_id: string | null; filing_account_id: string | null;
-      subsidiary_id: string | null; from: string | null; to: string | null;
-    }>(sql`
+    id: string;
+    document_number: string;
+    status: string;
+    total: string;
+    party_id: string | null;
+    filing_account_id: string | null;
+    subsidiary_id: string | null;
+    from: string | null;
+    to: string | null;
+  }>(
+    sql`
     select id, document_number, status, total, party_id,
            custom->'payrollRemittance'->>'filingAccountId' as filing_account_id,
            custom->'payrollRemittance'->>'subsidiaryId' as subsidiary_id,
@@ -660,41 +683,61 @@ export async function payrollRemittanceSummary(
        and custom->'payrollRemittance'->>'from' <= ${range.to}
        and custom->'payrollRemittance'->>'to' >= ${range.from}
        and status <> 'voided'
-       ${payrollSubsidiaryScopeFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}`, "objects");
+       ${payrollSubsidiaryScopeFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}`,
+    "objects",
+  );
   const partyName = new Map(parties.map((p) => [p.id, p.display_name]));
-  const accountLabel = new Map(accounts.map((a) => [a.id, a.number ? `${a.number} · ${a.name}` : a.name]));
+  const accountLabel = new Map(
+    accounts.map((a) => [a.id, a.number ? `${a.number} · ${a.name}` : a.name]),
+  );
   for (const group of groups.values()) {
     group.partyName = group.partyId ? (partyName.get(group.partyId) ?? null) : null;
     for (const component of group.components) {
       component.accountLabel = component.liabilityAccountId
-        ? (accountLabel.get(component.liabilityAccountId) ?? null) : null;
+        ? (accountLabel.get(component.liabilityAccountId) ?? null)
+        : null;
     }
     for (const slice of group.slices) {
       for (const component of slice.components) {
         component.accountLabel = component.liabilityAccountId
-          ? (accountLabel.get(component.liabilityAccountId) ?? null) : null;
+          ? (accountLabel.get(component.liabilityAccountId) ?? null)
+          : null;
       }
     }
-    const matched = bills.filter((b) =>
-      b.from != null && b.to != null
-      && b.from <= range.to && b.to >= range.from
-      &&
-      groupKey(b.party_id ?? null, b.filing_account_id) ===
-        groupKey(group.partyId, group.filingAccount.id));
-    group.existingBills = matched
-      .map((b) => ({ documentId: b.id, documentNumber: b.document_number, status: b.status, total: b.total }));
+    const matched = bills.filter(
+      (b) =>
+        b.from != null &&
+        b.to != null &&
+        b.from <= range.to &&
+        b.to >= range.from &&
+        groupKey(b.party_id ?? null, b.filing_account_id) ===
+          groupKey(group.partyId, group.filingAccount.id),
+    );
+    group.existingBills = matched.map((b) => ({
+      documentId: b.id,
+      documentNumber: b.document_number,
+      status: b.status,
+      total: b.total,
+    }));
     // Each slice sees its own bills plus legacy bills with no entity marker
     // (which covered the consolidated group and may cover this slice — the
     // bill creator fails closed on them rather than guessing).
     for (const slice of group.slices) {
       slice.existingBills = matched
         .filter((b) => b.subsidiary_id == null || b.subsidiary_id === slice.subsidiaryId)
-        .map((b) => ({ documentId: b.id, documentNumber: b.document_number, status: b.status, total: b.total }));
+        .map((b) => ({
+          documentId: b.id,
+          documentNumber: b.document_number,
+          status: b.status,
+          total: b.total,
+        }));
     }
   }
-  return [...groups.values()].sort((a, b) =>
-    (a.partyName ?? "￿").localeCompare(b.partyName ?? "￿")
-    || (a.filingAccount.accountNumber ?? "").localeCompare(b.filingAccount.accountNumber ?? ""));
+  return [...groups.values()].sort(
+    (a, b) =>
+      (a.partyName ?? "￿").localeCompare(b.partyName ?? "￿") ||
+      (a.filingAccount.accountNumber ?? "").localeCompare(b.filingAccount.accountNumber ?? ""),
+  );
 }
 
 /**
@@ -734,9 +777,12 @@ export async function scheduledFrequencyAdvisory(
   } catch {
     return null;
   }
-  const group = groups.find((candidate) => candidate.partyId === vendorPartyId
-    && (schedule.frequencySource !== "filing_account"
-      || candidate.filingAccount.id === filingAccount?.id));
+  const group = groups.find(
+    (candidate) =>
+      candidate.partyId === vendorPartyId &&
+      (schedule.frequencySource !== "filing_account" ||
+        candidate.filingAccount.id === filingAccount?.id),
+  );
   if (!group || cmp(group.total, "0") === 0) return null;
   const average = div(group.total, "12");
   let frequency: string;
@@ -747,7 +793,9 @@ export async function scheduledFrequencyAdvisory(
   }
   const measured = remittanceBandForAverage(schedule, average);
   if (!measured || measured.frequency === frequency) return null;
-  return `${schedule.authority} remittances averaged $${formatMoney(average, 2)}/month across ${year} — ` +
+  return (
+    `${schedule.authority} remittances averaged $${formatMoney(average, 2)}/month across ${year} — ` +
     `the ${measured.label.toLowerCase()} band — but bills date at the ${frequency.replaceAll("_", " ")} ` +
-    `frequency; confirm it against your ${schedule.authority} notice in Setup → Payroll`;
+    `frequency; confirm it against your ${schedule.authority} notice in Setup → Payroll`
+  );
 }

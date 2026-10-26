@@ -5,14 +5,30 @@ import { PayrollError } from "./error.ts";
 import { payrollPaymentMethodSettings } from "./payment-method.ts";
 import { payrollSettings } from "./run-setup.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
-import { packRemittanceSchedules, packRemittanceVendorSettingsKeys, packSlotState, remittanceFrequencyBand } from "./packs.ts";
+import {
+  packRemittanceSchedules,
+  packRemittanceVendorSettingsKeys,
+  packSlotState,
+  remittanceFrequencyBand,
+} from "./packs.ts";
 import { scheduledFrequencyAdvisory, scheduledRemittanceFrequency } from "./remittance.ts";
 import { payrollBankProfiles } from "./bank-file.ts";
 import { findDocumentNumberSeriesCollisions } from "../records/numbering.ts";
 import type { PayrollFilingAccount } from "./filing.ts";
-import { PayrollJurisdictionError, payrollTaxYearForDate, payrollTaxYearOperatorMessage } from "./packs.ts";
+import {
+  PayrollJurisdictionError,
+  payrollTaxYearForDate,
+  payrollTaxYearOperatorMessage,
+} from "./packs.ts";
 import { laborCostingSettings } from "../projects/labor-costing.ts";
-import { CONTROL_ACCOUNTS_HREF, regionsByCountry, installedPayrollCountries, currentTaxYear, activePayrollPopulation, type ReadinessSeverity } from "./readiness-context.ts";
+import {
+  CONTROL_ACCOUNTS_HREF,
+  regionsByCountry,
+  installedPayrollCountries,
+  currentTaxYear,
+  activePayrollPopulation,
+  type ReadinessSeverity,
+} from "./readiness-context.ts";
 import { unconfiguredRatesForRun } from "./readiness-statutory-gaps.ts";
 
 /** Organization-level payroll setup state: the configuration checks a pay run depends on. */
@@ -70,7 +86,9 @@ export function setupTaxYearCheck(
   try {
     const { taxYear, problem } = payrollTaxYearForDate(country, today);
     return {
-      severity: "blocker", code: "setup.taxYear", ok: problem === null,
+      severity: "blocker",
+      code: "setup.taxYear",
+      ok: problem === null,
       detail: problem ? problem.operatorMessage : `${country} · ${taxYear}`,
       href: `${setupHref}?tab=packs`,
     };
@@ -83,7 +101,9 @@ export function setupTaxYearCheck(
     // case converts. A crash becomes a refusal; nothing payable widens.
     if (!(error instanceof PayrollJurisdictionError)) throw error;
     return {
-      severity: "blocker", code: "setup.taxYear", ok: false,
+      severity: "blocker",
+      code: "setup.taxYear",
+      ok: false,
       detail: payrollTaxYearOperatorMessage(country, country, null, "undeclared", []),
       href: `${setupHref}?tab=packs`,
     };
@@ -97,43 +117,62 @@ export async function payrollSetupState(
   const setupHref = "/admin/setup/payroll";
   const checks: PayrollSetupCheck[] = [];
 
-  const blobRes = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
+  const blobRes = await db.execute<{ p: Record<string, unknown> | null }>(
+    sql`
     select settings->'payroll' as p from orgs where id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const blob = blobRes[0]?.p ?? {};
   const installed = await installedPayrollCountries(orgId, blob, allowedSubsidiaryIds);
   const settings = await payrollSettings(orgId, allowedSubsidiaryIds);
 
   checks.push({
-    severity: "blocker", code: "setup.pack",
-    ok: installed.length > 0, href: `${setupHref}?tab=packs`,
+    severity: "blocker",
+    code: "setup.pack",
+    ok: installed.length > 0,
+    href: `${setupHref}?tab=packs`,
   });
   checks.push({
-    severity: "blocker", code: "setup.wageExpense",
-    ok: Boolean(settings.wageExpenseAccountId), href: `${setupHref}?tab=accounts`,
+    severity: "blocker",
+    code: "setup.wageExpense",
+    ok: Boolean(settings.wageExpenseAccountId),
+    href: `${setupHref}?tab=accounts`,
   });
   checks.push({
-    severity: "blocker", code: "setup.netPay",
-    ok: Boolean(settings.netPayAccountId), href: `${setupHref}?tab=accounts`,
+    severity: "blocker",
+    code: "setup.netPay",
+    ok: Boolean(settings.netPayAccountId),
+    href: `${setupHref}?tab=accounts`,
   });
   if (settings.wagesTo === "labor_clearing") {
     // The labour clearing control account the commit debits and labour
     // costing credits — one mapping, read the way both of them read it.
-    const clearing = (await db.execute<{ id: string | null }>(sql`
+    const clearing = await db.execute<{ id: string | null }>(
+      sql`
       select settings->'controlAccounts'->>'laborClearing' as id from orgs where id = ${orgId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     checks.push({
-      severity: "blocker", code: "setup.laborClearing",
-      ok: Boolean(clearing[0]?.id), href: CONTROL_ACCOUNTS_HREF,
+      severity: "blocker",
+      code: "setup.laborClearing",
+      ok: Boolean(clearing[0]?.id),
+      href: CONTROL_ACCOUNTS_HREF,
     });
   }
   // Labour costing posts standard labour to WIP against Labor clearing at
   // approval; only wages posted to Labor clearing wash it. Expensing wages
   // while costing posts leaves WIP and clearing grossed up every run.
-  if (settings.wagesTo !== "labor_clearing" && (await laborCostingSettings(orgId)).mode === "post") {
+  if (
+    settings.wagesTo !== "labor_clearing" &&
+    (await laborCostingSettings(orgId)).mode === "post"
+  ) {
     checks.push({
-      severity: "warning", code: "setup.laborWashMode",
-      ok: false, href: `${setupHref}?tab=accounts`,
+      severity: "warning",
+      code: "setup.laborWashMode",
+      ok: false,
+      href: `${setupHref}?tab=accounts`,
     });
   }
 
@@ -153,7 +192,9 @@ export async function payrollSetupState(
     }
     for (const slot of missing) {
       checks.push({
-        severity: "blocker", code: "setup.slot", ok: false,
+        severity: "blocker",
+        code: "setup.slot",
+        ok: false,
         detail: `${pack.country} · ${slot.key}`,
         href: `${setupHref}?tab=${pack.country.toLowerCase()}`,
       });
@@ -165,14 +206,19 @@ export async function payrollSetupState(
   // this surface, so the existence read carries the same scope predicate: a
   // caller restricted to A with the only active schedule under B has no
   // usable schedule, and a null subsidiary belongs to no restricted caller.
-  const schedules = (await db.execute<{ ok: boolean }>(sql`
+  const schedules = await db.execute<{ ok: boolean }>(
+    sql`
     select exists (
       select 1 from pay_schedules where org_id = ${orgId} and is_active
         ${payrollSubsidiaryScopeFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}) as ok
-  `, "objects"));
+  `,
+    "objects",
+  );
   checks.push({
-    severity: "blocker", code: "setup.schedule",
-    ok: Boolean(schedules[0]?.ok), href: `${setupHref}?tab=schedules`,
+    severity: "blocker",
+    code: "setup.schedule",
+    ok: Boolean(schedules[0]?.ok),
+    href: `${setupHref}?tab=schedules`,
   });
 
   // Statutory remittance vendors — exactly the settings keys the installed
@@ -183,9 +229,11 @@ export async function payrollSetupState(
     for (const key of packRemittanceVendorSettingsKeys(country)) {
       const value = (blob as Record<string, unknown>)[key];
       checks.push({
-        severity: "warning", code: "setup.remittanceVendor",
+        severity: "warning",
+        code: "setup.remittanceVendor",
         ok: typeof value === "string" && value.length > 0,
-        detail: `${country} · ${key}`, href: `${setupHref}?tab=accounts`,
+        detail: `${country} · ${key}`,
+        href: `${setupHref}?tab=accounts`,
       });
     }
   }
@@ -203,9 +251,12 @@ export async function payrollSetupState(
     if (!collision.kinds.includes("pay_run")) continue;
     const other = collision.kinds.find((kind) => kind !== "pay_run")!;
     checks.push({
-      severity: "warning", code: "setup.documentNumberSeries", ok: false,
-      detail: `"pay_run" and "${other}" both issue ${collision.prefix || "(no prefix)"}${"0".repeat(Math.min(collision.padding, 12))}… — `
-        + "change one kind's prefix in Setup → Number sequences for future documents; posted history keeps its numbers",
+      severity: "warning",
+      code: "setup.documentNumberSeries",
+      ok: false,
+      detail:
+        `"pay_run" and "${other}" both issue ${collision.prefix || "(no prefix)"}${"0".repeat(Math.min(collision.padding, 12))}… — ` +
+        "change one kind's prefix in Setup → Number sequences for future documents; posted history keeps its numbers",
       href: "/admin/setup/number-sequences",
     });
   }
@@ -234,16 +285,21 @@ export async function payrollSetupState(
           accountNumber: string;
           name: string;
           remitterType: PayrollFilingAccount["remitterType"];
-        }>(sql`
+        }>(
+          sql`
           select id::text as id, account_number as "accountNumber", name,
                  remitter_type as "remitterType"
             from payroll_filing_accounts
            where org_id = ${orgId} and country = ${country} and is_active
            order by is_default desc, account_number
-        `, "objects");
+        `,
+          "objects",
+        );
         if (accounts.length === 0) {
           checks.push({
-            severity: "warning", code: "setup.remittanceFrequency", ok: false,
+            severity: "warning",
+            code: "setup.remittanceFrequency",
+            ok: false,
             detail: `${schedule.authority} remittance needs a filing account with its remitter type set in Payroll Setup → Filing accounts`,
             href: `${setupHref}?tab=accounts`,
           });
@@ -251,24 +307,36 @@ export async function payrollSetupState(
         }
         for (const account of accounts) {
           const filingAccount = {
-            id: account.id, accountNumber: account.accountNumber,
-            name: account.name, remitterType: account.remitterType,
+            id: account.id,
+            accountNumber: account.accountNumber,
+            name: account.name,
+            remitterType: account.remitterType,
           };
           const { frequency } = scheduledRemittanceFrequency(
-            schedule, blob as Record<string, unknown>, filingAccount,
+            schedule,
+            blob as Record<string, unknown>,
+            filingAccount,
           );
           checks.push({
-            severity: "warning", code: "setup.remittanceFrequency", ok: true,
+            severity: "warning",
+            code: "setup.remittanceFrequency",
+            ok: true,
             detail: `${schedule.authority} · ${account.accountNumber} · ${frequency.replaceAll("_", " ")}`,
           });
           const advisory = await scheduledFrequencyAdvisory(
-            orgId, schedule, vendor, blob as Record<string, unknown>,
-            Number(today.slice(0, 4)) - 1, filingAccount,
+            orgId,
+            schedule,
+            vendor,
+            blob as Record<string, unknown>,
+            Number(today.slice(0, 4)) - 1,
+            filingAccount,
           );
           if (advisory) {
             checks.push({
-              severity: "warning", code: "setup.remittanceFrequency",
-              ok: false, detail: `${account.accountNumber}: ${advisory}`,
+              severity: "warning",
+              code: "setup.remittanceFrequency",
+              ok: false,
+              detail: `${account.accountNumber}: ${advisory}`,
               href: `${setupHref}?tab=accounts`,
             });
           }
@@ -277,39 +345,52 @@ export async function payrollSetupState(
       }
       const frequencyKey = schedule.frequencySettingsKey;
       if (!frequencyKey) {
-        throw new PayrollError(`${schedule.authority} organization-frequency schedule has no settings key`);
+        throw new PayrollError(
+          `${schedule.authority} organization-frequency schedule has no settings key`,
+        );
       }
       const stored = (blob as Record<string, unknown>)[frequencyKey];
       const declared = typeof stored === "string" && remittanceFrequencyBand(schedule, stored);
       if (!declared) {
         checks.push({
-          severity: "warning", code: "setup.remittanceFrequency",
+          severity: "warning",
+          code: "setup.remittanceFrequency",
           ok: false,
-          detail: typeof stored === "string" && stored
-            ? `${schedule.authority} frequency "${stored}" is not declared — ` +
-              `the ${schedule.defaultFrequency.replaceAll("_", " ")} frequency applies until it is set in Setup → Payroll`
-            : `${schedule.authority} remittance frequency is not set — ` +
-              `the ${schedule.defaultFrequency.replaceAll("_", " ")} frequency applies; ` +
-              `confirm it against your ${schedule.authority} notice in Setup → Payroll`,
+          detail:
+            typeof stored === "string" && stored
+              ? `${schedule.authority} frequency "${stored}" is not declared — ` +
+                `the ${schedule.defaultFrequency.replaceAll("_", " ")} frequency applies until it is set in Setup → Payroll`
+              : `${schedule.authority} remittance frequency is not set — ` +
+                `the ${schedule.defaultFrequency.replaceAll("_", " ")} frequency applies; ` +
+                `confirm it against your ${schedule.authority} notice in Setup → Payroll`,
           href: `${setupHref}?tab=accounts`,
         });
       } else {
         const { frequency } = scheduledRemittanceFrequency(
-          schedule, blob as Record<string, unknown>,
+          schedule,
+          blob as Record<string, unknown>,
         );
         checks.push({
-          severity: "warning", code: "setup.remittanceFrequency",
-          ok: true, detail: `${schedule.authority} · ${frequency}`,
+          severity: "warning",
+          code: "setup.remittanceFrequency",
+          ok: true,
+          detail: `${schedule.authority} · ${frequency}`,
         });
       }
       const advisory = await scheduledFrequencyAdvisory(
-        orgId, schedule, vendor, blob as Record<string, unknown>,
+        orgId,
+        schedule,
+        vendor,
+        blob as Record<string, unknown>,
         Number(today.slice(0, 4)) - 1,
       );
       if (advisory) {
         checks.push({
-          severity: "warning", code: "setup.remittanceFrequency",
-          ok: false, detail: advisory, href: `${setupHref}?tab=accounts`,
+          severity: "warning",
+          code: "setup.remittanceFrequency",
+          ok: false,
+          detail: advisory,
+          href: `${setupHref}?tab=accounts`,
         });
       }
     }
@@ -323,18 +404,28 @@ export async function payrollSetupState(
   // above — one population for the whole setup state.)
   for (const country of installed) {
     const missing = await unconfiguredRatesForRun(
-      orgId, country, await currentTaxYear(orgId, country), setupPopulation, today,
+      orgId,
+      country,
+      await currentTaxYear(orgId, country),
+      setupPopulation,
+      today,
     );
     if (missing.length === 0) {
       checks.push({
-        severity: "warning", code: "setup.statutoryRate", ok: true, detail: country,
+        severity: "warning",
+        code: "setup.statutoryRate",
+        ok: true,
+        detail: country,
       });
       continue;
     }
     for (const item of missing) {
       checks.push({
-        severity: "warning", code: "setup.statutoryRate", ok: false,
-        detail: item.message, href: `${setupHref}?tab=rates`,
+        severity: "warning",
+        code: "setup.statutoryRate",
+        ok: false,
+        detail: item.message,
+        href: `${setupHref}?tab=rates`,
       });
     }
   }
@@ -347,7 +438,8 @@ export async function payrollSetupState(
     payrollBankProfiles(orgId),
   ]);
   checks.push({
-    severity: "warning", code: "setup.paymentRail",
+    severity: "warning",
+    code: "setup.paymentRail",
     ok: paymentMethods.eftFallbackToCheque || bankProfiles.some((profile) => profile.configured),
     href: `${setupHref}?tab=payday`,
   });

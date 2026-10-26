@@ -3,7 +3,11 @@ import { db } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { PayrollError } from "./error.ts";
 import { add, cmp, neg, sum } from "../money/money.ts";
-import { PAYROLL_PAYMENT_METHODS, stubPaymentMethods, type PayrollPaymentMethod } from "./payment-method.ts";
+import {
+  PAYROLL_PAYMENT_METHODS,
+  stubPaymentMethods,
+  type PayrollPaymentMethod,
+} from "./payment-method.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { runContext } from "./readiness-context.ts";
 
@@ -65,7 +69,8 @@ export async function payRunFunding(
   const today = await businessToday(orgId);
   const payDate = run.pay_date;
 
-  const totals = (await db.execute<{ net: string; gross: string; employer: string }>(sql`
+  const totals = await db.execute<{ net: string; gross: string; employer: string }>(
+    sql`
     select coalesce(sum(s.net_pay), 0)::text as net,
            coalesce(sum(s.gross), 0)::text as gross,
            coalesce(sum(s.employer_cost), 0)::text as employer
@@ -73,7 +78,9 @@ export async function payRunFunding(
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const t = totals[0] ?? { net: "0", gross: "0", employer: "0" };
   // Liabilities = what the run owes but does not pay today: employee
   // withholdings (gross − net) plus the employer-side accruals.
@@ -82,13 +89,16 @@ export async function payRunFunding(
   // Both rails are always reported, including at zero: the operator has to be
   // able to see that nobody is on cheques, not infer it from an absent row.
   const stubs = await stubPaymentMethods(orgId, documentId);
-  const visibleStubIds = await db.execute<{ id: string }>(sql`
+  const visibleStubIds = await db.execute<{ id: string }>(
+    sql`
     select s.id
       from pay_stubs s
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `, "objects");
+  `,
+    "objects",
+  );
   const visibleStubIdSet = new Set(visibleStubIds.map((row) => row.id));
   const scopedStubs = stubs.filter((stub) => visibleStubIdSet.has(stub.stubId));
   const rails: FundingRail[] = PAYROLL_PAYMENT_METHODS.map((method) => {
@@ -105,7 +115,8 @@ export async function payRunFunding(
   // explain the gap — because the explaining entries were the reversed ones
   // this query excluded. A secondary book's adjustments must not inflate
   // funding either, like bank reconciliation itself.
-  const accounts = (await db.execute<{ id: string; label: string; balance: string }>(sql`
+  const accounts = await db.execute<{ id: string; label: string; balance: string }>(
+    sql`
     select a.id, coalesce(a.number || ' · ', '') || a.name as label,
            coalesce(bal.amount, 0)::text as balance
       from accounts a
@@ -119,16 +130,20 @@ export async function payRunFunding(
                               order by b.created_at limit 1)
          where jl.org_id = a.org_id and jl.account_id = a.id) bal on true
      where a.org_id = ${orgId} and a.is_active and not a.is_summary and a.type = 'asset_bank'
-       ${allowedSubsidiaryIds == null
-         ? sql``
-         : allowedSubsidiaryIds.size > 0
-           ? sql`and (a.subsidiary_id is null or a.subsidiary_id in (${sql.join(
-               [...allowedSubsidiaryIds].map((id) => sql`${id}`),
-               sql`, `,
-             )}))`
-           : sql`and false`}
+       ${
+         allowedSubsidiaryIds == null
+           ? sql``
+           : allowedSubsidiaryIds.size > 0
+             ? sql`and (a.subsidiary_id is null or a.subsidiary_id in (${sql.join(
+                 [...allowedSubsidiaryIds].map((id) => sql`${id}`),
+                 sql`, `,
+               )}))`
+             : sql`and false`
+       }
      order by a.number nulls last, a.name
-  `, "objects"));
+  `,
+    "objects",
+  );
 
   return {
     netPay: t.net,

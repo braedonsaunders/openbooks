@@ -3,7 +3,15 @@ import { db } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { cmp, neg, sum } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
-import { rawPayrollSettings, makeRemittanceDestinationResolver, payrollRemittanceSummary, type RemittanceExecutor, type RemittanceResolvableRow } from "./remittance-summary.ts";
+import {
+  rawPayrollSettings,
+  payrollRemittanceSummary,
+  type RemittanceExecutor,
+} from "./remittance-summary.ts";
+import {
+  makeRemittanceDestinationResolver,
+  type RemittanceResolvableRow,
+} from "./remittance-destination.ts";
 
 /** Remittance bill integrity: a generated bill must still match its live payroll source. */
 
@@ -31,15 +39,17 @@ export async function assertPayrollRemittanceBillCurrent(
   documentId: string,
   executor: RemittanceExecutor = db,
 ): Promise<void> {
-  const marker = (await executor.execute<{
-    party_id: string | null;
-    total: string;
-    document_number: string | null;
-    from: string | null;
-    to: string | null;
-    filing_account_id: string | null;
-    subsidiary_id: string | null;
-  }>(sql`
+  const marker = (
+    await executor.execute<{
+      party_id: string | null;
+      total: string;
+      document_number: string | null;
+      from: string | null;
+      to: string | null;
+      filing_account_id: string | null;
+      subsidiary_id: string | null;
+    }>(
+      sql`
     select party_id::text as party_id, total::text as total,
            document_number,
            custom->'payrollRemittance'->>'from' as from,
@@ -49,16 +59,19 @@ export async function assertPayrollRemittanceBillCurrent(
       from documents
      where org_id = ${orgId} and id = ${documentId}
        and kind = 'vendor_bill' and custom ? 'payrollRemittance'
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!marker) return;
   if (
-    !marker.party_id
-    || !marker.from
-    || !marker.to
-    || !/^\d{4}-\d{2}-\d{2}$/.test(marker.from)
-    || !/^\d{4}-\d{2}-\d{2}$/.test(marker.to)
-    || marker.from > marker.to
-    || (marker.filing_account_id !== null && !isUuid(marker.filing_account_id))
+    !marker.party_id ||
+    !marker.from ||
+    !marker.to ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(marker.from) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(marker.to) ||
+    marker.from > marker.to ||
+    (marker.filing_account_id !== null && !isUuid(marker.filing_account_id))
   ) {
     throw new PayrollError("payroll remittance bill has an invalid source marker");
   }
@@ -77,17 +90,19 @@ export async function assertPayrollRemittanceBillCurrent(
      for update of r, d
   `);
 
-  const locked = (await executor.execute<{
-    party_id: string | null;
-    total: string;
-    document_number: string | null;
-    currency: string;
-    doc_subsidiary_id: string | null;
-    from: string | null;
-    to: string | null;
-    filing_account_id: string | null;
-    subsidiary_id: string | null;
-  }>(sql`
+  const locked = (
+    await executor.execute<{
+      party_id: string | null;
+      total: string;
+      document_number: string | null;
+      currency: string;
+      doc_subsidiary_id: string | null;
+      from: string | null;
+      to: string | null;
+      filing_account_id: string | null;
+      subsidiary_id: string | null;
+    }>(
+      sql`
     select party_id::text as party_id, total::text as total,
            document_number, currency,
            subsidiary_id::text as doc_subsidiary_id,
@@ -99,7 +114,10 @@ export async function assertPayrollRemittanceBillCurrent(
      where org_id = ${orgId} and id = ${documentId}
        and kind = 'vendor_bill' and custom ? 'payrollRemittance'
      for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!locked || !locked.party_id || !locked.from || !locked.to) {
     throw new PayrollError("payroll remittance bill has an invalid source marker");
   }
@@ -111,35 +129,43 @@ export async function assertPayrollRemittanceBillCurrent(
   // here even when the coverage itself is untouched.
   if (locked.doc_subsidiary_id !== locked.subsidiary_id) {
     throw new PayrollError(
-      `payroll remittance bill ${billName} no longer matches its committed source: `
-      + `its subsidiary changed; ${staleRemedy}`,
+      `payroll remittance bill ${billName} no longer matches its committed source: ` +
+        `its subsidiary changed; ${staleRemedy}`,
     );
   }
   if (locked.subsidiary_id !== null) {
-    const entity = (await executor.execute<{ base_currency: string }>(sql`
+    const entity = (
+      await executor.execute<{ base_currency: string }>(
+        sql`
       select base_currency from subsidiaries
        where org_id = ${orgId} and id = ${locked.subsidiary_id}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!entity) {
       throw new PayrollError(
-        `payroll remittance bill ${billName} no longer matches its committed source: `
-        + `its source entity is gone; ${staleRemedy}`,
+        `payroll remittance bill ${billName} no longer matches its committed source: ` +
+          `its source entity is gone; ${staleRemedy}`,
       );
     }
     if (locked.currency !== entity.base_currency) {
       throw new PayrollError(
-        `payroll remittance bill ${billName} no longer matches its committed source: `
-        + `its currency ${locked.currency} differs from its entity's ${entity.base_currency}; ${staleRemedy}`,
+        `payroll remittance bill ${billName} no longer matches its committed source: ` +
+          `its currency ${locked.currency} differs from its entity's ${entity.base_currency}; ${staleRemedy}`,
       );
     }
   }
 
-  const coverage = await executor.execute<{ stub_line_id: string; amount: string }>(sql`
+  const coverage = await executor.execute<{ stub_line_id: string; amount: string }>(
+    sql`
     select cov.stub_line_id::text as stub_line_id, cov.amount::text as amount
       from payroll_remittance_coverage cov
      where cov.org_id = ${orgId} and cov.bill_document_id = ${documentId}
      order by cov.stub_line_id
-  `, "objects");
+  `,
+    "objects",
+  );
 
   if (coverage.length === 0) {
     // A bill with no coverage rows predates the coverage write: reconcile
@@ -150,9 +176,11 @@ export async function assertPayrollRemittanceBillCurrent(
       undefined,
       executor,
     );
-    const group = groups.find((candidate) =>
-      candidate.partyId === locked.party_id
-      && candidate.filingAccount.id === (locked.filing_account_id ?? null));
+    const group = groups.find(
+      (candidate) =>
+        candidate.partyId === locked.party_id &&
+        candidate.filingAccount.id === (locked.filing_account_id ?? null),
+    );
     if (!group) {
       throw new PayrollError(
         "payroll remittance source is no longer committed; regenerate this bill",
@@ -162,7 +190,7 @@ export async function assertPayrollRemittanceBillCurrent(
     // a legacy bill with no entity marker reconciles against the consolidated
     // group exactly as before.
     const expected = locked.subsidiary_id
-      ? group.slices.find((slice) => slice.subsidiaryId === locked.subsidiary_id)?.total ?? null
+      ? (group.slices.find((slice) => slice.subsidiaryId === locked.subsidiary_id)?.total ?? null)
       : group.total;
     if (expected == null || cmp(expected, locked.total) !== 0) {
       throw new PayrollError(
@@ -178,12 +206,18 @@ export async function assertPayrollRemittanceBillCurrent(
   // elsewhere; both refuse naming the bill and the remedy. Scope growth
   // (accruals committed after the bill) is invisible here by construction:
   // uncovered lines are simply not the bill's.
-  const live = (await executor.execute<{
-    line_id: string; kind: "deduction" | "employer_contribution" | "credit";
-    amount: string; snapshot_party_id: string | null;
-    component_party_id: string | null; covered_party_id: string | null;
-    system_key: string | null; country: string | null; province: string;
-  }>(sql`
+  const live = await executor.execute<{
+    line_id: string;
+    kind: "deduction" | "employer_contribution" | "credit";
+    amount: string;
+    snapshot_party_id: string | null;
+    component_party_id: string | null;
+    covered_party_id: string | null;
+    system_key: string | null;
+    country: string | null;
+    province: string;
+  }>(
+    sql`
     select l.id::text as line_id, l.kind, l.amount::text as amount,
            l.remittance_party_id::text as snapshot_party_id,
            c.remittance_party_id::text as component_party_id,
@@ -202,16 +236,21 @@ export async function assertPayrollRemittanceBillCurrent(
       join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.org_id = ${orgId}
        and l.id = any(${`{${coverage.map((row) => row.stub_line_id).join(",")}}`}::uuid[])
-  `, "objects"));
+  `,
+    "objects",
+  );
   const liveById = new Map(
-    live.map((row) => [row.line_id, {
-      snapshotPartyId: row.snapshot_party_id,
-      componentPartyId: row.component_party_id,
-      coveredPartyId: row.covered_party_id,
-      systemKey: row.system_key,
-      country: row.country,
-      province: row.province,
-    } satisfies RemittanceResolvableRow]),
+    live.map((row) => [
+      row.line_id,
+      {
+        snapshotPartyId: row.snapshot_party_id,
+        componentPartyId: row.component_party_id,
+        coveredPartyId: row.covered_party_id,
+        systemKey: row.system_key,
+        country: row.country,
+        province: row.province,
+      } satisfies RemittanceResolvableRow,
+    ]),
   );
   const liveAmounts = new Map(live.map((row) => [row.line_id, row.amount]));
   const liveKinds = new Map(live.map((row) => [row.line_id, row.kind]));
@@ -221,9 +260,9 @@ export async function assertPayrollRemittanceBillCurrent(
   for (const covered of coverage) {
     const row = liveById.get(covered.stub_line_id);
     if (
-      !row
-      || resolution.isInternalAccrual(row)
-      || resolution.resolveDestination(row).partyId !== locked.party_id
+      !row ||
+      resolution.isInternalAccrual(row) ||
+      resolution.resolveDestination(row).partyId !== locked.party_id
     ) {
       gone += 1;
     } else if (cmp(liveAmounts.get(covered.stub_line_id)!, covered.amount) !== 0) {
@@ -234,22 +273,34 @@ export async function assertPayrollRemittanceBillCurrent(
     `${count} of its ${coverage.length} covered ${count === 1 ? "line has" : "lines have"} ${what}`;
   if (gone > 0 || changed > 0) {
     const causes = [
-      gone > 0 ? stale(gone, "left committed payroll (voided, amended away, or re-pointed to another vendor)") : null,
+      gone > 0
+        ? stale(
+            gone,
+            "left committed payroll (voided, amended away, or re-pointed to another vendor)",
+          )
+        : null,
       changed > 0 ? stale(changed, "a different amount than the bill consumed") : null,
     ].filter((cause): cause is string => cause !== null);
     throw new PayrollError(
-      `payroll remittance bill ${billName} no longer matches its committed source: `
-      + `${causes.join("; ")}; void this draft and raise a fresh bill`,
+      `payroll remittance bill ${billName} no longer matches its committed source: ` +
+        `${causes.join("; ")}; void this draft and raise a fresh bill`,
     );
   }
   // Receipt: the bill's own total must equal its verified coverage, so a
   // hand-edited bill total cannot post against a stale-but-live source.
-  if (cmp(sum(coverage.map((row) =>
-    liveKinds.get(row.stub_line_id) === "credit" ? neg(row.amount) : row.amount,
-  )), locked.total) !== 0) {
+  if (
+    cmp(
+      sum(
+        coverage.map((row) =>
+          liveKinds.get(row.stub_line_id) === "credit" ? neg(row.amount) : row.amount,
+        ),
+      ),
+      locked.total,
+    ) !== 0
+  ) {
     throw new PayrollError(
-      `payroll remittance bill ${billName} no longer matches its committed source: `
-      + `its total differs from the lines it consumed; void this draft and raise a fresh bill`,
+      `payroll remittance bill ${billName} no longer matches its committed source: ` +
+        `its total differs from the lines it consumed; void this draft and raise a fresh bill`,
     );
   }
 }
@@ -274,14 +325,21 @@ export async function assertRemittanceBillEdit(
   preparedLines: unknown[] | null,
   patch?: { currency?: string | undefined; subsidiaryId?: string | null | undefined },
 ): Promise<boolean> {
-  const bill = (await tx.execute<{
-    document_number: string | null; currency: string; subsidiary_id: string | null;
-  }>(sql`
+  const bill = (
+    await tx.execute<{
+      document_number: string | null;
+      currency: string;
+      subsidiary_id: string | null;
+    }>(
+      sql`
     select document_number, currency, subsidiary_id::text as subsidiary_id
       from documents
      where org_id = ${orgId} and id = ${id}
        and kind = 'vendor_bill' and custom ? 'payrollRemittance'
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!bill) return false;
   const name = `remittance bill ${bill.document_number ?? "unnumbered"}`;
   const remedy = "void or delete this draft and raise a fresh bill from Payroll → Remittances";
@@ -300,7 +358,6 @@ export async function assertRemittanceBillEdit(
   }
   if (preparedLines === null) return true;
   throw new RemittanceSourceIntegrityError(
-    `${name} is generated from its payroll source — `
-    + `its lines cannot be edited; ${remedy}`,
+    `${name} is generated from its payroll source — ` + `its lines cannot be edited; ${remedy}`,
   );
 }
