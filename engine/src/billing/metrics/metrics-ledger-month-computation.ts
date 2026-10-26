@@ -51,9 +51,20 @@ async function computeSubscriptionBase(args: {
   source: Awaited<ReturnType<typeof readSources>>["subscriptions"][number];
   history: Awaited<ReturnType<typeof readSources>>["history"];
   fx: FxEvidenceCache;
+  previousMonthStart: string;
   previousMonthEnd: string;
 }): Promise<SubscriptionMetricBase> {
-  const { executor, orgId, month, sources, source, history, fx, previousMonthEnd } = args;
+  const {
+    executor,
+    orgId,
+    month,
+    sources,
+    source,
+    history,
+    fx,
+    previousMonthStart,
+    previousMonthEnd,
+  } = args;
   const baseCurrency = sources.baseCurrency;
   const monthEnd = sources.monthEnd;
   if (source.customer_subsidiary_id !== null && source.trusted_subsidiary_id === null) {
@@ -93,7 +104,6 @@ async function computeSubscriptionBase(args: {
     context: `subscription ${source.id}`,
   });
   const mrrEnd = monthStatus === "active" ? mulDecimal(normalized(), mrrEvidence.rate!) : "0.0000";
-  const history = historyBySubscription.get(source.id) ?? [];
   // Every consumed history row validates first — including rows consulted
   // only for sign below, which never bypass the rollout refusal.
   for (const row of history) {
@@ -425,6 +435,7 @@ export async function computeRows(
       source,
       history: historyBySubscription.get(source.id) ?? [],
       fx,
+      previousMonthStart,
       previousMonthEnd,
     });
     const financial = await computeSubscriptionFinancials({

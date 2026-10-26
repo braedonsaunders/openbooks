@@ -562,8 +562,7 @@ export async function runSync(
       })
       .where(sql`${schema.syncRuns.id} = ${run!.id} and ${schema.syncRuns.orgId} = ${org.id}`);
     throw e;
-  }
-  {
+  } finally {
     if (source.dispose) {
       try {
         await source.dispose();
