@@ -1,4 +1,4 @@
-import { LOCAL_NAVIGATION, applyLocalNavigationPreferences, type LocalNavigationPreferences } from '@openbooks/engine/navigation'
+import { LOCAL_NAVIGATION, applyLocalNavigationPreferences, type LocalNavigationPreferences } from '@openbooks/engine/navigation/local-navigation'
 import type { ModuleHomeTab } from './tab-types'
 
 /** Preserve page-owned counts and access choices while applying shared preferences. */

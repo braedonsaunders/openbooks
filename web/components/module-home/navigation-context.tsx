@@ -2,7 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
-import type { LocalNavigationPreferences } from '@openbooks/engine/navigation'
+import type { LocalNavigationPreferences } from '@openbooks/engine/navigation/local-navigation'
 import type { ViewTabGroup, ViewTabOwnership } from './view-tab-match'
 
 export const ViewTabsContext = createContext<{ groups: readonly ViewTabGroup[]; managed: boolean; preferences?: LocalNavigationPreferences; ownership?: readonly ViewTabOwnership[] } | null>(null)

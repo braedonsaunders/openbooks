@@ -446,6 +446,7 @@
     "./multibook": "./src/multibook/public.ts",
     "./navigation": "./src/navigation/public.ts",
     "./navigation/approvals-home": "./src/navigation/approvals-home.ts",
+    "./navigation/local-navigation": "./src/navigation/local-navigation.ts",
     "./navigation/nav-registry": "./src/navigation/nav-registry.ts",
     "./nonprofit/encumbrances": "./src/nonprofit/encumbrances.ts",
     "./nonprofit/errors": "./src/nonprofit/errors.ts",

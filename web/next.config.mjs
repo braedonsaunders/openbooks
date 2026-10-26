@@ -67,6 +67,17 @@ const config = {
     staticGenerationMaxConcurrency: 1,
     webpackBuildWorker: true,
     webpackMemoryOptimizations: true,
+    // Workspace packages expose pure `export *` barrels. Without this, one
+    // named import from a barrel puts every module it re-exports into the
+    // importing bundle: a single date-preset helper shipped the whole report
+    // engine to every page. Only barrels that contain nothing but re-exports
+    // belong here.
+    optimizePackageImports: [
+      "@openbooks/analytics",
+      "@openbooks/customization",
+      "@openbooks/reports",
+      "@openbooks/ui",
+    ],
   },
   webpack(webpackConfig, { dev }) {
     if (!dev) {

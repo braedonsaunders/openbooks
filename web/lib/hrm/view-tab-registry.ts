@@ -1,4 +1,4 @@
-import { HRM_LOCAL_NAVIGATION, type LocalNavigationTab } from '@openbooks/engine/navigation'
+import { HRM_LOCAL_NAVIGATION, type LocalNavigationTab } from '@openbooks/engine/navigation/local-navigation'
 import type { ViewTabGroup } from '../../components/module-home/view-tab-match'
 
 /** Compatibility exports for HR loaders; native destinations live in the application catalog. */
