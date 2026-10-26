@@ -261,6 +261,12 @@ export const documents = pgTable(
       .on(t.orgId, t.externalSource, t.externalRef)
       .where(sql`${t.externalRef} is not null`),
     index("documents_org_kind_status").on(t.orgId, t.kind, t.status),
+    /**
+     * Document lists page through one kind newest first and module homes read
+     * a kind's recent date window; both read this order directly instead of
+     * sorting every document of the kind.
+     */
+    index("documents_org_kind_document_date").on(t.orgId, t.kind, t.documentDate.desc().nullsLast(), t.id.desc()),
     index("documents_party").on(t.partyId),
     /**
      * "Does this party have any payable document?" — the cash cockpit asks it

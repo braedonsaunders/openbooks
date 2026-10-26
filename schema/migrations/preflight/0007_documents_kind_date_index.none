@@ -1,0 +1,1 @@
+Adds one index to documents, built concurrently; it changes no rows and has no data precondition.
