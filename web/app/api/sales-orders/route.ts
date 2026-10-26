@@ -1,9 +1,9 @@
-import { defineRoute } from '@/lib/api/route'
-import 'next/server';
-import { orderCreateBody, parseJsonBody } from '@/lib/api/json'
-import { createOrder } from '../_order/create'
+import { defineRoute } from "@/lib/api/route";
+import "next/server";
+import { orderCreateBody } from "@/lib/api/json";
+import { createOrder } from "../_order/create";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Unsaved-create collection: the sales-order drawer opens and cancels with
@@ -12,12 +12,15 @@ export const runtime = 'nodejs'
  * boundary before the kernel sees it.
  */
 export const POST = defineRoute({
-  permission: 'ar.create',
-  feature: 'orders',
-  handler: async ({ request: req, authz: gate }) => {
-    const parsed = await parseJsonBody(req, orderCreateBody)
-    if (!parsed.ok) return parsed.response
-    return createOrder({ kind: 'sales_order', createPerm: 'ar.create', numberPrefix: 'SO-' }, gate, req, parsed.data)
-
+  permission: "ar.create",
+  feature: "orders",
+  body: orderCreateBody,
+  handler: async ({ request: req, authz: gate, body }) => {
+    return createOrder(
+      { kind: "sales_order", createPerm: "ar.create", numberPrefix: "SO-" },
+      gate,
+      req,
+      body,
+    );
   },
-})
+});
