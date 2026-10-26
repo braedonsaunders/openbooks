@@ -229,7 +229,7 @@ export const HRM_THROUGH_PICK_GUARD_DIGESTS = [
   },
   {
     name: "openbooks_open_item_balances_line",
-    sha256: "03f5718d95734f9532794ade4fd222c391115e77557f8f045a5d137a8dd0a67d",
+    sha256: "9275e3f1d14f3156bb2257964c6c08bc50728c91abae32d953f985b721d87830",
   },
   {
     name: "openbooks_party_payment_stats",

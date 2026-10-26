@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { add, cmp, mulDecimal, neg, normalizeMoney, sum } from "../money/money.ts";
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "../records/open-item-kinds.ts";
-import { datedAppliedAmountSql } from "../records/balance-due.ts";
-import { apOpenAccountScope, asOfPostedEntryLateral } from "../records/open-item-scopes.ts";
+import { apOpenAccountScope, openItemsAsOfSql } from "../records/open-item-scopes.ts";
+import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { excludePeriodEndJournals, statementMonthActivity } from "../records/period-end-origins.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween, parseIsoDate } from "../platform/business-date.ts";
 import {
@@ -179,10 +179,9 @@ type OpenItem = {
  * applications dated on/before it. Bills/invoices carry the side's normal
  * sign; credit memos carry the opposite sign on the same control account, so
  * an unapplied credit nets against the party's bills (or scheduled outflow
- * overstates cash need). Each leg nets through its own carrying column via
- * the shared balance-due helper, never a bare sum for both legs. The
- * document's posting is reconstructed as of the date from journal history
- * (shared helper) — a later correction or void never rewrites it. Translated
+ * overstates cash need). The shared open-item reader nets each application
+ * leg through its own carrying column and follows the document's posting as
+ * of the date, so a later correction or void never rewrites it. Translated
  * at the closing spot — raw functionals would mix subsidiary currencies.
  */
 async function sideOpenItems(
@@ -191,41 +190,27 @@ async function sideOpenItems(
   side: "ar" | "ap",
   asOf: string,
 ): Promise<OpenItem[]> {
-  const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
-  const lineFilter =
-    side === "ap"
-      ? sql`((d.kind = ${creditKind} and jl.amount > 0) or (d.kind <> ${creditKind} and jl.amount < 0))`
-      : sql`((d.kind = ${creditKind} and jl.amount < 0) or (d.kind <> ${creditKind} and jl.amount > 0))`;
-  // Population is the shared open-item kinds const — the transcription must
-  // name the same doorway as the cockpit, never re-list it (P5.1).
-  const kinds = side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS;
-  const kindFilter = sql`d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})`;
-  // The projection and nonzero filter share one dated application sum per
-  // control line rather than evaluating the same correlated aggregate twice.
+  // The same open-item read, scope and book as the cockpit, never a second
+  // population.
+  const items = openItemsAsOfSql({
+    orgId,
+    asOf,
+    bookId: await activePostingPrimaryBookId(orgId),
+    accounts: side === "ap" ? apOpenAccountScope(sql`a`, orgId) : sql`a.type = 'asset_receivable'`,
+    kinds: side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS,
+    creditKind: side === "ap" ? "vendor_credit" : "customer_credit",
+    normalSign: side === "ap" ? "credit" : "debit",
+  });
   const res = await db.execute<Record<string, unknown>>(sql`
-    with oi as materialized (
-      select jl.id, jl.party_id, je.posting_date as tran_date, jl.due_date,
-             d.kind as doc_kind, d.document_number as doc_number,
-             sub.base_currency as func,
-             (case when d.kind = ${creditKind} then -1 else 1 end) * (abs(jl.amount) - ${datedAppliedAmountSql(orgId, sql`jl.id`, asOf)}) as remaining
-        from documents d
-        ${asOfPostedEntryLateral(orgId, asOf)}
-        join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and ${lineFilter}
-        join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
-         and ${side === "ap" ? apOpenAccountScope(sql`a`, orgId) : sql`a.type = 'asset_receivable'`}
-        left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
-       where d.org_id = ${orgId}
-         and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
-         and ${kindFilter}
-    )
+    with oi as materialized (${items})
     select oi.id::text as id, oi.party_id::text as party_id,
            coalesce(p.display_name, 'Unspecified') as party_name,
            oi.tran_date::text as tran_date, oi.due_date::text as due_date,
            oi.doc_kind as doc_kind, oi.doc_number as doc_number,
-           oi.remaining::text as remaining, oi.func as func
+           oi.remaining::text as remaining, sub.base_currency as func
       from oi
       left join parties p on p.id = oi.party_id and p.org_id = ${orgId}
-     where oi.remaining <> 0
+      left join subsidiaries sub on sub.id = oi.subsidiary_id and sub.org_id = ${orgId}
   `, "objects");
   const rows = res.map((row) => ({
     id: String(row.id),

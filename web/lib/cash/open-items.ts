@@ -8,17 +8,10 @@ import { mulDecimal } from '@openbooks/engine/money'
 // bare @openbooks/* to the main checkout, so a new engine module would not
 // resolve until merge; a relative import binds this checkout everywhere.
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from '@openbooks/engine/records/open-item-kinds'
-import { datedAppliedAmountSql } from '@openbooks/engine/records/balance-due'
-import { asOfPostedEntryLateral } from '@openbooks/engine/records/open-item-scopes'
+import { openItemsAsOfSql } from '@openbooks/engine/records/open-item-scopes'
 import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
 import { apOpenAccountScope, arOpenAccountScope } from '../ledger-scope'
 import { normalizeMoneyValue, parseISO, type OpenItem, type Side } from './core'
-
-function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
-  return subIds !== undefined
-    ? sql` and ${col} = any(${`{${subIds.join(',')}}`}::uuid[])`
-    : sql``
-}
 
 /**
  * Operational AR/AP items follow the document's posting AS OF the forecast
@@ -52,105 +45,37 @@ export async function openItemSourceQuery(
   subIds?: string[],
   partyId?: string,
 ) {
-  const creditKind = side === 'ap' ? 'vendor_credit' : 'customer_credit'
   // Bills/invoices carry the side's normal sign; credit memos carry the
   // opposite sign on the same control account. Both are open items: an
   // unapplied credit is a negative payable/receivable that nets against the
   // party's bills (the aging report already nets it — the forecast must too,
-  // or scheduled outflow overstates cash need).
-  const lineFilter = side === 'ap'
-    ? sql`((d.kind = ${creditKind} and jl.amount > 0) or (d.kind <> ${creditKind} and jl.amount < 0))`
-    : sql`((d.kind = ${creditKind} and jl.amount < 0) or (d.kind <> ${creditKind} and jl.amount > 0))`
-  // Population is the shared open-item kinds const — never a local list (P5.1:
-  // a kind added here and not in the aging (or vice versa) silently un-ties
-  // same-labeled AP/AR figures; the source-text guard forbids literals).
-  const kinds = side === 'ap' ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS
-  const kindFilter = sql`d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})`
-  const bookId = await activePostingPrimaryBookId(orgId)
-  // `remaining` reconstructs what was still collectible AS OF the forecast
-  // date — gross line minus applications dated on/before it (an application
-  // unapplied only after the date still counted then). Netting live
-  // applications instead would let a later settlement rewrite a past forecast,
-  // and gating on the live cached open_balance would hide documents settled
-  // after the date that were open on it. The applied sum reads each leg
-  // through its own carrying column (shared engine helper — never a bare
-  // sum for both legs, which mixes denominations on cross-currency credits).
-  // Both the result and its nonzero filter consume remaining. Materializing
-  // the scoped rows evaluates the dated application sum once per control line.
+  // or scheduled outflow overstates cash need). Population is the shared
+  // open-item kinds const, never a local list, so the aging and these
+  // figures tie.
   //
-  // Only documents that can still be open on the date are reconstructed. A
-  // line's as-of remaining differs from its live remaining (maintained in
-  // open_item_balances) only through applications applied after the date or
-  // unapplied at any time, so the candidates are the lines open today plus
-  // the lines those applications touch, and the documents that own them.
-  // Every other document's chosen entry nets to zero on the date.
+  // `remaining` is what was still collectible AS OF the forecast date: a
+  // later settlement must not rewrite a past forecast, and a document
+  // settled after the date was open on it. The open-item index answers that
+  // from the lines open today plus the lines later applications touched.
+  const items = openItemsAsOfSql({
+    orgId,
+    asOf,
+    bookId: await activePostingPrimaryBookId(orgId),
+    accounts: side === 'ap' ? apOpenAccountScope(sql`a`, orgId) : arOpenAccountScope(sql`a`),
+    kinds: side === 'ap' ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS,
+    creditKind: side === 'ap' ? 'vendor_credit' : 'customer_credit',
+    normalSign: side === 'ap' ? 'credit' : 'debit',
+    subsidiaryIds: subIds,
+    partyId,
+  })
   return sql`
-    with candidate_lines as materialized (
-      select b.line_id from open_item_balances b where b.org_id = ${orgId} and b.is_open
-      union
-      select x.from_line_id from applications x
-       where x.org_id = ${orgId} and x.unapplied_at is null and x.applied_on > ${asOf}
-      union
-      select x.to_line_id from applications x
-       where x.org_id = ${orgId} and x.unapplied_at is null and x.applied_on > ${asOf}
-      union
-      select x.from_line_id from applications x
-       where x.org_id = ${orgId} and x.unapplied_at is not null and x.unapplied_at::date > ${asOf}::date
-      union
-      select x.to_line_id from applications x
-       where x.org_id = ${orgId} and x.unapplied_at is not null and x.unapplied_at::date > ${asOf}::date
-    ),
-    -- A candidate line counts only on an entry that can be in effect on the
-    -- date — the same eligibility the as-of entry choice applies — so lines
-    -- left open on entries reversed by then never widen the reconstruction.
-    candidate_entries as materialized (
-      select distinct cl.entry_id as id
-        from candidate_lines c
-        join journal_lines cl on cl.id = c.line_id and cl.org_id = ${orgId}
-        join journal_entries je on je.id = cl.entry_id and je.org_id = cl.org_id
-       where je.status in ('posted', 'reversed')
-         and je.reverses_entry_id is null
-         and je.posting_date <= ${asOf}
-         and not exists (
-           select 1 from journal_entries r
-            where r.org_id = ${orgId} and r.reverses_entry_id = je.id and r.posting_date <= ${asOf}
-         )
-    ),
-    candidate_docs as materialized (
-      select je.source_document_id as id
-        from candidate_entries ce
-        join journal_entries je on je.id = ce.id and je.org_id = ${orgId}
-       where je.source_document_id is not null
-      union
-      select d.id
-        from candidate_entries ce
-        join documents d on d.posted_entry_id = ce.id and d.org_id = ${orgId}
-    ),
-    oi as materialized (
-      select jl.id, jl.party_id, jl.entry_id, je.posting_date as tran_date, jl.due_date,
-             d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
-             sub.base_currency as func,
-             (case when d.kind = ${creditKind} then -1 else 1 end) * (abs(jl.amount) - ${datedAppliedAmountSql(orgId, sql`jl.id`, asOf)}) as remaining
-        from documents d
-        ${asOfPostedEntryLateral(orgId, asOf)}
-        join journal_entries book_entry on book_entry.id = je.id and book_entry.org_id = je.org_id and book_entry.book_id = ${bookId}
-        join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and ${lineFilter}
-        join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
-         and ${side === 'ap' ? apOpenAccountScope(sql`a`, orgId) : arOpenAccountScope(sql`a`)}
-        left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
-       where d.org_id = ${orgId}
-         and d.id in (select id from candidate_docs)
-         and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
-         and ${kindFilter}
-         ${subScope(sql`jl.subsidiary_id`, subIds)}
-         ${partyId === undefined ? sql`` : sql`and jl.party_id = ${partyId}`}
-    )
+    with oi as materialized (${items})
     select oi.id, oi.entry_id, oi.doc_id, oi.doc_kind, oi.doc_number, oi.party_id,
            coalesce(p.display_name, 'Unspecified') as party_name,
-           oi.tran_date, oi.due_date, oi.remaining, oi.func
+           oi.tran_date, oi.due_date, oi.remaining, sub.base_currency as func
       from oi
       left join parties p on p.id = oi.party_id and p.org_id = ${orgId}
-     where oi.remaining <> 0
+      left join subsidiaries sub on sub.id = oi.subsidiary_id and sub.org_id = ${orgId}
   `
 }
 

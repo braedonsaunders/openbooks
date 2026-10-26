@@ -1,4 +1,4 @@
--- Track each open-item line's live remaining amount, so as-of AR/AP reads start from the lines that can still be open.
+-- Index open-item lines with their live remaining amount, so as-of AR/AP reads start from the lines that can still be open.
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
@@ -8,18 +8,26 @@ SET search_path = public, pg_catalog;
 
 -- One row per open-item journal line: the line's magnitude less every active
 -- application leg on it, in the line's functional currency (the same legs
--- the as-of open-item reader nets). Derived and never authored: triggers on
--- journal_lines and applications maintain it, and
--- openbooks_open_item_balances_rebuild() reproduces it from source rows.
+-- the as-of open-item reader nets), alongside the line attributes that
+-- select and age it. Derived and never authored: triggers on journal_lines
+-- and applications maintain it, and openbooks_open_item_balances_rebuild()
+-- reproduces it from source rows.
 CREATE TABLE public.open_item_balances (
     org_id uuid NOT NULL,
     line_id uuid NOT NULL,
+    entry_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    subsidiary_id uuid NOT NULL,
+    party_id uuid,
+    posting_date date,
+    due_date date,
+    amount numeric(19,4) NOT NULL,
     remaining numeric(19,4) NOT NULL,
     is_open boolean GENERATED ALWAYS AS (remaining <> 0) STORED NOT NULL,
     CONSTRAINT open_item_balances_pkey PRIMARY KEY (org_id, line_id)
 );
 
-COMMENT ON TABLE public.open_item_balances IS 'Derived live remaining amount per open-item journal line (magnitude less active application legs); maintained by openbooks_open_item_balances_* triggers.';
+COMMENT ON TABLE public.open_item_balances IS 'Derived open-item index: each open-item journal line''s attributes and live remaining amount (magnitude less active application legs); maintained by openbooks_open_item_balances_* triggers.';
 
 ALTER TABLE public.open_item_balances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.open_item_balances FORCE ROW LEVEL SECURITY;
@@ -32,9 +40,10 @@ CREATE TRIGGER tenant_retirement_fence
   BEFORE INSERT OR UPDATE OR DELETE ON public.open_item_balances
   FOR EACH ROW EXECUTE FUNCTION tenant_retirement.openbooks_tenant_retirement_fence();
 
--- The open set: the reader scans only lines with something left to settle.
--- A boolean predicate keeps the index usable under row-level security.
-CREATE INDEX open_item_balances_open ON public.open_item_balances USING btree (org_id, line_id) WHERE is_open;
+-- The open set by control account and posting date: a reader scans only the
+-- lines with something left to settle on the accounts it ages. A boolean
+-- predicate keeps the index usable under row-level security.
+CREATE INDEX open_item_balances_open ON public.open_item_balances USING btree (org_id, account_id, posting_date) WHERE is_open;
 
 -- Applications dated after an as-of date, or unapplied after it, are the only
 -- reason a line's as-of remaining can differ from its live remaining.
@@ -106,17 +115,22 @@ CREATE FUNCTION public.openbooks_open_item_balances_line_insert() RETURNS trigge
     SET search_path TO 'pg_catalog', 'public'
     AS $$
 begin
-  insert into public.open_item_balances (org_id, line_id, remaining)
-  select l.org_id, l.id, abs(l.amount) - public.openbooks_open_item_balances_applied(l.org_id, l.id)
+  insert into public.open_item_balances
+    (org_id, line_id, entry_id, account_id, subsidiary_id, party_id, posting_date, due_date, amount, remaining)
+  select l.org_id, l.id, l.entry_id, l.account_id, l.subsidiary_id, l.party_id, l.posting_date, l.due_date, l.amount,
+         abs(l.amount) - public.openbooks_open_item_balances_applied(l.org_id, l.id)
     from inserted_journal_lines l
    where l.is_open_item
-  on conflict (org_id, line_id) do update set remaining = excluded.remaining;
+  on conflict (org_id, line_id) do update set
+    entry_id = excluded.entry_id, account_id = excluded.account_id, subsidiary_id = excluded.subsidiary_id,
+    party_id = excluded.party_id, posting_date = excluded.posting_date, due_date = excluded.due_date,
+    amount = excluded.amount, remaining = excluded.remaining;
   return null;
 end
 $$;
 
--- Lines change only while draft, so an update recomputes the line's row from
--- scratch; a delete removes it.
+-- A changed line recomputes its row from scratch (posting carries the entry's
+-- date onto its lines); a delete removes it.
 CREATE FUNCTION public.openbooks_open_item_balances_line() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'public'
@@ -133,16 +147,21 @@ begin
     delete from public.open_item_balances where org_id = old.org_id and line_id = old.id;
   end if;
   if tg_op = 'UPDATE' and new.is_open_item then
-    insert into public.open_item_balances (org_id, line_id, remaining)
-    values (new.org_id, new.id, abs(new.amount) - public.openbooks_open_item_balances_applied(new.org_id, new.id))
-    on conflict (org_id, line_id) do update set remaining = excluded.remaining;
+    insert into public.open_item_balances
+      (org_id, line_id, entry_id, account_id, subsidiary_id, party_id, posting_date, due_date, amount, remaining)
+    values (new.org_id, new.id, new.entry_id, new.account_id, new.subsidiary_id, new.party_id, new.posting_date,
+            new.due_date, new.amount, abs(new.amount) - public.openbooks_open_item_balances_applied(new.org_id, new.id))
+    on conflict (org_id, line_id) do update set
+      entry_id = excluded.entry_id, account_id = excluded.account_id, subsidiary_id = excluded.subsidiary_id,
+      party_id = excluded.party_id, posting_date = excluded.posting_date, due_date = excluded.due_date,
+      amount = excluded.amount, remaining = excluded.remaining;
   end if;
   return null;
 end
 $$;
 
 -- Repair and audit: recompute one organization's rows from source, and list
--- every line whose stored remaining differs from its source (empty when sound).
+-- every line whose stored row differs from its source (empty when sound).
 CREATE FUNCTION public.openbooks_open_item_balances_rebuild(p_org uuid) RETURNS bigint
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'public'
@@ -151,8 +170,10 @@ declare
   v_rows bigint;
 begin
   delete from public.open_item_balances where org_id = p_org;
-  insert into public.open_item_balances (org_id, line_id, remaining)
-  select l.org_id, l.id, abs(l.amount) - coalesce(src.amount, 0) - coalesce(tgt.amount, 0)
+  insert into public.open_item_balances
+    (org_id, line_id, entry_id, account_id, subsidiary_id, party_id, posting_date, due_date, amount, remaining)
+  select l.org_id, l.id, l.entry_id, l.account_id, l.subsidiary_id, l.party_id, l.posting_date, l.due_date, l.amount,
+         abs(l.amount) - coalesce(src.amount, 0) - coalesce(tgt.amount, 0)
     from public.journal_lines l
     left join (
       select x.from_line_id as line_id, sum(x.source_amount) as amount
@@ -172,20 +193,29 @@ begin
 end
 $$;
 
-CREATE FUNCTION public.openbooks_open_item_balances_verify(p_org uuid) RETURNS TABLE(line_id uuid, stored numeric, actual numeric)
+CREATE FUNCTION public.openbooks_open_item_balances_verify(p_org uuid) RETURNS TABLE(line_id uuid, stored jsonb, actual jsonb)
     LANGUAGE sql STABLE
     SET search_path TO 'pg_catalog', 'public'
     AS $$
   with actual as (
-    select l.id as line_id, abs(l.amount) - public.openbooks_open_item_balances_applied(p_org, l.id) as remaining
+    select l.id as line_id,
+           jsonb_build_object('entry_id', l.entry_id, 'account_id', l.account_id, 'subsidiary_id', l.subsidiary_id,
+             'party_id', l.party_id, 'posting_date', l.posting_date, 'due_date', l.due_date, 'amount', l.amount,
+             'remaining', abs(l.amount) - public.openbooks_open_item_balances_applied(p_org, l.id)) as row
       from public.journal_lines l
      where l.org_id = p_org and l.is_open_item
+  ), stored as (
+    select s.line_id,
+           jsonb_build_object('entry_id', s.entry_id, 'account_id', s.account_id, 'subsidiary_id', s.subsidiary_id,
+             'party_id', s.party_id, 'posting_date', s.posting_date, 'due_date', s.due_date, 'amount', s.amount,
+             'remaining', s.remaining) as row
+      from public.open_item_balances s
+     where s.org_id = p_org
   )
-  select coalesce(a.line_id, b.line_id), b.remaining, a.remaining
+  select coalesce(a.line_id, b.line_id), b.row, a.row
     from actual a
-    full join (select s.line_id, s.remaining from public.open_item_balances s where s.org_id = p_org) b
-      on b.line_id = a.line_id
-   where a.remaining is distinct from b.remaining
+    full join stored b on b.line_id = a.line_id
+   where a.row is distinct from b.row
 $$;
 
 -- Triggers before the backfill: creating them takes the write locks on
@@ -198,11 +228,13 @@ CREATE TRIGGER open_item_balances_line_insert
   AFTER INSERT ON public.journal_lines REFERENCING NEW TABLE AS inserted_journal_lines
   FOR EACH STATEMENT EXECUTE FUNCTION public.openbooks_open_item_balances_line_insert();
 CREATE TRIGGER open_item_balances_line
-  AFTER DELETE OR UPDATE OF is_open_item, amount, id, org_id ON public.journal_lines
+  AFTER DELETE OR UPDATE OF is_open_item, amount, id, org_id, entry_id, account_id, subsidiary_id, party_id, posting_date, due_date ON public.journal_lines
   FOR EACH ROW EXECUTE FUNCTION public.openbooks_open_item_balances_line();
 
-INSERT INTO public.open_item_balances (org_id, line_id, remaining)
-SELECT l.org_id, l.id, abs(l.amount) - coalesce(src.amount, 0) - coalesce(tgt.amount, 0)
+INSERT INTO public.open_item_balances
+  (org_id, line_id, entry_id, account_id, subsidiary_id, party_id, posting_date, due_date, amount, remaining)
+SELECT l.org_id, l.id, l.entry_id, l.account_id, l.subsidiary_id, l.party_id, l.posting_date, l.due_date, l.amount,
+       abs(l.amount) - coalesce(src.amount, 0) - coalesce(tgt.amount, 0)
   FROM public.journal_lines l
   LEFT JOIN (
     SELECT x.org_id, x.from_line_id AS line_id, sum(x.source_amount) AS amount
