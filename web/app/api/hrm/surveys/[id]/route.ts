@@ -1,13 +1,8 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import {
-  closeSurvey,
-  getSurvey,
-  openSurvey,
-} from "@openbooks/engine/hrm/surveys/surveys";
-import { deliverSurveyInvitations } from "../../../../../lib/hrm/document-delivery";
+import { closeSurvey, getSurvey, openSurvey } from "@openbooks/engine/hrm/surveys/surveys";
+import { deliverSurveyInvitations } from "@/lib/hrm/document-delivery";
 import { hrmDocumentsErrorResponse } from "../../documents/_lib";
 import { resolveAppBaseUrl } from "../route";
 import { openSurveyBody } from "../bodies";
@@ -38,7 +33,11 @@ export const POST = defineRoute({
   permission: "hrm.surveys.manage",
   feature: "hrmSurveys",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz: gate, params }) => {
+  body: ({ request }) => {
+    const action = new URL(request.url).searchParams.get("action") ?? "open";
+    return action === "open" ? openSurveyBody : undefined;
+  },
+  handler: async ({ request: req, authz: gate, params, body }) => {
     const searchParams = new URL(req.url).searchParams;
     const action = searchParams.get("action") ?? "open";
     try {
@@ -52,18 +51,13 @@ export const POST = defineRoute({
         return NextResponse.json({ survey });
       }
       if (action !== "open") {
-        return NextResponse.json(
-          { error: "action must be open or close" },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: "action must be open or close" }, { status: 400 });
       }
-      const parsedBody = await parseJsonBody(req, openSurveyBody);
-      if (!parsedBody.ok) return parsedBody.response;
       const { survey, deliveries } = await openSurvey({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         surveyId: id,
-        partyIds: parsedBody.data.partyIds,
+        partyIds: body.partyIds,
       });
       const results = await deliverSurveyInvitations({
         orgId: gate.user.orgId,
@@ -80,13 +74,10 @@ export const POST = defineRoute({
           invitationId: d.invitationId,
           partyId: d.partyId,
           respondUrl: `${resolveAppBaseUrl(req).replace(/\/$/, "")}/survey/${d.token}`,
-          notified:
-            results.find((r) => r.partyId === d.partyId)?.notified ?? false,
-          emailed:
-            results.find((r) => r.partyId === d.partyId)?.emailed ?? false,
+          notified: results.find((r) => r.partyId === d.partyId)?.notified ?? false,
+          emailed: results.find((r) => r.partyId === d.partyId)?.emailed ?? false,
           emailSkippedReason:
-            results.find((r) => r.partyId === d.partyId)?.emailSkippedReason ??
-            null,
+            results.find((r) => r.partyId === d.partyId)?.emailSkippedReason ?? null,
         })),
       });
     } catch (e) {
