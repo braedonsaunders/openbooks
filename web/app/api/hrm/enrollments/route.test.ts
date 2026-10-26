@@ -48,6 +48,7 @@ const mockSources = new Map<string, string>([
         return { user: { id: 'user-1', orgId: 'org-1' } }
       }
       export async function getAuthz() { return state.gateStatus ? null : { user: { id: 'user-1', orgId: 'org-1' } } }
+      export function can(_authz, permission) { return state.grants.has(permission) }
       export function guardRootSubsidiaryScope() { return null } export function guardUnrestrictedScope() { return null }
       export async function isFeatureEnabled(orgId, key) { if (key !== 'hrm') throw new Error('unexpected feature ' + key); return state.featureOn }
       export async function guardFeaturePermission(permission, feature) { const gate = await guardPermission(permission); if (gate instanceof globalThis.openbooksHrmBenefitsEnrollmentsRouteNextResponse) return gate; return await isFeatureEnabled(gate.user.orgId, feature) ? gate : globalThis.openbooksHrmBenefitsEnrollmentsRouteNextResponse.json({ error: 'not found' }, { status: 404 }) }
@@ -88,35 +89,38 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmBenefitsEnrollmentsRouteNextResponse =
-  NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmBenefitsEnrollmentsRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
   ["../../../../lib/features", "mock:authz"],
   ["@/lib/authz", "mock:authz"],
+  ["@/lib/features", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
   ["@openbooks/engine/hrm/benefits/enrollments", "mock:service"],
   ["@openbooks/engine/hrm/benefits/benefits-read", "mock:read"],
   ["@openbooks/engine/platform/db", "mock:read"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-benefits-enrollments-collection";
-  const collectionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-benefits-enrollments-collection";
+const collectionRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000041";
 const PLAN_ID = "00000000-0000-4000-8000-000000000042";
@@ -140,7 +144,7 @@ function jsonRequest(url: string, body: unknown): Request {
 
 const electBody = {
   action: "elect",
-  contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1.2345678912"}],
+  contributionTerms: [{ ruleId: PLAN_ID, electionMode: "fixed", electedRate: "1.2345678912" }],
   employmentId: EMPLOYMENT_ID,
   planId: PLAN_ID,
   windowId: WINDOW_ID,
@@ -155,24 +159,41 @@ test("GET lists one employment with filter pass-through", async () => {
   assert.equal(res.status, 200);
   assert.deepEqual(routeState.calls[0], {
     fn: "list",
-    args: { orgId: "org-1", actorId: "user-1", filter: { employmentId: EMPLOYMENT_ID, status: "active" } },
+    args: {
+      orgId: "org-1",
+      actorId: "user-1",
+      filter: { employmentId: EMPLOYMENT_ID, status: "active" },
+    },
   });
 });
 
 test("GET mine reads the self-service inbox with no caller-supplied worker", async () => {
   reset();
-  const res = await collectionRoute!.GET(new Request("http://x/api/hrm/enrollments?employmentId=mine"));
+  const res = await collectionRoute!.GET(
+    new Request("http://x/api/hrm/enrollments?employmentId=mine"),
+  );
   assert.equal(res.status, 200);
-  assert.deepEqual(routeState.calls[0], { fn: "mine", args: { orgId: "org-1", actorId: "user-1" } });
+  assert.deepEqual(routeState.calls[0], {
+    fn: "mine",
+    args: { orgId: "org-1", actorId: "user-1" },
+  });
 });
 
 test("GET refuses unknown status and non-uuid ids before the service", async () => {
   reset();
   assert.equal(
-    (await collectionRoute!.GET(new Request(`http://x/api/hrm/enrollments?employmentId=${EMPLOYMENT_ID}&status=taken`))).status,
+    (
+      await collectionRoute!.GET(
+        new Request(`http://x/api/hrm/enrollments?employmentId=${EMPLOYMENT_ID}&status=taken`),
+      )
+    ).status,
     400,
   );
-  assert.equal((await collectionRoute!.GET(new Request("http://x/api/hrm/enrollments?employmentId=nope"))).status, 400);
+  assert.equal(
+    (await collectionRoute!.GET(new Request("http://x/api/hrm/enrollments?employmentId=nope")))
+      .status,
+    400,
+  );
   assert.equal(routeState.calls.length, 0, "the service never runs on a rejected boundary");
 });
 
@@ -213,9 +234,13 @@ test("POST waives through the discriminated body", async () => {
 
 test("POST refuses a malformed body with 400 and never calls the service", async () => {
   reset();
-  assert.equal((await collectionRoute!.POST(jsonRequest("http://x/api/hrm/enrollments", "{oops"))).status, 400);
   assert.equal(
-    (await collectionRoute!.POST(jsonRequest("http://x/api/hrm/enrollments", { action: "elect" }))).status,
+    (await collectionRoute!.POST(jsonRequest("http://x/api/hrm/enrollments", "{oops"))).status,
+    400,
+  );
+  assert.equal(
+    (await collectionRoute!.POST(jsonRequest("http://x/api/hrm/enrollments", { action: "elect" })))
+      .status,
     400,
   );
   assert.equal(routeState.calls.length, 0);
@@ -227,7 +252,9 @@ test("POST maps the overlap refusal and the self-scope denial", async () => {
     "REFUSED",
     "this employment already holds this plan over those dates — change or end the existing enrolment instead of electing twice",
   );
-  const refused = await collectionRoute!.POST(jsonRequest("http://x/api/hrm/enrollments", electBody));
+  const refused = await collectionRoute!.POST(
+    jsonRequest("http://x/api/hrm/enrollments", electBody),
+  );
   assert.equal(refused.status, 422);
   const body = (await refused.json()) as { error: string };
   assert.match(body.error, /change or end the existing enrolment/);
