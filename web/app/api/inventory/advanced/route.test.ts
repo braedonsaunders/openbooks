@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 const stateKey = Symbol.for("openbooks.inventory-advanced-route-test");
 const state = {
@@ -21,17 +22,7 @@ const state = {
 
 /** Flatten a Drizzle SQL expression to its structural text for scope checks. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
-  if (!Array.isArray(chunks)) return "";
-  return chunks
-    .map((chunk) => {
-      if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
-      if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
-      return "";
-    })
-    .join("");
+  return new PgDialect().sqlToQuery(query as never).sql;
 }
 (globalThis as typeof globalThis & Record<string, unknown>).inventoryAdvancedSqlText = sqlText;
 
