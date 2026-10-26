@@ -551,6 +551,20 @@ async function main(): Promise<void> {
   log("intercompany journals posted");
 
   // -- Consolidation run (rates + 100%-owned elimination) ----------------------
+  // Historical equity rates derive from the preceding period's consolidated
+  // rates, so the first consolidated period needs its basis supplied. The
+  // subsidiaries were acquired at the base spots (cost == FVNA above), which
+  // are the historical rates for their equity; February carries them as the
+  // manual basis March derives from.
+  await scoped(async () => {
+    for (const [from, base] of [["EUR", "1.08"], ["CAD", "0.74"]] as const) {
+      await db.execute(sql`
+        insert into consolidated_fx_rates
+          (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate, source, created_by)
+        values (${orgId}, ${period("2026-02")}, ${from}, 'USD',
+                ${spot(from, "USD", "2026-02-28")}, ${spot(from, "USD", "2026-02-15")}, ${base}, 'manual', ${admin})`);
+    }
+  });
   const consol = await scoped(async () =>
     runCombinedConsolidation(orgId, period("2026-03"), admin));
   if (consol.ownership.entryIds.length === 0 || (consol.elimination.lineCount ?? 0) === 0) {
