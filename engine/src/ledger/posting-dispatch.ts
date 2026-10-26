@@ -1,7 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { effectivePostingDate } from "../journal/posting-contracts.ts";
-import { resolveScriptUser, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
+import type { DocumentScriptContext } from "../journal/posting-preconditions.ts";
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { applyInventoryReturnsForVendorCredit } from "../inventory/documents-vendor-credits.ts";
@@ -176,8 +176,9 @@ export async function runPostDocumentEffects(
       if (options.alreadyClaimed) throw error;
       return;
     }
-    const scriptUser = await resolveScriptUser(doc.orgId, effectActorId, { required: false });
-    const ctx: ScriptContext = {
+    const scripts = postingEffectHooks.require("scripting");
+    const scriptUser = await scripts.resolveUser(doc.orgId, effectActorId);
+    const ctx: DocumentScriptContext = {
       trigger: "after_post",
       document: doc as unknown as Record<string, unknown>,
       lines: lines as unknown as Record<string, unknown>[],
@@ -185,7 +186,7 @@ export async function runPostDocumentEffects(
       ...(scriptUser ? { user: scriptUser } : {}),
     };
     if (!options.suppressAutomation) {
-      await runTriggerScripts("after_post", ctx, doc.id);
+      await scripts.runTrigger("after_post", ctx, doc.id);
       await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, {
         orgId: doc.orgId,
       });

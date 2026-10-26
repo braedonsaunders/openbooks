@@ -4,11 +4,8 @@ import { db, schema, type SqlExecutor } from "../platform/db.ts";
 import { documentRevisionCounterSql } from "../records/revision.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { closeModuleForDocument, type CloseModule } from "../periods/period-policy.ts";
-import {
-  resolveScriptUser,
-  runTriggerScripts,
-  type ScriptContext,
-} from "../scripting/scripting.ts";
+import { voidRemedyHooks } from "../journal/void-remedy-contributors.ts";
+import type { DocumentScriptContext } from "../journal/posting-preconditions.ts";
 import { billedCostSourceRefusal, liveInvoicesBillingDocument } from "./billing-provenance.ts";
 import { isUuid } from "../platform/uuid.ts";
 
@@ -368,15 +365,16 @@ export async function runBeforeVoidScripts(input: {
       and(eq(schema.documentLines.documentId, doc.id), eq(schema.documentLines.orgId, input.orgId)),
     );
   if (!org) throw new DocumentVoidError("organization not found");
-  const user = await resolveScriptUser(input.orgId, input.actorId, { required: false });
-  const scriptCtx: ScriptContext = {
+  const scripts = voidRemedyHooks.require("scripting");
+  const user = await scripts.resolveUser(input.orgId, input.actorId);
+  const scriptCtx: DocumentScriptContext = {
     trigger: "before_void",
     document: doc as unknown as Record<string, unknown>,
     lines: lines as unknown as Record<string, unknown>[],
     org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
     ...(user ? { user } : {}),
   };
-  const outcomes = await runTriggerScripts("before_void", scriptCtx, doc.id);
+  const outcomes = await scripts.runTrigger("before_void", scriptCtx, doc.id);
   const bad = outcomes.find((outcome) => outcome.status !== "ok");
   if (bad) {
     throw new DocumentVoidError(

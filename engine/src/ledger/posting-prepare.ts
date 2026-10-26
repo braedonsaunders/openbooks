@@ -19,7 +19,7 @@ import { PayrollError as PayrollRemittanceError } from "../payroll/error.ts";
 import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
 import { isZero, toUnits } from "../money/money.ts";
 import { parseMoney, sumMoney } from "../money/brands.ts";
-import { CustomGlLinesError, beforePostCustomControlsChanged, mergeBeforePostCustomMutation, resolveScriptUser, runCustomGlLineScripts, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
+import { postingLineHooks } from "../journal/posting-line-contributors.ts";
 import type { ContributedLine } from "../allocations/types.ts";
 import { assertContributorBalance, collectPostContributions, PostAllocationError, type PostContributionResult } from "../allocations/post.ts";
 import { postDriverResolver } from "../allocations/report-runner.ts";
@@ -32,7 +32,7 @@ import { assertInvoiceIssuesPostable } from "../inventory/documents-sales.ts";
 import { assertVendorCreditInventoryReturnsPostable, resolveVendorCreditInventoryAccounts } from "../inventory/documents-vendor-credits.ts";
 import { assertCustomerCreditInventoryReturnsPostable } from "../inventory/documents-customer-credits.ts";
 
-import { postingPreconditionHooks } from "../journal/posting-preconditions.ts";
+import { postingPreconditionHooks, type DocumentScriptContext } from "../journal/posting-preconditions.ts";
 
 import { type KernelLine, type PostingDeps, PostingError, effectivePostingDate } from "../journal/posting-contracts.ts";
 import { resolveMarketplaceClearingForDocument, validateTaxControlAccounts } from "./posting-tax-policy.ts";
@@ -387,8 +387,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     for (const plan of providerPlans) providerComponents.set(plan.line.id, plan.components);
     deps = { ...deps, taxComponentsByLine: providerComponents };
   }
-  const scriptUser = await resolveScriptUser(doc.orgId, options.audit?.actorId ?? null, { required: false });
-  const scriptCtx: ScriptContext = {
+  const scripts = postingPreconditionHooks.require("scripting");
+  const scriptUser = await scripts.resolveUser(doc.orgId, options.audit?.actorId ?? null);
+  const scriptCtx: DocumentScriptContext = {
     trigger: "before_post",
     document: doc as unknown as Record<string, unknown>,
     lines: lines as unknown as Record<string, unknown>[],
@@ -399,7 +400,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   // -- user scripts: before_post (veto / mutate) --------------------------
   const outcomes = options.suppressAutomation
     ? []
-    : await runTriggerScripts("before_post", scriptCtx, doc.id);
+    : await scripts.runTrigger("before_post", scriptCtx, doc.id);
   const bad = outcomes.find((o) => o.status !== "ok");
   if (bad) {
     throw new PostingError(
@@ -416,7 +417,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
         // document and could erase or replace posting controls between
         // approval and the kernel. Merge only non-financial keys and preserve
         // every existing protected value from the approved document.
-        merged.custom = mergeBeforePostCustomMutation(
+        merged.custom = scripts.mergeBeforePostCustomMutation(
           merged.custom ?? doc.custom,
           value,
         );
@@ -493,7 +494,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     if (refreshed) effectiveDoc = refreshed;
   }
 
-  const changedPostingControl = beforePostCustomControlsChanged(doc.custom, effectiveDoc.custom);
+  const changedPostingControl = scripts.beforePostCustomControlsChanged(doc.custom, effectiveDoc.custom);
   if (changedPostingControl) throw new PostingError(changedPostingControl);
 
   // Revalidate the effective header after scripts/flows, including legacy
@@ -635,8 +636,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   // replay/migration like automation.
   let customGlLines: ContributedLine[] = [];
   if (!options.suppressAutomation && !deps.migration) {
+    const lineScripts = postingLineHooks.require("scripting");
     try {
-      customGlLines = await runCustomGlLineScripts({
+      customGlLines = await lineScripts.runCustomGlLines({
         orgId: doc.orgId,
         document: effectiveDoc as unknown as Record<string, unknown>,
         documentLines: postingLines as unknown as Record<string, unknown>[],
@@ -645,14 +647,10 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
         targetId: doc.id,
       });
     } catch (error) {
+      // A refused script set arrives as a PostingError carrying the
+      // completed-run evidence; its message is preserved verbatim — callers
+      // match on it.
       if (error instanceof PostingError) throw error;
-      // The runner's in-transaction script_runs rows roll back with the
-      // refused post; carry the completed-run evidence on the refusal so the
-      // posting coordinator can re-record it out-of-band. The message is
-      // preserved verbatim — callers match on it.
-      if (error instanceof CustomGlLinesError) {
-        throw new PostingError(error.message, { customGlLineRuns: error.scriptRuns });
-      }
       throw new PostingError(
         error instanceof Error ? error.message : String(error),
       );
