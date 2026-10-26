@@ -1,9 +1,9 @@
-import { orderCreateBody } from '@/lib/api/json'
-import { defineRoute } from '@/lib/api/route'
-import { guardFeaturePermission } from '../../../lib/feature-gates'
-import { createOrder } from '../_order/create'
+import { orderCreateBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
+import { guardPermission } from "@/lib/authz";
+import { createOrder } from "../_order/create";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Unsaved-create collection: the purchase-order drawer opens and cancels
@@ -12,9 +12,14 @@ export const runtime = 'nodejs'
  * order-create boundary before the kernel sees it.
  */
 export const POST = defineRoute({
-  authorize: () => guardFeaturePermission('purchase_orders.create', 'orders'),
-  feature: { none: 'The purchase-order create guard combines purchase_orders.create with the orders feature.' },
+  authorize: () => guardPermission("purchase_orders.create"),
+  feature: "orders",
   body: orderCreateBody,
   handler: async ({ request, authz, body }) =>
-    createOrder({ kind: 'purchase_order', createPerm: 'purchase_orders.create', numberPrefix: 'PO-' }, authz, request, body),
-})
+    createOrder(
+      { kind: "purchase_order", createPerm: "purchase_orders.create", numberPrefix: "PO-" },
+      authz,
+      request,
+      body,
+    ),
+});
