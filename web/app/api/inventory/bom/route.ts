@@ -1,68 +1,98 @@
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { BomPolicyError, saveBomPolicy, readBomPolicyVersion } from '@openbooks/engine/inventory/bom-policy'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { can } from '@/lib/authz'
-import { defineRoute } from '@/lib/api/route'
-import { exactMoney, isoDate, uuidId } from '@/lib/api/json'
-import { isFeatureEnabled } from '@/lib/features'
-import { isUuid } from '@/lib/list-params'
-import { z } from 'zod'
+import { NextResponse } from "next/server";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { BomPolicyError, saveBomPolicy } from "@openbooks/engine/inventory/bom-policy";
+import { loadBomWorkspace } from "@openbooks/engine/inventory/bom-workspace";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { can } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { exactMoney, isoDate, uuidId } from "@/lib/api/json";
+import { isFeatureEnabled } from "@/lib/features";
+import { isUuid } from "@/lib/list-params";
+import { z } from "zod";
 
-const optionalDate = z.union([isoDate(), z.literal(''), z.null()]).optional()
-const optionalDecimal = z.union([exactMoney(), z.literal(''), z.null()]).optional()
+const optionalDate = z.union([isoDate(), z.literal(""), z.null()]).optional();
+const optionalDecimal = z.union([exactMoney(), z.literal(""), z.null()]).optional();
 const bomBody = z.object({
   assemblyItemId: uuidId,
   expectedVersion: z.string().nullable(),
   reason: z.string(),
   subsidiaryId: uuidId.optional(),
-  components: z.array(z.object({
-    componentItemId: uuidId, quantityPer: exactMoney(),quantityBasis:z.enum(['per_unit','per_batch','per_formula']).optional(),formulaOutputQuantity:exactMoney().optional(),
-    effectiveFrom: optionalDate, effectiveTo: optionalDate,
-    operationSeq: z.union([z.number(), z.string(), z.null()]).optional(),
-    scrapPct: optionalDecimal,
-    outputCostWeight:optionalDecimal,
-    isByproduct: z.union([z.boolean(), z.enum(['true', 'false']), z.null()]).optional(),
-  })),
-})
-function refusal(error: string, status = 422) { return NextResponse.json({error}, {status}) }
+  components: z.array(
+    z.object({
+      componentItemId: uuidId,
+      quantityPer: exactMoney(),
+      quantityBasis: z.enum(["per_unit", "per_batch", "per_formula"]).optional(),
+      formulaOutputQuantity: exactMoney().optional(),
+      effectiveFrom: optionalDate,
+      effectiveTo: optionalDate,
+      operationSeq: z.union([z.number(), z.string(), z.null()]).optional(),
+      scrapPct: optionalDecimal,
+      outputCostWeight: optionalDecimal,
+      isByproduct: z.union([z.boolean(), z.enum(["true", "false"]), z.null()]).optional(),
+    }),
+  ),
+});
+function refusal(error: string, status = 422) {
+  return NextResponse.json({ error }, { status });
+}
 
 /** The native command owns validation, fresh authority, effectivity and approval. */
 export const PUT = defineRoute({
-  permission: 'admin.setup.manage', feature: 'inventory', scope: 'unrestricted', body: bomBody,
-  handler: async ({body, request, authz: gate}) => {
+  permission: "admin.setup.manage",
+  feature: "inventory",
+  scope: "unrestricted",
+  body: bomBody,
+  handler: async ({ body, request, authz: gate }) => {
     try {
-      const result = await withOrgTransaction(gate.user.orgId, () => saveBomPolicy(db,gate.user.orgId,gate.user.id,{
-        assemblyItemId:body.assemblyItemId,expectedVersion:body.expectedVersion,reason:body.reason,
-        subsidiaryId:body.subsidiaryId,requestKey:request.headers.get('Idempotency-Key') ?? undefined,
-        components:body.components.map(line=>({
-          componentItemId:line.componentItemId,quantityPer:line.quantityPer,quantityBasis:line.quantityBasis,formulaOutputQuantity:line.formulaOutputQuantity,
-          effectiveFrom:line.effectiveFrom || null,effectiveTo:line.effectiveTo || null,
-          operationSeq:line.operationSeq === undefined || line.operationSeq === null || line.operationSeq === '' ? null : Number(line.operationSeq),
-          scrapPct:line.scrapPct || null,isByproduct:line.isByproduct === true || line.isByproduct === 'true',outputCostWeight:line.outputCostWeight||null,
-        })),
-      }));
+      const result = await withOrgTransaction(gate.user.orgId, () =>
+        saveBomPolicy(db, gate.user.orgId, gate.user.id, {
+          assemblyItemId: body.assemblyItemId,
+          expectedVersion: body.expectedVersion,
+          reason: body.reason,
+          subsidiaryId: body.subsidiaryId,
+          requestKey: request.headers.get("Idempotency-Key") ?? undefined,
+          components: body.components.map((line) => ({
+            componentItemId: line.componentItemId,
+            quantityPer: line.quantityPer,
+            quantityBasis: line.quantityBasis,
+            formulaOutputQuantity: line.formulaOutputQuantity,
+            effectiveFrom: line.effectiveFrom || null,
+            effectiveTo: line.effectiveTo || null,
+            operationSeq:
+              line.operationSeq === undefined ||
+              line.operationSeq === null ||
+              line.operationSeq === ""
+                ? null
+                : Number(line.operationSeq),
+            scrapPct: line.scrapPct || null,
+            isByproduct: line.isByproduct === true || line.isByproduct === "true",
+            outputCostWeight: line.outputCostWeight || null,
+          })),
+        }),
+      );
       return NextResponse.json(result);
-    } catch(error) {
+    } catch (error) {
       // The editor highlights the offending component from the refusal, so
       // the overlap answers with its structured evidence at the top level —
       // the same body the pre-consolidation route returned. The evidence is
       // the operator's own component and date windows, curated at the
       // policy origin — never driver text.
       if (error instanceof BomPolicyError) {
-        if (error.code === 'bom_effectivity_overlap' && error.details) {
+        if (error.code === "bom_effectivity_overlap" && error.details) {
           const componentItemId = (error.details as { componentItemId?: unknown }).componentItemId;
           const windows = (error.details as { windows?: unknown }).windows;
-          if (typeof componentItemId === 'string' && Array.isArray(windows))
-            return NextResponse.json({ error: error.message, code: error.code, componentItemId, windows }, { status: 422 });
+          if (typeof componentItemId === "string" && Array.isArray(windows))
+            return NextResponse.json(
+              { error: error.message, code: error.code, componentItemId, windows },
+              { status: 422 },
+            );
         }
       }
-      return apiErrorResponse(error,{request});
+      return apiErrorResponse(error, { request });
     }
   },
-})
+});
 
 /**
  * Read one assembly's recipe for operators: the kit Components tab and the
@@ -78,111 +108,52 @@ export const GET = defineRoute({
   // cannot change, and setup managers keep the access they already had.
   // The native helper names the primary grant on refusal.
   authorize: async () => {
-    const { guardPermission } = await import('@/lib/authz');
-    const catalog = await guardPermission('items.read');
+    const { guardPermission } = await import("@/lib/authz");
+    const catalog = await guardPermission("items.read");
     if (!(catalog instanceof NextResponse)) return catalog;
-    const setup = await guardPermission('admin.setup.manage');
+    const setup = await guardPermission("admin.setup.manage");
     if (!(setup instanceof NextResponse)) return setup;
     return catalog;
   },
-  feature: 'inventory',
+  feature: "inventory",
   handler: async ({ request, authz: gate }) => {
-  const assemblyItemId = new URL(request.url).searchParams.get('assemblyItemId')
-  const manufacturingEnabled = await isFeatureEnabled(gate.user.orgId, 'manufacturing')
-  const today = await businessToday(gate.user.orgId)
-  const canProposeRevision = gate.allowedSubsidiaryIds === null && can(gate,'manufacturing.manage') && can(gate,'admin.setup.manage')
-  const subsidiaries = canProposeRevision ? (await db.execute<{id:string;name:string}>(sql`select id,name from subsidiaries where org_id=${gate.user.orgId} and is_active and not is_elimination order by name,id`, 'objects')) : []
-  if (!assemblyItemId) return NextResponse.json({ manufacturingEnabled,canProposeRevision,subsidiaries,today })
-  if (!isUuid(assemblyItemId)) return refusal('Choose a valid assembly item.')
+    const assemblyItemId = new URL(request.url).searchParams.get("assemblyItemId");
+    const manufacturingEnabled = await isFeatureEnabled(gate.user.orgId, "manufacturing");
+    const today = await businessToday(gate.user.orgId);
+    const canProposeRevision =
+      gate.allowedSubsidiaryIds === null &&
+      can(gate, "manufacturing.manage") &&
+      can(gate, "admin.setup.manage");
+    if (assemblyItemId && !isUuid(assemblyItemId)) return refusal("Choose a valid assembly item.");
 
-  const assembly = await db.execute<{ id: string; kind:string }>(sql`
-    select id,kind from items where org_id = ${gate.user.orgId} and id = ${assemblyItemId}`, 'objects')
-  if (!assembly[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  // Catalog identity rides with every line: a component the picker would no
-  // longer offer (inactive, unprofiled) still names itself instead of
-  // falling back to its storage id. The joined row id tells readers
-  // whether a catalog row stands behind the line: a null joined id means
-  // no readable identity, and the line keeps its stored fields as evidence.
-  // isCurrent applies the same half-open window the kit explosion and the
-  // availability endpoint use, so the reader's current summary never
-  // aggregates an expired window.
-  const components = await db.execute<{
-    id: string;
-    componentItemId: string;
-    quantityPer: string;quantityBasis:"per_unit"|"per_batch"|"per_formula";formulaOutputQuantity:string;
-    sortOrder: number;
-    effectiveFrom: string | null;
-    effectiveTo: string | null;
-    operationSeq: number | null;
-    scrapPct: string | null;
-    isByproduct: boolean;
-    outputCostWeight:string|null;
-    code: string | null;
-    name: string | null;
-    isActive: boolean | null;
-    joinedId: string | null;
-    isCurrent: boolean;
-  }>(sql`
-    select line.id, line.component_item_id as "componentItemId", line.quantity_per::text as "quantityPer",line.quantity_basis as "quantityBasis",line.formula_output_quantity::text as "formulaOutputQuantity",
-           line.sort_order as "sortOrder", line.effective_from::text as "effectiveFrom",
-           line.effective_to::text as "effectiveTo", line.operation_seq as "operationSeq",
-           line.scrap_pct::text as "scrapPct", line.is_byproduct as "isByproduct",line.output_cost_weight::text as "outputCostWeight",
-           item.code, item.name, item.is_active as "isActive", item.id as "joinedId",
-           ((line.effective_from is null or line.effective_from <= ${today}::date)
-            and (line.effective_to is null or ${today}::date < line.effective_to)) as "isCurrent"
-      from bom_components line
-      left join items item on item.org_id = line.org_id and item.id = line.component_item_id
-     where line.org_id = ${gate.user.orgId} and line.assembly_item_id = ${assemblyItemId}
-     order by line.sort_order, line.component_item_id, line.operation_seq nulls first,
-              line.is_byproduct, line.effective_from nulls first, line.effective_to nulls first`, 'objects')
-  const version = await readBomPolicyVersion(db,gate.user.orgId,assemblyItemId)
-  // The editor places a re-added line on the routing's single consuming
-  // operation instead of leaving its sequence blank: the reader carries the
-  // active routing's operations (sequence, name, backflush point) so the
-  // workspace can prefill exactly what the revision command defaults to
-  // server-side. Zero or several candidate routings leave the list empty
-  // and the command governs, exactly like the release-time checks.
-  const routingOperations = manufacturingEnabled ? (await db.execute<{ sequence: number; name: string; backflushAt: string }>(sql`
-    select operation.sequence, operation.name, operation.backflush_at as "backflushAt"
-      from mfg_routing_operations operation
-      join mfg_routings routing on routing.org_id = operation.org_id and routing.id = operation.routing_id
-     where operation.org_id = ${gate.user.orgId} and routing.produced_item_id = ${assemblyItemId} and routing.status = 'active'
-       and routing.effective_from <= ${today}::date and (routing.effective_to is null or ${today}::date < routing.effective_to)
-       and (select count(*) from mfg_routings candidate
-             where candidate.org_id = ${gate.user.orgId} and candidate.produced_item_id = ${assemblyItemId} and candidate.status = 'active'
-               and candidate.effective_from <= ${today}::date and (candidate.effective_to is null or ${today}::date < candidate.effective_to)) = 1
-     order by operation.sequence`, 'objects')) : []
-  // Stocked components need costing profiles. Kit recipes can also include
-  // active commercial-only components, which do not move inventory.
-  const componentEligibility = assembly[0].kind === 'kit'
-    ? sql`and item.kind <> 'kit'
-          and (item.kind not in ('inventory', 'assembly') or exists (
-            select 1 from item_inventory_profiles profile
-             where profile.org_id = item.org_id and profile.item_id = item.id
-          ))`
-    : sql`and exists (
-          select 1 from item_inventory_profiles profile
-           where profile.org_id = item.org_id and profile.item_id = item.id
-        )`
-  const validItems = await db.execute<{ id: string; code: string | null; name: string | null }>(sql`
-    select item.id, item.code, item.name
-      from items item
-     where item.org_id = ${gate.user.orgId} and item.is_active
-       ${componentEligibility}
-     order by item.code nulls last, item.name`, 'objects')
-  return NextResponse.json({
-    manufacturingEnabled,
-    assemblyItemId,
-    kind:assembly[0].kind,
-    version,
-    today,canProposeRevision,subsidiaries,routingOperations,
-    components: components.map((line) => ({
-      ...line,
-      operationSeq: manufacturingEnabled ? line.operationSeq : null,
-      isByproduct: manufacturingEnabled ? line.isByproduct : false,
-      outputCostWeight:manufacturingEnabled?line.outputCostWeight:null,
-    })),
-    validItems,
-  })
+    const result = await loadBomWorkspace({
+      orgId: gate.user.orgId,
+      assemblyItemId: assemblyItemId || null,
+      manufacturingEnabled,
+      canProposeRevision,
+      today,
+    });
+    if (result.kind === "not_found")
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (result.kind === "empty") {
+      return NextResponse.json({
+        manufacturingEnabled: result.manufacturingEnabled,
+        canProposeRevision: result.canProposeRevision,
+        subsidiaries: result.subsidiaries,
+        today: result.today,
+      });
+    }
+    return NextResponse.json({
+      manufacturingEnabled: result.manufacturingEnabled,
+      assemblyItemId: result.assemblyItemId,
+      kind: result.itemKind,
+      version: result.version,
+      today: result.today,
+      canProposeRevision: result.canProposeRevision,
+      subsidiaries: result.subsidiaries,
+      routingOperations: result.routingOperations,
+      components: result.components,
+      validItems: result.validItems,
+    });
   },
-})
+});

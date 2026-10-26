@@ -115,8 +115,8 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/inventory/landed-cost", "mock:inventory"],
   ["@openbooks/engine/inventory/tracking", "mock:inventory"],
   ["@openbooks/engine/inventory/transfer-orders", "mock:inventory"],
-  ["../../../../lib/authz", "mock:authz"],
-  ["../../../../lib/features", "mock:features"],
+  ["@/lib/authz", "mock:authz"],
+  ["@/lib/features", "mock:features"],
 ]);
 
 const hooks = registerHooks({
@@ -132,7 +132,11 @@ const hooks = registerHooks({
     const source = mockSources.get(url);
     if (source !== undefined) return { format: "module", source, shortCircuit: true };
     if (url === "mock:business-date") {
-      return { format: "module", source: "export async function businessToday() { return '2026-08-28' }", shortCircuit: true };
+      return {
+        format: "module",
+        source: "export async function businessToday() { return '2026-08-28' }",
+        shortCircuit: true,
+      };
     }
     return nextLoad(url, context);
   },
@@ -140,7 +144,7 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?inventory-advanced-scope-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-test.after(() => hooks.deregister())
+test.after(() => hooks.deregister());
 
 function reset(scope: Set<string> | null): void {
   state.allowedSubsidiaryIds = scope;
@@ -168,7 +172,9 @@ test("restricted reads carry subsidiary scope into every advanced view", async (
   const subsidiaryId = "00000000-0000-4000-8000-000000000001";
   for (const view of ["recall", "lots", "landed", "transfers"]) {
     reset(new Set([subsidiaryId]));
-    const response = await GET(new Request(`http://openbooks.test/api/inventory/advanced?view=${view}`));
+    const response = await GET(
+      new Request(`http://openbooks.test/api/inventory/advanced?view=${view}`),
+    );
     assert.equal(response.status, 200, view);
     if (view === "recall") {
       assert.deepEqual(state.recallFilters[0]?.subsidiaryIds, [subsidiaryId]);
@@ -181,7 +187,9 @@ test("restricted reads carry subsidiary scope into every advanced view", async (
 test("an empty subsidiary scope fails closed without returning read metadata", async () => {
   for (const view of ["recall", "lots", "landed", "transfers"]) {
     reset(new Set());
-    const response = await GET(new Request(`http://openbooks.test/api/inventory/advanced?view=${view}`));
+    const response = await GET(
+      new Request(`http://openbooks.test/api/inventory/advanced?view=${view}`),
+    );
     assert.equal(response.status, 200, view);
     if (view === "recall") {
       assert.deepEqual(state.recallFilters[0]?.subsidiaryIds, []);
@@ -194,7 +202,9 @@ test("an empty subsidiary scope fails closed without returning read metadata", a
 test("null subsidiary scope remains unrestricted", async () => {
   for (const view of ["recall", "lots", "landed", "transfers"]) {
     reset(null);
-    const response = await GET(new Request(`http://openbooks.test/api/inventory/advanced?view=${view}`));
+    const response = await GET(
+      new Request(`http://openbooks.test/api/inventory/advanced?view=${view}`),
+    );
     assert.equal(response.status, 200, view);
     if (view === "recall") {
       assert.equal(state.recallFilters[0]?.subsidiaryIds, null);
@@ -229,10 +239,27 @@ test("landed-cost reversal validates voucher, date, and reason at the boundary",
   reset(null);
   const voucherId = "00000000-0000-4000-8000-000000000010";
   for (const [name, payload] of [
-    ["missing voucher", { action: "reverseLandedVoucher", date: "2026-08-28", memo: "Freight was billed wrong" }],
-    ["missing date", { action: "reverseLandedVoucher", id: voucherId, memo: "Freight was billed wrong" }],
-    ["short reason", { action: "reverseLandedVoucher", id: voucherId, date: "2026-08-28", memo: "oops" }],
-    ["malformed date", { action: "reverseLandedVoucher", id: voucherId, date: "soon", memo: "Freight was billed wrong" }],
+    [
+      "missing voucher",
+      { action: "reverseLandedVoucher", date: "2026-08-28", memo: "Freight was billed wrong" },
+    ],
+    [
+      "missing date",
+      { action: "reverseLandedVoucher", id: voucherId, memo: "Freight was billed wrong" },
+    ],
+    [
+      "short reason",
+      { action: "reverseLandedVoucher", id: voucherId, date: "2026-08-28", memo: "oops" },
+    ],
+    [
+      "malformed date",
+      {
+        action: "reverseLandedVoucher",
+        id: voucherId,
+        date: "soon",
+        memo: "Freight was billed wrong",
+      },
+    ],
   ] as const) {
     const response = await POST(post({ ...payload }));
     assert.equal(response.status, 422, name);
@@ -260,21 +287,30 @@ test("absent and out-of-scope record targets share one 404 across advanced inven
 
   reset(new Set([allowed]));
   state.missingVoucher = true;
-  const absentVoucher = await POST(post({
-    action: "reverseLandedVoucher", id: voucherId, date: "2026-08-28",
-    memo: "Freight was billed to the wrong receipt", idempotencyKey: "key-absent",
-  }));
+  const absentVoucher = await POST(
+    post({
+      action: "reverseLandedVoucher",
+      id: voucherId,
+      date: "2026-08-28",
+      memo: "Freight was billed to the wrong receipt",
+      idempotencyKey: "key-absent",
+    }),
+  );
   assert.equal(absentVoucher.status, 404);
   assert.deepEqual(await absentVoucher.json(), { error: "not_found" });
 
   reset(new Set([allowed]));
   state.orderSubsidiary = "00000000-0000-4000-8000-000000000002";
-  const hiddenOrder = await POST(post({ action: "shipTransfer", id: voucherId, idempotencyKey: "key-hidden-order" }));
+  const hiddenOrder = await POST(
+    post({ action: "shipTransfer", id: voucherId, idempotencyKey: "key-hidden-order" }),
+  );
   assert.equal(hiddenOrder.status, 404);
 
   reset(new Set([allowed]));
   state.missingOrder = true;
-  const absentOrder = await POST(post({ action: "shipTransfer", id: voucherId, idempotencyKey: "key-absent-order" }));
+  const absentOrder = await POST(
+    post({ action: "shipTransfer", id: voucherId, idempotencyKey: "key-absent-order" }),
+  );
   assert.equal(absentOrder.status, 404);
   assert.deepEqual(await hiddenOrder.json(), await absentOrder.json());
 
@@ -303,13 +339,17 @@ test("recall filters are validated at the boundary before they reach the engine"
     "expiresOnOrBefore=20260831",
   ]) {
     reset(null);
-    const response = await GET(new Request(`http://openbooks.test/api/inventory/advanced?view=recall&${query}`));
+    const response = await GET(
+      new Request(`http://openbooks.test/api/inventory/advanced?view=recall&${query}`),
+    );
     assert.equal(response.status, 422, query);
     assert.equal(state.recallFilters.length, 0, `${query} must not reach queryLotRecall`);
   }
   reset(null);
   const ok = await GET(
-    new Request(`http://openbooks.test/api/inventory/advanced?view=recall&lotId=${uuid}&itemId=${uuid}&expiresOnOrBefore=2026-08-31`),
+    new Request(
+      `http://openbooks.test/api/inventory/advanced?view=recall&lotId=${uuid}&itemId=${uuid}&expiresOnOrBefore=2026-08-31`,
+    ),
   );
   assert.equal(ok.status, 200);
   assert.equal(state.recallFilters[0]?.lotId, uuid);
@@ -326,7 +366,10 @@ test("createTransfer carries transit through and defaults it to null", async () 
     subsidiary: "00000000-0000-4000-8000-000000000024",
     transit: "00000000-0000-4000-8000-000000000025",
   };
-  const transfer = (transit: string | undefined, idempotencyKey: string): Record<string, unknown> => ({
+  const transfer = (
+    transit: string | undefined,
+    idempotencyKey: string,
+  ): Record<string, unknown> => ({
     action: "createTransfer",
     idempotencyKey,
     fromStockLocationId: ids.from,

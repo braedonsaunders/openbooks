@@ -4,17 +4,26 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/testing/fixtures";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+} from "@openbooks/engine/testing/fixtures";
 import { withSimClock } from "@openbooks/engine/testing/platform/clock";
 
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __inventoryRetryAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
-      return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
-        "export async function guardPermission(){return {user:globalThis.__inventoryRetryAudit.user,allowedSubsidiaryIds:null}};export function can(){return true}",
-      ) };
+    if (specifier === "@/lib/authz" && context.parentURL?.includes("/api/inventory/")) {
+      return {
+        shortCircuit: true,
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            "export async function guardPermission(){return {user:globalThis.__inventoryRetryAudit.user,allowedSubsidiaryIds:null}};export function can(){return true}",
+          ),
+      };
     }
     return next(specifier, context);
   },
@@ -32,14 +41,28 @@ test("a committed receipt retried after midnight replays with one movement and o
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     state.user = { orgId: org.orgId, id: actor };
-    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`);
+    await db.execute(
+      sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`,
+    );
     const { POST } = await import("./route");
     const key = randomUUID();
     // The drawer freezes the server business day in the FIRST payload.
-    const body = { action: "receive", idempotencyKey: key, itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId, subsidiaryId: org.subsidiaryId, date: "2026-07-15",
-      quantity: "5", unitCost: "10", offsetAccountId: org.accounts.clearing };
-    const post = () => new Request("http://audit.local/api/inventory/actions", { method: "POST", body: JSON.stringify(body) });
+    const body = {
+      action: "receive",
+      idempotencyKey: key,
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId,
+      date: "2026-07-15",
+      quantity: "5",
+      unitCost: "10",
+      offsetAccountId: org.accounts.clearing,
+    };
+    const post = () =>
+      new Request("http://audit.local/api/inventory/actions", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
     // Committed at 23:59; the response never reaches the operator.
     const first = await withSimClock("2026-07-15T23:59:00Z", () => POST(post()));
     const result = await first.json();
@@ -52,12 +75,24 @@ test("a committed receipt retried after midnight replays with one movement and o
     assert.equal(retry.status, 200, JSON.stringify(replay));
     assert.deepEqual(replay, { ...result, replayed: true });
     assert.equal(
-      (await db.execute<{ n: number }>(sql`select count(*)::int as n from inventory_movements where org_id=${org.orgId}`, "objects"))[0]!.n,
-      1, "the retry must replay, not post a second movement",
+      (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from inventory_movements where org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n,
+      1,
+      "the retry must replay, not post a second movement",
     );
     assert.equal(
-      (await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n,
-      1, "the retry must replay, not post a second journal",
+      (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n,
+      1,
+      "the retry must replay, not post a second journal",
     );
     // Mechanism guard: the SAME key retried with the date left for the
     // server to fill after the rollover hashes differently and conflicts —
@@ -65,7 +100,15 @@ test("a committed receipt retried after midnight replays with one movement and o
     const unfrozen = { ...body, date: undefined };
     delete (unfrozen as Record<string, unknown>).date;
     const conflict = await withSimClock("2026-07-16T00:05:00Z", () =>
-      POST(new Request("http://audit.local/api/inventory/actions", { method: "POST", body: JSON.stringify(unfrozen) })));
+      POST(
+        new Request("http://audit.local/api/inventory/actions", {
+          method: "POST",
+          body: JSON.stringify(unfrozen),
+        }),
+      ),
+    );
     assert.equal(conflict.status, 409, JSON.stringify(await conflict.json()));
-  } finally { await dropScratchOrg(org.orgId); }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
 });
