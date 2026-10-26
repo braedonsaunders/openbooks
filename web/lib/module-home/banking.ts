@@ -79,10 +79,9 @@ async function bankRosterRows(
   // intersects it (null = shared). Book scope: the primary posting book,
   // like bank reconciliation itself.
   const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
-  const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
+  const summaryScope = subArr ? sql` and g.subsidiary_id = any(${subArr})` : sql``
   const membership = bankAccountMembership()
   const acctScope = bankAccountScope(subIds)
-  const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
   const rows = await db.execute(sql`
       select a.id, a.number, a.name, a.type, a.currency_restriction,
              bal.func as func,
@@ -93,12 +92,15 @@ async function bankRosterRows(
              st.statement_date as last_statement_date,
              st.imported_at as last_imported_at
         from accounts a
+        -- The balance is every posted and reversed line on the primary book,
+        -- read from the maintained monthly ledger summary rather than by
+        -- summing each account's full line history on every page view.
         left join lateral (
-          select sub.base_currency as func, sum(jl.amount) as balance
-            from journal_lines jl
-            join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')${bookScope}
-            left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = jl.org_id
-           where jl.account_id = a.id and jl.org_id = a.org_id${lineScope}
+          select sub.base_currency as func, sum(g.debit_total - g.credit_total) as balance
+            from gl_month_activity g
+            left join subsidiaries sub on sub.id = g.subsidiary_id and sub.org_id = g.org_id
+           where g.account_id = a.id and g.org_id = a.org_id
+             and g.book_id = ${statementBookExpr(orgId)}${summaryScope}
            group by sub.base_currency) bal on true
         left join lateral (
           select count(*) as n
@@ -205,6 +207,7 @@ export async function bankingHome(
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = jl.org_id
        where a.org_id = ${orgId} and ${membership}${acctScope}${lineScope}
+         and jl.posting_date >= ${trendFrom}
          and je.posting_date >= ${trendFrom}
          and ${excludePeriodEndJournals(sql`je.origin`)}
        group by 1, 2, 3
