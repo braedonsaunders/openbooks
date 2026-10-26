@@ -25,8 +25,7 @@ const routeState: SubcontractsRouteState = {
   updateConflict: null,
   dbCalls: [],
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 function sqlText(query: unknown): string {
   const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
@@ -36,15 +35,12 @@ function sqlText(query: unknown): string {
       if (typeof chunk === "string") return chunk;
       const value = (chunk as { value?: unknown[] })?.value;
       if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks)
-        return sqlText(chunk);
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
     })
     .join("");
 }
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksSqlTextSubcontracts = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextSubcontracts = sqlText;
 
 const mockSources = new Map<string, string>([
   [
@@ -103,14 +99,6 @@ const mockSources = new Map<string, string>([
   ],
   ["mock:features", `export async function isFeatureEnabled() { return true }`],
   [
-    "mock:subcontracts-gate",
-    `export async function guardSubcontractsFeature() { return null }`,
-  ],
-  [
-    "mock:subsidiaries",
-    `export function subsidiaryVisibleFilter() { return { queryChunks: [] } }`,
-  ],
-  [
     "mock:subcontracts",
     `
       const state = globalThis[Symbol.for('openbooks.subcontracts-route-test')]
@@ -152,10 +140,8 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/platform/db", "mock:db"],
   ["@openbooks/engine/organization/scope", "mock:subsidiary-scope"],
   ["@openbooks/engine/projects/subcontracts", "mock:subcontracts"],
-  ["../../../lib/authz", "mock:authz"],
-  ["../../../lib/features", "mock:features"],
-  ["../../../lib/subcontracts-gate", "mock:subcontracts-gate"],
-  ["../../../lib/subsidiaries", "mock:subsidiaries"],
+  ["@/lib/authz", "mock:authz"],
+  ["@/lib/features", "mock:features"],
 ]);
 
 const hooks = registerHooks({
@@ -175,7 +161,7 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?subcontracts-update-lines-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-test.after(() => hooks.deregister())
+test.after(() => hooks.deregister());
 
 const APP_ID = "00000000-0000-4000-8000-00000000b001";
 const SOV_ID = "00000000-0000-4000-8000-00000000b002";
@@ -203,7 +189,11 @@ function updateBody(lines: unknown, expectedRevision: unknown = 1): Record<strin
 
 test("updatePayApplication with missing lines is rejected at the body boundary", async () => {
   reset();
-  const response = await post({ action: "updatePayApplication", payApplicationId: APP_ID, expectedRevision: 1 });
+  const response = await post({
+    action: "updatePayApplication",
+    payApplicationId: APP_ID,
+    expectedRevision: 1,
+  });
 
   assert.equal(response.status, 422);
   const payload = (await response.json()) as { issues?: Array<{ path: string }> };
@@ -218,7 +208,12 @@ test("updatePayApplication without a revision token is rejected at the body boun
   // not as the helper's default — that absence is what this refuses.
   const missing = updateBody(lines);
   delete missing.expectedRevision;
-  for (const body of [missing, updateBody(lines, 0), updateBody(lines, 1.5), updateBody(lines, "1")]) {
+  for (const body of [
+    missing,
+    updateBody(lines, 0),
+    updateBody(lines, 1.5),
+    updateBody(lines, "1"),
+  ]) {
     const response = await post(body);
     assert.equal(response.status, 422, `expectedRevision=${JSON.stringify(body.expectedRevision)}`);
     const payload = (await response.json()) as { issues?: Array<{ path: string }> };
@@ -242,7 +237,9 @@ test("updatePayApplication with a line missing its identity is rejected at the b
 test("updatePayApplication with an unparseable amount is 422 naming the line and its identity", async () => {
   reset();
   const response = await post(
-    updateBody([{ sovLineId: SOV_ID, workCompletedThisPeriod: "ten", materialsStoredCurrent: "0" }]),
+    updateBody([
+      { sovLineId: SOV_ID, workCompletedThisPeriod: "ten", materialsStoredCurrent: "0" },
+    ]),
   );
 
   assert.equal(response.status, 422);
@@ -262,7 +259,11 @@ test("updatePayApplication forwards the token and validated lines to the engine"
   assert.equal(routeState.updateCalls.length, 1);
   const call = routeState.updateCalls[0] as {
     expectedRevision: number;
-    lines: Array<{ sovLineId: string; workCompletedThisPeriod: string; materialsStoredCurrent: string }>;
+    lines: Array<{
+      sovLineId: string;
+      workCompletedThisPeriod: string;
+      materialsStoredCurrent: string;
+    }>;
   };
   assert.equal(call.expectedRevision, 1);
   assert.deepEqual(call.lines, [
