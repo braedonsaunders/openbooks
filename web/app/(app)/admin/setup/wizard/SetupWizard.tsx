@@ -279,7 +279,9 @@ export function SetupWizard(props: {
     refusal: SampleCompanyRefusal;
   } | null>(null);
   const installablePacks = props.payrollPacks ?? [];
-  const [payrollPack, setPayrollPack] = useState<PayrollPack>(initialPayrollPack(installablePacks));
+  const [payrollPack, setPayrollPack] = useState<PayrollPack>(
+    initialPayrollPack(installablePacks, props.initial.country),
+  );
   const countries = useMemo(() => countryOptions(locale), [locale]);
   const currencies = useMemo(() => currencyOptions(locale), [locale]);
   // Fiscal months render in the operator's locale — a hardcoded English list
@@ -465,13 +467,17 @@ export function SetupWizard(props: {
       setStepIdx(steps.indexOf("done"));
     } catch (e) {
       if (attemptedSampleIndustry) {
+        // The company setup is already saved; only the optional sample
+        // company failed. Finish the wizard and keep the notice beside its
+        // next steps rather than offering to apply the setup again.
         const refusal = sampleAttempts.current.get(attemptedSampleIndustry) ?? {};
         setSampleFailure({ industry: attemptedSampleIndustry, refusal });
         toast.error(refusal.message ?? sampleT("createFailed"));
+        setStepIdx(steps.indexOf("done"));
       } else {
         toast.error((e as Error).message);
+        setStepIdx(steps.indexOf("review"));
       }
-      setStepIdx(steps.indexOf("review"));
     } finally {
       applyLocked.current = false;
       setBusy(false);
@@ -694,6 +700,12 @@ export function SetupWizard(props: {
           setName={setName}
           setLegalName={setLegalName}
           setCountry={(value) => {
+            // A pack still derived from the previous country follows the new one.
+            setPayrollPack((current) =>
+              current === initialPayrollPack(installablePacks, country)
+                ? initialPayrollPack(installablePacks, value)
+                : current,
+            );
             setCountry(value);
             if (!timeZoneChosen) setTimeZone(countryDefaultTimeZone(value));
           }}
@@ -788,7 +800,16 @@ export function SetupWizard(props: {
           {sampleFailure.refusal.requestId && (
             <p>{sampleT("requestReference", { requestId: sampleFailure.refusal.requestId })}</p>
           )}
-          <Link href="/admin/setup/company#sample-companies" className="underline">
+          <Link
+            href="/admin/setup/company#sample-companies"
+            className="underline"
+            onClick={(event) => {
+              // Refresh so the completed setup closes this first-run overlay.
+              event.preventDefault();
+              router.push("/admin/setup/company#sample-companies");
+              router.refresh();
+            }}
+          >
             {sampleT("checkStatus")}
           </Link>
         </div>
@@ -1000,7 +1021,7 @@ function CompanyStep(props: {
               id="setup-country"
               value={country}
               onChange={(e) => props.setCountry(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm uppercase text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
             >
               {countries.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -1020,7 +1041,7 @@ function CompanyStep(props: {
               id="setup-currency"
               value={currency}
               onChange={(e) => props.setCurrency(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm uppercase text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
             >
               {currencies.map((option) => (
                 <option key={option.value} value={option.value}>

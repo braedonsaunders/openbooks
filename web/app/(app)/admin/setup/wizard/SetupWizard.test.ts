@@ -42,14 +42,17 @@ test("descriptions fall back to empty, never the code", () => {
   assert.equal(packDescription(withoutCopy, "XX"), "");
 });
 
-// Preselect only what is derived: a sole installable pack, else nothing.
-test("wizard preselects no pack unless exactly one is installable", () => {
+// Preselect only what is derived: the company's own country, a sole installable pack, else nothing.
+test("wizard preselects the company country's pack or a sole pack, else nothing", () => {
   const pack = (country: string) => ({ country, name: `${country} name` });
   assert.equal(initialPayrollPack([]), null);
   assert.equal(initialPayrollPack([pack("CA"), pack("US")]), null);
   assert.equal(initialPayrollPack([pack("XX"), pack("YY"), pack("ZZ")]), null);
   assert.equal(initialPayrollPack([pack("CA")]), "CA");
   assert.equal(initialPayrollPack([pack("XX")]), "XX");
+  assert.equal(initialPayrollPack([pack("CA"), pack("US")], "CA"), "CA");
+  assert.equal(initialPayrollPack([pack("CA"), pack("US")], "us"), "US");
+  assert.equal(initialPayrollPack([pack("CA"), pack("US")], "MX"), null);
 });
 
 // Every pack in the chooser reads with a subtitle derived from its own

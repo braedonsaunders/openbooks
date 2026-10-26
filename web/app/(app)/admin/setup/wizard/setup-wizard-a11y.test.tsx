@@ -591,7 +591,7 @@ test("optional industry data installs a separate workspace and offers direct ent
 });
 
 for (const outcome of ["refused", "transport"] as const) {
-  test(`optional sample ${outcome} keeps saved setup and blocks a repeated provisioning request`, async (t) => {
+  test(`optional sample ${outcome} keeps saved setup and finishes without a repeated provisioning request`, async (t) => {
     const { host, root } = mount();
     const requests: string[] = [];
     const prior = globalThis.fetch;
@@ -658,12 +658,13 @@ for (const outcome of ["refused", "transport"] as const) {
       assert.match(failure, /readiness is unconfirmed/);
     }
     assert.doesNotMatch(failure, /Nothing was created/);
-    const apply = buttonsNamed("Set up my books")[0]!;
-    assert.equal(apply.disabled, false);
-    await act(async () => {
-      apply.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    });
-    await tick(STEP_WAIT);
+    // The saved setup finishes the wizard: nothing offers to apply it again,
+    // and the live company's next steps stay beside the sample notice.
+    assert.equal(buttonsNamed("Set up my books").length, 0, "the saved setup is not offered again");
+    assert.ok(
+      buttonsNamed("Create your first invoice")[0],
+      "the live-company next action remains available",
+    );
     assert.equal(
       requests.filter((url) => url === "/api/admin/setup/wizard").length,
       1,
@@ -672,7 +673,7 @@ for (const outcome of ["refused", "transport"] as const) {
     assert.equal(
       requests.filter((url) => url === "/api/data/sample-companies").length,
       1,
-      "same-industry Apply never replays the failed sample request",
+      "a failed sample request is never replayed",
     );
   });
 }

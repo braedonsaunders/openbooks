@@ -26,11 +26,17 @@ function taxYearSpan(years: readonly number[]): string {
 }
 
 /**
- * Preselect only what is derived: a sole installable pack. Otherwise nothing —
- * the wizard must not silently become any one country, and the operator
- * chooses (or leaves payroll pack-less to install later from Payroll setup).
+ * Preselect only what is derived: the pack for the company's own country, or
+ * a sole installable pack. Otherwise nothing — the wizard must not silently
+ * become any other country, and the operator chooses (or leaves payroll
+ * pack-less to install later from Payroll setup).
  */
-export function initialPayrollPack(packs: readonly WizardPayrollPack[]): string | null {
+export function initialPayrollPack(
+  packs: readonly WizardPayrollPack[],
+  companyCountry?: string | null,
+): string | null {
+  const own = packs.find((pack) => pack.country === companyCountry?.toUpperCase());
+  if (own) return own.country;
   return packs.length === 1 ? (packs[0]?.country ?? null) : null;
 }
 
