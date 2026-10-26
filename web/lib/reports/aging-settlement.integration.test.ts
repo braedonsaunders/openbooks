@@ -433,3 +433,35 @@ test(
     }
   },
 );
+
+test(
+  "AP aging keeps a vendor whose open bill and unapplied payment offset inside one bucket",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await withBypassContext(async () => {
+        await addPeriod(org, 2026, 4, "2026-04-01", "2026-04-30");
+        await postBill(org, "BILL-OFFSET", "2026-04-05", "2026-04-20", "900");
+        await postPayment(org, "PAY-OFFSET", "2026-04-20", "900");
+      });
+      await withOrgContext(org.orgId, async () => {
+        assert.equal(await glControl(org), "0.0000", "the payment clears the control");
+        const summary = await agingByParty("ap", AS_OF, undefined, org.orgId);
+        assert.equal(summary.rows.length, 1, "the vendor still carries two open documents");
+        const row = summary.rows[0]!;
+        assert.deepEqual(
+          [row.current, row.b1, row.b2, row.b3, row.b4, row.total],
+          ["0.0000", "0.0000", "0.0000", "0.0000", "0.0000", "0.0000"],
+        );
+        const detail = await agingDetail("ap", AS_OF, undefined, org.orgId);
+        assert.deepEqual(detail.rows.map((r) => [r.reference, r.bucket, r.open]).sort(), [
+          ["BILL-OFFSET", "b1", "900.0000"],
+          ["PAY-OFFSET", "b1", "-900.0000"],
+        ]);
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

@@ -28,7 +28,7 @@ import { type DimFilter, dimWhere } from "./filters";
 import { apOpenAccountScope, arOpenAccountScope, arResidualAccountScope } from "../ledger-scope";
 // Age basis precedence (due, else posting, else document date) is the shared
 // rule in ../aging-basis; the SQL below applies it as a coalesce.
-import { agingBucketIndex } from "../aging-basis";
+import { AGING_BUCKET_UPPER_DAYS, agingBucketIndex } from "../aging-basis";
 
 // ---------------------------------------------------------------------------
 // AR / AP Aging
@@ -463,11 +463,57 @@ async function openDocuments(
   return readOpenDocuments(openDocumentsSql(...args));
 }
 
-/** The base summary's documents, without the transaction leg (`openTxn` is empty). */
-async function openBaseDocuments(
+/** The opens a party summary reads: its age, functional leg and amounts. */
+type AgingOpen = Pick<
+  OpenDocument,
+  "partyId" | "partyName" | "ageDays" | "funcCcy" | "txnCcy" | "openBase" | "openTxn"
+>;
+
+/** `agingBucketIndex` as SQL, from the same boundaries. */
+function agingBucketIndexSql(age: SQL): SQL {
+  const [current, b1, b2, b3] = AGING_BUCKET_UPPER_DAYS;
+  return sql`(case when ${age} <= ${current} then 0 when ${age} <= ${b1} then 1
+    when ${age} <= ${b2} then 2 when ${age} < ${b3 + 1} then 3 else 4 end)`;
+}
+
+/**
+ * The base summary's opens, netted in SQL per party, functional currency, age
+ * bucket and sign. An open already in the reporting currency converts 1:1, so
+ * summing first changes nothing; an open that needs a rate stays its own row
+ * and rounds on its own. Each row stands at its oldest document, so parties
+ * reach the summary in the same order their documents would. The transaction
+ * leg is not read (`txnCcy` and `openTxn` are empty).
+ */
+async function openBaseBuckets(
+  target: string,
   ...args: Parameters<typeof openBaseDocumentsSql>
-): Promise<OpenDocument[]> {
-  return readOpenDocuments(openBaseDocumentsSql(...args));
+): Promise<AgingOpen[]> {
+  const r = await db.execute<{
+    party_id: string | null;
+    party_name: string | null;
+    func_ccy: string;
+    age_days: number;
+    open_base: string;
+  }>(
+    sql`
+    select od.party_id, od.party_name, od.func_ccy, max(od.age_days) as age_days,
+           (array_agg(od.doc_id order by od.age_days desc, od.doc_id))[1] as lead_doc,
+           sum(od.open_base) as open_base
+      from (${openBaseDocumentsSql(...args)}) od
+     group by od.party_id, od.party_name, od.func_ccy, ${agingBucketIndexSql(sql`od.age_days`)},
+              od.open_base > 0, case when od.func_ccy = ${target} then null else od.doc_id end
+     order by od.party_name nulls last, max(od.age_days) desc, lead_doc`,
+    "objects",
+  );
+  return r.map((x) => ({
+    partyId: x.party_id,
+    partyName: x.party_name,
+    ageDays: x.age_days,
+    funcCcy: x.func_ccy,
+    txnCcy: "",
+    openBase: x.open_base,
+    openTxn: "",
+  }));
 }
 
 async function readOpenDocuments(query: SQL): Promise<OpenDocument[]> {
@@ -551,7 +597,7 @@ export async function agingByParty(
   // the open-item index when that is the cheaper way to read the date; the
   // transaction basis rebuilds both legs.
   const fromIndex = basis === "base" && (await openItemIndexFavored(db, resolvedOrgId, asOf));
-  const docs = await (fromIndex ? openBaseDocuments : openDocuments)(
+  const source = [
     side,
     asOf,
     dims,
@@ -560,15 +606,12 @@ export async function agingByParty(
     kinds,
     negativeKinds,
     { bookId: opts?.bookId },
-  );
-  const { residuals, unopenedLines } = await controlResiduals(
-    side,
-    asOf,
-    dims,
-    resolvedOrgId,
-    orgBase,
-    opts?.bookId,
-  );
+  ] as const;
+  // The documents and the control balances they reconcile to are independent reads.
+  const [docs, { residuals, unopenedLines }] = await Promise.all([
+    fromIndex ? openBaseBuckets(target, ...source) : openDocuments(...source),
+    controlResiduals(side, asOf, dims, resolvedOrgId, orgBase, opts?.bookId),
+  ]);
   // A document currency with no spot must never block the BASE report (it
   // converts nothing through it): only request the legs this basis reads,
   // plus the functional legs the residual always needs.
@@ -694,6 +737,9 @@ interface UnopenedControlLine {
   remainder: string;
 }
 
+/** The unopened control lines of the given parties (`null` is the partyless balance). */
+type UnopenedLinesReader = (parties: readonly (string | null)[]) => Promise<UnopenedControlLine[]>;
+
 async function controlResiduals(
   side: AgingSide,
   asOf: string,
@@ -701,7 +747,7 @@ async function controlResiduals(
   orgId: string,
   orgBase: string,
   bookId?: string | null,
-): Promise<{ residuals: ControlResidual[]; unopenedLines: () => Promise<UnopenedControlLine[]> }> {
+): Promise<{ residuals: ControlResidual[]; unopenedLines: UnopenedLinesReader }> {
   const noLines = async (): Promise<UnopenedControlLine[]> => [];
   if (
     dims?.departmentId ||
@@ -738,10 +784,12 @@ async function controlResiduals(
   );
   const residuals = control.map((c) => ({ partyId: c.party_id, funcCcy: c.func_ccy, bal: c.bal }));
   // The journal-entry listing is read only once a reconciling balance is
-  // known to exist (see foldControlResidual), so a tied subledger pays nothing.
+  // known to exist (see foldControlResidual), and only for the parties that
+  // carry one, so a tied subledger pays nothing.
   return {
     residuals,
-    unopenedLines: () => unopenedControlLines(side, asOf, dims, orgId, orgBase, bookId),
+    unopenedLines: (parties) =>
+      unopenedControlLines(side, asOf, dims, orgId, orgBase, parties, bookId),
   };
 }
 
@@ -759,8 +807,13 @@ async function unopenedControlLines(
   dims: DimFilter | undefined,
   orgId: string,
   orgBase: string,
+  parties: readonly (string | null)[],
   bookId?: string | null,
 ): Promise<UnopenedControlLine[]> {
+  const partyIds = parties.filter((id): id is string => id !== null);
+  const partyScope = sql`(l.party_id = any(${`{${partyIds.join(",")}}`}::uuid[])${
+    parties.includes(null) ? sql` or l.party_id is null` : sql``
+  })`;
   const controlScope =
     side === "ap" ? apOpenAccountScope(sql`a`, orgId) : arResidualAccountScope(sql`a`, orgId);
   const { kinds } = agingKinds(side);
@@ -783,7 +836,7 @@ async function unopenedControlLines(
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
         left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
-       where l.org_id = ${orgId} and ${controlScope} and e.posting_date <= ${asOf}
+       where l.org_id = ${orgId} and ${partyScope} and ${controlScope} and e.posting_date <= ${asOf}
          and e.book_id in ${statementBookIdsExpr(orgId, bookId)}
          and ${dimWhere(dims)}
          -- An open-item line settled on the date leaves no remainder, so
@@ -839,9 +892,9 @@ async function foldControlResidual(
   side: AgingSide,
   orgId: string,
   rows: AgingRow[],
-  docs: OpenDocument[],
+  docs: readonly AgingOpen[],
   residuals: ControlResidual[],
-  unopenedLines: () => Promise<UnopenedControlLine[]>,
+  unopenedLines: UnopenedLinesReader,
   convert: (native: string, from: string) => ExactDecimal,
 ): Promise<void> {
   if (residuals.length === 0) return;
@@ -871,7 +924,7 @@ async function foldControlResidual(
   }
   if (residualByParty.size === 0) return;
   const entriesByParty = new Map<string | null, UnopenedControlEntry[]>();
-  for (const line of await unopenedLines()) {
+  for (const line of await unopenedLines([...residualByParty.keys()])) {
     const presented = (side === "ap" ? decimalNeg(line.remainder) : line.remainder) as ExactDecimal;
     const list = entriesByParty.get(line.partyId) ?? [];
     list.push({
