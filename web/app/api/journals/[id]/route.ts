@@ -1,25 +1,45 @@
-import { journalHeaderInstructionFields, journalLineInstructionFields } from '@/lib/journal-instructions'
-import { validateJournalInstructions } from '@openbooks/engine/ledger/journal-instructions'
-import { lookupExchangeRate } from '@openbooks/engine/fx/spot-rate'
-import { accountingPreferences } from '@openbooks/engine/organization/accounting-preferences'
+import {
+  journalHeaderInstructionFields,
+  journalLineInstructionFields,
+} from "@/lib/journal-instructions";
+import { validateJournalInstructions } from "@openbooks/engine/ledger/journal-instructions";
+import { lookupExchangeRate } from "@openbooks/engine/fx/spot-rate";
+import { accountingPreferences } from "@openbooks/engine/organization/accounting-preferences";
 import { validateSavedAmortizationLines } from "@openbooks/engine/amortization";
 import { journalAmortizationFields } from "@/lib/journal-amortization";
-import { assertWithholdingDepositEdit, assertWithholdingRemittanceEdit, ContractorWithholdingError } from "@openbooks/engine/contractor-withholding";
+import {
+  assertWithholdingDepositEdit,
+  assertWithholdingRemittanceEdit,
+  ContractorWithholdingError,
+} from "@openbooks/engine/contractor-withholding";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { sum, toUnits } from '@openbooks/engine/money/money'
-import { deleteDocument, DeleteError } from '@openbooks/engine/ledger/document-delete'
-import { lockScopeRow, ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
-import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/records/transaction-audit'
-import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
-import { DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction } from "@openbooks/engine/records/document-edit-policy";
+import type { Authz } from "@/lib/authz";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { sum, toUnits } from "@openbooks/engine/money/money";
+import { deleteDocument, DeleteError } from "@openbooks/engine/ledger/document-delete";
+import {
+  lockScopeRow,
+  ScopeNotFoundError,
+  subsidiaryScopeAllows,
+  subsidiaryVisibleFilter,
+} from "@openbooks/engine/organization/scope";
+import {
+  captureTransactionAuditSnapshot,
+  recordTransactionAudit,
+} from "@openbooks/engine/records/transaction-audit";
+import { guardSubsidiaryScope, subsidiariesInScope } from "@/lib/authz";
+import {
+  DocumentEditError,
+  requireDocumentEditRevision,
+  runDocumentVersionedTransaction,
+} from "@openbooks/engine/records/document-edit-policy";
 import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
-import { loadJournalDoc, redactJournalHeaderCustom } from '../../../../lib/journals'
-import { isUuid } from '../../../../lib/list-params'
+import { loadJournalDoc, redactJournalHeaderCustom } from "@/lib/journals";
+import { isUuid } from "@/lib/list-params";
 import {
   customFieldViewerFor,
   findUnownedCustomReferences,
@@ -27,16 +47,15 @@ import {
   loadFieldDefs,
   validateCustomValues,
   visibleCustomFieldDefs,
-} from '../../../../lib/custom-fields'
-import { extraDimsSubsidiaryError, segmentRegistry, validateExtraDims } from '../../../../lib/segments'
-import { assertDocumentSegmentDependencies } from '@openbooks/engine/organization/segment-dependencies'
-import { exactMoney, isoDate, nullableUuidId } from '../../../../lib/api/json'
+} from "@/lib/custom-fields";
+import { extraDimsSubsidiaryError, segmentRegistry, validateExtraDims } from "@/lib/segments";
+import { assertDocumentSegmentDependencies } from "@openbooks/engine/organization/segment-dependencies";
+import { exactMoney, isoDate, nullableUuidId } from "@/lib/api/json";
 import { notFound } from "@/lib/api/responses";
 import { can } from "@/lib/authz-core";
 import { JournalBookError, resolveJournalBookTarget } from "@/lib/journal-book";
 
-
-type RouteTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+type RouteTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
  * Replace the lossy JavaScript Date `updated_at` with the exact canonical OCC
@@ -49,21 +68,26 @@ async function withExactDocumentRevision<T extends { doc: Record<string, unknown
   id: string,
   orgId: string,
 ): Promise<T> {
-  const row = (await db.execute<{ updatedAt: string }>(sql`
-    select ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
+  const row = await db.execute<{ updatedAt: string }>(
+    sql`
+    select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
       from documents where id = ${id} and org_id = ${orgId}
-  `, 'objects'))
-  if (row[0]) payload.doc = { ...payload.doc, updated_at: row[0].updatedAt }
-  return payload
+  `,
+    "objects",
+  );
+  if (row[0]) payload.doc = { ...payload.doc, updated_at: row[0].updatedAt };
+  return payload;
 }
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
-async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('gl.read')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
+async function legacyGET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+  gate: Authz,
+) {
+  const { id } = await params;
+  if (!isUuid(id)) return notFound("record");
   // One transaction for the scope gate and the detail reads, locking the
   // journal row first (READ COMMITTED, like loadAsset): a concurrent rehome
   // blocks on the lock instead of authorizing the header and then moving
@@ -71,19 +95,20 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
   // REPEATABLE READ snapshot cannot take the lock: a locking read that meets
   // a concurrent update errors with 40001 instead of waiting.)
   const journal = await withOrgTransaction(gate.user.orgId, async () => {
-    const owned = (await db.execute<{ subsidiaryId: string | null }>(
+    const owned = await db.execute<{ subsidiaryId: string | null }>(
       sql`select subsidiary_id as "subsidiaryId" from documents
            where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}
              ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
-             for share`, 'objects',
-    ))
-    if (!owned[0]) return null
-    const loaded = await loadJournalDoc(id, gate.user.orgId, gate.allowedSubsidiaryIds)
-    if (!loaded) return null
-    return withExactDocumentRevision(loaded, id, gate.user.orgId)
-  })
-  if (!journal) return notFound("record")
-  return NextResponse.json(await redactJournalHeaderCustom(journal, customFieldViewerFor(gate)))
+             for share`,
+      "objects",
+    );
+    if (!owned[0]) return null;
+    const loaded = await loadJournalDoc(id, gate.user.orgId, gate.allowedSubsidiaryIds);
+    if (!loaded) return null;
+    return withExactDocumentRevision(loaded, id, gate.user.orgId);
+  });
+  if (!journal) return notFound("record");
+  return NextResponse.json(await redactJournalHeaderCustom(journal, customFieldViewerFor(gate)));
 }
 
 const journalLineInput = z
@@ -105,24 +130,32 @@ const journalLineInput = z
   })
   // A zero leg carries no financial meaning; reject it instead of silently
   // dropping a submitted line at the posting boundary.
-  .refine((line) => toUnits(line.amount) !== 0n || (line.quantity !== undefined && toUnits(line.quantity) !== 0n), 'Enter a nonzero amount or statistical quantity.')
+  .refine(
+    (line) =>
+      toUnits(line.amount) !== 0n || (line.quantity !== undefined && toUnits(line.quantity) !== 0n),
+    "Enter a nonzero amount or statistical quantity.",
+  );
 
-const journalPatchBody = z.object({
-  ...journalHeaderInstructionFields,
-  /** Optimistic concurrency token from documents.revision_seq (exact form). */
-  expectedUpdatedAt: z.string().min(1).optional(),
-  partyId: nullableUuidId.optional(),
-  documentDate: isoDate().optional(),
-  referenceNumber: z.string().nullable().optional(),
-  memo: z.string().nullable().optional(),
-  /** null = org root (posting resolves it). Only sent by multi-subsidiary orgs. */
-  subsidiaryId: nullableUuidId.optional(),
-  /** Book-specific journal target; null posts to every book. */
-  accountingBookId: nullableUuidId.optional(),
-  extraDims: z.record(z.string(), z.string().nullable()).optional(),
-  custom: z.record(z.string(), z.json()).optional(),
-  lines: z.array(journalLineInput).optional(),
-}).refine(body => Object.keys(body).length > 0, { message: 'Supply the journal changes to save.' })
+const journalPatchBody = z
+  .object({
+    ...journalHeaderInstructionFields,
+    /** Optimistic concurrency token from documents.revision_seq (exact form). */
+    expectedUpdatedAt: z.string().min(1).optional(),
+    partyId: nullableUuidId.optional(),
+    documentDate: isoDate().optional(),
+    referenceNumber: z.string().nullable().optional(),
+    memo: z.string().nullable().optional(),
+    /** null = org root (posting resolves it). Only sent by multi-subsidiary orgs. */
+    subsidiaryId: nullableUuidId.optional(),
+    /** Book-specific journal target; null posts to every book. */
+    accountingBookId: nullableUuidId.optional(),
+    extraDims: z.record(z.string(), z.string().nullable()).optional(),
+    custom: z.record(z.string(), z.json()).optional(),
+    lines: z.array(journalLineInput).optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "Supply the journal changes to save.",
+  });
 
 /**
  * Autosave a manual-journal draft. Once it enters approval or posts, the
@@ -134,59 +167,66 @@ const journalPatchBody = z.object({
  * two concurrent saves can never silently overwrite one another.
  */
 
-
 /** Walk the driver-error cause chain for a tenant-coherent FK refusal (23503). */
 function isTenantReferenceViolation(error: unknown): boolean {
-  let cursor: unknown = error
-  for (let depth = 0; depth < 4 && cursor !== null && typeof cursor === 'object'; depth++) {
-    if ((cursor as { code?: unknown }).code === '23503') return true
-    cursor = (cursor as { cause?: unknown }).cause
+  let cursor: unknown = error;
+  for (let depth = 0; depth < 4 && cursor !== null && typeof cursor === "object"; depth++) {
+    if ((cursor as { code?: unknown }).code === "23503") return true;
+    cursor = (cursor as { cause?: unknown }).cause;
   }
-  return false
+  return false;
 }
 
 /** Delete a journal (guarded: open period, no applied payments, no downstream conversion). */
 
-
 export const GET = defineRoute({
   permission: "gl.read",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  params: z.object({ "id": z.string() }),
-  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+  feature: {
+    none: "Manual journals are a core general-ledger workflow with no organization feature switch.",
+  },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params) }, authz),
 });
 
 export const PATCH = defineRoute({
   permission: "gl.post",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  params: z.object({ "id": z.string() }),
+  feature: {
+    none: "Manual journals are a core general-ledger workflow with no organization feature switch.",
+  },
+  params: z.object({ id: z.string() }),
   body: journalPatchBody,
   handler: async ({ body, params, authz: routeAuthz }) => {
+    const gate = routeAuthz;
 
-    const gate = routeAuthz
+    const user = gate.user;
+    const { id } = params;
+    if (!isUuid(id)) return notFound("record");
 
-    const user = gate.user
-    const { id } = params
-    if (!isUuid(id)) return notFound("record")
-
-    const existing = (await db.execute<{ status: string; subsidiaryId: string | null; custom: Record<string, unknown> | null }>(
-      sql`select status, subsidiary_id as "subsidiaryId", custom from documents where id = ${id} and kind = 'journal' and org_id = ${user.orgId}`, 'objects',
-    ))
-    if (!existing[0]) return notFound("record")
-    const denied = guardSubsidiaryScope(gate, existing[0].subsidiaryId)
-    if (denied) return denied
-    if (existing[0].status !== 'draft') {
+    const existing = await db.execute<{
+      status: string;
+      subsidiaryId: string | null;
+      custom: Record<string, unknown> | null;
+    }>(
+      sql`select status, subsidiary_id as "subsidiaryId", custom from documents where id = ${id} and kind = 'journal' and org_id = ${user.orgId}`,
+      "objects",
+    );
+    if (!existing[0]) return notFound("record");
+    const denied = guardSubsidiaryScope(gate, existing[0].subsidiaryId);
+    if (denied) return denied;
+    if (existing[0].status !== "draft") {
       return NextResponse.json(
-        { error: `a ${existing[0].status} journal cannot be edited — create a correcting journal instead` },
+        {
+          error: `a ${existing[0].status} journal cannot be edited — create a correcting journal instead`,
+        },
         { status: 422 },
-      )
+      );
     }
     // An empty edit is refused only after the existence and scope gates, so a
     // malformed or unknown id keeps its 404 contract on every verb.
     if (Object.keys(body).length === 0) {
-      return NextResponse.json({ error: 'At least one field must be provided.' }, { status: 400 })
+      return NextResponse.json({ error: "At least one field must be provided." }, { status: 400 });
     }
-
-
 
     // Every journal carries its legal entity. Posting falls back to the root
     // when the header is null, but subsidiary-scoped readers exclude null rows,
@@ -194,49 +234,56 @@ export const PATCH = defineRoute({
     // impact intact. Line-level nulls remain valid and fall back to the header.
     if (body.subsidiaryId === null) {
       return NextResponse.json(
-        { error: 'a journal requires a subsidiary; the subsidiary cannot be removed' },
+        { error: "a journal requires a subsidiary; the subsidiary cannot be removed" },
         { status: 422 },
-      )
+      );
     }
     // Mandatory optimistic-concurrency evidence — same contract as /api/documents/[id].
-    let expectedRevision: string
+    let expectedRevision: string;
     try {
-      expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
+      expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt);
     } catch (e) {
       if (e instanceof DocumentEditError) {
-        return apiErrorResponse(e)
+        return apiErrorResponse(e);
       }
-      throw e
+      throw e;
     }
-    const requestedSubsidiaries = [...new Set([
-      ...(body.subsidiaryId ? [body.subsidiaryId] : []),
-      ...(body.lines ?? []).flatMap((line) => line.subsidiaryId ? [line.subsidiaryId] : []),
-    ])]
+    const requestedSubsidiaries = [
+      ...new Set([
+        ...(body.subsidiaryId ? [body.subsidiaryId] : []),
+        ...(body.lines ?? []).flatMap((line) => (line.subsidiaryId ? [line.subsidiaryId] : [])),
+      ]),
+    ];
     // A restricted caller may not move a journal (header or any leg) to a
     // subsidiary they cannot see — even one that exists and is active.
     if (requestedSubsidiaries.length && !subsidiariesInScope(gate, requestedSubsidiaries)) {
-      return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
+      return NextResponse.json({ error: "invalid subsidiary" }, { status: 422 });
     }
     if (requestedSubsidiaries.length) {
-      const subsidiaries = ((await db.execute(sql`
+      const subsidiaries = await db.execute(
+        sql`
         select id from subsidiaries
          where org_id = ${user.orgId} and is_active and not is_elimination
-           and id = any(${`{${requestedSubsidiaries.join(',')}}`}::uuid[])`, 'objects')))
+           and id = any(${`{${requestedSubsidiaries.join(",")}}`}::uuid[])`,
+        "objects",
+      );
       if (subsidiaries.length !== requestedSubsidiaries.length) {
-        return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
+        return NextResponse.json({ error: "invalid subsidiary" }, { status: 422 });
       }
     }
 
     // custom-field validation (header + line) against the live definitions
-    const viewer = customFieldViewerFor(gate)
+    const viewer = customFieldViewerFor(gate);
     const [activeHeaderDefs, lineDefs, segments] = await Promise.all([
-      loadFieldDefs('documents', 'journal'),
-      loadFieldDefs('document_lines', 'journal'),
+      loadFieldDefs("documents", "journal"),
+      loadFieldDefs("document_lines", "journal"),
       segmentRegistry(user.orgId),
-    ])
-    const headerDims = body.extraDims === undefined ? null : validateExtraDims(body.extraDims, segments)
-    if (headerDims && !headerDims.ok) return NextResponse.json({ error: headerDims.error }, { status: 422 })
-    let headerCustom: Record<string, unknown> | null = null
+    ]);
+    const headerDims =
+      body.extraDims === undefined ? null : validateExtraDims(body.extraDims, segments);
+    if (headerDims && !headerDims.ok)
+      return NextResponse.json({ error: headerDims.error }, { status: 422 });
+    let headerCustom: Record<string, unknown> | null = null;
     if (body.custom !== undefined) {
       // PATCH custom values are partial: validate the effective bag so an
       // omitted required field can be satisfied by its stored value, then
@@ -244,32 +291,54 @@ export const PATCH = defineRoute({
       // keys survive. The exact-revision guard below rejects the write if a
       // concurrent edit moved the stored bag after this read.
       const existingCustom =
-        existing[0].custom && typeof existing[0].custom === 'object'
+        existing[0].custom && typeof existing[0].custom === "object"
           ? (existing[0].custom as Record<string, unknown>)
-          : {}
+          : {};
       // A restricted header field the caller cannot see is refused when changed;
       // an unchanged echo passes, and the stored value is kept by the merge below.
-      const hiddenHeader = hiddenCustomFieldRefusal(activeHeaderDefs, viewer, body.custom, existingCustom)
+      const hiddenHeader = hiddenCustomFieldRefusal(
+        activeHeaderDefs,
+        viewer,
+        body.custom,
+        existingCustom,
+      );
       if (hiddenHeader)
-        return NextResponse.json({ error: hiddenHeader.message, fieldErrors: { [hiddenHeader.key]: hiddenHeader.message } }, { status: 403 })
-      const headerDefs = visibleCustomFieldDefs(activeHeaderDefs, viewer)
-      const v = validateCustomValues(headerDefs, { ...existingCustom, ...body.custom })
-      if (!v.ok) return NextResponse.json({ error: Object.values(v.errors)[0], fieldErrors: v.errors }, { status: 422 })
+        return NextResponse.json(
+          {
+            error: hiddenHeader.message,
+            fieldErrors: { [hiddenHeader.key]: hiddenHeader.message },
+          },
+          { status: 403 },
+        );
+      const headerDefs = visibleCustomFieldDefs(activeHeaderDefs, viewer);
+      const v = validateCustomValues(headerDefs, { ...existingCustom, ...body.custom });
+      if (!v.ok)
+        return NextResponse.json(
+          { error: Object.values(v.errors)[0], fieldErrors: v.errors },
+          { status: 422 },
+        );
       // Reference custom values are uuid-SHAPED at this point but nothing
       // proves the referenced row belongs to the caller: refuse foreign or
       // dangling ids with a tenant-opaque 404 instead of persisting a
       // cross-tenant pointer. Supplied values only, so legacy bags written
       // before this fence cannot lock unrelated edits.
-      const suppliedHeaderCustom: Record<string, unknown> = {}
+      const suppliedHeaderCustom: Record<string, unknown> = {};
       for (const key of Object.keys(body.custom)) {
-        if (v.cleaned[key] !== undefined) suppliedHeaderCustom[key] = v.cleaned[key]
+        if (v.cleaned[key] !== undefined) suppliedHeaderCustom[key] = v.cleaned[key];
       }
-      const unownedHeaderRefs = await findUnownedCustomReferences(user.orgId, headerDefs, suppliedHeaderCustom)
+      const unownedHeaderRefs = await findUnownedCustomReferences(
+        user.orgId,
+        headerDefs,
+        suppliedHeaderCustom,
+      );
       if (unownedHeaderRefs.length > 0) {
-        const def = unownedHeaderRefs[0]!
-        return NextResponse.json({ error: `${def.label} not found in this organization` }, { status: 404 })
+        const def = unownedHeaderRefs[0]!;
+        return NextResponse.json(
+          { error: `${def.label} not found in this organization` },
+          { status: 404 },
+        );
       }
-      headerCustom = { ...existingCustom, ...v.cleaned }
+      headerCustom = { ...existingCustom, ...v.cleaned };
     }
 
     // Pre-validate + prepare lines (read-only) before touching the DB, so a bad
@@ -277,48 +346,76 @@ export const PATCH = defineRoute({
     // line shape are already canonical here (the zod boundary above); custom
     // fields and segments are org-configured and validated against live defs.
     // journal totals = sum of debits (positive line amounts); tax never applies
-    let totalDebits: string | null = null
-    let preparedLines: { currency: string | null; fxRate: string | null; quantity: string; unit: string | null; eliminate: boolean; amortizationTemplateId: string | null; amortizationStartOn: string | null; amortizationEndOn: string | null; accountId: string; description: string | null; amount: string; partyId: string | null; departmentId: string | null; projectId: string | null; subsidiaryId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown> }[] | null = null
+    let totalDebits: string | null = null;
+    let preparedLines:
+      | {
+          currency: string | null;
+          fxRate: string | null;
+          quantity: string;
+          unit: string | null;
+          eliminate: boolean;
+          amortizationTemplateId: string | null;
+          amortizationStartOn: string | null;
+          amortizationEndOn: string | null;
+          accountId: string;
+          description: string | null;
+          amount: string;
+          partyId: string | null;
+          departmentId: string | null;
+          projectId: string | null;
+          subsidiaryId: string | null;
+          extraDims: Record<string, string | null>;
+          custom: Record<string, unknown>;
+        }[]
+      | null = null;
     if (body.lines) {
-      const submitted = body.lines
-      totalDebits = sum(submitted.map((line) => (toUnits(line.amount) > 0n ? line.amount : '0')))
-      preparedLines = []
+      const submitted = body.lines;
+      totalDebits = sum(submitted.map((line) => (toUnits(line.amount) > 0n ? line.amount : "0")));
+      preparedLines = [];
       for (let i = 0; i < submitted.length; i++) {
-        const l = submitted[i]!
+        const l = submitted[i]!;
         // Every submitted leg must name its account: the drawers send every
         // contentful row, so an account-less row arrives here rather
         // than vanishing client-side — name its line instead of booking
         // without it. Malformed ids get the same line-numbered treatment the
         // boundary's anonymous uuid failure never gave them.
-        const accountId = l.accountId
-        if (typeof accountId !== 'string' || accountId.trim() === '') {
-          return NextResponse.json({ error: `Line ${i + 1}: an account is required` }, { status: 422 })
+        const accountId = l.accountId;
+        if (typeof accountId !== "string" || accountId.trim() === "") {
+          return NextResponse.json(
+            { error: `Line ${i + 1}: an account is required` },
+            { status: 422 },
+          );
         }
         if (!isUuid(accountId)) {
-          return NextResponse.json({ error: `Line ${i + 1}: invalid account` }, { status: 422 })
+          return NextResponse.json({ error: `Line ${i + 1}: invalid account` }, { status: 422 });
         }
-        const lv = validateCustomValues(lineDefs, l.custom)
+        const lv = validateCustomValues(lineDefs, l.custom);
         if (!lv.ok) {
           return NextResponse.json(
             { error: `Line ${i + 1}: ${Object.values(lv.errors)[0]}`, fieldErrors: lv.errors },
             { status: 422 },
-          )
+          );
         }
         // Lines are replaced wholesale, so the whole submitted line bag is
         // newly supplied: refuse foreign or dangling reference ids with the
         // same tenant-opaque 404 the line-account precheck below returns.
-        const unownedLineRefs = await findUnownedCustomReferences(user.orgId, lineDefs, lv.cleaned)
+        const unownedLineRefs = await findUnownedCustomReferences(user.orgId, lineDefs, lv.cleaned);
         if (unownedLineRefs.length > 0) {
-          const def = unownedLineRefs[0]!
+          const def = unownedLineRefs[0]!;
           return NextResponse.json(
             { error: `Line ${i + 1}: ${def.label} not found in this organization` },
             { status: 404 },
-          )
+          );
         }
-        const lineDims = validateExtraDims(l.extraDims, segments)
-        if (!lineDims.ok) return NextResponse.json({ error: `Line ${i + 1}: ${lineDims.error}` }, { status: 422 })
+        const lineDims = validateExtraDims(l.extraDims, segments);
+        if (!lineDims.ok)
+          return NextResponse.json({ error: `Line ${i + 1}: ${lineDims.error}` }, { status: 422 });
         preparedLines.push({
-          currency: l.currency ?? null, fxRate: l.fxRate ?? null, quantity: l.quantity ?? "1", unit: l.unit ?? null, eliminate: l.eliminate ?? false,
+          currency: l.currency ?? null,
+          fxRate: l.fxRate ?? null,
+          quantity: l.quantity ?? "1",
+          unit: l.unit ?? null,
+          eliminate: l.eliminate ?? false,
           accountId,
           description: l.description ?? null,
           amount: l.amount,
@@ -331,7 +428,7 @@ export const PATCH = defineRoute({
           subsidiaryId: l.subsidiaryId ?? null,
           extraDims: lineDims.cleaned,
           custom: lv.cleaned,
-        })
+        });
       }
     }
 
@@ -342,21 +439,36 @@ export const PATCH = defineRoute({
     // applyDocumentEdit service). The per-line loop above guarantees every
     // submitted accountId is a uuid string.
     if (preparedLines) {
-      const lineAccountIds = [...new Set(preparedLines.map((l) => l.accountId))]
+      const lineAccountIds = [...new Set(preparedLines.map((l) => l.accountId))];
       const owned = lineAccountIds.length
-        ? (await db.execute<{ id: string }>(sql`
+        ? await db.execute<{ id: string }>(
+            sql`
             select id from accounts
-             where org_id = ${user.orgId} and id = any(${`{${lineAccountIds.join(',')}}`}::uuid[])`, 'objects'))
-        : []
+             where org_id = ${user.orgId} and id = any(${`{${lineAccountIds.join(",")}}`}::uuid[])`,
+            "objects",
+          )
+        : [];
       if (owned.length !== lineAccountIds.length) {
-        return NextResponse.json({ error: 'account not found in this organization' }, { status: 404 })
+        return NextResponse.json(
+          { error: "account not found in this organization" },
+          { status: 404 },
+        );
       }
     }
 
     try {
       await runDocumentVersionedTransaction<
         RouteTransaction,
-        { status: string; updatedAt: string; subsidiaryId: string | null; extraDims: unknown; accountingBookId: string | null; currency: string; fxRate: string; documentDate: string },
+        {
+          status: string;
+          updatedAt: string;
+          subsidiaryId: string | null;
+          extraDims: unknown;
+          accountingBookId: string | null;
+          currency: string;
+          fxRate: string;
+          documentDate: string;
+        },
         void
       >({
         expectedRevision,
@@ -364,58 +476,90 @@ export const PATCH = defineRoute({
         // The row lock and exact revision comparison are the first operations in
         // the write transaction: a concurrent writer cannot slip between the
         // check and the header/line replacement.
-        lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null; extraDims: unknown; accountingBookId: string | null; currency: string; fxRate: string; documentDate: string }>(sql`
+        lock: async (tx) =>
+          (
+            await tx.execute<{
+              status: string;
+              updatedAt: string;
+              subsidiaryId: string | null;
+              extraDims: unknown;
+              accountingBookId: string | null;
+              currency: string;
+              fxRate: string;
+              documentDate: string;
+            }>(
+              sql`
           select status,
-                 ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt",
+                 ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt",
                  subsidiary_id as "subsidiaryId", extra_dims as "extraDims",
                  accounting_book_id as "accountingBookId", currency, fx_rate::text as "fxRate", document_date::text as "documentDate"
             from documents
            where id = ${id} and kind = 'journal' and org_id = ${user.orgId}
            for update
-        `, 'objects'))[0] ?? null,
+        `,
+              "objects",
+            )
+          )[0] ?? null,
         mutate: async (tx, locked) => {
           if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, locked.subsidiaryId)) {
-            throw new ScopeNotFoundError()
+            throw new ScopeNotFoundError();
           }
-          if (locked.status !== 'draft') {
+          if (locked.status !== "draft") {
             throw new DocumentEditError(
               422,
               `a ${locked.status} journal cannot be edited — create a correcting journal instead`,
-            )
+            );
           }
 
-          const targetSubsidiaryId = body.subsidiaryId ?? locked.subsidiaryId
-          const effectiveHeaderDims = headerDims?.cleaned ?? (
-            locked.extraDims && typeof locked.extraDims === 'object' && !Array.isArray(locked.extraDims)
-              ? locked.extraDims as Record<string, string | null>
-              : {}
-          )
+          const targetSubsidiaryId = body.subsidiaryId ?? locked.subsidiaryId;
+          const effectiveHeaderDims =
+            headerDims?.cleaned ??
+            (locked.extraDims &&
+            typeof locked.extraDims === "object" &&
+            !Array.isArray(locked.extraDims)
+              ? (locked.extraDims as Record<string, string | null>)
+              : {});
           const headerNeedsDimensionCheck =
             (body.subsidiaryId !== undefined && body.subsidiaryId !== locked.subsidiaryId) ||
-            body.extraDims !== undefined || preparedLines !== null
+            body.extraDims !== undefined ||
+            preparedLines !== null;
           if (headerNeedsDimensionCheck) {
             const headerDimensionError = await extraDimsSubsidiaryError(
-              user.orgId, effectiveHeaderDims, targetSubsidiaryId ?? '', segments, tx,
-            )
-            if (headerDimensionError) throw new DocumentEditError(422, headerDimensionError)
+              user.orgId,
+              effectiveHeaderDims,
+              targetSubsidiaryId ?? "",
+              segments,
+              tx,
+            );
+            if (headerDimensionError) throw new DocumentEditError(422, headerDimensionError);
           }
           if (preparedLines) {
             for (const [index, line] of preparedLines.entries()) {
-              const lineSubsidiaryId = line.subsidiaryId ?? targetSubsidiaryId
-              if (!lineSubsidiaryId) throw new DocumentEditError(422, 'journal line requires a subsidiary')
-              const error = await extraDimsSubsidiaryError(user.orgId, line.extraDims, lineSubsidiaryId, segments, tx)
-              if (error) throw new DocumentEditError(422, `Line ${index + 1}: ${error}`)
+              const lineSubsidiaryId = line.subsidiaryId ?? targetSubsidiaryId;
+              if (!lineSubsidiaryId)
+                throw new DocumentEditError(422, "journal line requires a subsidiary");
+              const error = await extraDimsSubsidiaryError(
+                user.orgId,
+                line.extraDims,
+                lineSubsidiaryId,
+                segments,
+                tx,
+              );
+              if (error) throw new DocumentEditError(422, `Line ${index + 1}: ${error}`);
             }
           } else if (body.subsidiaryId !== undefined && body.subsidiaryId !== locked.subsidiaryId) {
             const existingDims = await tx.execute<{
-              subsidiary_id: string | null
-              extra_dims: Record<string, string | null> | null
-            }>(sql`
+              subsidiary_id: string | null;
+              extra_dims: Record<string, string | null> | null;
+            }>(
+              sql`
               select subsidiary_id, extra_dims from document_lines
                where org_id = ${user.orgId} and document_id = ${id}
                order by line_number
                for update
-            `, 'objects')
+            `,
+              "objects",
+            );
             for (const [index, line] of existingDims.entries()) {
               // Header-only rehome keeps every stored leg: an explicit line
               // subsidiary the caller cannot see would otherwise ride along
@@ -425,73 +569,131 @@ export const PATCH = defineRoute({
                 line.subsidiary_id !== null &&
                 !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, line.subsidiary_id)
               ) {
-                throw new ScopeNotFoundError()
+                throw new ScopeNotFoundError();
               }
-              const lineSubsidiaryId = line.subsidiary_id ?? targetSubsidiaryId
-              if (!lineSubsidiaryId) throw new DocumentEditError(422, 'journal line requires a subsidiary')
-              const error = await extraDimsSubsidiaryError(user.orgId, line.extra_dims ?? {}, lineSubsidiaryId, segments, tx)
-              if (error) throw new DocumentEditError(422, `Line ${index + 1}: ${error}`)
+              const lineSubsidiaryId = line.subsidiary_id ?? targetSubsidiaryId;
+              if (!lineSubsidiaryId)
+                throw new DocumentEditError(422, "journal line requires a subsidiary");
+              const error = await extraDimsSubsidiaryError(
+                user.orgId,
+                line.extra_dims ?? {},
+                lineSubsidiaryId,
+                segments,
+                tx,
+              );
+              if (error) throw new DocumentEditError(422, `Line ${index + 1}: ${error}`);
             }
           }
 
           // Generated authority journals keep their exact source rows and zero
           // statutory face amount. The editor's debit presentation is not a
           // new amount or permission to replace financial source evidence.
-          if (await assertWithholdingDepositEdit(tx, user.orgId, id, preparedLines, body) ||
-              await assertWithholdingRemittanceEdit(tx, user.orgId, id, preparedLines, body)) {
-            preparedLines = null
-            totalDebits = null
+          if (
+            (await assertWithholdingDepositEdit(tx, user.orgId, id, preparedLines, body)) ||
+            (await assertWithholdingRemittanceEdit(tx, user.orgId, id, preparedLines, body))
+          ) {
+            preparedLines = null;
+            totalDebits = null;
           }
 
           // Book targeting resolves the denomination of posted amounts; the journal retains its transaction currency.
-          let bookTarget: Awaited<ReturnType<typeof resolveJournalBookTarget>> | null = null
-          const requestedBook = body.accountingBookId !== undefined ? body.accountingBookId : locked.accountingBookId
-          if (body.accountingBookId !== undefined || body.subsidiaryId !== undefined || body.currency !== undefined || body.fxRate !== undefined || body.documentDate !== undefined) {
-            const bookSubsidiaryId = targetSubsidiaryId ?? (await tx.execute<{ id: string }>(sql`
-              select id from subsidiaries where org_id = ${user.orgId} and parent_id is null`, 'objects'))[0]?.id
-            if (!bookSubsidiaryId) throw new DocumentEditError(422, 'journal requires a subsidiary')
+          let bookTarget: Awaited<ReturnType<typeof resolveJournalBookTarget>> | null = null;
+          const requestedBook =
+            body.accountingBookId !== undefined ? body.accountingBookId : locked.accountingBookId;
+          if (
+            body.accountingBookId !== undefined ||
+            body.subsidiaryId !== undefined ||
+            body.currency !== undefined ||
+            body.fxRate !== undefined ||
+            body.documentDate !== undefined
+          ) {
+            const bookSubsidiaryId =
+              targetSubsidiaryId ??
+              (
+                await tx.execute<{ id: string }>(
+                  sql`
+              select id from subsidiaries where org_id = ${user.orgId} and parent_id is null`,
+                  "objects",
+                )
+              )[0]?.id;
+            if (!bookSubsidiaryId)
+              throw new DocumentEditError(422, "journal requires a subsidiary");
             try {
               bookTarget = await resolveJournalBookTarget({
                 orgId: user.orgId,
                 requested: requestedBook,
                 subsidiaryId: bookSubsidiaryId,
-                canPostBookSpecific: can(gate, 'gl.post_book_specific'),
+                canPostBookSpecific: can(gate, "gl.post_book_specific"),
                 executor: tx,
-              })
+              });
             } catch (error) {
-              if (error instanceof JournalBookError) throw new DocumentEditError(error.status, error.message)
-              throw error
+              if (error instanceof JournalBookError)
+                throw new DocumentEditError(error.status, error.message);
+              throw error;
             }
           }
 
-          const journalCurrency = body.currency ?? locked.currency
-          let journalRate = body.fxRate ?? locked.fxRate
-          if (bookTarget && body.fxRate === undefined && (body.currency !== undefined || body.documentDate !== undefined || body.subsidiaryId !== undefined || body.accountingBookId !== undefined)) {
-            const date = body.documentDate ?? locked.documentDate
-            const preferences = await accountingPreferences(tx,user.orgId,targetSubsidiaryId!,date)
-            journalRate = journalCurrency === bookTarget.currency ? '1' : (await lookupExchangeRate(tx,user.orgId,journalCurrency,bookTarget.currency,date,preferences.postingRateType)) ?? ''
-            if (!journalRate) throw new DocumentEditError(422,'No exchange rate covers this journal currency and date. Enter a rate or record the entity’s configured rate series in Setup.')
+          const journalCurrency = body.currency ?? locked.currency;
+          let journalRate = body.fxRate ?? locked.fxRate;
+          if (
+            bookTarget &&
+            body.fxRate === undefined &&
+            (body.currency !== undefined ||
+              body.documentDate !== undefined ||
+              body.subsidiaryId !== undefined ||
+              body.accountingBookId !== undefined)
+          ) {
+            const date = body.documentDate ?? locked.documentDate;
+            const preferences = await accountingPreferences(
+              tx,
+              user.orgId,
+              targetSubsidiaryId!,
+              date,
+            );
+            journalRate =
+              journalCurrency === bookTarget.currency
+                ? "1"
+                : ((await lookupExchangeRate(
+                    tx,
+                    user.orgId,
+                    journalCurrency,
+                    bookTarget.currency,
+                    date,
+                    preferences.postingRateType,
+                  )) ?? "");
+            if (!journalRate)
+              throw new DocumentEditError(
+                422,
+                "No exchange rate covers this journal currency and date. Enter a rate or record the entity’s configured rate series in Setup.",
+              );
           }
-          const auditBefore = await captureTransactionAuditSnapshot(tx, id, user.orgId)
-          if (!auditBefore) throw new Error(`journal ${id} disappeared before update`)
+          const auditBefore = await captureTransactionAuditSnapshot(tx, id, user.orgId);
+          if (!auditBefore) throw new Error(`journal ${id} disappeared before update`);
 
           if (preparedLines) {
-            await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
+            await tx.execute(
+              sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`,
+            );
             for (let i = 0; i < preparedLines.length; i++) {
-              const l = preparedLines[i]!
-              const savedLine = await tx.execute<{ id: string }>(sql`
+              const l = preparedLines[i]!;
+              const savedLine = await tx.execute<{ id: string }>(
+                sql`
                 insert into document_lines (org_id, document_id, line_number, account_id, description,
                                             quantity, unit, journal_currency, journal_fx_rate, journal_eliminate, unit_price, amount, party_id, department_id, project_id,
                                             subsidiary_id, extra_dims, custom, amortization_template_id, amortization_start_on, amortization_end_on)
                 values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description},
                         ${l.quantity}, ${l.unit}, ${l.currency}, ${l.fxRate}, ${l.eliminate}, ${l.amount}, ${l.amount}, ${l.partyId}, ${l.departmentId}, ${l.projectId},
                         ${l.subsidiaryId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)}, ${l.amortizationTemplateId}, ${l.amortizationStartOn}, ${l.amortizationEndOn}) returning id
-              `, 'objects')
-              if (savedLine.length !== 1) throw new DocumentEditError(409, `Line ${i + 1} could not be saved`)
+              `,
+                "objects",
+              );
+              if (savedLine.length !== 1)
+                throw new DocumentEditError(409, `Line ${i + 1} could not be saved`);
             }
           }
 
-          const savedDocument = await tx.execute<{ id: string }>(sql`
+          const savedDocument = await tx.execute<{ id: string }>(
+            sql`
             update documents set
               party_id = ${body.partyId !== undefined ? body.partyId : sql`party_id`},
               document_date = coalesce(${body.documentDate ?? null}, document_date),
@@ -515,36 +717,49 @@ export const PATCH = defineRoute({
               updated_by = ${user.id}
             where id = ${id} and org_id = ${user.orgId}
             returning id
-          `, 'objects')
-          if (savedDocument.length !== 1) throw new DocumentEditError(409, 'Journal could not be saved')
+          `,
+            "objects",
+          );
+          if (savedDocument.length !== 1)
+            throw new DocumentEditError(409, "Journal could not be saved");
 
           // Segment value dependencies on the saved lines, as posting will read them.
-          await assertDocumentSegmentDependencies(tx, user.orgId, id)
-          await validateSavedAmortizationLines(tx, user.orgId, id)
-          const totals = await validateJournalInstructions(tx,user.orgId,id)
-          const measured = await tx.execute(sql`update documents set subtotal=${totals.debits},total=${totals.debits}
-            where org_id=${user.orgId} and id=${id} and status='draft' returning id`, 'objects')
-          if (measured.length !== 1) throw new DocumentEditError(409,"The journal's header-currency total could not be saved")
+          await assertDocumentSegmentDependencies(tx, user.orgId, id);
+          await validateSavedAmortizationLines(tx, user.orgId, id);
+          const totals = await validateJournalInstructions(tx, user.orgId, id);
+          const measured = await tx.execute(
+            sql`update documents set subtotal=${totals.debits},total=${totals.debits}
+            where org_id=${user.orgId} and id=${id} and status='draft' returning id`,
+            "objects",
+          );
+          if (measured.length !== 1)
+            throw new DocumentEditError(
+              409,
+              "The journal's header-currency total could not be saved",
+            );
 
-          const auditAfter = await captureTransactionAuditSnapshot(tx, id, user.orgId)
-          if (!auditAfter) throw new Error(`journal ${id} disappeared during update`)
+          const auditAfter = await captureTransactionAuditSnapshot(tx, id, user.orgId);
+          if (!auditAfter) throw new Error(`journal ${id} disappeared during update`);
           await recordTransactionAudit(tx, {
             orgId: user.orgId,
             documentId: id,
-            action: 'update',
+            action: "update",
             actorId: user.id,
-            source: 'ui',
+            source: "ui",
             before: auditBefore,
             after: auditAfter,
-          })
+          });
         },
-      })
+      });
     } catch (e) {
       if (e instanceof DocumentEditError) {
-        return apiErrorResponse(e, { details: e.fieldErrors ? { fieldErrors: e.fieldErrors } : undefined })
+        return apiErrorResponse(e, {
+          details: e.fieldErrors ? { fieldErrors: e.fieldErrors } : undefined,
+        });
       }
-      if (e instanceof ContractorWithholdingError) return NextResponse.json({ error: e.message, remedy: e.remedy }, { status: 422 })
-      if (e instanceof ScopeNotFoundError) return notFound("record")
+      if (e instanceof ContractorWithholdingError)
+        return NextResponse.json({ error: e.message, remedy: e.remedy }, { status: 422 });
+      if (e instanceof ScopeNotFoundError) return notFound("record");
       // Composite org-scoped storage keys make cross-tenant references
       // unrepresentable; map their FK refusal to a domain 422 instead of a
       // raw 500. The whole save (lines + header + totals) rolls back, so a
@@ -553,75 +768,85 @@ export const PATCH = defineRoute({
       // every other line reference (party, department, project, ...).
       if (isTenantReferenceViolation(e)) {
         return NextResponse.json(
-          { error: 'referenced party, department, project, or dimension must belong to this organization' },
+          {
+            error:
+              "referenced party, department, project, or dimension must belong to this organization",
+          },
           { status: 422 },
-        )
+        );
       }
-      throw e
+      throw e;
     }
 
     try {
       const journal = await withOrgTransaction(user.orgId, async () => {
-        await lockScopeRow(db, user.orgId, 'document', id, gate.allowedSubsidiaryIds, 'share')
-        const loaded = await loadJournalDoc(id, user.orgId, gate.allowedSubsidiaryIds)
-        return loaded ? withExactDocumentRevision(loaded, id, user.orgId) : null
-      })
-      if (!journal) return notFound("record")
-      return NextResponse.json(await redactJournalHeaderCustom(journal, customFieldViewerFor(gate)))
+        await lockScopeRow(db, user.orgId, "document", id, gate.allowedSubsidiaryIds, "share");
+        const loaded = await loadJournalDoc(id, user.orgId, gate.allowedSubsidiaryIds);
+        return loaded ? withExactDocumentRevision(loaded, id, user.orgId) : null;
+      });
+      if (!journal) return notFound("record");
+      return NextResponse.json(
+        await redactJournalHeaderCustom(journal, customFieldViewerFor(gate)),
+      );
     } catch (error) {
-      if (error instanceof ScopeNotFoundError) return notFound("record")
-      throw error
+      if (error instanceof ScopeNotFoundError) return notFound("record");
+      throw error;
     }
   },
 });
 
 export const DELETE = defineRoute({
   permission: "gl.post",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  params: z.object({ "id": z.string() }),
+  feature: {
+    none: "Manual journals are a core general-ledger workflow with no organization feature switch.",
+  },
+  params: z.object({ id: z.string() }),
   // An empty body deletes the draft the caller already holds: the fence below
   // (not the envelope) refuses a missing revision with its own remedy, so a
   // draft delete never answers a raw "invalid request body".
-  body: z.object({
-    action: z.literal('delete').optional(),
-    expectedUpdatedAt: z.string().min(1).optional(),
-  }).default({}),
+  body: z
+    .object({
+      action: z.literal("delete").optional(),
+      expectedUpdatedAt: z.string().min(1).optional(),
+    })
+    .default({}),
   handler: async ({ body, params, authz: routeAuthz }) => {
+    const gate = routeAuthz;
 
-    const gate = routeAuthz
-
-    const { id } = params
-    if (!isUuid(id)) return notFound("record")
+    const { id } = params;
+    if (!isUuid(id)) return notFound("record");
     // Existence and scope probe first, so a malformed or unknown id still
     // answers 404 (never a body-shape refusal). The scope is enforced again
     // under the document lock inside deleteDocument; this probe is a fast
     // path only. The revision fence rides along like PATCH: without it a
     // stale client deletes over a newer save.
-    const owned = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}`, 'objects',
-    ))
-    if (!owned[0]) return notFound("record")
-    const denied = guardSubsidiaryScope(gate, owned[0].subsidiaryId)
-    if (denied) return denied
+    const owned = await db.execute<{ subsidiaryId: string | null }>(
+      sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}`,
+      "objects",
+    );
+    if (!owned[0]) return notFound("record");
+    const denied = guardSubsidiaryScope(gate, owned[0].subsidiaryId);
+    if (denied) return denied;
 
-
-    let expectedRevision: string
+    let expectedRevision: string;
     try {
-      expectedRevision = requireDocumentEditRevision((body as { expectedUpdatedAt?: unknown }).expectedUpdatedAt)
+      expectedRevision = requireDocumentEditRevision(
+        (body as { expectedUpdatedAt?: unknown }).expectedUpdatedAt,
+      );
     } catch (e) {
-      if (e instanceof DocumentEditError) return apiErrorResponse(e)
-      throw e
+      if (e instanceof DocumentEditError) return apiErrorResponse(e);
+      throw e;
     }
     try {
       await deleteDocument(id, gate.user.id, gate.user.orgId, {
         expectedUpdatedAt: expectedRevision,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      })
-      return NextResponse.json({ ok: true })
+      });
+      return NextResponse.json({ ok: true });
     } catch (e) {
-      if (e instanceof ScopeNotFoundError) return notFound("record")
-      if (e instanceof DeleteError) return apiErrorResponse(e)
-      throw e
+      if (e instanceof ScopeNotFoundError) return notFound("record");
+      if (e instanceof DeleteError) return apiErrorResponse(e);
+      throw e;
     }
   },
 });

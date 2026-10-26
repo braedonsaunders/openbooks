@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
+import type { Authz } from "@/lib/authz";
 import { NextResponse } from "next/server";
-import { guardPermission } from "../../../../lib/authz";
-import { createDraftJournal } from "../../../../lib/journals";
+import { createDraftJournal } from "@/lib/journals";
 import { notFound } from "@/lib/api/responses";
 import { isUuid } from "@openbooks/engine/platform/identifiers";
 
@@ -11,9 +11,7 @@ type DraftBody = { subsidiaryId?: string };
 
 async function readDraftBody(
   req?: Request,
-): Promise<
-  { ok: true; body: DraftBody } | { ok: false; response: NextResponse }
-> {
+): Promise<{ ok: true; body: DraftBody } | { ok: false; response: NextResponse }> {
   if (!req) return { ok: true, body: {} };
   let raw: string;
   try {
@@ -21,10 +19,7 @@ async function readDraftBody(
   } catch {
     return {
       ok: false,
-      response: NextResponse.json(
-        { error: "invalid request body" },
-        { status: 400 },
-      ),
+      response: NextResponse.json({ error: "invalid request body" }, { status: 400 }),
     };
   }
   if (!raw.trim()) return { ok: true, body: {} };
@@ -35,19 +30,13 @@ async function readDraftBody(
   } catch {
     return {
       ok: false,
-      response: NextResponse.json(
-        { error: "invalid request body" },
-        { status: 400 },
-      ),
+      response: NextResponse.json({ error: "invalid request body" }, { status: 400 }),
     };
   }
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return {
       ok: false,
-      response: NextResponse.json(
-        { error: "invalid request body" },
-        { status: 400 },
-      ),
+      response: NextResponse.json({ error: "invalid request body" }, { status: 400 }),
     };
   }
   const candidate = (value as Record<string, unknown>).subsidiaryId;
@@ -55,10 +44,7 @@ async function readDraftBody(
   if (!isUuid(candidate)) {
     return {
       ok: false,
-      response: NextResponse.json(
-        { error: "invalid subsidiary" },
-        { status: 422 },
-      ),
+      response: NextResponse.json({ error: "invalid subsidiary" }, { status: 422 }),
     };
   }
   return { ok: true, body: { subsidiaryId: candidate.toLowerCase() } };
@@ -68,31 +54,20 @@ function scopeErrorResponse(error: unknown): NextResponse | null {
   const code = (error as { code?: unknown } | null)?.code;
   switch (code) {
     case "invalid_subsidiary":
-      return NextResponse.json(
-        { error: "invalid subsidiary" },
-        { status: 422 },
-      );
+      return NextResponse.json({ error: "invalid subsidiary" }, { status: 422 });
     case "subsidiary_not_allowed":
       return notFound("record");
     case "no_available_subsidiary":
-      return NextResponse.json(
-        { error: "no_available_subsidiary" },
-        { status: 409 },
-      );
+      return NextResponse.json({ error: "no_available_subsidiary" }, { status: 409 });
     case "ambiguous_subsidiary_scope":
-      return NextResponse.json(
-        { error: "subsidiary_selection_required" },
-        { status: 409 },
-      );
+      return NextResponse.json({ error: "subsidiary_selection_required" }, { status: 409 });
     default:
       return null;
   }
 }
 
 /** Instant-into-draft: create an empty draft manual journal and return its id. */
-async function legacyPOST(req: Request) {
-  const gate = await guardPermission("gl.post");
-  if (gate instanceof NextResponse) return gate;
+async function legacyPOST(req: Request, gate: Authz) {
   const parsed = await readDraftBody(req);
   if (!parsed.ok) return parsed.response;
   const { subsidiaryId } = parsed.body;
@@ -108,15 +83,8 @@ async function legacyPOST(req: Request) {
   }
   // Empty restricted scope can never produce a legal journal. Leave the
   // one-versus-many legal-entity decision to the service's database check.
-  if (
-    !subsidiaryId &&
-    gate.allowedSubsidiaryIds !== null &&
-    gate.allowedSubsidiaryIds.size === 0
-  ) {
-    return NextResponse.json(
-      { error: "no_available_subsidiary" },
-      { status: 409 },
-    );
+  if (!subsidiaryId && gate.allowedSubsidiaryIds !== null && gate.allowedSubsidiaryIds.size === 0) {
+    return NextResponse.json({ error: "no_available_subsidiary" }, { status: 409 });
   }
 
   try {
@@ -134,6 +102,8 @@ async function legacyPOST(req: Request) {
 
 export const POST = defineRoute({
   permission: "gl.post",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  handler: async ({ request }) => legacyPOST(request as never),
+  feature: {
+    none: "Manual journal drafting is a core general-ledger workflow with no organization feature switch.",
+  },
+  handler: async ({ request, authz }) => legacyPOST(request, authz),
 });
