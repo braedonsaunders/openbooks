@@ -1,11 +1,13 @@
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 
 export class ReportCurrencyBasisError extends Error {
   constructor() {
-    super('This report contains multiple functional currencies. Choose a single-currency subsidiary view or use a consolidated financial statement.')
-    this.name = 'ReportCurrencyBasisError'
+    super(
+      "This report contains multiple functional currencies. Choose a single-currency subsidiary view or use a consolidated financial statement.",
+    );
+    this.name = "ReportCurrencyBasisError";
   }
 }
 
@@ -17,7 +19,16 @@ export class ReportCurrencyBasisError extends Error {
 export function functionalReportReader(orgId: string, where: SQL, translated = false) {
   // Each subsidiary counts in the currency the read's book carries it in:
   // its functional currency, or a secondary book's own currency for it.
-  const census = sql`(
+  // When every subsidiary in every book of the organization carries the same
+  // currency, no read can span two, and the lines need not be probed: the
+  // organization-wide count answers (one currency, or none at all).
+  const possible = sql`(
+    select count(distinct public.accounting_book_currency(sub.org_id, book.id, sub.id))
+      from subsidiaries sub
+      join accounting_books book on book.org_id = sub.org_id
+     where sub.org_id = ${orgId}
+  )`;
+  const census = sql`(case when ${possible} <= 1 then ${possible} else (
     select count(*) from (
       select distinct public.accounting_book_currency(sub.org_id, hit.book_id, sub.id)
         from subsidiaries sub
@@ -34,20 +45,25 @@ export function functionalReportReader(orgId: string, where: SQL, translated = f
        where sub.org_id = ${orgId}
        limit 2
     ) currencies
-  )`
+  ) end)`;
   return {
-    censusColumn: translated ? sql`1 as __functional_currency_count` : sql`${census} as __functional_currency_count`,
+    censusColumn: translated
+      ? sql`1 as __functional_currency_count`
+      : sql`${census} as __functional_currency_count`,
     async execute<Row extends Record<string, unknown> = Record<string, unknown>>(query: SQL) {
-      const rows = await db.execute<Row & { __functional_currency_count: string }>(query, 'objects')
+      const rows = await db.execute<Row & { __functional_currency_count: string }>(
+        query,
+        "objects",
+      );
       for (const row of rows) {
-        const count = Number(row.__functional_currency_count)
+        const count = Number(row.__functional_currency_count);
         if (row.__functional_currency_count == null || !Number.isSafeInteger(count) || count < 0) {
-          throw new Error('Report returned invalid functional-currency evidence')
+          throw new Error("Report returned invalid functional-currency evidence");
         }
-        if (count > 1) throw new ReportCurrencyBasisError()
-        delete (row as Record<string, unknown>).__functional_currency_count
+        if (count > 1) throw new ReportCurrencyBasisError();
+        delete (row as Record<string, unknown>).__functional_currency_count;
       }
-      return { rows: rows as Row[] }
+      return { rows: rows as Row[] };
     },
-  }
+  };
 }
