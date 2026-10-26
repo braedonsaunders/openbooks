@@ -957,6 +957,25 @@ export async function loadInformationReturnReadiness(
   allowedSubsidiaryIds?: ComplianceSubsidiaryScope
 ): Promise<ReadinessRow[]> {
   const r = await db.execute<ReadinessRow>(sql`
+    -- The year's bank cash per vendor, aggregated once for the organization.
+    -- Bank cash only: a discount is a second negative, non-open-item leg,
+    -- but it never leaves the bank and must not inflate the paid figure —
+    -- the same boundary the filing's own cash trace draws.
+    with paid as (
+      select d.party_id,
+             coalesce(-sum(jl.amount) filter (
+               where jl.amount < 0 and not jl.is_open_item and funding.type = 'asset_bank'
+             ), 0) as total
+        from documents d
+        join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status in ('posted', 'reversed')
+        join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id
+        join accounts funding on funding.id = jl.account_id and funding.org_id = jl.org_id
+       where d.org_id = ${orgId}
+         and d.kind = 'vendor_payment' and d.status = 'posted' -- Live entries only: readiness uses payments still posted today
+         and d.document_date between ${`${taxYear}-01-01`} and ${`${taxYear}-12-31`}
+         ${complianceSubsidiaryFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+       group by d.party_id
+    )
     select p.id as "partyId", p.display_name as "vendorName",
            coalesce(vr.is_t4a, false) as reportable,
            coalesce(vr.information_return_form, cc.default_information_return) as "resolvedForm",
@@ -966,22 +985,7 @@ export async function loadInformationReturnReadiness(
       from parties p
       join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
       left join compliance_classes cc on cc.id = vr.compliance_class_id and cc.org_id = p.org_id
-      join lateral (
-        -- Bank cash only: a discount is a second negative, non-open-item leg,
-        -- but it never leaves the bank and must not inflate the paid figure —
-        -- the same boundary the filing's own cash trace draws.
-        select coalesce(-sum(jl.amount) filter (
-          where jl.amount < 0 and not jl.is_open_item and funding.type = 'asset_bank'
-        ), 0) as total
-          from documents d
-          join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status in ('posted', 'reversed')
-          join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id
-          join accounts funding on funding.id = jl.account_id and funding.org_id = jl.org_id
-         where d.org_id = p.org_id and d.party_id = p.id
-           and d.kind = 'vendor_payment' and d.status = 'posted' -- Live entries only: readiness uses payments still posted today
-           and d.document_date between ${`${taxYear}-01-01`} and ${`${taxYear}-12-31`}
-           ${complianceSubsidiaryFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-      ) paid on true
+      left join paid on paid.party_id = p.id
      where p.org_id = ${orgId}
        ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        and (
@@ -999,7 +1003,7 @@ export async function loadInformationReturnReadiness(
                else 600 end
              and coalesce(vr.tax_classification, '') not in ('c_corp', 's_corp'))
        )
-     order by paid.total desc, p.display_name
+     order by coalesce(paid.total, 0) desc, p.display_name
      limit 200
   `, 'objects')
   return r
