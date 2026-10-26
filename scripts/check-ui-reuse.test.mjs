@@ -122,7 +122,7 @@ test('setup catalog pages compose the actual registered list and shared layout, 
 test('rendered native delegates prove both shared shell and registered body without trusting import-only claims', () => {
   const files = new Map([
     ['web/app/(app)/x/Workspace.tsx', `import { ListPageLayout as Shell } from '@/components/page-layout';
-      import { RegisteredListTable as Records } from '@/components/registered-list-table';
+      import { PagedTable as Records } from '@/components/paged-table';
       export function Workspace() { return <Shell header={null}><Records<Row> source="vendor_bill" /></Shell> }`],
   ])
   const read = path => { if (!files.has(path)) throw Error('missing'); return files.get(path) }
@@ -138,9 +138,9 @@ test('rendered native delegates prove both shared shell and registered body with
   assert.deepEqual(sharedPageComposition('web/app/(app)/x/Loop.tsx', cycle, read), {shell:false,body:false})
 })
 
-test('registered server and prepared adapters retain unknown-source refusal', () => {
-  for (const name of ['RegisteredListTable','ServerPagedTable','PreparedPagedTable']) {
-    const violations = scanText('web/components/x.tsx', `<${name} source="unregistered"/>`, KEYS)
+test('server-composed and server-window lists retain unknown-source refusal', () => {
+  for (const props of ['prepared', 'serverWindow', 'prepared serverWindow={{ total, page, perPage }}']) {
+    const violations = scanText('web/components/x.tsx', `<PagedTable ${props} source="unregistered"/>`, KEYS)
     assert.equal(violations.filter(value => value.rule === 'unknown-list-key').length, 1)
   }
 })

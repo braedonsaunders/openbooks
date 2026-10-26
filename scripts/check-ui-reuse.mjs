@@ -12,9 +12,9 @@
  * A site violates when one of these holds on comment/string-blanked source:
  *
  *   rule1  raw `<table` in web/app/(app)/** or web/components/** (non-test).
- *          Lists render PagedTable / RecordListView / EntityListView, reports
- *          render the ReportTable primitives, detail sections render the
- *          shared Table in @openbooks/ui — never a lowercase `<table`.
+ *          Lists render PagedTable (records) or RecordListView (documents),
+ *          reports render the ReportTable primitives, detail sections render
+ *          the shared Table in @openbooks/ui — never a lowercase `<table`.
  *   rule2  `<dialog`, `window.confirm(`, `window.prompt(` or `window.alert(`
  *          in the same scopes. Blocking browser dialogs are replaced by the
  *          shared promptDialog flow in web/lib/prompt.tsx.
@@ -73,7 +73,7 @@ export const TABLE_CEILING = 1;
 export const DIALOG_WINDOW_CEILING = 0;
 export const BESPOKE_PAGE_CEILING = 11;
 
-const LIST_COMPONENTS = ["PagedTable", "RecordListView", "EntityListView", "RegisteredListTable", "ServerPagedTable", "PreparedPagedTable"];
+const LIST_COMPONENTS = ["PagedTable", "RecordListView", "EntityListView"];
 const LIST_KEY_PROPS = ["source", "entity", "recordType"];
 
 function repoRoot() {
@@ -323,7 +323,7 @@ export function scanText(path, text, registeredKeys = new Set()) {
   // (not string-blanked) source with a string-aware element walk.
   const code = stripComments(text);
   if (LIST_COMPONENTS.some((name) => code.includes(`<${name}`))) {
-    const openRe = /<(PagedTable|RecordListView|EntityListView|RegisteredListTable|ServerPagedTable|PreparedPagedTable)\b/g;
+    const openRe = /<(PagedTable|RecordListView|EntityListView)\b/g;
     let m;
     while ((m = openRe.exec(code))) {
       const line = lineOf(code, m.index);
@@ -437,9 +437,6 @@ export function sharedPageComposition(file, text, readSource, seen = new Set()) 
   let shell = false, body = false;
   const terminals = new Map([
     ["web/components/page-layout", { shell: true, body: false }],
-    ["web/components/registered-list-table", { shell: false, body: true }],
-    ["web/components/server-paged-table", { shell: false, body: true }],
-    ["web/components/prepared-paged-table", { shell: false, body: true }],
     ["web/components/paged-table", { shell: false, body: true }],
     ["web/app/(app)/admin/setup/[entity]/SetupEntitySection", { shell: false, body: true }],
     ["web/components/viewspec/module-view", { shell: true, body: true }],
@@ -562,7 +559,7 @@ export function main() {
     for (const v of unknownKeys) console.error(`  ${v.path}:${v.line} unregistered key "${v.key}"`);
   }
   const sections = [
-    ["tables", tablePaths, allowlist.tables, "raw <table>. Compose the shared table layer (PagedTable / RecordListView / EntityListView for lists, the ReportTable primitives for reports, Table in @openbooks/ui) instead of a lowercase <table>"],
+    ["tables", tablePaths, allowlist.tables, "raw <table>. Compose the shared table layer (PagedTable or RecordListView for lists, the ReportTable primitives for reports, Table in @openbooks/ui) instead of a lowercase <table>"],
     ["dialogWindow", dialogPaths, allowlist.dialogWindow, "<dialog> or window.confirm/prompt/alert. Route the confirmation through the shared promptDialog flow in web/lib/prompt.tsx"],
     ["bespokePages", bespokePaths, allowlist.bespokePages, "page.tsx without ModuleView or a native registered list. Compose the shared page machinery"],
   ];
