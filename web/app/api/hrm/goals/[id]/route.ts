@@ -37,11 +37,10 @@ export const GET = defineRoute({
 export const PATCH = defineRoute({
   public: "session",
   feature: "hrm",
-  params: z.object({ id: z.string() }),
+  params: z.object({ id: z.string().refine(isUuid, { message: "invalid goal" }) }),
   body: patchGoalBody,
   handler: async ({ authz, params, body }) => {
     const { id } = params;
-    if (!isUuid(id)) return NextResponse.json({ error: "invalid goal" }, { status: 400 });
     const base = {
       orgId: authz.user.orgId,
       actorId: authz.user.id,
