@@ -13,7 +13,7 @@ export default async function ReceivablesIntelligencePage({ searchParams }: { se
   const sp = await searchParams
   let result: { data: Parameters<typeof receivablesIntelligenceSpec>[0] } | { error: CollectionPeriodError }
   try {
-    result = { data: await readAnalyticsDashboard('receivables-intelligence', sp) }
+    result = { data: await readAnalyticsDashboard('receivables-intelligence', sp, { answerStale: true }) }
   } catch (error) {
     if (!(error instanceof CollectionPeriodError)) throw error
     result = { error }

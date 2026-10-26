@@ -16,6 +16,6 @@ export default async function FinancialHealthPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
-  const data = await readAnalyticsDashboard('financial-health', sp)
+  const data = await readAnalyticsDashboard('financial-health', sp, { answerStale: true })
   return <ModuleView spec={financialHealthSpec(data)} data={data} searchParams={sp} trusted />
 }

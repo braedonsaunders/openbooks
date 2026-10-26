@@ -16,6 +16,6 @@ export default async function CustomerIntelligencePage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
-  const data = await readAnalyticsDashboard('customer-intelligence', sp)
+  const data = await readAnalyticsDashboard('customer-intelligence', sp, { answerStale: true })
   return <ModuleView spec={customerIntelligenceSpec(data)} data={data} searchParams={sp} trusted />
 }

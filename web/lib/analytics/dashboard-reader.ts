@@ -4,7 +4,8 @@ import { requirePermission, ForbiddenError } from '../authz'
 import { ANALYTICS_DASHBOARD_MAP, analyticsDashboardDenied } from './dashboard-catalog'
 import { requireFeatureEnabled } from '../feature-gates'
 import { analyticsTab, type AnalyticsSlug } from './dashboard-tabs'
-import { analyticsCacheIdentity, cachedAnalyticsRead } from './preview-cache'
+import { analyticsCacheIdentity, analyticsPreviewKey } from './preview-cache'
+import { latestProjection, rebuildProjection } from './latest-projection'
 import { withAnalyticsRead } from './read-context'
 import { analyticsSourceQuery, analyticsQueryString } from './query-params'
 
@@ -21,7 +22,19 @@ const loaders = {
 }
 type DashboardResult = Awaited<ReturnType<(typeof loaders)[AnalyticsSlug]>>
 
-export async function readAnalyticsDashboard<S extends AnalyticsSlug>(slug: S, sp: Record<string, string | undefined>): Promise<Awaited<ReturnType<typeof loaders[S]>> & { observedAt: string }> {
+/**
+ * One Analytics dashboard view for the caller, answered from its latest
+ * projection. A page render may answer a projection that is no longer
+ * current (`answerStale`): it carries the time it was observed, and the
+ * page's own read asks again at once and replaces it with the rebuilt one.
+ * Every other caller (the dashboard read API, spotlights building their own
+ * projection) receives a current projection, rebuilt first when needed.
+ */
+export async function readAnalyticsDashboard<S extends AnalyticsSlug>(
+  slug: S,
+  sp: Record<string, string | undefined>,
+  options: { answerStale?: boolean } = {},
+): Promise<Awaited<ReturnType<typeof loaders[S]>> & { observedAt: string }> {
   const authz = await requirePermission('reports.read')
   const definition = ANALYTICS_DASHBOARD_MAP[slug]!
   const denied = analyticsDashboardDenied(authz, definition)
@@ -34,8 +47,13 @@ export async function readAnalyticsDashboard<S extends AnalyticsSlug>(slug: S, s
     const identity = await analyticsCacheIdentity(authority.user.orgId)
     const read = { authz: authority, slug, tab, projection: 'tab' as const, ...identity, observedAt: Date.now() }
     return withAnalyticsRead(read, async () => {
-      const result = await cachedAnalyticsRead<DashboardResult>(authority, `dashboard:${slug}`, { ...query, tab }, () => loaders[slug](query), { identity })
-      const observedAt = new Date(read.observedAt).toISOString()
+      const key = analyticsPreviewKey(authority, `dashboard-view:${slug}`, { ...query, tab }, identity.locale, 'latest')
+      const build = () => loaders[slug](query) as Promise<DashboardResult>
+      const observed = () => new Date(read.observedAt).toISOString()
+      let projection = await latestProjection(key, identity.revision, build, observed)
+      if (projection.refreshing && !options.answerStale) projection = await rebuildProjection(key, identity.revision, build, observed)
+      const result = projection.data
+      const observedAt = projection.observedAt
       const data = result.data ? { ...result.data, _analyticsRead: { slug, tab, observedAt, query: analyticsQueryString(query, slug) } } : result.data
       return { ...result, data, observedAt } as unknown as Awaited<ReturnType<typeof loaders[S]>> & { observedAt: string }
     })

@@ -305,7 +305,7 @@ export function SentinelView({ data: initialData, canConfigure }: { data: Sentin
       ) : null}
 
       <RecordTabs label={t('title')} tabs={TABS.map((k) => ({ key: k, label: t(`tabs.${k}`), count: k === 'detection' ? s.flaggedCount : undefined }))} active={tab} onChange={setTab}>
-      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
+      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry} refreshing={read.refreshing}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'benford' ? <BenfordTab data={data} /> : null}

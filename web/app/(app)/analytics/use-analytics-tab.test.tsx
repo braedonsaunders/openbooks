@@ -120,3 +120,14 @@ test('a source refusal is shown by name and retry opens one new request', async 
   await act(async () => h.requests[1]!.resolve(Response.json(payload('items', 'items', 'period=this_fiscal_year', h.now()))))
   assert.equal(h.host.textContent, 'items')
 })
+
+test('figures observed before the freshness window say so while their newer read runs', async t => {
+  const h = await harness(t)
+  assert.equal(selected.refreshing, undefined, 'a current observation carries no label')
+  await h.advance()
+  assert.equal(h.host.textContent, 'initial', 'the shown figures stay while the next read is pending')
+  assert.equal(selected.refreshing, payload('initial', 'overview', 'period=this_fiscal_year', h.now() - 30_001).data._analyticsRead.observedAt)
+  await act(async () => h.requests[0]!.resolve(Response.json(payload('refreshed', 'overview', 'period=this_fiscal_year', h.now()))))
+  assert.equal(h.host.textContent, 'refreshed')
+  assert.equal(selected.refreshing, undefined, 'the newer read clears the label')
+})

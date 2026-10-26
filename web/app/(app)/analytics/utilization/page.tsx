@@ -16,6 +16,6 @@ export default async function UtilizationPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
-  const data = await readAnalyticsDashboard('utilization', sp)
+  const data = await readAnalyticsDashboard('utilization', sp, { answerStale: true })
   return <ModuleView spec={utilizationSpec(data)} data={data} searchParams={sp} trusted />
 }

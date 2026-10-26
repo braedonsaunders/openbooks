@@ -16,6 +16,6 @@ export default async function CashflowPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
-  const data = await readAnalyticsDashboard('cashflow', sp)
+  const data = await readAnalyticsDashboard('cashflow', sp, { answerStale: true })
   return <ModuleView spec={cashflowSpec(data)} data={data} searchParams={sp} trusted />
 }

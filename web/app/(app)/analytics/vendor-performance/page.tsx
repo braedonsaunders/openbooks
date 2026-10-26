@@ -16,6 +16,6 @@ export default async function VendorPerformancePage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
-  const data = await readAnalyticsDashboard('vendor-performance', sp)
+  const data = await readAnalyticsDashboard('vendor-performance', sp, { answerStale: true })
   return <ModuleView spec={vendorPerformanceSpec(data)} data={data} searchParams={sp} trusted />
 }

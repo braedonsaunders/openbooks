@@ -16,6 +16,6 @@ export default async function SpendVelocityPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
-  const data = await readAnalyticsDashboard('spend-velocity', sp)
+  const data = await readAnalyticsDashboard('spend-velocity', sp, { answerStale: true })
   return <ModuleView spec={spendVelocitySpec(data)} data={data} searchParams={sp} trusted />
 }

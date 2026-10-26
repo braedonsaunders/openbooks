@@ -8,6 +8,8 @@ import { readApiErrorMessage } from '../../../lib/api-error'
 import { analyticsQueryString } from '../../../lib/analytics/query-params'
 import type { AnalyticsSlug } from '../../../lib/analytics/dashboard-tabs'
 import { useDocumentHidden } from '../../../lib/use-document-hidden'
+import { useViewerFormat } from '../../../lib/viewer-format'
+import { RefreshCw } from 'lucide-react'
 
 type ReadMeta = { slug: string; tab: string; observedAt: string; query: string }
 function metadata(data: unknown): ReadMeta | undefined {
@@ -39,10 +41,10 @@ export function useAnalyticsTab<T extends { data: unknown }, K extends string>(s
   // identity. Reading these refs during render is that deliberate reset.
   /* eslint-disable react-hooks/refs */
   const source = useRef<unknown>(undefined)
-  const cache = useRef(new Map<string, { props?: T; until: number; error?: string }>())
+  const cache = useRef(new Map<string, { props?: T; until: number; error?: string; observedAt?: string; refreshing?: boolean }>())
   if (source.current !== initial.data) {
     source.current = initial.data
-    cache.current = new Map([[`${meta?.query ?? query}:${meta?.tab ?? tab}`, { props: initial, until: Date.parse(meta?.observedAt ?? new Date().toISOString()) + 30_000 }]])
+    cache.current = new Map([[`${meta?.query ?? query}:${meta?.tab ?? tab}`, { props: initial, until: Date.parse(meta?.observedAt ?? new Date().toISOString()) + 30_000, observedAt: meta?.observedAt }]])
   }
   const generation = cache.current
   const entry = generation.get(key)
@@ -64,7 +66,10 @@ export function useAnalyticsTab<T extends { data: unknown }, K extends string>(s
       return () => { if (timer !== undefined) window.clearTimeout(timer) }
     }
     const controller = new AbortController()
+    // Figures already on screen stay while the newer read runs, labelled
+    // with when they were observed.
     if (!cached?.props) generation.delete(key)
+    else generation.set(key, { ...cached, refreshing: true })
     rerender()
     const load = async () => {
       try {
@@ -77,7 +82,7 @@ export function useAnalyticsTab<T extends { data: unknown }, K extends string>(s
         if (returned?.slug !== slug || returned.tab !== tab || returned.query !== query) throw new Error(t('loadError'))
         if (!controller.signal.aborted) {
           const until = Date.parse(returned.observedAt) + 30_000
-          generation.set(key, { props: value as T, until })
+          generation.set(key, { props: value as T, until, observedAt: returned.observedAt })
           schedule(until > Date.now() ? until : Date.now() + 30_000)
         }
       } catch (failure) {
@@ -97,12 +102,24 @@ export function useAnalyticsTab<T extends { data: unknown }, K extends string>(s
       window.history.replaceState(null, '', url)
     }
   }
-  return { props: enabled && entry?.props ? entry.props : initial, tab, setTab, loading: !ready && !error, error, retry: () => { generation.delete(key); retry() } }
+  const refreshing = enabled && entry?.props && entry.refreshing && entry.observedAt ? entry.observedAt : undefined
+  return { props: enabled && entry?.props ? entry.props : initial, tab, setTab, loading: !ready && !error, error, refreshing, retry: () => { generation.delete(key); retry() } }
 }
 
-export function AnalyticsTabContent({ loading, error, retry, children }: { loading: boolean; error?: string; retry: () => void; children: ReactNode }) {
+export function AnalyticsTabContent({ loading, error, retry, refreshing, children }: { loading: boolean; error?: string; retry: () => void; refreshing?: string; children: ReactNode }) {
   const t = useTranslations('analytics.hub')
+  const td = useTranslations('dashboard')
+  const { dateTime } = useViewerFormat()
   if (error) return <div role="alert" className="rounded-xl border border-amber-200 p-4 dark:border-amber-900"><p className="mb-3 text-sm text-amber-700 dark:text-amber-300">{error}</p><Button variant="secondary" onClick={retry}>{t('retryMetrics')}</Button></div>
   if (loading) return <div aria-busy="true" aria-label={t('loading')} className="grid gap-4 md:grid-cols-2">{[0, 1].map((n) => <Skeleton key={n} className="h-64 rounded-xl" />)}</div>
-  return children
+  if (!refreshing) return children
+  return (
+    <>
+      <p className="mb-2 flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500" role="status">
+        <RefreshCw size={10} aria-hidden className="shrink-0 animate-spin" />
+        {td('spotlight.updated', { time: dateTime(new Date(refreshing), { timeStyle: 'short' }) })}
+      </p>
+      {children}
+    </>
+  )
 }

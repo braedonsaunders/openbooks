@@ -67,7 +67,7 @@ export function ReceivablesView({ data: initialData, canOpenCustomers = false }:
       <KpiCard icon={Clock3} accent="sky" label={t('kpi.onTime')} value={percent(s.onTimeShare)} sub={t('behaviorWindow', { days: data.baselineDays })} />
     </div>
     <RecordTabs label={t('title')} tabs={TABS.map((key) => ({ key, label: t(`tabs.${key}`) }))} active={read.tab} onChange={read.setTab}>
-      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
+      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry} refreshing={read.refreshing}>
         <div className="space-y-4" key={read.tab}>
           {read.tab === 'customers' && <>
             <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('portfolio')}</h2><p className="mt-0.5 text-xs text-slate-400">{t('portfolioHint', { count: s.customers })}</p></div>{controls}</div>

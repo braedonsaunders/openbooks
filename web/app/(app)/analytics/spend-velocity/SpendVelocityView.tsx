@@ -141,7 +141,7 @@ export function SpendVelocityView({ data: initialData, canConfigure }: { data: S
       </div>
 
       <RecordTabs label={t('title')} tabs={TABS.map((k) => ({ key: k, label: t(`tabs.${k}`), count: k === 'detectors' ? s.totalAlerts : undefined }))} active={tab} onChange={setTab}>
-      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
+      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry} refreshing={read.refreshing}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} onDrill={setDrill} /> : null}
         {tab === 'velocity' ? <VelocityTab data={data} onDrill={setDrill} /> : null}

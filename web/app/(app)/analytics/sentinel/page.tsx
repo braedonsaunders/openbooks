@@ -24,6 +24,6 @@ export default async function SentinelPage({
   const denied = sentinelAccessDenied(await requirePermission('reports.read'))
   if (denied !== null) redirect(accessDeniedHref({ permission: denied }))
   const sp = await searchParams
-  const data = await readAnalyticsDashboard('sentinel', sp)
+  const data = await readAnalyticsDashboard('sentinel', sp, { answerStale: true })
   return <ModuleView spec={sentinelSpec(data)} data={data} searchParams={sp} trusted />
 }

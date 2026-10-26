@@ -220,7 +220,7 @@ export function TrueCostView({ data: initialData, mode = 'analytics' }: { data: 
         </div>
       ) : null}
       <RecordTabs label={t('title')} tabs={tabs.map((key) => ({ key, label: t(`tabs.${key}`) }))} active={tab} onChange={setTab}>
-      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
+      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry} refreshing={read.refreshing}>
       <div key={tab}>
         {tab === 'categories' ? <CategoriesTab data={data} openCat={setOpenCatId} /> : null}
         {tab === 'matrix' ? <MatrixTab data={data} onDrill={setCell} /> : null}

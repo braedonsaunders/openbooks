@@ -240,7 +240,7 @@ export function CustomerView({
 
       {/* Tabs */}
       <RecordTabs label={t('title')} tabs={tabs.map((key) => ({ key: key, label: t(`tabs.${key}`) }))} active={tab} onChange={setTab}>
-      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
+      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry} refreshing={read.refreshing}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'health' ? <HealthTab data={data} onDrill={openCustomer} /> : null}

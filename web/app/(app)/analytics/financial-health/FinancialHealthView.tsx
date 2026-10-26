@@ -100,7 +100,7 @@ export function FinancialHealthView({
 
       {/* Tab strip */}
       <RecordTabs label={t('title')} tabs={tabs.map((k) => ({ key: k, label: t(`tabs.${k}`) }))} active={tab} onChange={setTab}>
-      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry}>
+      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry} refreshing={read.refreshing}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'margin' ? <MarginTab data={data} /> : null}

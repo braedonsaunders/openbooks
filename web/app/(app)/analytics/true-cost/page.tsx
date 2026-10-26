@@ -16,6 +16,6 @@ export default async function TrueCostPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
-  const data = await readAnalyticsDashboard('true-cost', sp)
+  const data = await readAnalyticsDashboard('true-cost', sp, { answerStale: true })
   return <ModuleView spec={trueCostSpec(data)} data={data} searchParams={sp} trusted />
 }

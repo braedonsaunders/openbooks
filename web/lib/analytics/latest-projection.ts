@@ -22,18 +22,31 @@ import { ANALYTICS_PREVIEW_FRESHNESS_MS } from "./preview-invalidation";
  */
 const RETENTION_MS = 24 * 60 * 60 * 1000;
 const MAX_LOCAL = 256;
+/** A projection larger than this is answered but not kept: it is cheaper to
+ * rebuild than to hold. The process keeps at most the byte budget. */
+const MAX_PAYLOAD_BYTES = 4 * 1024 * 1024;
+const MAX_LOCAL_BYTES = 96 * 1024 * 1024;
 
 export type LatestProjection<T> = { data: T; observedAt: string; refreshing: boolean };
 
 type Stored = { version: 1; revision: string; observedAt: string; payload: string };
 
 const local = new Map<string, Stored>();
-const building = new Map<string, Promise<Stored>>();
+const building = new Map<string, Promise<{ data: unknown; observedAt: string }>>();
+let localBytes = 0;
+
+function forget(key: string) {
+  const previous = local.get(key);
+  if (previous) localBytes -= previous.payload.length;
+  local.delete(key);
+}
 
 function remember(key: string, value: Stored) {
-  local.delete(key);
-  if (local.size >= MAX_LOCAL) local.delete(local.keys().next().value!);
+  forget(key);
+  if (value.payload.length > MAX_PAYLOAD_BYTES) return;
+  while (local.size >= MAX_LOCAL || localBytes + value.payload.length > MAX_LOCAL_BYTES) forget(local.keys().next().value!);
   local.set(key, value);
+  localBytes += value.payload.length;
 }
 
 function decodeStored(raw: string | null | undefined): Stored | null {
@@ -58,13 +71,20 @@ const retained = (value: Stored | null): value is Stored =>
 /**
  * Projection payloads round-trip through JSON with their dates intact:
  * figures read from the database carry timestamps, and a revived projection
- * must render exactly as the one first built.
+ * must render exactly as the one first built. A value JSON cannot carry
+ * faithfully (a Map, a Set, a bigint, an undefined array slot) makes the
+ * projection unkeepable: `null`, and the caller answers it without keeping it.
  */
-export function encodeProjection(data: unknown): string {
-  return JSON.stringify(data, function (this: Record<string, unknown>, key, value) {
+export function encodeProjection(data: unknown): string | null {
+  let faithful = true;
+  const payload = JSON.stringify(data, function (this: Record<string, unknown>, key, value) {
     const original = this[key];
-    return original instanceof Date ? { $date: original.toISOString() } : value;
+    if (original instanceof Date) return { $date: original.toISOString() };
+    if (original instanceof Map || original instanceof Set || typeof original === "bigint") faithful = false;
+    if (Array.isArray(original) && original.some((item) => item === undefined || typeof item === "function")) faithful = false;
+    return typeof value === "bigint" ? null : value;
   });
+  return faithful ? payload : null;
 }
 
 export function decodeProjection<T>(payload: string): T {
@@ -83,23 +103,29 @@ export function rebuildProjection<T>(
   build: () => Promise<T>,
   observedAt: (data: T) => string = () => new Date().toISOString(),
 ): Promise<LatestProjection<T>> {
-  let work = building.get(key);
+  let work = building.get(key) as Promise<{ data: T; observedAt: string }> | undefined;
   if (!work) {
     work = (async () => {
       const token = await claimSharedCache(key);
       try {
         const data = await build();
-        const value: Stored = { version: 1, revision, observedAt: observedAt(data), payload: encodeProjection(data) };
-        remember(key, value);
-        if (token) await publishSharedCache(key, token, JSON.stringify(value), RETENTION_MS);
-        return value;
+        const at = observedAt(data);
+        const payload = encodeProjection(data);
+        if (payload !== null) {
+          const value: Stored = { version: 1, revision, observedAt: at, payload };
+          remember(key, value);
+          if (token && payload.length <= MAX_PAYLOAD_BYTES) await publishSharedCache(key, token, JSON.stringify(value), RETENTION_MS);
+          return { data: decodeProjection<T>(payload), observedAt: at };
+        }
+        return { data, observedAt: at };
       } finally {
         if (token) await releaseSharedCache(key, token);
       }
     })().finally(() => building.delete(key));
     building.set(key, work);
   }
-  return work.then((value) => ({ data: decodeProjection<T>(value.payload), observedAt: value.observedAt, refreshing: false }));
+  // Each caller receives its own copy: callers annotate what they answer.
+  return work.then((value) => ({ data: structuredClone(value.data), observedAt: value.observedAt, refreshing: false }));
 }
 
 /**

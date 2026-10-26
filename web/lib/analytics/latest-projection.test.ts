@@ -55,9 +55,22 @@ test('concurrent rebuilds of one projection share a single build, and a failed b
 
 test('projection payloads keep their dates through storage', () => {
   const value = { at: new Date('2026-10-26T15:04:05.000Z'), rows: [{ created: new Date('2026-01-02T00:00:00.000Z'), label: 'x' }], text: '2026-10-26' }
-  const revived = decodeProjection<typeof value>(encodeProjection(value))
+  const revived = decodeProjection<typeof value>(encodeProjection(value)!)
   assert.ok(revived.at instanceof Date)
   assert.equal(revived.at.toISOString(), value.at.toISOString())
   assert.ok(revived.rows[0]!.created instanceof Date)
   assert.equal(revived.text, '2026-10-26', 'date-like text stays text')
+})
+
+test('a projection JSON cannot carry faithfully is answered but never kept', async () => {
+  const key = uniqueKey()
+  let builds = 0
+  const build = async () => ({ byParty: new Map([['p1', ++builds]]) })
+  const first = await latestProjection(key, 'r', build)
+  assert.ok(first.data.byParty instanceof Map, 'the caller receives the value exactly as built')
+  const again = await latestProjection(key, 'r', build)
+  assert.equal(builds, 2, 'nothing was kept, so the next read builds again')
+  assert.equal(again.data.byParty.get('p1'), 2)
+  assert.equal(encodeProjection({ n: 1n }), null)
+  assert.equal(encodeProjection({ rows: [1, undefined] }), null)
 })
