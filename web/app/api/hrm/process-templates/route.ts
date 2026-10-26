@@ -1,41 +1,23 @@
 import { defineRoute } from "@/lib/api/route";
-import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import {
   createProcessTemplate,
   listProcessTemplates,
   type ProcessKind,
 } from "@openbooks/engine/hrm/processes/operations";
-import { guardPermission } from "../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
-import { isUuid } from "../../../../lib/list-params";
+import { isUuid } from "@/lib/list-params";
 import { processErrorResponse } from "../processes/_lib";
 import { createProcessTemplateBody } from "./bodies";
 
 export const runtime = "nodejs";
 
-async function gate() {
-  const result = await guardPermission("hrm.process.manage");
-  if (result instanceof NextResponse) return result;
-  if (!(await isFeatureEnabled(result.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  return result;
-}
-
 export const GET = defineRoute({
-  public: "session",
-  handler: async ({ request: req }) => {
-    const authz = await gate();
-    if (authz instanceof NextResponse) return authz;
+  permission: "hrm.process.manage",
+  feature: "hrm",
+  handler: async ({ request: req, authz }) => {
     const url = new URL(req.url);
     const kind = url.searchParams.get("kind");
-    if (
-      kind !== null &&
-      kind !== "onboarding" &&
-      kind !== "offboarding" &&
-      kind !== "transfer"
-    ) {
+    if (kind !== null && kind !== "onboarding" && kind !== "offboarding" && kind !== "transfer") {
       return NextResponse.json(
         { error: "kind must be onboarding, offboarding, or transfer" },
         { status: 400 },
@@ -44,10 +26,7 @@ export const GET = defineRoute({
     const employmentId = url.searchParams.get("employment");
     const effectiveDate = url.searchParams.get("effectiveDate");
     if (employmentId !== null && !isUuid(employmentId)) {
-      return NextResponse.json(
-        { error: "employment must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "employment must be a uuid" }, { status: 400 });
     }
     if ((employmentId === null) !== (effectiveDate === null)) {
       return NextResponse.json(
@@ -61,9 +40,7 @@ export const GET = defineRoute({
         actorId: authz.user.id,
         activeOnly: url.searchParams.get("active") === "true",
         ...(kind === null ? {} : { kind: kind as ProcessKind }),
-        ...(employmentId === null
-          ? {}
-          : { employmentId, effectiveDate: effectiveDate! }),
+        ...(employmentId === null ? {} : { employmentId, effectiveDate: effectiveDate! }),
       });
       return NextResponse.json({ templates });
     } catch (error) {
@@ -73,12 +50,10 @@ export const GET = defineRoute({
 });
 
 export const POST = defineRoute({
-  public: "session",
+  permission: "hrm.process.manage",
+  feature: "hrm",
   body: createProcessTemplateBody,
-  handler: async ({ body: body }) => {
-    const authz = await gate();
-    if (authz instanceof NextResponse) return authz;
-
+  handler: async ({ authz, body: body }) => {
     try {
       const template = await createProcessTemplate({
         orgId: authz.user.orgId,
