@@ -100,8 +100,10 @@ const config = {
   // tenant-scoped and write-sensitive with no invalidation wiring — caching
   // either without the org in the key (or without invalidation) risks
   // cross-tenant or stale reads. Navigation latency is instead carried by the
-  // (app) loading skeleton, the Suspense boundary around the layout children,
-  // and explicit prefetch on the shell nav links.
+  // (app) loading skeleton and the Suspense boundary around the layout
+  // children. Shell nav links keep Next's default prefetch, which fetches a
+  // dynamic route only down to that loading boundary: a full prefetch would
+  // render every linked module home on each page load.
   // Shared development hosts explicitly authorize their private proxy origin.
   allowedDevOrigins: [
     "127.0.0.1",

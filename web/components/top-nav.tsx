@@ -187,7 +187,6 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
                 <div className={cn(triggerCls, 'gap-0 pr-1')} onMouseEnter={() => { setFocusEdge(undefined); enterMenu(i) }} onMouseLeave={scheduleClose}>
                   <Link
                     href={group.groupHref as never}
-                    prefetch
                     aria-current={groupActive ? 'true' : undefined}
                     data-walkthrough={`nav:${group.groupHref}`}
                     onClick={() => closeMenu()}
@@ -447,7 +446,6 @@ function OverflowGroupRow({
         // More-menu's onClick closes it); hover still opens the child flyout.
         <Link
           href={group.groupHref as never}
-          prefetch
           role="menuitem"
           aria-haspopup="menu"
           aria-expanded={open}
@@ -522,7 +520,6 @@ function MenuItemLink({ item, active }: { item: SidebarNavItem; active: boolean 
   ) : (
     <Link
       href={item.href as never}
-      prefetch
       aria-current={active ? 'page' : undefined}
       role="menuitem"
       data-walkthrough={`nav:${item.href}`}
@@ -554,7 +551,6 @@ function MenuSection({
       {href ? (
         <Link
           href={href as never}
-          prefetch
           role="menuitem"
           aria-current={selfActive ? 'page' : undefined}
           data-walkthrough={`nav:${href}`}

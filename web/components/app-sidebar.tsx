@@ -148,7 +148,6 @@ export function AppSidebar({
                 {selected.groupHref ? (
                   <Link
                     href={selected.groupHref as never}
-                    prefetch
                     aria-current={activeHref === selected.groupHref ? 'page' : undefined}
                     data-walkthrough={`nav:${selected.groupHref}`}
                     className={cn(
@@ -316,7 +315,6 @@ function RailWorkspace({
         {group.groupHref ? (
           <Link
             href={group.groupHref as never}
-            prefetch
             aria-current={activeHref === group.groupHref ? 'page' : undefined}
             data-walkthrough={`nav:${group.groupHref}`}
             className="block px-4 pt-3 pb-1.5 text-sm font-semibold text-slate-900 transition-colors hover:text-teal-700 dark:text-slate-100 dark:hover:text-teal-300"
@@ -402,7 +400,6 @@ function PanelItems({
             <>
               <Link
                 href={block.href as never}
-                prefetch
                 aria-current={activeHref === block.href ? 'page' : undefined}
                 data-walkthrough={`nav:${block.href}`}
                 className={cn(

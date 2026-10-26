@@ -349,7 +349,6 @@ export function SidebarNav({ groups }: { groups: SidebarNavGroup[] }) {
               <div className={headerCls}>
                 <Link
                   href={group.groupHref as never}
-                  prefetch
                   aria-current={activeHref === group.groupHref ? 'page' : undefined}
                   data-walkthrough={`nav:${group.groupHref}`}
                   onClick={() => openGroup(group.id)}
@@ -537,7 +536,6 @@ export function NavLink({
   ) : (
     <Link
       href={item.href as never}
-      prefetch
       aria-current={active ? 'page' : undefined}
       data-walkthrough={`nav:${item.href}`}
       className={className}
@@ -609,7 +607,6 @@ function SubgroupSection({
           </button>
           <Link
             href={(href)}
-            prefetch
             aria-current={selfActive ? 'page' : undefined}
             data-walkthrough={`nav:${href}`}
             onClick={() => setOpen(true)}

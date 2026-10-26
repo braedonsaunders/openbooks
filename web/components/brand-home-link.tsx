@@ -14,7 +14,6 @@ export function BrandHomeLink({ className, mark = false }: { className?: string;
   return (
     <Link
       href="/dashboard"
-      prefetch
       aria-label={t('home')}
       title={t('home')}
       className={cn(
