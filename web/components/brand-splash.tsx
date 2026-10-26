@@ -7,7 +7,9 @@
 // elapsed AND no route fallback is holding it open. Route loading fallbacks
 // mount <SplashHold /> to keep it up while content streams.
 //
-// The brand reveal plays ONCE per document load. app/(app)/loading.tsx is the
+// The brand reveal plays ONCE per browser session: the first document load
+// plays it and records a session cookie, so later loads, refreshes and new tabs
+// in that session skip it (see app/layout.tsx HEAD_INIT). app/(app)/loading.tsx is the
 // Suspense fallback for the whole authenticated group, so it mounts on every
 // in-app navigation that suspends; without the `played` latch below each of
 // those replayed the draw-in. That matches the intent already stated in
@@ -19,6 +21,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@openbooks/ui'
 import { BrandSplash } from './brand-logo'
+import { SPLASH_PLAYED_COOKIE } from '../lib/splash'
 
 const MIN_VISIBLE_MS = 2000 // full draw-in completes at ~1.9s
 const REDUCED_MOTION_MIN_MS = 500 // static logo — no reason to linger
@@ -31,6 +34,15 @@ let holds = 0
 let played = false
 const listeners = new Set<() => void>()
 const notify = () => listeners.forEach((l) => l())
+
+function rememberPlayed() {
+  played = true
+  try {
+    document.cookie = `${SPLASH_PLAYED_COOKIE}=1; path=/; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`
+  } catch {
+    // Without the cookie the next document load replays the intro; nothing else depends on it.
+  }
+}
 
 /** Keeps the splash on screen while mounted. Render inside route loading
  *  fallbacks that should show the full-screen splash. */
@@ -79,7 +91,7 @@ export function SplashScreen() {
       fadeT = setTimeout(() => {
         apply('fading')
         goneT = setTimeout(() => {
-          played = true
+          rememberPlayed()
           apply('gone')
         }, FADE_MS)
       }, remaining)
@@ -94,7 +106,7 @@ export function SplashScreen() {
     const internal = html.classList.contains('nav-internal')
     html.classList.remove('nav-internal')
     if (internal && holds === 0) {
-      played = true
+      rememberPlayed()
       apply('gone')
     } else {
       sync()
