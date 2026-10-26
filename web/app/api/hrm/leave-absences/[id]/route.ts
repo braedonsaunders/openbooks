@@ -1,11 +1,9 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { getAbsence } from "@openbooks/engine/hrm/attendance";
-import { can, guardPermission } from "../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../lib/features";
-import { isUuid } from "../../../../../lib/list-params";
+import { guardPermission } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
 import { leaveErrorResponse } from "../../leave-requests/_lib";
 
 export const runtime = "nodejs";
@@ -16,20 +14,18 @@ export const runtime = "nodejs";
  * behind the day); the drawer shows the fact with its basis.
  */
 export const GET = defineRoute({
-  public: "session",
+  authorize: async () => {
+    const read = await guardPermission("hrm.leave.read");
+    return read instanceof NextResponse && read.status === 403
+      ? await guardPermission("hrm.leave.manage")
+      : read;
+  },
+  feature: "hrm",
   params: z.object({ id: z.string().min(1) }),
-  handler: async ({ request: _req, authz: authz, params: routeParams }) => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrm"))) {
-      return notFound("record");
-    }
-    const gate = can(authz, "hrm.leave.read") ? authz : await guardPermission("hrm.leave.manage");
-    if (gate instanceof NextResponse) return gate;
+  handler: async ({ params: routeParams, authz: gate }) => {
     const { id } = routeParams;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "absence id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "absence id must be a uuid" }, { status: 400 });
     try {
       const absence = await getAbsence({
         orgId: gate.user.orgId,
