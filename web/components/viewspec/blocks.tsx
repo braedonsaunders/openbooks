@@ -43,6 +43,9 @@ import { AnalyticsHeader } from '../../app/(app)/analytics/_ui/AnalyticsHeader'
 import { CellView } from './cells'
 import { WidgetSlot, WidgetBlockView } from './widget-slot'
 import { toneClass } from './tone'
+import { alignClass, bodyCellClassName, leafOf } from './table-cells'
+import { VirtualReportRows } from './virtual-report-rows'
+import { rowsRenderInBrowser, windowedColumns, WINDOWED_ROWS_FROM } from './windowed-rows'
 import { nestedScope } from './list-scope'
 import Link from 'next/link'
 import { Badge } from '@openbooks/ui'
@@ -139,33 +142,6 @@ export class UnknownFrameError extends Error {
   readonly name = 'UnknownFrameError'
 }
 
-/** Column alignment → the exact classes the native tables use. */
-function alignClass(align: 'left' | 'right' | 'center' | undefined): string {
-  if (align === 'right') return 'text-right'
-  if (align === 'center') return 'text-center'
-  return ''
-}
-
-/**
- * Money and number columns carry `tabular-nums` on the cell, matching the
- * native pages. Doing it here rather than in the cell renderer keeps the
- * figure alignment attached to the column, which is where it belongs.
- */
-/**
- * The page scope, for `$root` resolution.
- *
- * `$root` always means the PAGE, at any nesting depth. Each nesting level
- * therefore PRESERVES an existing `$root` instead of pointing it at itself —
- * otherwise a table inside a repeat would shadow it and `$root.someLabel`
- * would silently resolve to nothing, rendering an empty cell that looks fine
- * until the DOM is diffed. That happened twice before this existed.
- */
-function leafOf(cell: TableBlock['columns'][number]['cell']) {
-  // Every wrapper kind must be unwrapped here. Adding one and forgetting this
-  // helper is how a converted cell silently loses its alignment or tone.
-  return cell.kind === 'drill' || cell.kind === 'txn' ? cell.inner : cell
-}
-
 /** A spanning summary row (opening / closing / totals). Resolves against the
  *  table's own scope, not a row scope. */
 export function SpanRowView({
@@ -209,11 +185,6 @@ export function SpanRowView({
       })}
     </TableRow>
   )
-}
-
-function isNumericCell(cell: TableBlock['columns'][number]['cell']): boolean {
-  const leaf = leafOf(cell)
-  return leaf.kind === 'money' || leaf.kind === 'number'
 }
 
 /**
@@ -261,6 +232,11 @@ function TableBlockView({
   const { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } =
     primitives
   const rows = resolveRows(spec.rows, scope)
+  // Long report tables render their rows in the browser, a window at a time:
+  // thousands of server-rendered rows cost tens of megabytes of markup and a
+  // hydration pass over every drill link. Totals, header and export are
+  // unaffected; tables with cells only the server can render stay here.
+  const windowed = spec.variant === 'report' && rows.length > WINDOWED_ROWS_FROM && rowsRenderInBrowser(spec)
   if (
     rows.length === 0 &&
     spec.empty &&
@@ -352,7 +328,9 @@ function TableBlockView({
             </TableCell>
           </TableRow>
         ) : null}
-        {rows.map((row, rowIndex) => {
+        {windowed ? (
+          <VirtualReportRows rows={rows} columns={windowedColumns(spec.columns)} rowKey={spec.rowKey} />
+        ) : rows.map((row, rowIndex) => {
           // Cells resolve against the row, with the page scope reachable at
           // `$root` for shared constants (placeholder text, labels). One fixed
           // name, not a parent-traversal operator.
@@ -363,29 +341,11 @@ function TableBlockView({
                 resolveText(spec.rowKey, rowScope) || `row-${rowIndex}`,
               )}
             >
-              {spec.columns.map((column, index) => {
-                const leaf = leafOf(column.cell)
-                // Only the value-bearing renderers carry a tone; date/badge/link
-                // cells own their own presentation.
-                const tone = toneClass(
-                  'tone' in leaf
-                    ? (resolveValue(leaf.tone as never, rowScope) as
-                        Tone | undefined)
-                    : undefined,
-                )
-                const className =
-                  cn(
-                    alignClass(column.align),
-                    isNumericCell(column.cell) && 'tabular-nums',
-                    tone,
-                    column.className,
-                  ) || undefined
-                return (
-                  <TableCell key={index} className={className}>
-                    <CellView spec={column.cell} scope={rowScope} />
-                  </TableCell>
-                )
-              })}
+              {spec.columns.map((column, index) => (
+                <TableCell key={index} className={bodyCellClassName(column, rowScope)}>
+                  <CellView spec={column.cell} scope={rowScope} />
+                </TableCell>
+              ))}
             </TableRow>
           )
         })}

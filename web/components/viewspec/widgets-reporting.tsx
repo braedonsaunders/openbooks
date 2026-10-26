@@ -1,4 +1,5 @@
 import { GlAuditNumberCommand } from '../gl-audit-number-command'
+import { BROWSER_CELL_WIDGETS } from './browser-cell-widgets'
 import { type ComponentProps } from 'react'
 import {
   ExportMenu,
@@ -30,7 +31,6 @@ import {
 import { JournalEntryHeading } from '../../app/(app)/reports/journal/sections'
 import { AccountHeading, EntryCell } from '../../app/(app)/reports/general-ledger/sections'
 import { PartyHeading } from '../../app/(app)/reports/registers/sections'
-import { PartyLinkCell } from '../../app/(app)/reports/aging/sections'
 import { AgingStrip } from '../../app/(app)/reports/statements/[partyId]/sections'
 import { StatementRows, ReconciliationNote } from '../../app/(app)/reports/StatementRows'
 import { ReportNameCell } from '../../app/(app)/reports/custom/sections'
@@ -98,14 +98,7 @@ export const REPORTING_WIDGETS = {
       closingDrill={props.closingDrill as ComponentProps<typeof PartyHeading>['closingDrill']}
     />
   ),
-  'party-link-cell': (props) => (
-    <PartyLinkCell
-      partyId={(props.partyId as string | null) ?? null}
-      partyName={str(props, 'partyName') ?? ''}
-      href={str(props, 'href') ?? ''}
-      note={str(props, 'note')}
-    />
-  ),
+  'party-link-cell': BROWSER_CELL_WIDGETS['party-link-cell'],
   'aging-strip': (props) => (
     <AgingStrip
       cells={(props.cells as ComponentProps<typeof AgingStrip>['cells']) ?? []}

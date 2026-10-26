@@ -306,7 +306,9 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     label,
     side,
     asOf,
-    dims,
+    // A copy per target: one object shared by thousands of cells serializes
+    // as a long back-reference in every cell instead of its own few bytes.
+    dims: { ...dims },
     // The drawer must reproduce the screen's selection, not the defaults.
     // The partyless row drills to exactly its documents: omitting the party
     // would drop the predicate and show every party's documents.
