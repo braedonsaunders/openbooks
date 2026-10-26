@@ -1,13 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  createBenefitAward,
-  listBenefitAwards,
-} from "@openbooks/engine/hrm/benefits";
-import { guardPermission } from "../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
-import { notFound } from "@/lib/api/responses";
-import { isUuid } from "../../../../lib/list-params";
+import { createBenefitAward, listBenefitAwards } from "@openbooks/engine/hrm/benefits";
+import { isUuid } from "@/lib/list-params";
 import { benefitsErrorResponse } from "../benefits/_lib";
 import { benefitAwardPostBody } from "./bodies";
 
@@ -46,14 +40,10 @@ export const GET = defineRoute({
 });
 
 export const POST = defineRoute({
-  public: "session",
+  permission: "hrm.benefits.manage",
+  feature: "hrm",
   body: benefitAwardPostBody,
-  handler: async ({ body }) => {
-    const gate = await guardPermission("hrm.benefits.manage");
-    if (gate instanceof NextResponse) return gate;
-    if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-      return notFound("record");
-    }
+  handler: async ({ authz: gate, body }) => {
     try {
       const award = await createBenefitAward({
         orgId: gate.user.orgId,
