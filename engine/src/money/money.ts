@@ -47,7 +47,14 @@ export function roundDiv(numerator: bigint, denominator: bigint): bigint {
   return negative ? -rounded : rounded;
 }
 
+/** The canonical stored form, four decimals exactly: what every database
+ * read and every fromUnits result already is. */
+const CANONICAL_MONEY = /^-?\d+\.\d{4}$/;
+
 export function toUnits(s: string | number): bigint {
+  // Canonical money parses as one integer of its digits; sums over large
+  // item sets spend most of their time here.
+  if (typeof s === "string" && CANONICAL_MONEY.test(s)) return BigInt(s.replace(".", ""));
   let str = String(s).trim();
   if (!/^[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$/.test(str)) {
     throw new Error(`not a decimal number: "${s}"`);

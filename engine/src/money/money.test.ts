@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { abs, allocateLargestRemainder, apportion, cmp, div, divRate, fitsLedgerRange, formatMoney, isZero, ledgerSideTotals, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, prorateDays, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
+import { abs, allocateLargestRemainder, apportion, cmp, div, divRate, fitsLedgerRange, formatMoney, isZero, ledgerSideTotals, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, prorateDays, roundDiv, roundMoney, sum, toUnits, fromUnits } from "./money.ts";
 
 test("mul handles quantity math, zero rates and exact rounding", () => {
   assert.equal(mul("3", "12.3456"), "37.0368");
@@ -476,4 +476,16 @@ test("side totals split debits and credit magnitudes exactly", () => {
     credits: "900000000000000.0000",
   });
   assert.deepEqual(ledgerSideTotals([]), { debits: "0.0000", credits: "0.0000" });
+});
+
+test("canonical money strings parse to the same units as every other spelling of the amount", () => {
+  // A leading space keeps a value off the canonical fast path, so each pair
+  // compares the two parsers on the same amount.
+  const samples = ["0.0000", "-0.0000", "1.0000", "-1.0000", "0.0001", "-0.0001", "123456789012345.6789", "-99999999999999.9999", "00042.5000", "-00000.0050"];
+  for (let n = -20_000; n <= 20_000; n += 37) samples.push(fromUnits(BigInt(n) * 7919n));
+  for (const value of samples) assert.equal(toUnits(value), toUnits(` ${value}`), value);
+  assert.equal(toUnits("12.3400"), 123400n);
+  assert.equal(toUnits("12.34"), 123400n, "non-canonical spellings still parse");
+  assert.throws(() => toUnits("12.34567"), /beyond 4 decimal places/);
+  assert.throws(() => toUnits("１２.３４００"), /not a decimal number/, "only ASCII digits are money");
 });
