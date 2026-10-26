@@ -1,10 +1,9 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { db } from "@openbooks/engine/platform/db";
 import { attachEvidence } from "@openbooks/engine/hrm/qualifications/qualifications";
-import { guardPermission } from "../../../../../../lib/authz";
+import { guardPermission } from "@/lib/authz";
 import { qualificationErrorResponse } from "../../_lib";
 import { attachEvidenceBody } from "../../bodies";
 /**
@@ -13,28 +12,24 @@ import { attachEvidenceBody } from "../../bodies";
  * HR's — attaching never verifies.
  */
 export const POST = defineRoute({
-  public: "session",
+  authorize: async () => {
+    const hrGate = await guardPermission("hrm.certifications.read");
+    return hrGate instanceof NextResponse ? await guardPermission("hrm.self.read") : hrGate;
+  },
   feature: "hrmCertifications",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, params }) => {
+  body: attachEvidenceBody,
+  handler: async ({ params, body, authz: gate }) => {
     // HR readers attach anywhere they manage; the holder attaches to their
     // own pending rows (the service enforces both) — so either grant opens
     // the route and the service decides.
-    const hrGate = await guardPermission("hrm.certifications.read");
-    const gate =
-      hrGate instanceof NextResponse
-        ? await guardPermission("hrm.self.read")
-        : hrGate;
-    if (gate instanceof NextResponse) return gate;
-    const parsedBody = await parseJsonBody(req, attachEvidenceBody);
-    if (!parsedBody.ok) return parsedBody.response;
     try {
       const { id } = params;
       const qualification = await attachEvidence(db, {
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         qualificationId: id,
-        ...parsedBody.data,
+        ...body,
       });
       return NextResponse.json({ qualification });
     } catch (e) {
