@@ -5,6 +5,7 @@ export {
   storedValueAccountOwnedByCustomer,
   type BalanceView,
 } from "./accounts.ts";
+export { readStoredValueTenderLookup, type StoredValueTenderLookup } from "./register-read.ts";
 
 /** Client-visible balance and lifecycle refusal contract. */
 export { StoredValueError } from "./errors.ts";
