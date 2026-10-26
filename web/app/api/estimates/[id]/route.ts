@@ -1,31 +1,39 @@
-import { makeGET, makePATCH, makeDELETE } from '../../_order/handlers'
-import { defineRoute } from '@/lib/api/route'
-import { z } from 'zod'
+import { makeGET, makePATCH, makeDELETE } from "../../_order/handlers";
+import { defineRoute } from "@/lib/api/route";
+import { jsonObject } from "@/lib/api/json";
+import { isUuid } from "@/lib/list-params";
+import { z } from "zod";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
-const cfg = { kind: 'quote', readPerm: 'estimates.read', createPerm: 'estimates.create' } as const
+const cfg = { kind: "quote", readPerm: "estimates.read", createPerm: "estimates.create" } as const;
 
-const get = makeGET(cfg)
-const patch = makePATCH(cfg)
-const remove = makeDELETE(cfg)
-const params = z.object({ id: z.string() })
+const get = makeGET(cfg);
+const patch = makePATCH(cfg);
+const remove = makeDELETE(cfg);
+const params = z.object({ id: z.string().refine(isUuid) });
 
 export const GET = defineRoute({
-  permission: 'estimates.read',
-  feature: 'orders',
+  permission: "estimates.read",
+  feature: "orders",
   params,
-  handler: ({ request, params }) => get(request, { params: Promise.resolve(params) }),
-})
+  invalidParamsNotFound: "record",
+  handler: ({ request, params, authz }) => get(request, { params: Promise.resolve(params) }, authz),
+});
 export const PATCH = defineRoute({
-  permission: 'estimates.create',
-  feature: 'orders',
+  permission: "estimates.create",
+  feature: "orders",
   params,
-  handler: ({ request, params }) => patch(request, { params: Promise.resolve(params) }),
-})
+  invalidParamsNotFound: "record",
+  body: jsonObject,
+  handler: ({ request, params, authz, body }) =>
+    patch(request, { params: Promise.resolve(params) }, authz, body),
+});
 export const DELETE = defineRoute({
-  permission: 'estimates.create',
-  feature: 'orders',
+  permission: "estimates.create",
+  feature: "orders",
   params,
-  handler: ({ request, params }) => remove(request, { params: Promise.resolve(params) }),
-})
+  invalidParamsNotFound: "record",
+  handler: ({ request, params, authz }) =>
+    remove(request, { params: Promise.resolve(params) }, authz),
+});

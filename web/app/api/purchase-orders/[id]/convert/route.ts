@@ -1,5 +1,7 @@
 import { makeConvertPOST } from "../../../_order/handlers";
-import { guardPermission, type Authz } from "@/lib/authz";
+import { guardFeaturePermission } from "@/lib/feature-gates";
+import { jsonObject } from "@/lib/api/json";
+import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/list-params";
 import { conversionWouldCopyInventoryKinds } from "@/lib/order-cycle";
 import { notFound } from "@/lib/api/responses";
@@ -18,26 +20,19 @@ const convert = makeConvertPOST({
   convertPerm: purchaseOrderConversionPermission,
 });
 
-async function convertPurchaseOrder(
-  gate: Authz,
-  req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
-  const { id } = await ctx.params;
-  // A malformed id names no uuid document: refuse it before the
-  // inventory-kind probe binds it to a uuid column (raw 500 when
-  // Inventory is off), the same 404 the convert handler answers.
-  if (!isUuid(id)) return notFound("record");
-  if (await conversionWouldCopyInventoryKinds(gate.user.orgId, id)) {
-    return notFound("record");
-  }
-  return convert(req, ctx);
-}
-
 export const POST = defineRoute({
-  authorize: () => guardPermission(PURCHASE_ORDER_PERMISSIONS.read),
+  authorize: async ({ params }) => {
+    const gate = await guardFeaturePermission(PURCHASE_ORDER_PERMISSIONS.read, "orders");
+    if (gate instanceof NextResponse) return gate;
+    const id = (params as { id?: unknown } | undefined)?.id;
+    if (typeof id !== "string" || !isUuid(id)) return notFound("record");
+    if (await conversionWouldCopyInventoryKinds(gate.user.orgId, id)) return notFound("record");
+    return gate;
+  },
   feature: "orders",
-  params: z.object({ id: z.string() }),
-  handler: async ({ request, params, authz }) =>
-    convertPurchaseOrder(authz, request, { params: Promise.resolve(params) }),
+  params: z.object({ id: z.string().refine(isUuid) }),
+  invalidParamsNotFound: "record",
+  body: jsonObject,
+  handler: async ({ request, params, authz, body }) =>
+    convert(authz, request, { params: Promise.resolve(params) }, body),
 });
