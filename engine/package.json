@@ -676,6 +676,7 @@
     "./records/control-accounts": "./src/records/control-accounts.ts",
     "./records/custom-fields": "./src/records/custom-fields.ts",
     "./records/document-edit-policy": "./src/records/document-edit-policy.ts",
+    "./records/document-revision-read": "./src/records/document-revision-read.ts",
     "./records/document-kind-permissions": "./src/records/document-kind-permissions.ts",
     "./records/document-kinds": "./src/records/document-kinds.ts",
     "./records/expense-access": "./src/records/expense-access.ts",
