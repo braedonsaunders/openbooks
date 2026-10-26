@@ -10,7 +10,6 @@ import { applyInventoryIssuesForInvoice } from "../inventory/documents-sales.ts"
 import { applyInventoryReceiptsForBill } from "../inventory/documents-purchasing.ts";
 import { createObligationsFromInvoice } from "../revenue/recognition.ts";
 import { postingEffectHooks } from "../journal/posting-effect-contributors.ts";
-import { issueStoredValueForInvoice, issueStoreCreditForCreditMemo } from "../stored-value/invoice-effects.ts";
 import { hasStoredValueTenders, settleCashRefundTenders } from "../sales/document-tenders.ts";
 import { finalizePaymentAcceptanceForDocument } from "../payments-core/acceptance-effect.ts";
 import { emitDocumentPosted, emitPaymentReceived } from "../webhooks/emit.ts";
@@ -133,7 +132,7 @@ export async function runPostDocumentEffects(
       // A cash sale defers recognition lines like an invoice. Deferred
       // consideration requires the customer contract checked by the service.
       await createObligationsFromInvoice(doc.id, doc.orgId, effectActorId);
-      await issueStoredValueForInvoice(doc.id, doc.orgId, effectActorId);
+      await postingEffectHooks.require("stored-value").issueForInvoice(doc.id, doc.orgId, effectActorId);
     } else if (doc.kind === "customer_credit" || doc.kind === "cash_refund") {
       // A cash refund's stored-value tenders settle per tender (top up the
       // named account, or mint from the memo program); the memo-level credit
@@ -151,7 +150,7 @@ export async function runPostDocumentEffects(
           actorId: effectActorId,
         });
       } else {
-        await issueStoreCreditForCreditMemo(doc.id, doc.orgId, effectActorId);
+        await postingEffectHooks.require("stored-value").issueStoreCreditForCreditMemo(doc.id, doc.orgId, effectActorId);
       }
     }
     // Capitalization rules turn posted purchase lines into asset proposals;

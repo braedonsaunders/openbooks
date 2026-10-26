@@ -39,7 +39,6 @@ import { resolveMarketplaceClearingForDocument, validateTaxControlAccounts } fro
 import { RULES } from "./posting-rules.ts";
 import { assertFinalKernelBalance, assertCreditMemoDirection, retainedKernelLines } from "../journal/posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
-import { resolveStoredValueLiabilityByLine, resolveStoreCreditLiability } from "../stored-value/posting-accounts.ts";
 import { resolveCashPostingTenders, TenderRefusal } from "../sales/document-tenders.ts";
 import { CashCloseoutError, resolveCashCloseoutForPosting } from "../sales/cash-closeout.ts";
 import { resolveProviderTaxPlans, resolveShipToSnapshot } from "./posting-provider-tax.ts";
@@ -157,7 +156,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   if (doc.kind === "customer_invoice" && !deps.storedValueLiabilityByLine) {
     deps = {
       ...deps,
-      storedValueLiabilityByLine: await resolveStoredValueLiabilityByLine(db, doc.id, doc.orgId),
+      storedValueLiabilityByLine: await postingLineHooks.require("stored-value").liabilityByLine(db, doc.id, doc.orgId),
     };
   }
   if (doc.kind === "customer_credit" && !deps.storeCreditLiabilityAccountId) {
@@ -165,7 +164,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     if (typeof custom.storeCreditProgramId === "string" && custom.storeCreditProgramId) {
       deps = {
         ...deps,
-        storeCreditLiabilityAccountId: await resolveStoreCreditLiability(db, doc.orgId, custom.storeCreditProgramId),
+        storeCreditLiabilityAccountId: await postingLineHooks.require("stored-value").storeCreditLiability(db, doc.orgId, custom.storeCreditProgramId),
       };
     }
   }

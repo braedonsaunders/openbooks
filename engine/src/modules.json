@@ -194,6 +194,7 @@
         "schedule-boards",
         "scripting",
         "service",
+        "stored-value",
         "tax-returns"
       ]
     },
@@ -462,7 +463,6 @@
         "records",
         "revenue",
         "sales",
-        "stored-value",
         "tax",
         "webhooks"
       ]

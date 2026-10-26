@@ -17,7 +17,7 @@ import {
 } from "../records/transaction-audit.ts";
 import { reverseFieldTicketProgressInTransaction } from "../projects/progress.ts";
 import { emitDocumentVoided } from "../webhooks/emit.ts";
-import { reverseStoredValueForVoidedDocument } from "../stored-value/void-reversal.ts";
+import { voidRemedyHooks } from "../journal/void-remedy-contributors.ts";
 import { PROVIDER_COMMIT_KINDS, requestProviderVoidTx } from "../tax/provider-commit.ts";
 import { AmortizationError } from "../amortization/errors.ts";
 import { cancelAmortizationForVoidedSource } from "../amortization/source-void.ts";
@@ -238,7 +238,7 @@ export async function completeRequestedDocumentVoid(
         }
         // The journal reversal above moved the stored-value liability; the
         // card subledger moves with it in this same transaction.
-        await reverseStoredValueForVoidedDocument({
+        await voidRemedyHooks.require("stored-value").reverseForVoidedDocument({
           orgId,
           documentId,
           documentNumber: String(doc.document_number),

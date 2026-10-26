@@ -19,7 +19,7 @@ import { transferCorrectionApplications } from "./posting-replay-applications.ts
 import { type PostingDeps, PostingError, effectivePostingDate } from "../journal/posting-contracts.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
-import { resolveStoredValueLiabilityByLine, resolveStoreCreditLiability } from "../stored-value/posting-accounts.ts";
+import { postingLineHooks } from "../journal/posting-line-contributors.ts";
 import { resolveCashPostingTenders, TenderRefusal } from "../sales/document-tenders.ts";
 import { CashCloseoutError, resolveCashCloseoutForPosting } from "../sales/cash-closeout.ts";
 import { resolveMarketplaceClearingForDocument } from "./posting-tax-policy.ts";
@@ -149,7 +149,7 @@ export async function regenerateGlImpactTx(
   if (doc.kind === "customer_invoice" && !deps.storedValueLiabilityByLine) {
     deps = {
       ...deps,
-      storedValueLiabilityByLine: await resolveStoredValueLiabilityByLine(tx, doc.id, doc.orgId),
+      storedValueLiabilityByLine: await postingLineHooks.require("stored-value").liabilityByLine(tx, doc.id, doc.orgId),
     };
   }
   if (doc.kind === "customer_credit" && !deps.storeCreditLiabilityAccountId) {
@@ -157,7 +157,7 @@ export async function regenerateGlImpactTx(
     if (typeof custom.storeCreditProgramId === "string" && custom.storeCreditProgramId) {
       deps = {
         ...deps,
-        storeCreditLiabilityAccountId: await resolveStoreCreditLiability(tx, doc.orgId, custom.storeCreditProgramId),
+        storeCreditLiabilityAccountId: await postingLineHooks.require("stored-value").storeCreditLiability(tx, doc.orgId, custom.storeCreditProgramId),
       };
     }
   }
