@@ -76,6 +76,10 @@ export interface PostingEffectContributors {
       subsidiaryId: string,
     ): Promise<unknown>;
   };
+  "payments-core": {
+    /** Completes the payment acceptance a posted customer payment settles. */
+    finalizeAcceptance(paymentDocumentId: string): Promise<void>;
+  };
 }
 
 export const postingEffectHooks = postingContributorRegistry<PostingEffectContributors>("effect");

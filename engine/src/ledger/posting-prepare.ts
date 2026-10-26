@@ -9,9 +9,6 @@ import { documentTaxDate, staleTaxRateLine } from '../tax/document-tax-date.ts';
 import { CrossBorderTaxError } from '../tax/cross-border-place-of-supply.ts';
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
-import { assertProviderReturnPosting } from "../payments-core/provider-return-posting.ts";
-import { assertReceiptFundingPosting } from "../payments-core/receipt-funding.ts";
-import { PaymentError } from "../payments-core/payment-errors.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
 import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../projects/billing-source-integrity.ts";
 import { PayrollError as PayrollRemittanceError } from "../money/payroll-error.ts";
@@ -53,8 +50,8 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     .from(schema.documents)
     .where(eq(schema.documents.id, documentId));
   if (!doc) throw new PostingError(`document ${documentId} not found`);
-  try { assertProviderReturnPosting(doc); }
-  catch (error) { if (error instanceof PaymentError) throw new PostingError(error.message); throw error; }
+  const payments = postingPreconditionHooks.require("payments-core");
+  payments.assertProviderReturnPosting(doc);
   // One configuration snapshot covers account routing, allocation and the
   // obligations/accruals that commit with this document's journal.
   await lockLedgerSetupFence(db,doc.orgId,'shared');
@@ -316,8 +313,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     .orderBy(asc(schema.documentLines.lineNumber));
 
   if (!deps.migration) {
-    try { await assertReceiptFundingPosting(db, doc, options.audit?.actorId ?? null, lines.map(line => line.accountId)); }
-    catch (error) { if (error instanceof PaymentError) throw new PostingError(error.message); throw error; }
+    await payments.assertReceiptFundingPosting(db, doc, options.audit?.actorId ?? null, lines.map(line => line.accountId));
   }
 
   if (doc.kind === "internal_billing" && !deps.internalBilling) {
@@ -552,8 +548,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
 
   // -- build + validate kernel lines --------------------------------------
   if (!deps.migration) {
-    try { await assertReceiptFundingPosting(db, effectiveDoc, options.audit?.actorId ?? null, postingLines.map(line => line.accountId)); }
-    catch (error) { if (error instanceof PaymentError) throw new PostingError(error.message); throw error; }
+    await payments.assertReceiptFundingPosting(db, effectiveDoc, options.audit?.actorId ?? null, postingLines.map(line => line.accountId));
   }
   const kernelLines = retainedKernelLines(
     await normalizeJournalCurrencyLines(db,effectiveDoc,rule(effectiveDoc, postingLines, deps)),

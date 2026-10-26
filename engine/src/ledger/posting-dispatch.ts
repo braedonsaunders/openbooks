@@ -7,7 +7,6 @@ import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { createObligationsFromInvoice } from "../revenue/recognition.ts";
 import { postingEffectHooks } from "../journal/posting-effect-contributors.ts";
 import { hasStoredValueTenders, settleCashRefundTenders } from "../sales/document-tenders.ts";
-import { finalizePaymentAcceptanceForDocument } from "../payments-core/acceptance-effect.ts";
 import { claimPostingEffectsForDocument, markPostingEffectsFailed, markPostingEffectsSucceeded, PostingEffectsLeaseFencedError, PostingEffectsTerminalFailureError, type PostingEffectsRow } from "./posting-effects.ts";
 /**
  * Emit post-commit effects for a caller that used `deferEffects` so a larger
@@ -192,7 +191,7 @@ export async function runPostDocumentEffects(
       );
     }
     if (doc.kind === "customer_payment") {
-      await finalizePaymentAcceptanceForDocument(doc.id);
+      await postingEffectHooks.require("payments-core").finalizeAcceptance(doc.id);
     }
     if (!options.suppressAutomation) {
       // Domain events fan out to webhook subscribers from the posted

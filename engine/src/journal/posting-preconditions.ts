@@ -153,6 +153,26 @@ export interface PostingPreconditions {
       lineLabel: string,
     ): Promise<void>;
   };
+  "payments-core": {
+    /** Refuses, with a PostingError, a provider-return receipt posted outside its governed release. */
+    assertProviderReturnPosting(document: { id: string; orgId: string; custom: unknown }): void;
+    /** Refuses, with a PostingError, a payment whose lines leave the accounts its funding allows. */
+    assertReceiptFundingPosting(
+      executor: SqlExecutor,
+      document: {
+        orgId: string;
+        id: string;
+        kind: string;
+        subsidiaryId: string | null;
+        currency: string;
+        documentDate: string;
+        postingDate?: string | null;
+        custom: unknown;
+      },
+      actorId: string | null,
+      actualAccountIds: readonly (string | null)[],
+    ): Promise<void>;
+  };
 }
 
 export const postingPreconditionHooks =
