@@ -10,6 +10,8 @@ import { PayrollError } from "./error.ts";
 import { payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.ts";
 
 type Executor = Pick<typeof db, "execute">;
+type EmployeeSubsidiaryRow = { subsidiaryId: string | null };
+type AssignmentListRow = Record<string, unknown>;
 
 /**
  * Recurring per-employee pay-component assignments — the write side of the
@@ -57,9 +59,9 @@ export async function listEmployeePayComponentAssignments(input: {
   components: Record<string, unknown>[];
   employments: Record<string, unknown>[];
 }> {
-  return withOrgTransaction(input.orgId, async (tx) => {
+  return withOrgTransaction(input.orgId, async () => {
     const employee = (
-      await tx.execute<{ subsidiaryId: string | null }>(
+      await db.execute<EmployeeSubsidiaryRow>(
         sql`
       select subsidiary_id as "subsidiaryId" from parties
        where org_id = ${input.orgId} and id = ${input.employeePartyId} for share`,
@@ -71,7 +73,7 @@ export async function listEmployeePayComponentAssignments(input: {
     }
     const today = await businessToday(input.orgId);
     const [assignments, components, employments] = await Promise.all([
-      tx.execute<Record<string, unknown>>(
+      db.execute<AssignmentListRow>(
         sql`
         select a.id, a.employee_party_id as "employeePartyId", a.employment_id as "employmentId",
                a.component_id as "componentId", c.code as "componentCode", c.name as "componentName",
@@ -85,7 +87,7 @@ export async function listEmployeePayComponentAssignments(input: {
          order by a.effective_from desc`,
         "objects",
       ),
-      tx.execute<Record<string, unknown>>(
+      db.execute<AssignmentListRow>(
         sql`
         select c.id, c.code, c.name, c.kind, c.basis, c.value::text as value,
                c.payment_kind as "paymentKind", c.country
@@ -94,7 +96,7 @@ export async function listEmployeePayComponentAssignments(input: {
          order by c.sequence, c.code`,
         "objects",
       ),
-      tx.execute<Record<string, unknown>>(
+      db.execute<AssignmentListRow>(
         sql`
         select w.id, w.service_start::text as "serviceStart", s.name as "subsidiaryName"
           from worker_employments w

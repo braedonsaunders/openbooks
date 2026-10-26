@@ -83,9 +83,12 @@ export class ParallelRunStoreError extends PayrollError {}
 
 type ScopedId = { id: string };
 
+/** A route caller's explicit legal-entity scope: null is unrestricted. */
+type ParallelRunScope = ReadonlySet<string> | null;
+
 async function visiblePriorRegisterIds(
   orgId: string,
-  allowed: PayrollSubsidiaryScope,
+  allowed: ParallelRunScope,
 ): Promise<Set<string> | null> {
   if (allowed === null) return null;
   const ids = [...allowed];
@@ -108,7 +111,7 @@ async function visiblePriorRegisterIds(
 
 async function visiblePayRunDocumentIds(
   orgId: string,
-  allowed: PayrollSubsidiaryScope,
+  allowed: ParallelRunScope,
 ): Promise<Set<string> | null> {
   if (allowed === null) return null;
   const rows = await db.execute<ScopedId>(
@@ -124,7 +127,7 @@ async function visiblePayRunDocumentIds(
 
 async function visibleComparisonIds(
   orgId: string,
-  allowed: PayrollSubsidiaryScope,
+  allowed: ParallelRunScope,
   registerIds: Set<string> | null,
   runIds: Set<string> | null,
 ): Promise<Set<string> | null> {
@@ -152,7 +155,7 @@ async function visibleComparisonIds(
   return new Set(rows.map((row) => row.id));
 }
 
-export async function listParallelRunScope(orgId: string, allowed: PayrollSubsidiaryScope) {
+export async function listParallelRunScope(orgId: string, allowed: ParallelRunScope) {
   const [registerIds, runIds] = await Promise.all([
     visiblePriorRegisterIds(orgId, allowed),
     visiblePayRunDocumentIds(orgId, allowed),
@@ -163,7 +166,7 @@ export async function listParallelRunScope(orgId: string, allowed: PayrollSubsid
 
 export async function parallelRunInputsInScope(
   orgId: string,
-  allowed: PayrollSubsidiaryScope,
+  allowed: ParallelRunScope,
   registerId: string,
   payRunDocumentId: string,
 ): Promise<boolean> {
