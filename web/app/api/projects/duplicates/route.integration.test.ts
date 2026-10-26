@@ -42,7 +42,7 @@ const mockFeatureGates = `
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      (specifier === "../../../../lib/authz" || specifier === "../../../../lib/projects-gate")
+      (specifier === "../../../../lib/authz" || specifier === "@/lib/authz" || specifier === "../../../../lib/projects-gate")
       && (context.parentURL?.includes("projects/duplicates") || context.parentURL?.includes("projects/merge"))
     ) {
       return { url: "mock:authz", shortCircuit: true };

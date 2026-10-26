@@ -17,7 +17,7 @@ registerHooks({
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: s.allowed };
       }
     `)
-    if (specifier === '../../../../../lib/authz') return virtual(`
+    if (specifier === '../../../../../lib/authz' || specifier === '@/lib/authz') return virtual(`
       export function can() { return true }
     `)
     return next(specifier, context)

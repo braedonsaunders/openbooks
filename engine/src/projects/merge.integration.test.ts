@@ -50,6 +50,14 @@ const routeHooks = registerHooks({
     if (specifier === "@/lib/feature-gates") {
       return { shortCircuit: true, format: "module", url: "mock:project-merge-feature-gates" };
     }
+    // The route imports the alias. Matching it here keeps the real authz
+    // module (and its request-org resolver) out of the test process.
+    if (
+      specifier === "@/lib/authz" &&
+      context.parentURL?.includes("/web/app/api/projects/merge/")
+    ) {
+      return { shortCircuit: true, format: "module", url: "mock:project-merge-authz" };
+    }
     if (specifier.startsWith("@/") && context.parentURL?.includes("/web/app/api/projects/merge/")) {
       return nextResolve(
         new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href,

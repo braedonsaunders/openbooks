@@ -122,8 +122,8 @@ export async function createConnectionRecord(input: {
   actorId: string;
   source: string;
   displayName: string;
-  authKind: string;
-  status: string;
+  authKind: "token" | "oauth2";
+  status: "active" | "paused" | "error" | "unconfigured";
   config: Record<string, unknown>;
   secrets: string | null;
 }): Promise<string> {
