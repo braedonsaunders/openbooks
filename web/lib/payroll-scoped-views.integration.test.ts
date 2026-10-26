@@ -756,6 +756,35 @@ const payrollReportingCases = [
               masked.accounts[0]?.lines.some((l) => l.party === PAYROLL_RESTRICTED_PARTY_LABEL),
             );
             assert.ok(JSON.stringify(full).includes(ALICE));
+
+            // Pages count a collapsed payroll line once and carry running
+            // balances across page breaks, so the pages read back as the ledger.
+            for (const [canSeePayroll, whole] of [
+              [false, masked],
+              [true, full],
+            ] as const) {
+              const pages = await withOrgContext(fx.orgId, async () =>
+                Promise.all(
+                  [1, 2, 3].map((page) =>
+                    generalLedger(fx.date, fx.date, {
+                      orgId: fx.orgId,
+                      accountId: fx.accounts.ap,
+                      canSeePayroll,
+                      page,
+                      pageSize: 2,
+                    }),
+                  ),
+                ),
+              );
+              const lineCount = whole.accounts[0]!.lines.length;
+              assert.equal(pages[0]!.paging?.lineCount, lineCount);
+              assert.deepEqual(
+                pages
+                  .slice(0, Math.ceil(lineCount / 2))
+                  .flatMap((p) => p.accounts.flatMap((a) => a.lines)),
+                whole.accounts[0]!.lines,
+              );
+            }
           } finally {
             await withBypass(() => dropScratchOrg(fx.orgId));
           }

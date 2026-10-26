@@ -136,8 +136,9 @@ export async function generalLedger(
            and (${pnlInYear} e.posting_date >= ${fyStart}::date)
            and ${dimWhere(opts.dims)}${acctFilter}
          group by l.account_id`;
-  const opening = await reportDb.execute<{ account_id: string; bal: string }>(openingSql);
-  const openingByAcct = new Map(opening.rows.map((r) => [r.account_id, r.bal]));
+  // Opening balances, period activity and the page's line counts are
+  // independent reads; they run together.
+  const opening = reportDb.execute<{ account_id: string; bal: string }>(openingSql);
 
   // Keep the detail cap presentation-only. Closing balances must include all
   // posted activity in the report window, including lines omitted by `limit`.
@@ -161,10 +162,9 @@ export async function generalLedger(
        and ${dimWhere(opts.dims)}${acctFilter}
      group by l.account_id
   `;
-  const periodActivity = await reportDb.execute<{ account_id: string; activity: string }>(
+  const periodActivity = reportDb.execute<{ account_id: string; activity: string }>(
     periodActivitySql,
   );
-  const activityByAcct = new Map(periodActivity.rows.map((r) => [r.account_id, r.activity]));
 
   // Payroll legs collapse per (entry, account) in a UNION arm BEFORE the
   // order/limit below, so the cap can never split a group and surface a
@@ -229,15 +229,45 @@ export async function generalLedger(
   // A page reads only the accounts it spans: per-account line counts locate
   // the page in ledger order, and only those accounts' lines are sorted.
   let pageAccounts: { ids: string[]; skip: number; lineCount: number } | null = null;
-  if (pageSize !== null && page !== null) {
-    const counts = (
-      await reportDb.execute<{ account_id: string; n: string }>(sql`
-      select ${reportDb.censusColumn}, u.account_id, count(*) as n
-        from (${lineSource}) u
-       group by u.account_id, u.number, u.name
-       order by u.number nulls last, u.name, u.account_id
+  // One pass over the period's lines: each line counts once, except that a
+  // restricted payroll leg counts once per entry and account, as its
+  // collapsed line does. The pay-run document is consulted only for
+  // party-tagged lines whose entry origin has not already settled it.
+  const countsRead =
+    pageSize !== null
+      ? reportDb.execute<{ account_id: string; n: string }>(sql`
+      select ${reportDb.censusColumn}, x.account_id,
+             count(*) filter (where not x.restricted)
+               + count(distinct x.entry_id) filter (where x.restricted) as n
+        from (
+          select l.account_id, a.number, a.name, e.id as entry_id,
+                 ${
+                   opts.canSeePayroll === true
+                     ? sql`false`
+                     : sql`(l.party_id is not null and (coalesce(e.origin, '') = 'payroll' or exists (
+                         select 1 from documents d
+                          where d.id = e.source_document_id and d.org_id = e.org_id and d.kind = 'pay_run')))`
+                 } as restricted
+            from journal_lines l
+            join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+             and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
+            join accounts a on a.id = l.account_id and a.org_id = l.org_id
+           where l.org_id = ${orgId} and l.posting_date >= ${from} and l.posting_date <= ${to}
+             and e.posting_date >= ${from} and e.posting_date <= ${to} and ${dimWhere(opts.dims)}${acctFilter}
+        ) x
+       group by x.account_id, x.number, x.name
+       order by x.number nulls last, x.name, x.account_id
     `)
-    ).rows;
+      : null;
+  const [openingRows, activityRows, countRows] = await Promise.all([
+    opening,
+    periodActivity,
+    countsRead,
+  ]);
+  const openingByAcct = new Map(openingRows.rows.map((r) => [r.account_id, r.bal]));
+  const activityByAcct = new Map(activityRows.rows.map((r) => [r.account_id, r.activity]));
+  if (pageSize !== null && page !== null && countRows !== null) {
+    const counts = countRows.rows;
     const lineCount = counts.reduce((total, row) => total + Number(row.n), 0);
     const offset = (page - 1) * pageSize;
     const ids: string[] = [];
@@ -262,10 +292,17 @@ export async function generalLedger(
              sum(u.amount) over (partition by u.account_id order by ${ledgerOrder}
                rows between unbounded preceding and current row) as running,
              ${pageAccounts.lineCount} as total_n
-        from (${lineSource}) u
-       where u.account_id = any(${`{${pageAccounts.ids.join(",")}}`}::uuid[])
+        from (
+          -- The ledger-order prefix ending with this page holds every earlier
+          -- line of each account it reaches, so running balances over the
+          -- prefix are exact and the rest of the period is never sorted.
+          select * from (${lineSource}) prefix
+           where prefix.account_id = any(${`{${pageAccounts.ids.join(",")}}`}::uuid[])
+           order by ${ledgerOrder}
+           limit ${pageAccounts.skip + pageSize}
+        ) u
     ) w
-     where w.rn > ${pageAccounts.skip} and w.rn <= ${pageAccounts.skip + pageSize}
+     where w.rn > ${pageAccounts.skip}
      order by w.rn
   `
       : sql`
