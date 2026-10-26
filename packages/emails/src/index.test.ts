@@ -304,6 +304,30 @@ for (const scenario of SCENARIOS) {
   });
 }
 
+test("a message without attachments sends no attachments field to any JSON provider", async () => {
+  const capture = await startCaptureServer();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = remapProviders(originalFetch, capture.origin);
+  try {
+    for (const name of ["resend", "sendgrid", "postmark"] as const) {
+      const outcome = await sendVia(
+        transportByProvider[name],
+        { to: "dana@example.com", subject: "No attachments", html: "<p>x</p>", text: "x" },
+        { deliveryKey: testKey(`no-attachments-${name}`) },
+      );
+      assert.equal(outcome.kind, "sent", name);
+    }
+    assert.equal(capture.requests.length, 3);
+    for (const request of capture.requests) {
+      const body = JSON.parse(request.bodyText) as Record<string, unknown>;
+      assert.equal("attachments" in body || "Attachments" in body, false, `${request.host} received an attachments field`);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    await new Promise<void>((resolve) => capture.server.close(() => resolve()));
+  }
+});
+
 test("resend acceptance whose success body is unusable reconciles to uncertainty without a throw", async () => {
   const server = createServer((_req, res) => {
     res.writeHead(200, { "content-type": "application/json" });

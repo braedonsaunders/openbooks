@@ -405,7 +405,11 @@ export async function sendVia(
   if (inlineAttachments.length !== (normalizedInput.attachments?.length ?? 0)) {
     throw new Error('Provider delivery requires materialized attachments — queue references must be resolved before sendVia.')
   }
-  const transmittableInput: TransmittableEmailInput = { ...normalizedInput, attachments: inlineAttachments }
+  // A message without attachments carries no attachments field: SendGrid refuses an empty array.
+  const transmittableInput: TransmittableEmailInput = {
+    ...normalizedInput,
+    attachments: inlineAttachments.length > 0 ? inlineAttachments : undefined,
+  }
   // A per-message reply-to (dunning policy, approval flow) wins over the org
   // transport default; both were validated on the way in.
   const replyTo = normalizedInput.replyTo ?? transport.replyTo
