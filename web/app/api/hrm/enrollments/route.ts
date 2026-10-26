@@ -1,18 +1,11 @@
 import { defineRoute } from "@/lib/api/route";
-import { notFound } from "@/lib/api/responses";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import {
-  electEnrollment,
-  waiveEnrollment,
-} from "@openbooks/engine/hrm/benefits/enrollments";
-import {
-  listEnrollments,
-  myEnrollments,
-} from "@openbooks/engine/hrm/benefits/benefits-read";
+import { electEnrollment, waiveEnrollment } from "@openbooks/engine/hrm/benefits/enrollments";
+import { listEnrollments, myEnrollments } from "@openbooks/engine/hrm/benefits/benefits-read";
 import { db } from "@openbooks/engine/platform/db";
-import { guardPermission } from "../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
-import { isUuid } from "../../../../lib/list-params";
+import { can, getAuthz } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
 import { benefitsErrorResponse } from "../benefits/_lib";
 import { enrollmentPostBody } from "./bodies";
 
@@ -46,44 +39,28 @@ export const GET = defineRoute({
       return NextResponse.json({ error: "unknown status" }, { status: 400 });
     }
     if (windowId !== null && !isUuid(windowId)) {
-      return NextResponse.json(
-        { error: "window id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "window id must be a uuid" }, { status: 400 });
     }
     try {
       if (employmentId === "mine" || employmentId === null) {
         if (status !== null || windowId !== null) {
           return NextResponse.json(
             {
-              error:
-                "status and window filtering on the self-service inbox is not supported",
+              error: "status and window filtering on the self-service inbox is not supported",
             },
             { status: 400 },
           );
         }
-        const enrollments = await myEnrollments(
-          db,
-          gate.user.orgId,
-          gate.user.id,
-        );
+        const enrollments = await myEnrollments(db, gate.user.orgId, gate.user.id);
         return NextResponse.json({ enrollments });
       }
       if (!isUuid(employmentId))
-        return NextResponse.json(
-          { error: "employment id must be a uuid" },
-          { status: 400 },
-        );
-      const enrollments = await listEnrollments(
-        db,
-        gate.user.orgId,
-        gate.user.id,
-        {
-          employmentId,
-          ...(windowId ? { windowId } : {}),
-          ...(status ? { status } : {}),
-        },
-      );
+        return NextResponse.json({ error: "employment id must be a uuid" }, { status: 400 });
+      const enrollments = await listEnrollments(db, gate.user.orgId, gate.user.id, {
+        employmentId,
+        ...(windowId ? { windowId } : {}),
+        ...(status ? { status } : {}),
+      });
       return NextResponse.json({ enrollments });
     } catch (e) {
       return benefitsErrorResponse(e);
@@ -92,21 +69,23 @@ export const GET = defineRoute({
 });
 
 export const POST = defineRoute({
-  public: "session",
-  body: enrollmentPostBody,
-  handler: async ({ body: body }) => {
-    // The body decides the grant: self-service elects with the read grant,
-    // on-behalf filing needs hrm.benefits.manage (enforced again inside the
-    // engine per employment). Parsing first is safe — nothing is written
-    // before the gate below.
-
-    const gate = await guardPermission(
-      body.selfService ? "hrm.benefits.read" : "hrm.benefits.manage",
-    );
-    if (gate instanceof NextResponse) return gate;
-    if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-      return notFound("record");
+  authorize: async ({ request }) => {
+    const authz = await getAuthz();
+    if (!authz) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
+    // The request mode selects the grant, so malformed input keeps its body
+    // refusal before an action-specific permission refusal.
+    const parsedBody = await parseJsonBody(request.clone(), enrollmentPostBody);
+    if (!parsedBody.ok) return parsedBody.response;
+    const permission = parsedBody.data.selfService ? "hrm.benefits.read" : "hrm.benefits.manage";
+    return can(authz, permission)
+      ? authz
+      : NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 });
+  },
+  feature: "hrm",
+  body: enrollmentPostBody,
+  handler: async ({ body, authz: gate }) => {
     try {
       if (body.action === "waive") {
         const enrollment = await waiveEnrollment({
