@@ -1,29 +1,33 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { NextResponse } from 'next/server'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { NextResponse } from "next/server";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 // The real business-date module, so the calendar check runs unmodified.
-const BUSINESS_DATE_URL = new URL('../../../../../../engine/src/platform/business-date.ts', import.meta.url).href
+const BUSINESS_DATE_URL = new URL(
+  "../../../../../../engine/src/platform/business-date.ts",
+  import.meta.url,
+).href;
 
 interface RouteState {
-  permissions: Set<string>
-  permissionChecks: string[]
-  databaseCalls: string[]
-  committedQueries: string[]
-  pendingQueries: string[]
-  priorCategories: unknown[]
-  priorRevision: number
-  accounts: Map<string, { type: string; is_summary: boolean; subsidiary_id: string | null }>
-  parties: Map<string, { is_vendor: boolean; subsidiary_id: string | null }>
-  allowedSubs: Set<string> | null
-  inTransaction: boolean
-  transactions: number
-  commits: number
-  rollbacks: number
+  permissions: Set<string>;
+  permissionChecks: string[];
+  databaseCalls: string[];
+  committedQueries: string[];
+  pendingQueries: string[];
+  priorCategories: unknown[];
+  priorRevision: number;
+  accounts: Map<string, { type: string; is_summary: boolean; subsidiary_id: string | null }>;
+  parties: Map<string, { is_vendor: boolean; subsidiary_id: string | null }>;
+  allowedSubs: Set<string> | null;
+  inTransaction: boolean;
+  transactions: number;
+  commits: number;
+  rollbacks: number;
 }
 
-const stateKey = Symbol.for('openbooks.cashflow-categories-route-test')
+const stateKey = Symbol.for("openbooks.cashflow-categories-route-test");
 const state: RouteState = {
   permissions: new Set(),
   permissionChecks: [],
@@ -39,27 +43,23 @@ const state: RouteState = {
   transactions: 0,
   commits: 0,
   rollbacks: 0,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksCashflowCategoriesNextResponse =
-  NextResponse
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksCashflowCategoriesNextResponse = NextResponse;
 
 /** Flatten a drizzle SQL chunk into its raw text, including bound values. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
-  return chunks
-    .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
-    })
-    .join('')
+  try {
+    const compiled = new PgDialect().sqlToQuery(query as never);
+    return `${compiled.sql} ${compiled.params.map(String).join("")}`;
+  } catch {
+    return "";
+  }
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksCashflowCategoriesSqlText =
-  sqlText
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksCashflowCategoriesSqlText =
+  sqlText;
 
 // Neither '@/lib/api/json' nor the money kernel is mocked: validation and
 // money are never doubled (a double cannot produce the refusals the real
@@ -67,7 +67,7 @@ function sqlText(query: unknown): string {
 // assertions pin.
 const mockSources = new Map<string, string>([
   [
-    'mock:authz',
+    "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.cashflow-categories-route-test')]
       const NextResponse = globalThis.openbooksCashflowCategoriesNextResponse
@@ -86,7 +86,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.cashflow-categories-route-test')]
       const sqlText = globalThis.openbooksCashflowCategoriesSqlText
@@ -102,6 +102,8 @@ const mockSources = new Map<string, string>([
         if (state.inTransaction) state.pendingQueries.push(text)
         else state.committedQueries.push(text)
         if (text.includes('select settings')) return inMode({ rows: [{ cats: state.priorCategories, rev: state.priorRevision }] })
+        if (text.includes('update orgs')) return { rows: [], rowCount: 1 }
+        if (text.includes('insert into audit_log')) return { rows: [], rowCount: 1 }
         // Reference checks: the double serves exactly the seeded rows, so an
         // unseeded id refuses — a double that always resolves could never
         // produce the refusal under test.
@@ -129,482 +131,610 @@ const mockSources = new Map<string, string>([
           }
         },
       }
+      export async function withOrgTransaction(_orgId, work) {
+        return db.transaction(work)
+      }
     `,
   ],
-])
+]);
 
 // The org business day is the clock the anchor defaults to; the real calendar
 // check is re-exported so refusals still run against the production validator.
 mockSources.set(
-  'mock:business-date',
+  "mock:business-date",
   `
     export { isIsoCalendarDate } from ${JSON.stringify(BUSINESS_DATE_URL)}
     export async function businessToday() { return new Date().toISOString().slice(0, 10) }
   `,
-)
+);
 
 const mockUrls = new Map<string, string>([
-  ['../../../../../lib/authz', 'mock:authz'],
-  ['@/lib/authz', 'mock:authz'],
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
-])
+  ["../../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
+]);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    if (
+      specifier === "../platform/db.ts" &&
+      context.parentURL?.endsWith("/reports/cashflow-categories.ts")
+    ) {
+      return { url: "mock:db", shortCircuit: true };
+    }
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?cashflow-categories-route-test'
-const { PUT, GET } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?cashflow-categories-route-test";
+const { PUT, GET } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset(): void {
-  state.permissions = new Set(['admin.setup.manage', 'reports.read'])
-  state.permissionChecks.length = 0
-  state.databaseCalls.length = 0
-  state.committedQueries.length = 0
-  state.pendingQueries.length = 0
+  state.permissions = new Set(["admin.setup.manage", "reports.read"]);
+  state.permissionChecks.length = 0;
+  state.databaseCalls.length = 0;
+  state.committedQueries.length = 0;
+  state.pendingQueries.length = 0;
   state.priorCategories = [
     {
-      id: '11111111-1111-4111-8111-111111111111',
-      name: 'Old forecast',
-      direction: 'outflow',
-      method: 'manual_recurring',
-      amount: '500.0000',
-      frequency: 'monthly',
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "Old forecast",
+      direction: "outflow",
+      method: "manual_recurring",
+      amount: "500.0000",
+      frequency: "monthly",
     },
-  ]
-  state.priorRevision = 7
-  state.accounts = new Map()
-  state.parties = new Map()
-  state.allowedSubs = null
-  state.inTransaction = false
-  state.transactions = 0
-  state.commits = 0
-  state.rollbacks = 0
+  ];
+  state.priorRevision = 7;
+  state.accounts = new Map();
+  state.parties = new Map();
+  state.allowedSubs = null;
+  state.inTransaction = false;
+  state.transactions = 0;
+  state.commits = 0;
+  state.rollbacks = 0;
 }
 
-function put(categories: unknown[], expectedRevision: unknown = state.priorRevision): Promise<Response> {
+function put(
+  categories: unknown[],
+  expectedRevision: unknown = state.priorRevision,
+): Promise<Response> {
   return PUT(
-    new Request('http://openbooks.test/api/analytics/cashflow/categories', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/analytics/cashflow/categories", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ categories, expectedRevision }),
     }),
-  )
+  );
 }
 
-const todayAnchor = () => new Date().toISOString().slice(0, 10)
+const todayAnchor = () => new Date().toISOString().slice(0, 10);
 
 const validCategory = {
-  id: '22222222-2222-4222-8222-222222222222',
-  name: 'Rent',
-  direction: 'outflow',
-  method: 'manual_recurring',
-  amount: '1250',
-  frequency: 'monthly',
-}
+  id: "22222222-2222-4222-8222-222222222222",
+  name: "Rent",
+  direction: "outflow",
+  method: "manual_recurring",
+  amount: "1250",
+  frequency: "monthly",
+};
 
 const expectedValidCategory = {
   ...validCategory,
-  amount: '1250.0000',
+  amount: "1250.0000",
   anchorDate: todayAnchor(),
-}
+};
 
 const fractionalCategory = {
-  id: '33333333-3333-4333-8333-333333333333',
-  name: 'Fractional charge',
-  direction: 'outflow',
-  method: 'manual_recurring',
-  amount: '12.3456',
-  frequency: 'monthly',
-}
+  id: "33333333-3333-4333-8333-333333333333",
+  name: "Fractional charge",
+  direction: "outflow",
+  method: "manual_recurring",
+  amount: "12.3456",
+  frequency: "monthly",
+};
 
 const cappedCategory = {
-  id: '44444444-4444-4444-8444-444444444444',
-  name: 'Large reserve',
-  direction: 'inflow',
-  method: 'manual_recurring',
+  id: "44444444-4444-4444-8444-444444444444",
+  name: "Large reserve",
+  direction: "inflow",
+  method: "manual_recurring",
   // A string keeps this value exact instead of rounding it through an unsafe
   // JavaScript number before the route applies its configured cap.
-  amount: '9007199254740993.0000',
-  frequency: 'monthly',
-}
+  amount: "9007199254740993.0000",
+  frequency: "monthly",
+};
 
-test('replacement rejects malformed entries atomically instead of dropping them', async () => {
-  reset()
+test("replacement rejects malformed entries atomically instead of dropping them", async () => {
+  reset();
 
   const response = await put([
     validCategory,
     {
-      id: '55555555-5555-4555-8555-555555555555',
-      name: 'Missing amount',
-      direction: 'outflow',
-      method: 'manual_recurring',
-      amount: '12.34567',
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Missing amount",
+      direction: "outflow",
+      method: "manual_recurring",
+      amount: "12.34567",
     },
-  ])
+  ]);
 
-  assert.equal(response.status, 400)
-  const refusal = (await response.json()) as { error: string; issues: Array<{ path: string }> }
-  assert.match(refusal.error, /exact decimal string with at most four decimal places/)
-  assert.equal(refusal.issues[0]?.path, 'categories.1.amount')
-  assert.equal(state.databaseCalls.length, 0, 'invalid replacement never reaches persistence')
-  assert.equal(state.transactions, 0, 'invalid replacement never opens a transaction')
-  assert.equal(state.committedQueries.length, 0, 'invalid replacement creates no audit or write')
-  assert.deepEqual(state.permissionChecks, ['admin.setup.manage'])
-})
+  assert.equal(response.status, 400);
+  const refusal = (await response.json()) as { error: string; issues: Array<{ path: string }> };
+  assert.match(refusal.error, /exact decimal string with at most four decimal places/);
+  assert.equal(refusal.issues[0]?.path, "categories.1.amount");
+  assert.equal(state.databaseCalls.length, 0, "invalid replacement never reaches persistence");
+  assert.equal(state.transactions, 0, "invalid replacement never opens a transaction");
+  assert.equal(state.committedQueries.length, 0, "invalid replacement creates no audit or write");
+  assert.deepEqual(state.permissionChecks, ["admin.setup.manage"]);
+});
 
-test('restricted setup manager cannot replace org-wide cashflow policy', async () => {
-  reset()
-  state.allowedSubs = new Set(['sub-a'])
+test("restricted setup manager cannot replace org-wide cashflow policy", async () => {
+  reset();
+  state.allowedSubs = new Set(["sub-a"]);
 
-  const response = await put([validCategory])
+  const response = await put([validCategory]);
 
-  assert.equal(response.status, 403)
-  assert.deepEqual(state.committedQueries, [])
-  assert.equal(state.transactions, 0)
-})
+  assert.equal(response.status, 403);
+  assert.deepEqual(state.committedQueries, []);
+  assert.equal(state.transactions, 0);
+});
 
-test('an over-limit manual amount refuses naming the limit instead of clamping', async () => {
-  reset()
+test("an over-limit manual amount refuses naming the limit instead of clamping", async () => {
+  reset();
 
-  const response = await put([validCategory, cappedCategory])
+  const response = await put([validCategory, cappedCategory]);
 
-  assert.equal(response.status, 400)
-  const refusal = (await response.json()) as { error: string; issues: Array<{ path: string }> }
-  assert.match(refusal.error, /amount must not exceed 100000000\.0000/)
-  assert.equal(refusal.issues[0]?.path, 'categories.1.amount')
-  assert.equal(state.databaseCalls.length, 0, 'an over-limit replacement never reaches persistence')
-  assert.equal(state.transactions, 0, 'an over-limit replacement never opens a transaction')
-  assert.equal(state.committedQueries.length, 0, 'an over-limit replacement creates no audit or write')
-})
+  assert.equal(response.status, 400);
+  const refusal = (await response.json()) as { error: string; issues: Array<{ path: string }> };
+  assert.match(refusal.error, /amount must not exceed 100000000\.0000/);
+  assert.equal(refusal.issues[0]?.path, "categories.1.amount");
+  assert.equal(
+    state.databaseCalls.length,
+    0,
+    "an over-limit replacement never reaches persistence",
+  );
+  assert.equal(state.transactions, 0, "an over-limit replacement never opens a transaction");
+  assert.equal(
+    state.committedQueries.length,
+    0,
+    "an over-limit replacement creates no audit or write",
+  );
+});
 
-test('replacement persists every valid row with exact money and complete audit evidence', async () => {
-  reset()
+test("replacement persists every valid row with exact money and complete audit evidence", async () => {
+  reset();
 
-  const response = await put([validCategory, fractionalCategory])
+  const response = await put([validCategory, fractionalCategory]);
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     ok: true,
-    categories: [
-      expectedValidCategory,
-      { ...fractionalCategory, anchorDate: todayAnchor() },
-    ],
+    categories: [expectedValidCategory, { ...fractionalCategory, anchorDate: todayAnchor() }],
     revision: 8,
-  })
-  assert.equal(state.transactions, 1)
-  assert.equal(state.commits, 1)
-  assert.equal(state.rollbacks, 0)
-  assert.equal(state.committedQueries.length, 3, 'row lock, replacement, and audit commit together')
-  assert.match(state.committedQueries[0]!, /select settings[\s\S]*for update/i)
-  assert.match(state.committedQueries[1]!, /update orgs/i)
-  const audit = state.committedQueries[2]
-  assert.ok(audit, 'the replacement writes an audit row')
-  assert.match(audit, /insert into audit_log/i)
-  assert.match(audit, /"before":\{"analytics":\{"cashflowCategories":\[\{"id":"11111111-1111-4111-8111-111111111111"/)
-  assert.match(audit, /"after":\{"analytics":\{"cashflowCategories":\[/)
-  assert.match(audit, /22222222-2222-4222-8222-222222222222/)
-  assert.match(audit, /33333333-3333-4333-8333-333333333333/)
-  assert.match(audit, /"amount":"12\.3456"/)
-  assert.doesNotMatch(audit, /44444444-4444-4444-8444-444444444444/)
-})
+  });
+  assert.equal(state.transactions, 1);
+  assert.equal(state.commits, 1);
+  assert.equal(state.rollbacks, 0);
+  assert.equal(
+    state.committedQueries.length,
+    3,
+    "row lock, replacement, and audit commit together",
+  );
+  assert.match(state.committedQueries[0]!, /select settings[\s\S]*for update/i);
+  assert.match(state.committedQueries[1]!, /update orgs/i);
+  const audit = state.committedQueries[2];
+  assert.ok(audit, "the replacement writes an audit row");
+  assert.match(audit, /insert into audit_log/i);
+  assert.match(
+    audit,
+    /"before":\{"analytics":\{"cashflowCategories":\[\{"id":"11111111-1111-4111-8111-111111111111"/,
+  );
+  assert.match(audit, /"after":\{"analytics":\{"cashflowCategories":\[/);
+  assert.match(audit, /22222222-2222-4222-8222-222222222222/);
+  assert.match(audit, /33333333-3333-4333-8333-333333333333/);
+  assert.match(audit, /"amount":"12\.3456"/);
+  assert.doesNotMatch(audit, /44444444-4444-4444-8444-444444444444/);
+});
 
-test('GET returns the list with its revision', async () => {
-  reset()
-  const response = await GET(new Request('http://test.local/'))
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { categories: state.priorCategories, revision: 7 })
-})
+test("GET returns the list with its revision", async () => {
+  reset();
+  const response = await GET(new Request("http://test.local/"));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { categories: state.priorCategories, revision: 7 });
+});
 
-test('restricted reader cannot inspect org-wide cashflow configuration', async () => {
-  reset()
-  state.allowedSubs = new Set(['sub-a'])
+test("restricted reader cannot inspect org-wide cashflow configuration", async () => {
+  reset();
+  state.allowedSubs = new Set(["sub-a"]);
 
-  const response = await GET(new Request('http://test.local/'))
+  const response = await GET(new Request("http://test.local/"));
 
-  assert.equal(response.status, 403)
-  assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
-  assert.deepEqual(state.databaseCalls, [], 'restricted reads stop before fetching org-wide references')
-})
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+  assert.deepEqual(
+    state.databaseCalls,
+    [],
+    "restricted reads stop before fetching org-wide references",
+  );
+});
 
-test('a replacement without the expected revision refuses before touching the database', async () => {
-  reset()
+test("a replacement without the expected revision refuses before touching the database", async () => {
+  reset();
   const response = await PUT(
-    new Request('http://openbooks.test/api/analytics/cashflow/categories', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/analytics/cashflow/categories", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ categories: [validCategory] }),
     }),
-  )
-  assert.equal(response.status, 400)
+  );
+  assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), {
-    error: 'expectedRevision required',
-    message: 'Send the revision returned by GET with every replacement.',
-  })
-  assert.equal(state.databaseCalls.length, 0, 'a revision-less replacement never reaches persistence')
-  assert.equal(state.transactions, 0, 'a revision-less replacement never opens a transaction')
-})
+    error: "expectedRevision required",
+    message: "Send the revision returned by GET with every replacement.",
+  });
+  assert.equal(
+    state.databaseCalls.length,
+    0,
+    "a revision-less replacement never reaches persistence",
+  );
+  assert.equal(state.transactions, 0, "a revision-less replacement never opens a transaction");
+});
 
-test('a stale replacement gets 409 and writes nothing', async () => {
-  reset()
-  const response = await put([validCategory], 6)
+test("a stale replacement gets 409 and writes nothing", async () => {
+  reset();
+  const response = await put([validCategory], 6);
 
-  assert.equal(response.status, 409)
+  assert.equal(response.status, 409);
   assert.deepEqual(await response.json(), {
-    error: 'revision conflict',
-    message: 'Cashflow categories changed since revision 6 (now at 7): reload and reapply your edit.',
+    error: "revision conflict",
+    message:
+      "Cashflow categories changed since revision 6 (now at 7): reload and reapply your edit.",
     revision: 7,
-  })
-  assert.equal(state.transactions, 1, 'the conflict is detected on the locked row')
-  assert.equal(state.commits, 1, 'detecting the conflict writes nothing to roll back')
-  assert.equal(state.committedQueries.length, 1, 'only the locking read commits')
-  assert.doesNotMatch(state.committedQueries[0]!, /update orgs/i)
-  assert.doesNotMatch(state.committedQueries[0]!, /insert into audit_log/i)
-})
+  });
+  assert.equal(state.transactions, 1, "the conflict is detected on the locked row");
+  assert.equal(state.commits, 1, "detecting the conflict writes nothing to roll back");
+  assert.equal(state.committedQueries.length, 1, "only the locking read commits");
+  assert.doesNotMatch(state.committedQueries[0]!, /update orgs/i);
+  assert.doesNotMatch(state.committedQueries[0]!, /insert into audit_log/i);
+});
 
-const ACCT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
-const PARTY = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
-const GHOST = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+const ACCT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const PARTY = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const GHOST = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-test('a non-UUID reference refuses before the cast can explode', async () => {
-  reset()
+test("a non-UUID reference refuses before the cast can explode", async () => {
+  reset();
   const response = await put([
     {
-      id: '66666666-6666-4666-8666-666666666666',
-      name: 'GL',
-      direction: 'outflow',
-      method: 'gl_history_average',
-      accountIds: ['not-a-uuid'],
+      id: "66666666-6666-4666-8666-666666666666",
+      name: "GL",
+      direction: "outflow",
+      method: "gl_history_average",
+      accountIds: ["not-a-uuid"],
     },
-  ])
-  assert.equal(response.status, 400)
-  const refusal = (await response.json()) as { error: string; issues: Array<{ path: string }> }
-  assert.match(refusal.error, /accountIds entry must be a UUID/)
-  assert.equal(refusal.issues[0]?.path, 'categories.0.accountIds.0')
-  assert.equal(state.transactions, 0, 'a malformed reference never opens a transaction')
-})
+  ]);
+  assert.equal(response.status, 400);
+  const refusal = (await response.json()) as { error: string; issues: Array<{ path: string }> };
+  assert.match(refusal.error, /accountIds entry must be a UUID/);
+  assert.equal(refusal.issues[0]?.path, "categories.0.accountIds.0");
+  assert.equal(state.transactions, 0, "a malformed reference never opens a transaction");
+});
 
-test('an unknown reference refuses naming the field instead of forecasting zero', async () => {
-  reset()
+test("an unknown reference refuses naming the field instead of forecasting zero", async () => {
+  reset();
   for (const [field, category] of [
-    ['accountIds', { id: '10101010-1010-4010-8010-101010101010', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [GHOST] }],
-    ['partyIds', { id: '20202020-2020-4020-8020-202020202020', name: 'VP', direction: 'outflow', method: 'vendor_payment_history', partyIds: [GHOST] }],
-    ['cardAccountIds', { id: '30303030-3030-4030-8030-303030303030', name: 'CC', direction: 'outflow', method: 'credit_card_cycle', cardAccountIds: [GHOST] }],
-    ['bankAccountIds', { id: '40404040-4040-4040-8040-404040404040', name: 'BR', direction: 'outflow', method: 'bank_register_history', bankAccountIds: [GHOST] }],
+    [
+      "accountIds",
+      {
+        id: "10101010-1010-4010-8010-101010101010",
+        name: "GL",
+        direction: "outflow",
+        method: "gl_history_average",
+        accountIds: [GHOST],
+      },
+    ],
+    [
+      "partyIds",
+      {
+        id: "20202020-2020-4020-8020-202020202020",
+        name: "VP",
+        direction: "outflow",
+        method: "vendor_payment_history",
+        partyIds: [GHOST],
+      },
+    ],
+    [
+      "cardAccountIds",
+      {
+        id: "30303030-3030-4030-8030-303030303030",
+        name: "CC",
+        direction: "outflow",
+        method: "credit_card_cycle",
+        cardAccountIds: [GHOST],
+      },
+    ],
+    [
+      "bankAccountIds",
+      {
+        id: "40404040-4040-4040-8040-404040404040",
+        name: "BR",
+        direction: "outflow",
+        method: "bank_register_history",
+        bankAccountIds: [GHOST],
+      },
+    ],
   ] as const) {
-    const response = await put([category])
-    assert.equal(response.status, 400, `${field} must refuse`)
-    const body = (await response.json()) as { error: string; message: string }
-    assert.equal(body.error, 'invalid category at index 0')
-    assert.match(body.message, new RegExp(`${field} "${GHOST}" is not (an account|a party) in this organization`))
-    assert.equal(state.transactions, 0, 'an unknown reference never opens a transaction')
-    reset()
+    const response = await put([category]);
+    assert.equal(response.status, 400, `${field} must refuse`);
+    const body = (await response.json()) as { error: string; message: string };
+    assert.equal(body.error, "invalid category at index 0");
+    assert.match(
+      body.message,
+      new RegExp(`${field} "${GHOST}" is not (an account|a party) in this organization`),
+    );
+    assert.equal(state.transactions, 0, "an unknown reference never opens a transaction");
+    reset();
   }
-})
+});
 
-test('a reference from the wrong table refuses', async () => {
-  reset()
-  state.parties.set(PARTY, { is_vendor: true, subsidiary_id: null })
+test("a reference from the wrong table refuses", async () => {
+  reset();
+  state.parties.set(PARTY, { is_vendor: true, subsidiary_id: null });
   const response = await put([
     {
-      id: '66666666-6666-4666-8666-666666666666',
-      name: 'GL',
-      direction: 'outflow',
-      method: 'gl_history_average',
+      id: "66666666-6666-4666-8666-666666666666",
+      name: "GL",
+      direction: "outflow",
+      method: "gl_history_average",
       accountIds: [PARTY],
     },
-  ])
-  assert.equal(response.status, 400)
+  ]);
+  assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), {
-    error: 'invalid category at index 0',
+    error: "invalid category at index 0",
     message: `accountIds "${PARTY}" is not an account in this organization`,
-  })
-  assert.equal(state.transactions, 0)
-})
+  });
+  assert.equal(state.transactions, 0);
+});
 
-test('references that resolve persist with their ids intact', async () => {
-  reset()
-  state.accounts.set(ACCT, { type: 'expense', is_summary: false, subsidiary_id: null })
-  state.parties.set(PARTY, { is_vendor: true, subsidiary_id: null })
+test("references that resolve persist with their ids intact", async () => {
+  reset();
+  state.accounts.set(ACCT, { type: "expense", is_summary: false, subsidiary_id: null });
+  state.parties.set(PARTY, { is_vendor: true, subsidiary_id: null });
   const response = await put([
     {
-      id: '66666666-6666-4666-8666-666666666666',
-      name: 'GL',
-      direction: 'outflow',
-      method: 'gl_history_average',
+      id: "66666666-6666-4666-8666-666666666666",
+      name: "GL",
+      direction: "outflow",
+      method: "gl_history_average",
       accountIds: [ACCT],
     },
     {
-      id: '77777777-7777-4777-8777-777777777777',
-      name: 'VP',
-      direction: 'outflow',
-      method: 'vendor_payment_history',
+      id: "77777777-7777-4777-8777-777777777777",
+      name: "VP",
+      direction: "outflow",
+      method: "vendor_payment_history",
       partyIds: [PARTY],
     },
-  ])
-  assert.equal(response.status, 200)
-  const body = (await response.json()) as { ok: boolean; categories: Array<{ accountIds?: string[]; partyIds?: string[] }>; revision: number }
-  assert.equal(body.revision, 8)
-  assert.deepEqual(body.categories[0]?.accountIds, [ACCT])
-  assert.deepEqual(body.categories[1]?.partyIds, [PARTY])
-})
+  ]);
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as {
+    ok: boolean;
+    categories: Array<{ accountIds?: string[]; partyIds?: string[] }>;
+    revision: number;
+  };
+  assert.equal(body.revision, 8);
+  assert.deepEqual(body.categories[0]?.accountIds, [ACCT]);
+  assert.deepEqual(body.categories[1]?.partyIds, [PARTY]);
+});
 
-const SUB_A = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
-const SUB_B = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+const SUB_A = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const SUB_B = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
-test('a mistyped account refuses naming the expected type', async () => {
-  reset()
-  state.accounts.set(ACCT, { type: 'expense', is_summary: false, subsidiary_id: null })
+test("a mistyped account refuses naming the expected type", async () => {
+  reset();
+  state.accounts.set(ACCT, { type: "expense", is_summary: false, subsidiary_id: null });
   for (const [field, category, expected] of [
-    ['bankAccountIds', { id: '50505050-5050-4050-8050-505050505050', name: 'BR', direction: 'outflow', method: 'bank_register_history', bankAccountIds: [ACCT] }, 'must be a bank account (asset_bank), got "expense"'],
-    ['cardAccountIds', { id: '60606060-6060-4060-8060-606060606060', name: 'CC', direction: 'outflow', method: 'credit_card_cycle', cardAccountIds: [ACCT] }, 'must be a card account (liability_card), got "expense"'],
+    [
+      "bankAccountIds",
+      {
+        id: "50505050-5050-4050-8050-505050505050",
+        name: "BR",
+        direction: "outflow",
+        method: "bank_register_history",
+        bankAccountIds: [ACCT],
+      },
+      'must be a bank account (asset_bank), got "expense"',
+    ],
+    [
+      "cardAccountIds",
+      {
+        id: "60606060-6060-4060-8060-606060606060",
+        name: "CC",
+        direction: "outflow",
+        method: "credit_card_cycle",
+        cardAccountIds: [ACCT],
+      },
+      'must be a card account (liability_card), got "expense"',
+    ],
   ] as const) {
-    const response = await put([category])
-    assert.equal(response.status, 400, `${field} must refuse`)
+    const response = await put([category]);
+    assert.equal(response.status, 400, `${field} must refuse`);
     assert.deepEqual(await response.json(), {
-      error: 'invalid category at index 0',
+      error: "invalid category at index 0",
       message: `${field} "${ACCT}" ${expected}`,
-    })
-    assert.equal(state.transactions, 0, 'a mistyped account never opens a transaction')
-    reset()
-    state.accounts.set(ACCT, { type: 'expense', is_summary: false, subsidiary_id: null })
+    });
+    assert.equal(state.transactions, 0, "a mistyped account never opens a transaction");
+    reset();
+    state.accounts.set(ACCT, { type: "expense", is_summary: false, subsidiary_id: null });
   }
-})
+});
 
-test('a summary account refuses as a GL history source', async () => {
-  reset()
-  state.accounts.set(ACCT, { type: 'expense', is_summary: true, subsidiary_id: null })
+test("a summary account refuses as a GL history source", async () => {
+  reset();
+  state.accounts.set(ACCT, { type: "expense", is_summary: true, subsidiary_id: null });
   const response = await put([
-    { id: '70707070-7070-4070-8070-707070707070', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [ACCT] },
-  ])
-  assert.equal(response.status, 400)
+    {
+      id: "70707070-7070-4070-8070-707070707070",
+      name: "GL",
+      direction: "outflow",
+      method: "gl_history_average",
+      accountIds: [ACCT],
+    },
+  ]);
+  assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), {
-    error: 'invalid category at index 0',
+    error: "invalid category at index 0",
     message: `accountIds "${ACCT}" must be a postable account, not a summary account`,
-  })
-  assert.equal(state.transactions, 0)
-})
+  });
+  assert.equal(state.transactions, 0);
+});
 
-test('a party with no vendor role refuses for vendor methods', async () => {
-  reset()
-  state.parties.set(PARTY, { is_vendor: false, subsidiary_id: null })
+test("a party with no vendor role refuses for vendor methods", async () => {
+  reset();
+  state.parties.set(PARTY, { is_vendor: false, subsidiary_id: null });
   const response = await put([
-    { id: '80808080-8080-4080-8080-808080808080', name: 'VP', direction: 'outflow', method: 'vendor_payment_history', partyIds: [PARTY] },
-  ])
-  assert.equal(response.status, 400)
+    {
+      id: "80808080-8080-4080-8080-808080808080",
+      name: "VP",
+      direction: "outflow",
+      method: "vendor_payment_history",
+      partyIds: [PARTY],
+    },
+  ]);
+  assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), {
-    error: 'invalid category at index 0',
+    error: "invalid category at index 0",
     message: `partyIds "${PARTY}" is not a vendor in this organization`,
-  })
-  assert.equal(state.transactions, 0)
-})
+  });
+  assert.equal(state.transactions, 0);
+});
 
-test('a customer-kind party holding a vendor role saves', async () => {
-  reset()
-  state.parties.set(PARTY, { is_vendor: true, subsidiary_id: null })
+test("a customer-kind party holding a vendor role saves", async () => {
+  reset();
+  state.parties.set(PARTY, { is_vendor: true, subsidiary_id: null });
   const response = await put([
-    { id: '80808080-8080-4080-8080-808080808080', name: 'VP', direction: 'outflow', method: 'vendor_payment_history', partyIds: [PARTY] },
-  ])
-  assert.equal(response.status, 200)
-  const body = (await response.json()) as { ok: boolean; revision: number }
-  assert.equal(body.revision, 8)
-})
+    {
+      id: "80808080-8080-4080-8080-808080808080",
+      name: "VP",
+      direction: "outflow",
+      method: "vendor_payment_history",
+      partyIds: [PARTY],
+    },
+  ]);
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { ok: boolean; revision: number };
+  assert.equal(body.revision, 8);
+});
 
-test('restricted user cannot replace org-wide policy even with an out-of-scope reference', async () => {
-  reset()
-  state.accounts.set(ACCT, { type: 'expense', is_summary: false, subsidiary_id: SUB_A })
-  state.allowedSubs = new Set([SUB_B])
+test("restricted user cannot replace org-wide policy even with an out-of-scope reference", async () => {
+  reset();
+  state.accounts.set(ACCT, { type: "expense", is_summary: false, subsidiary_id: SUB_A });
+  state.allowedSubs = new Set([SUB_B]);
   const response = await put([
-    { id: '90909090-9090-4090-8090-909090909090', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [ACCT] },
-  ])
-  assert.equal(response.status, 403)
-  assert.equal(state.transactions, 0)
-})
+    {
+      id: "90909090-9090-4090-8090-909090909090",
+      name: "GL",
+      direction: "outflow",
+      method: "gl_history_average",
+      accountIds: [ACCT],
+    },
+  ]);
+  assert.equal(response.status, 403);
+  assert.equal(state.transactions, 0);
+});
 
-test('references in visible subsidiaries and org-wide rows persist', async () => {
-  reset()
-  state.accounts.set(ACCT, { type: 'expense', is_summary: false, subsidiary_id: SUB_A })
-  state.accounts.set(GHOST, { type: 'expense', is_summary: false, subsidiary_id: null })
-  state.allowedSubs = null
+test("references in visible subsidiaries and org-wide rows persist", async () => {
+  reset();
+  state.accounts.set(ACCT, { type: "expense", is_summary: false, subsidiary_id: SUB_A });
+  state.accounts.set(GHOST, { type: "expense", is_summary: false, subsidiary_id: null });
+  state.allowedSubs = null;
   const response = await put([
-    { id: 'abababab-abab-4bab-8bab-abababababab', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [ACCT, GHOST] },
-  ])
-  assert.equal(response.status, 200)
-  const body = (await response.json()) as { ok: boolean; revision: number }
-  assert.equal(body.revision, 8)
-})
+    {
+      id: "abababab-abab-4bab-8bab-abababababab",
+      name: "GL",
+      direction: "outflow",
+      method: "gl_history_average",
+      accountIds: [ACCT, GHOST],
+    },
+  ]);
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { ok: boolean; revision: number };
+  assert.equal(body.revision, 8);
+});
 
-test('an unknown direction refuses instead of flipping the sign', async () => {
-  for (const direction of ['outflwo', 'INCOME', '', null, undefined]) {
-    reset()
-    const candidate = { ...validCategory, id: '99999999-9999-4999-8999-999999999999' }
-    if (direction === undefined) delete (candidate as Record<string, unknown>).direction
-    else (candidate as Record<string, unknown>).direction = direction
-    const response = await put([candidate])
-    assert.equal(response.status, 400, `direction ${String(direction)} must refuse`)
-    const refusal = (await response.json()) as { issues: Array<{ path: string; message: string }> }
-    assert.equal(refusal.issues[0]?.path, 'categories.0.direction')
-    assert.match(refusal.issues[0]?.message ?? '', /direction must be inflow or outflow/)
-    assert.equal(state.transactions, 0, 'a misspelled direction never opens a transaction')
+test("an unknown direction refuses instead of flipping the sign", async () => {
+  for (const direction of ["outflwo", "INCOME", "", null, undefined]) {
+    reset();
+    const candidate = { ...validCategory, id: "99999999-9999-4999-8999-999999999999" };
+    if (direction === undefined) delete (candidate as Record<string, unknown>).direction;
+    else (candidate as Record<string, unknown>).direction = direction;
+    const response = await put([candidate]);
+    assert.equal(response.status, 400, `direction ${String(direction)} must refuse`);
+    const refusal = (await response.json()) as { issues: Array<{ path: string; message: string }> };
+    assert.equal(refusal.issues[0]?.path, "categories.0.direction");
+    assert.match(refusal.issues[0]?.message ?? "", /direction must be inflow or outflow/);
+    assert.equal(state.transactions, 0, "a misspelled direction never opens a transaction");
   }
-})
+});
 
-test('manual schedules keep an explicit anchor and refuse a malformed one', async () => {
-  reset()
+test("manual schedules keep an explicit anchor and refuse a malformed one", async () => {
+  reset();
 
   const anchored = {
-    id: '88888888-8888-4888-8888-888888888888',
-    name: 'Anchored rent',
-    direction: 'outflow',
-    method: 'manual_recurring',
-    amount: '1000.0000',
-    frequency: 'monthly',
-    anchorDate: '2026-08-30',
-  }
-  const kept = await put([anchored])
-  assert.equal(kept.status, 200)
-  assert.deepEqual(await kept.json(), { ok: true, categories: [anchored], revision: 8 })
+    id: "88888888-8888-4888-8888-888888888888",
+    name: "Anchored rent",
+    direction: "outflow",
+    method: "manual_recurring",
+    amount: "1000.0000",
+    frequency: "monthly",
+    anchorDate: "2026-08-30",
+  };
+  const kept = await put([anchored]);
+  assert.equal(kept.status, 200);
+  assert.deepEqual(await kept.json(), { ok: true, categories: [anchored], revision: 8 });
 
-  for (const bad of ['2026-02-30', '2026-13-01', 'not-a-date', 20260830]) {
-    reset()
-    const response = await put([{ ...anchored, id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', anchorDate: bad }])
-    assert.equal(response.status, 400, `anchorDate ${String(bad)} must refuse`)
-    const refusal = (await response.json()) as { error: string; issues: Array<{ path: string }> }
-    assert.equal(refusal.error, 'anchorDate must be a real YYYY-MM-DD calendar date')
-    assert.equal(refusal.issues[0]?.path, 'categories.0.anchorDate')
-    assert.equal(state.transactions, 0, 'a malformed anchor never opens a transaction')
+  for (const bad of ["2026-02-30", "2026-13-01", "not-a-date", 20260830]) {
+    reset();
+    const response = await put([
+      { ...anchored, id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", anchorDate: bad },
+    ]);
+    assert.equal(response.status, 400, `anchorDate ${String(bad)} must refuse`);
+    const refusal = (await response.json()) as { error: string; issues: Array<{ path: string }> };
+    assert.equal(refusal.error, "anchorDate must be a real YYYY-MM-DD calendar date");
+    assert.equal(refusal.issues[0]?.path, "categories.0.anchorDate");
+    assert.equal(state.transactions, 0, "a malformed anchor never opens a transaction");
   }
-})
+});
 
-test('a manual schedule without a frequency refuses by name instead of assuming monthly', async () => {
+test("a manual schedule without a frequency refuses by name instead of assuming monthly", async () => {
   // The editor used to show Weekly while the engine assumed monthly: a save
   // that never names a cadence must refuse (422, naming the remedy), never
   // forecast at a cadence nobody picked.
-  reset()
+  reset();
   const response = await put([
     {
-      id: '99999999-9999-4999-8999-999999999999',
-      name: 'Unscheduled rent',
-      direction: 'outflow',
-      method: 'manual_recurring',
-      amount: '1000.0000',
+      id: "99999999-9999-4999-8999-999999999999",
+      name: "Unscheduled rent",
+      direction: "outflow",
+      method: "manual_recurring",
+      amount: "1000.0000",
     },
-  ])
-  assert.equal(response.status, 422)
-  const refusal = (await response.json()) as { error: string; message: string }
-  assert.equal(refusal.error, 'invalid category at index 0')
-  assert.match(refusal.message, /needs a frequency/)
-  assert.match(refusal.message, /weekly, biweekly or monthly/)
-  assert.equal(state.transactions, 0, 'a frequency-less replacement never opens a transaction')
-  assert.deepEqual(state.committedQueries, [], 'a frequency-less replacement writes nothing')
-})
+  ]);
+  assert.equal(response.status, 422);
+  const refusal = (await response.json()) as { error: string; message: string };
+  assert.equal(refusal.error, "invalid category at index 0");
+  assert.match(refusal.message, /needs a frequency/);
+  assert.match(refusal.message, /weekly, biweekly or monthly/);
+  assert.equal(state.transactions, 0, "a frequency-less replacement never opens a transaction");
+  assert.deepEqual(state.committedQueries, [], "a frequency-less replacement writes nothing");
+});

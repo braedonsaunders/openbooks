@@ -1,48 +1,48 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 interface RouteState {
-  revision: number
-  executed: string[]
-  updateResponses: ({ rows: unknown[] })[]
-  allowedSubsidiaryIds: Set<string> | null
+  revision: number;
+  executed: string[];
+  updateResponses: { rows: unknown[] }[];
+  allowedSubsidiaryIds: Set<string> | null;
 }
 
-const stateKey = Symbol.for('openbooks.true-cost-config-route-test')
-const state: RouteState = { revision: 0, executed: [], updateResponses: [], allowedSubsidiaryIds: null }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+const stateKey = Symbol.for("openbooks.true-cost-config-route-test");
+const state: RouteState = {
+  revision: 0,
+  executed: [],
+  updateResponses: [],
+  allowedSubsidiaryIds: null,
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 /** Flatten a drizzle SQL chunk into its template text for query assertions. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
-  return chunks
-    .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
-    })
-    .join('')
+  try {
+    return new PgDialect().sqlToQuery(query as never).sql;
+  } catch {
+    return "";
+  }
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksTrueCostSqlText = sqlText
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksTrueCostSqlText = sqlText;
 
 const profile = {
-  id: 'profile-1',
-  name: 'Default',
-  color: '#3b82f6',
-  compositeMethod: 'sum',
-  baseLaborRate: '50',
+  id: "profile-1",
+  name: "Default",
+  color: "#3b82f6",
+  compositeMethod: "sum",
+  baseLaborRate: "50",
   categorySettings: {},
   customCategories: [],
   baseOverrides: {},
-}
+};
 
 const mockSources = new Map<string, string>([
   [
-    'mock:gates',
+    "mock:gates",
     `
       export async function guardFeaturePermission() {
         const state = globalThis[Symbol.for('openbooks.true-cost-config-route-test')]
@@ -51,13 +51,13 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:data',
+    "mock:data",
     `
       export const DEFAULT_PROFILE = ${JSON.stringify(profile)}
     `,
   ],
   [
-    'mock:engine',
+    "mock:engine",
     `
       export const ALLOCATION_BASES = { billed_hours: {}, total_hours: {}, labor_dollars: {}, headcount: {}, revenue: {}, direct_cost: {}, square_feet: {}, units: {}, custom: {} }
       export const ALLOCATION_METHODS = { simple: {}, weighted: {}, stepped: {} }
@@ -66,7 +66,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.true-cost-config-route-test')]
       const sqlText = globalThis.openbooksTrueCostSqlText
@@ -95,117 +95,170 @@ const mockSources = new Map<string, string>([
           throw new Error('unexpected database query: ' + text)
         },
       }
+      export async function withOrgTransaction(_orgId, work) {
+        return work()
+      }
     `,
   ],
-])
+]);
 
 // Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
 // mocked: hand doubles of validation and money cannot produce the refusals
 // the real modules enforce, so every bad-body and bad-amount case behind
 // them reported green untested.
 const mockUrls = new Map<string, string>([
-  ['../../../../../lib/feature-gates', 'mock:gates'],
-  ['@/lib/feature-gates', 'mock:gates'],
-  ['../../../../../lib/analytics/true-cost-data', 'mock:data'],
-  ['../../../../../lib/analytics/true-cost-engine', 'mock:engine'],
-  ['@openbooks/engine/platform/db', 'mock:db'],
-])
-let realAuthzUrl = ''
-let dbRealUrl = ''
+  ["../../../../../lib/feature-gates", "mock:gates"],
+  ["@/lib/feature-gates", "mock:gates"],
+  ["../../../../../lib/analytics/true-cost-data", "mock:data"],
+  ["../../../../../lib/analytics/true-cost-engine", "mock:engine"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+]);
+let realAuthzUrl = "";
+let dbRealUrl = "";
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '../../../../../lib/authz') {
-      realAuthzUrl = nextResolve(specifier, context).url
-      return { url: 'mock:authz', shortCircuit: true }
+    if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz") {
+      realAuthzUrl = nextResolve(specifier, context).url;
+      return { url: "mock:authz", shortCircuit: true };
     }
-    if (specifier === '@openbooks/engine/platform/db') {
-      dbRealUrl = nextResolve(specifier, context).url
-      return { url: 'mock:db', shortCircuit: true }
+    if (specifier === "@openbooks/engine/platform/db") {
+      dbRealUrl = nextResolve(specifier, context).url;
+      return { url: "mock:db", shortCircuit: true };
     }
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    if (
+      specifier === "../platform/db.ts" &&
+      context.parentURL?.endsWith("/reports/true-cost-config.ts")
+    ) {
+      dbRealUrl ||= nextResolve("@openbooks/engine/platform/db", context).url;
+      return { url: "mock:db", shortCircuit: true };
+    }
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source: url === 'mock:db' ? `export * from ${JSON.stringify(dbRealUrl)};\n${source}` : source, shortCircuit: true }
-    if (url === 'mock:authz') return { format: 'module', source: `export { guardUnrestrictedScope } from ${JSON.stringify(realAuthzUrl)}`, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined)
+      return {
+        format: "module",
+        source:
+          url === "mock:db"
+            ? `${dbRealUrl ? `export * from ${JSON.stringify(dbRealUrl)};\n` : ""}${source}`
+            : source,
+        shortCircuit: true,
+      };
+    if (url === "mock:authz")
+      return {
+        format: "module",
+        source: `export { guardUnrestrictedScope } from ${JSON.stringify(realAuthzUrl)}`,
+        shortCircuit: true,
+      };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?true-cost-config-occ-test'
-const { GET, PUT } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?true-cost-config-occ-test";
+const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset(revision: number): void {
-  state.revision = revision
-  state.executed = []
-  state.updateResponses = []
-  state.allowedSubsidiaryIds = null
+  state.revision = revision;
+  state.executed = [];
+  state.updateResponses = [];
+  state.allowedSubsidiaryIds = null;
 }
 
 function put(body: Record<string, unknown>): Promise<Response> {
   return PUT(
-    new Request('http://openbooks.test/api/analytics/true-cost/config', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/analytics/true-cost/config", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-  )
+  );
 }
 
-test('GET exposes the persisted configuration revision', async () => {
-  reset(7)
+test("GET exposes the persisted configuration revision", async () => {
+  reset(7);
 
-  const response = await GET(new Request('http://test.local/'))
+  const response = await GET(new Request("http://test.local/"));
 
-  assert.equal(response.status, 200)
-  assert.equal((await response.json()).revision, 7)
-  assert.ok(state.executed.some((query) => query.includes("-> 'trueCost' as cfg")))
-})
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).revision, 7);
+  assert.ok(state.executed.some((query) => query.includes("-> 'trueCost' as cfg")));
+});
 
-test('PUT rejects missing revisions and malformed nested categories before writing', async () => {
-  reset(3); const response = await put({ activeProfileId: profile.id, profiles: [profile] })
-  assert.equal(response.status, 409); assert.match((await response.json()).error, /revision is required/)
-  assert.equal(state.executed.length, 0)
-  reset(3); const malformed = await put({ expectedRevision: 3, activeProfileId: profile.id, profiles: [{ ...profile, customCategories: [{ name: 'Valid', type: 'manual' }, { name: '', type: 'manual' }] }] })
-  assert.equal(malformed.status, 400); assert.equal(state.executed.some((query) => query.includes('returning settings')), false)
-})
-test('restricted actors cannot write org-wide True Cost settings', async () => {
-  reset(3)
-  state.allowedSubsidiaryIds = new Set(['subsidiary-a'])
-  const response = await put({ expectedRevision: 3, activeProfileId: profile.id, profiles: [profile] })
-  assert.equal(response.status, 403)
-  assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
-  assert.equal(state.executed.length, 0)
-})
+test("PUT rejects missing revisions and malformed nested categories before writing", async () => {
+  reset(3);
+  const response = await put({ activeProfileId: profile.id, profiles: [profile] });
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /revision is required/);
+  assert.equal(state.executed.length, 0);
+  reset(3);
+  const malformed = await put({
+    expectedRevision: 3,
+    activeProfileId: profile.id,
+    profiles: [
+      {
+        ...profile,
+        customCategories: [
+          { name: "Valid", type: "manual" },
+          { name: "", type: "manual" },
+        ],
+      },
+    ],
+  });
+  assert.equal(malformed.status, 400);
+  assert.equal(
+    state.executed.some((query) => query.includes("returning settings")),
+    false,
+  );
+});
+test("restricted actors cannot write org-wide True Cost settings", async () => {
+  reset(3);
+  state.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
+  const response = await put({
+    expectedRevision: 3,
+    activeProfileId: profile.id,
+    profiles: [profile],
+  });
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+  assert.equal(state.executed.length, 0);
+});
 
-test('a committed PUT audits the save with before, after and actor', async () => {
-  reset(4)
-  const response = await put({ expectedRevision: 4, activeProfileId: profile.id, profiles: [profile] })
-  assert.equal(response.status, 200)
-  const audit = state.executed.find((query) => query.includes('insert into audit_log'))
-  assert.ok(audit, 'the save writes its own audit row in the same statement')
-  assert.match(audit!, /insert into audit_log \(org_id, table_name, row_id, action, actor_id, changes\)/)
-  assert.match(audit!, /'orgs'.*'update'/)
-  assert.match(audit!, /'before'.*'after'.*'reason'/s)
-})
+test("a committed PUT audits the save with before, after and actor", async () => {
+  reset(4);
+  const response = await put({
+    expectedRevision: 4,
+    activeProfileId: profile.id,
+    profiles: [profile],
+  });
+  assert.equal(response.status, 200);
+  const audit = state.executed.find((query) => query.includes("insert into audit_log"));
+  assert.ok(audit, "the save writes its own audit row in the same statement");
+  assert.match(
+    audit!,
+    /insert into audit_log \(org_id, table_name, row_id, action, actor_id, changes\)/,
+  );
+  assert.match(audit!, /'orgs'.*'update'/);
+  assert.match(audit!, /'before'.*'after'.*'reason'/s);
+});
 
-test('two PUTs from one read cannot both commit the whole configuration', async () => {
-  reset(4)
+test("two PUTs from one read cannot both commit the whole configuration", async () => {
+  reset(4);
   // The first writer wins the row-level compare-and-swap; the stale writer
   // receives no RETURNING row and must surface a conflict.
-  state.updateResponses = [{ rows: [{ revision: '5' }] }, { rows: [] }]
-  const body = { expectedRevision: 4, activeProfileId: profile.id, profiles: [profile] }
+  state.updateResponses = [{ rows: [{ revision: "5" }] }, { rows: [] }];
+  const body = { expectedRevision: 4, activeProfileId: profile.id, profiles: [profile] };
 
-  const [winner, loser] = await Promise.all([put(body), put(body)])
+  const [winner, loser] = await Promise.all([put(body), put(body)]);
 
-  assert.equal(winner.status, 200)
-  assert.equal((await winner.json()).revision, 5)
-  assert.equal(loser.status, 409)
-  assert.match((await loser.json()).error, /changed after you opened it/)
-  const update = state.executed.find((query) => query.includes('returning settings'))
-  assert.ok(update, 'the write uses UPDATE ... RETURNING to detect a lost compare-and-swap')
-  assert.match(update!, /coalesce\(settings -> 'analytics' -> 'trueCost' ->> 'revision', '0'\)/)
-})
+  assert.equal(winner.status, 200);
+  assert.equal((await winner.json()).revision, 5);
+  assert.equal(loser.status, 409);
+  assert.match((await loser.json()).error, /changed after you opened it/);
+  const update = state.executed.find((query) => query.includes("returning settings"));
+  assert.ok(update, "the write uses UPDATE ... RETURNING to detect a lost compare-and-swap");
+  assert.match(update!, /coalesce\(settings -> 'analytics' -> 'trueCost' ->> 'revision', '0'\)/);
+});

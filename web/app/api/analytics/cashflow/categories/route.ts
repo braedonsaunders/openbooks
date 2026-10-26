@@ -1,79 +1,104 @@
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { defineRoute } from '@/lib/api/route'
-import { exactMoney, parseJsonBody } from "@/lib/api/json"
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { defineRoute } from "@/lib/api/route";
+import { exactMoney } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
+import {
+  loadCashflowCategories,
+  saveCashflowCategories,
+} from "@openbooks/engine/reports/cashflow-categories";
 import { cmp as compareMoney, normalizeMoney } from "@openbooks/engine/money/money";
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
-import { guardUnrestrictedScope } from "../../../../../lib/authz";
-import { canonicalDecimal } from "../../../../../lib/exact-decimal";
-import type { ForecastCategory } from "../../../../../lib/analytics/cashflow-data";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { guardUnrestrictedScope } from "@/lib/authz";
+import { canonicalDecimal } from "@/lib/exact-decimal";
+import type { ForecastCategory } from "@/lib/analytics/cashflow-data";
 import {
   BANK_ACCOUNT_TYPE,
   CARD_ACCOUNT_TYPE,
   validateReferences,
-} from "../../../../../lib/cash/category-references";
+} from "@/lib/cash/category-references";
 
 const MANUAL_AMOUNT_MAX = "100000000.0000";
-const categoryUuid = (field: string) => uuidString({ error: `${field} must be a UUID; choose a saved record from this organization` })
-const categoryUuidList = (field: string) => z.array(categoryUuid(`${field} entry`), { error: `${field} must be a list of UUID references` })
+const categoryUuid = (field: string) =>
+  uuidString({ error: `${field} must be a UUID; choose a saved record from this organization` });
+const categoryUuidList = (field: string) =>
+  z.array(categoryUuid(`${field} entry`), { error: `${field} must be a list of UUID references` });
 
 const categoryBase = {
-  id: categoryUuid('id').optional(),
-  name: z.string().trim().min(1, 'name is required').max(80),
-  direction: z.enum(['inflow', 'outflow'], { error: 'direction must be inflow or outflow' }),
+  id: categoryUuid("id").optional(),
+  name: z.string().trim().min(1, "name is required").max(80),
+  direction: z.enum(["inflow", "outflow"], { error: "direction must be inflow or outflow" }),
   expectedDay: z.number().int().min(0).max(6).optional(),
   expectedWeek: z.number().int().min(1).max(4).optional(),
   adjustmentPct: z.number().finite().min(-90).max(200).optional(),
-  subsidiaryIds: categoryUuidList('subsidiaryIds').max(50).optional(),
-}
-const positiveManualAmount = exactMoney('amount must be an exact decimal string with at most four decimal places')
-  .refine((value) => compareMoney(value, '0.0000') > 0, { error: 'amount must be greater than zero' })
-  .refine((value) => compareMoney(value, MANUAL_AMOUNT_MAX) <= 0, { error: `amount must not exceed ${MANUAL_AMOUNT_MAX}` })
-const forecastCategorySchema = z.discriminatedUnion('method', [
+  subsidiaryIds: categoryUuidList("subsidiaryIds").max(50).optional(),
+};
+const positiveManualAmount = exactMoney(
+  "amount must be an exact decimal string with at most four decimal places",
+)
+  .refine((value) => compareMoney(value, "0.0000") > 0, {
+    error: "amount must be greater than zero",
+  })
+  .refine((value) => compareMoney(value, MANUAL_AMOUNT_MAX) <= 0, {
+    error: `amount must not exceed ${MANUAL_AMOUNT_MAX}`,
+  });
+const forecastCategorySchema = z.discriminatedUnion("method", [
   z.object({
     ...categoryBase,
-    method: z.literal('gl_history_average'),
-    accountIds: categoryUuidList('accountIds').min(1).max(50),
+    method: z.literal("gl_history_average"),
+    accountIds: categoryUuidList("accountIds").min(1).max(50),
     historyWeeks: z.number().int().min(1).max(52).optional(),
     useNetAmt: z.boolean().optional(),
   }),
+  z
+    .object({
+      ...categoryBase,
+      method: z.literal("vendor_payment_history"),
+      partyIds: categoryUuidList("partyIds").max(50).optional(),
+      partyId: categoryUuid("partyId").optional(),
+      partyName: z.string().max(120).optional(),
+      historyMonths: z.number().int().min(1).max(36).optional(),
+    })
+    .refine((value) => (value.partyIds?.length ?? 0) > 0 || value.partyId !== undefined, {
+      error: "partyIds or partyId must name at least one vendor",
+    }),
+  z
+    .object({
+      ...categoryBase,
+      method: z.literal("vendor_recurring_average"),
+      partyIds: categoryUuidList("partyIds").max(50).optional(),
+      partyId: categoryUuid("partyId").optional(),
+      partyName: z.string().max(120).optional(),
+      historyMonths: z.number().int().min(1).max(36).optional(),
+    })
+    .refine((value) => (value.partyIds?.length ?? 0) > 0 || value.partyId !== undefined, {
+      error: "partyIds or partyId must name at least one vendor",
+    }),
+  z
+    .object({
+      ...categoryBase,
+      method: z.literal("credit_card_cycle"),
+      cardAccountIds: categoryUuidList("cardAccountIds").max(20).optional(),
+      accountIds: categoryUuidList("accountIds").max(20).optional(),
+      historyMonths: z.number().int().min(1).max(24).optional(),
+      significantPaymentThreshold: exactMoney(
+        "significantPaymentThreshold must be an exact decimal string",
+      ).optional(),
+    })
+    .refine(
+      (value) => (value.cardAccountIds?.length ?? 0) > 0 || (value.accountIds?.length ?? 0) > 0,
+      { error: "cardAccountIds or accountIds must name at least one card account" },
+    ),
   z.object({
     ...categoryBase,
-    method: z.literal('vendor_payment_history'),
-    partyIds: categoryUuidList('partyIds').max(50).optional(),
-    partyId: categoryUuid('partyId').optional(),
-    partyName: z.string().max(120).optional(),
-    historyMonths: z.number().int().min(1).max(36).optional(),
-  }).refine((value) => (value.partyIds?.length ?? 0) > 0 || value.partyId !== undefined, { error: 'partyIds or partyId must name at least one vendor' }),
-  z.object({
-    ...categoryBase,
-    method: z.literal('vendor_recurring_average'),
-    partyIds: categoryUuidList('partyIds').max(50).optional(),
-    partyId: categoryUuid('partyId').optional(),
-    partyName: z.string().max(120).optional(),
-    historyMonths: z.number().int().min(1).max(36).optional(),
-  }).refine((value) => (value.partyIds?.length ?? 0) > 0 || value.partyId !== undefined, { error: 'partyIds or partyId must name at least one vendor' }),
-  z.object({
-    ...categoryBase,
-    method: z.literal('credit_card_cycle'),
-    cardAccountIds: categoryUuidList('cardAccountIds').max(20).optional(),
-    accountIds: categoryUuidList('accountIds').max(20).optional(),
-    historyMonths: z.number().int().min(1).max(24).optional(),
-    significantPaymentThreshold: exactMoney('significantPaymentThreshold must be an exact decimal string').optional(),
-  }).refine((value) => (value.cardAccountIds?.length ?? 0) > 0 || (value.accountIds?.length ?? 0) > 0, { error: 'cardAccountIds or accountIds must name at least one card account' }),
-  z.object({
-    ...categoryBase,
-    method: z.literal('formula_expression'),
-    formula: z.string().trim().min(1, 'formula is required').max(500),
+    method: z.literal("formula_expression"),
+    formula: z.string().trim().min(1, "formula is required").max(500),
   }),
   z.object({
     ...categoryBase,
-    method: z.literal('bank_register_history'),
-    bankAccountIds: categoryUuidList('bankAccountIds').min(1).max(20),
+    method: z.literal("bank_register_history"),
+    bankAccountIds: categoryUuidList("bankAccountIds").min(1).max(20),
     historyWeeks: z.number().int().min(1).max(52).optional(),
     memoKeywords: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
     includeTransfers: z.boolean().optional(),
@@ -82,18 +107,23 @@ const forecastCategorySchema = z.discriminatedUnion('method', [
   }),
   z.object({
     ...categoryBase,
-    method: z.literal('manual_recurring'),
+    method: z.literal("manual_recurring"),
     amount: positiveManualAmount,
-    anchorDate: z.string({ error: 'anchorDate must be a real YYYY-MM-DD calendar date' })
-      .refine(isIsoCalendarDate, { error: 'anchorDate must be a real YYYY-MM-DD calendar date' }).optional(),
-    frequency: z.enum(['weekly', 'biweekly', 'bi_weekly', 'monthly']).optional(),
+    anchorDate: z
+      .string({ error: "anchorDate must be a real YYYY-MM-DD calendar date" })
+      .refine(isIsoCalendarDate, { error: "anchorDate must be a real YYYY-MM-DD calendar date" })
+      .optional(),
+    frequency: z.enum(["weekly", "biweekly", "bi_weekly", "monthly"]).optional(),
   }),
-])
+]);
 const requestBodySchema = z.object({
-  categories: z.array(forecastCategorySchema).max(50, 'too many categories (max 50)'),
-  expectedRevision: z.number().int().nonnegative('expectedRevision must be a non-negative integer').optional(),
-})
-
+  categories: z.array(forecastCategorySchema).max(50, "too many categories (max 50)"),
+  expectedRevision: z
+    .number()
+    .int()
+    .nonnegative("expectedRevision must be a non-negative integer")
+    .optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -123,8 +153,7 @@ const clampNum = (v: unknown, min: number, max: number, dflt: number): number =>
 };
 
 type CleanResult =
-  | { ok: true; category: ForecastCategory }
-  | { ok: false; error: string; status?: 422 };
+  { ok: true; category: ForecastCategory } | { ok: false; error: string; status?: 422 };
 const GENERIC_CATEGORY_ERROR =
   "Each category must include a valid name, method, and method-specific configuration.";
 
@@ -144,7 +173,11 @@ async function clean(
     table: "accounts" | "parties",
     kind: string,
     ids: string[],
-    expect?: { accountType?: typeof BANK_ACCOUNT_TYPE | typeof CARD_ACCOUNT_TYPE; postable?: boolean; vendorRole?: boolean },
+    expect?: {
+      accountType?: typeof BANK_ACCOUNT_TYPE | typeof CARD_ACCOUNT_TYPE;
+      postable?: boolean;
+      vendorRole?: boolean;
+    },
   ): Promise<string | null> =>
     validateReferences(orgId, [
       {
@@ -176,11 +209,25 @@ async function clean(
 
   // Shared placement + adjustment knobs (getProrationFactor inputs).
   const day = Number(c.expectedDay);
-  if (c.expectedDay !== "" && c.expectedDay !== null && c.expectedDay !== undefined && Number.isInteger(day) && day >= 0 && day <= 6) {
+  if (
+    c.expectedDay !== "" &&
+    c.expectedDay !== null &&
+    c.expectedDay !== undefined &&
+    Number.isInteger(day) &&
+    day >= 0 &&
+    day <= 6
+  ) {
     out.expectedDay = day;
   }
   const wk = Number(c.expectedWeek);
-  if (c.expectedWeek !== "" && c.expectedWeek !== null && c.expectedWeek !== undefined && Number.isInteger(wk) && wk >= 1 && wk <= 4) {
+  if (
+    c.expectedWeek !== "" &&
+    c.expectedWeek !== null &&
+    c.expectedWeek !== undefined &&
+    Number.isInteger(wk) &&
+    wk >= 1 &&
+    wk <= 4
+  ) {
     out.expectedWeek = wk;
   }
   const adj = Number(c.adjustmentPct);
@@ -203,25 +250,40 @@ async function clean(
     out.partyIds = ids;
     out.partyId = ids[0];
     out.partyName = typeof c.partyName === "string" ? c.partyName.slice(0, 120) : undefined;
-    out.historyMonths = clampNum(c.historyMonths, 1, 36, method === "vendor_recurring_average" ? 3 : 12);
+    out.historyMonths = clampNum(
+      c.historyMonths,
+      1,
+      36,
+      method === "vendor_recurring_average" ? 3 : 12,
+    );
   } else if (method === "credit_card_cycle") {
-    const ids = strList(c.cardAccountIds, 20).length ? strList(c.cardAccountIds, 20) : strList(c.accountIds, 20);
+    const ids = strList(c.cardAccountIds, 20).length
+      ? strList(c.cardAccountIds, 20)
+      : strList(c.accountIds, 20);
     if (!ids.length) return bad(GENERIC_CATEGORY_ERROR);
-    const refError = await check("cardAccountIds", "accounts", "an account", ids, { accountType: CARD_ACCOUNT_TYPE });
+    const refError = await check("cardAccountIds", "accounts", "an account", ids, {
+      accountType: CARD_ACCOUNT_TYPE,
+    });
     if (refError) return bad(refError);
     out.cardAccountIds = ids;
     out.historyMonths = clampNum(c.historyMonths, 1, 24, 6);
     if (c.significantPaymentThreshold !== undefined) {
       if (typeof c.significantPaymentThreshold !== "string") {
-        return bad("significantPaymentThreshold must be a decimal string; reload the category and enter an exact amount.");
+        return bad(
+          "significantPaymentThreshold must be a decimal string; reload the category and enter an exact amount.",
+        );
       }
       const exactThreshold = canonicalDecimal(c.significantPaymentThreshold, 4);
       if (exactThreshold === null) {
-        return bad("significantPaymentThreshold must be a valid amount with no more than four decimal places; correct the amount and save again.");
+        return bad(
+          "significantPaymentThreshold must be a valid amount with no more than four decimal places; correct the amount and save again.",
+        );
       }
       const threshold = normalizeMoney(exactThreshold);
       if (compareMoney(threshold, "0.0000") < 0 || compareMoney(threshold, "1000000000.0000") > 0) {
-        return bad("significantPaymentThreshold must be between 0 and 1000000000.0000; enter a supported amount and save again.");
+        return bad(
+          "significantPaymentThreshold must be between 0 and 1000000000.0000; enter a supported amount and save again.",
+        );
       }
       out.significantPaymentThreshold = threshold;
     }
@@ -232,11 +294,15 @@ async function clean(
   } else if (method === "bank_register_history") {
     const ids = strList(c.bankAccountIds, 20);
     if (!ids.length) return bad(GENERIC_CATEGORY_ERROR);
-    const refError = await check("bankAccountIds", "accounts", "an account", ids, { accountType: BANK_ACCOUNT_TYPE });
+    const refError = await check("bankAccountIds", "accounts", "an account", ids, {
+      accountType: BANK_ACCOUNT_TYPE,
+    });
     if (refError) return bad(refError);
     out.bankAccountIds = ids;
     out.historyWeeks = clampNum(c.historyWeeks, 1, 52, 12);
-    const keywords = strList(c.memoKeywords, 10).map((k) => k.trim().slice(0, 40)).filter(Boolean);
+    const keywords = strList(c.memoKeywords, 10)
+      .map((k) => k.trim().slice(0, 40))
+      .filter(Boolean);
     if (keywords.length) out.memoKeywords = keywords;
     if (c.includeTransfers === false) out.includeTransfers = false;
     if (c.includeChecks === false) out.includeChecks = false;
@@ -264,7 +330,11 @@ async function clean(
     const rawAnchor = c.anchorDate;
     if (rawAnchor === undefined || rawAnchor === null || rawAnchor === "") {
       out.anchorDate = await businessToday(orgId);
-    } else if (typeof rawAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawAnchor) && !Number.isNaN(Date.parse(`${rawAnchor}T00:00:00Z`))) {
+    } else if (
+      typeof rawAnchor === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(rawAnchor) &&
+      !Number.isNaN(Date.parse(`${rawAnchor}T00:00:00Z`))
+    ) {
       const [y, m, d] = rawAnchor.split("-").map(Number);
       if (m! < 1 || m! > 12) return bad(GENERIC_CATEGORY_ERROR);
       const days = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
@@ -321,44 +391,36 @@ async function clean(
 
 export const GET = defineRoute({
   permission: "reports.read",
-  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  feature: { none: "No optional feature applies to this permission-governed endpoint." },
   handler: async ({ authz: gate }) => {
     const scopeDenied = guardUnrestrictedScope(gate);
     if (scopeDenied) return scopeDenied;
-    const r = ((await db.execute(sql`
-      select settings -> 'analytics' -> 'cashflowCategories' as cats,
-             coalesce((settings -> 'analytics' ->> 'cashflowCategoriesRevision')::int, 0) as rev
-        from orgs where id = ${gate.user.orgId}
-    `, "objects")));
-    const raw = r[0]?.cats;
+    const snapshot = await loadCashflowCategories(gate.user.orgId);
     return NextResponse.json({
-      categories: Array.isArray(raw) ? raw : [],
-      revision: typeof r[0]?.rev === "number" ? r[0].rev : 0,
+      categories: snapshot.categories,
+      revision: snapshot.revision,
     });
-
   },
-})
+});
 
 export const PUT = defineRoute({
   permission: "admin.setup.manage",
-  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
-  handler: async ({ request: req, authz: gate }) => {
-    // Cashflow categories are one org-wide forecasting policy stored on orgs;
-    // their subsidiary references constrain inputs, not which entities the
-    // replacement governs.
-    const scopeDenied = guardUnrestrictedScope(gate);
-    if (scopeDenied) return scopeDenied;
-    const parsedBody = await parseJsonBody(req, requestBodySchema);
-    if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data
+  feature: { none: "No optional feature applies to this permission-governed endpoint." },
+  scope: "unrestricted",
+  body: requestBodySchema,
+  handler: async ({ authz: gate, body }) => {
+    // Subsidiary references constrain category inputs, not which entities the replacement governs.
     // Optimistic concurrency: the editor sends the revision it read, and a
     // stale writer gets 409 instead of silently discarding the other edit.
-    const expectedRevision = body.expectedRevision
+    const expectedRevision = body.expectedRevision;
     if (expectedRevision === undefined) {
-      return NextResponse.json({
-        error: 'expectedRevision required',
-        message: 'Send the revision returned by GET with every replacement.',
-      }, { status: 400 })
+      return NextResponse.json(
+        {
+          error: "expectedRevision required",
+          message: "Send the revision returned by GET with every replacement.",
+        },
+        { status: 400 },
+      );
     }
 
     // Sequential: the first invalid index wins, and reference checks stay ordered.
@@ -380,57 +442,30 @@ export const PUT = defineRoute({
     // Every result is ok here (any failure returned above); project the stored rows.
     const categories = cleaned.flatMap((result) => (result.ok ? [result.category] : []));
 
-    // Lock the current document and commit its replacement together with complete
-    // before/after audit evidence. A malformed payload returns above, before a
-    // transaction or mutation can begin. The revision is read from the locked
-    // row and the replacement refused when it moved: concurrent editors
-    // serialize on the org row, but serialization alone would still let the
-    // second writer silently discard the first — the 409 forces a re-read.
-    const result = await db.transaction(async (tx) => {
-      const existing = await tx.execute(sql`
-        select settings -> 'analytics' -> 'cashflowCategories' as cats,
-               coalesce((settings -> 'analytics' ->> 'cashflowCategoriesRevision')::int, 0) as rev
-          from orgs where id = ${gate.user.orgId} for update
-      `, "objects");
-      if (!existing[0]) return NextResponse.json({ error: "org not found" }, { status: 404 });
-      const currentRevision = typeof existing[0].rev === "number" ? existing[0].rev : 0;
-      if (currentRevision !== expectedRevision) {
-        return NextResponse.json(
-          {
-            error: "revision conflict",
-            message: `Cashflow categories changed since revision ${expectedRevision} (now at ${currentRevision}): reload and reapply your edit.`,
-            revision: currentRevision,
-          },
-          { status: 409 },
-        );
-      }
-      const rawBefore = existing[0].cats;
-      const before = Array.isArray(rawBefore) ? rawBefore : [];
-      const nextRevision = currentRevision + 1;
-      await tx.execute(sql`
-        update orgs
-        set settings = jsonb_set(
-          jsonb_set(
-            jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics}', coalesce(settings -> 'analytics', '{}'::jsonb), true),
-            '{analytics,cashflowCategories}', ${JSON.stringify(categories)}::jsonb, true),
-          '{analytics,cashflowCategoriesRevision}', ${JSON.stringify(nextRevision)}::jsonb, true)
-        where id = ${gate.user.orgId}
-      `);
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (
-          ${gate.user.orgId}, 'orgs', ${gate.user.orgId}, 'update',
-          ${JSON.stringify({
-            before: { analytics: { cashflowCategories: before } },
-            after: { analytics: { cashflowCategories: categories } },
-          })}::jsonb,
-          ${gate.user.id}
-        )
-      `);
-      return nextRevision;
+    const result = await saveCashflowCategories({
+      orgId: gate.user.orgId,
+      actorId: gate.user.id,
+      expectedRevision,
+      categories,
     });
-    if (result instanceof NextResponse) return result;
-    return NextResponse.json({ ok: true, categories, revision: result });
-
+    if (result.kind === "missing")
+      return NextResponse.json({ error: "org not found" }, { status: 404 });
+    if (result.kind === "conflict") {
+      return NextResponse.json(
+        {
+          error: "revision conflict",
+          message: `Cashflow categories changed since revision ${expectedRevision} (now at ${result.revision}): reload and reapply your edit.`,
+          revision: result.revision,
+        },
+        { status: 409 },
+      );
+    }
+    if (result.kind === "unwritten") {
+      return NextResponse.json(
+        { error: "Cashflow categories were not saved; reload and retry." },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ ok: true, categories, revision: result.revision });
   },
-})
+});
