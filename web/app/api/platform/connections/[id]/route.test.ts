@@ -11,8 +11,7 @@ const routeState = {
   audits: 0,
   secrets: "sealed",
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 function sqlText(query: unknown): string {
   const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
@@ -27,8 +26,7 @@ function sqlText(query: unknown): string {
     })
     .join("");
 }
-(globalThis as typeof globalThis & Record<string, unknown>).connectionIdSqlText =
-  sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).connectionIdSqlText = sqlText;
 
 const mockSources = new Map<string, string>([
   [
@@ -128,13 +126,26 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
+    "mock:connection-admin",
+    `
+      const state = globalThis[Symbol.for("openbooks.connection-patch-route-test")]
+      export async function deleteConnectionRecord() {
+        state.deletes += 1
+        const removed = state.deleteRows[0]
+        if (!removed) return null
+        state.audits += 1
+        return removed.id
+      }
+    `,
+  ],
+  [
     "mock:secrets",
     `
       export { KeyedFingerprintError, SEALED_V1_PREFIX, SEALED_V2_PREFIX, describeSealedBlob,
         fingerprintUnderKey, isNamedNonProductionEnvironment, keyedFingerprint,
         keyedFingerprintForComparison, loadDataKeyRing, matchKeyedFingerprint,
         parseKeyedFingerprint, requireDataKey, sealSecret, unsealSecret }
-        from '${import.meta.resolve('@openbooks/engine/platform/secrets')}'
+        from '${import.meta.resolve("@openbooks/engine/platform/secrets")}'
       export class SecretIntegrityError extends Error {
         constructor(orgId, purpose, keyId, detail) {
           super(
@@ -157,22 +168,13 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    "mock:business-date",
-    `export async function businessToday() { return "2026-09-20" }`,
-  ],
-  [
-    "mock:mirror",
-    `export function nextMirrorAt() { return new Date() }`,
-  ],
+  ["mock:business-date", `export async function businessToday() { return "2026-09-20" }`],
+  ["mock:mirror", `export function nextMirrorAt() { return new Date() }`],
   [
     "mock:audit",
     `export function connectionAuditChanges() { return { event: "connection_deleted" } }`,
   ],
-  [
-    "mock:storage",
-    `export function storageIdentityError() { return false }`,
-  ],
+  ["mock:storage", `export function storageIdentityError() { return false }`],
   [
     "mock:drizzle",
     `
@@ -188,12 +190,15 @@ const mockSources = new Map<string, string>([
 // The shared connection command imports the engine's public contracts; the
 // sync contract re-exports the connection, credential and mirror-schedule
 // pieces mocked individually above.
-mockSources.set("mock:engine-sync", [
-  mockSources.get("mock:connection"),
-  mockSources.get("mock:secrets"),
-  mockSources.get("mock:mirror"),
-  "export async function terminateConnectionSessions() {}",
-].join("\n"));
+mockSources.set(
+  "mock:engine-sync",
+  [
+    mockSources.get("mock:connection"),
+    mockSources.get("mock:secrets"),
+    mockSources.get("mock:mirror"),
+    "export async function terminateConnectionSessions() {}",
+  ].join("\n"),
+);
 const CONTRACT_MOCKS: Record<string, string> = {
   "@openbooks/engine/platform/database": "mock:db",
   "@openbooks/engine/platform/business-date": "mock:business-date",
@@ -203,13 +208,17 @@ const CONTRACT_MOCKS: Record<string, string> = {
 const hooks = registerHooks({
   resolve(rawSpecifier, context, nextResolve) {
     const specifier = canonicalEngineSpecifier(rawSpecifier) ?? rawSpecifier;
-    const mocked = CONTRACT_MOCKS[rawSpecifier] ?? CONTRACT_MOCKS[specifier] ??
-      (specifier === "../../../../../lib/authz"
-          ? "mock:authz"
-          : specifier === "@openbooks/engine/platform/db"
-            ? "mock:db"
-            : specifier === "@openbooks/engine/sync/connection"
-              ? "mock:connection"
+    const mocked =
+      CONTRACT_MOCKS[rawSpecifier] ??
+      CONTRACT_MOCKS[specifier] ??
+      (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz"
+        ? "mock:authz"
+        : specifier === "@openbooks/engine/platform/db"
+          ? "mock:db"
+          : specifier === "@openbooks/engine/sync/connection"
+            ? "mock:connection"
+            : specifier === "@openbooks/engine/sync/connection-admin"
+              ? "mock:connection-admin"
               : specifier === "@openbooks/engine/platform/secrets"
                 ? "mock:secrets"
                 : specifier === "@openbooks/engine/platform/business-date/module"
@@ -228,15 +237,14 @@ const hooks = registerHooks({
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);
   },
 });
 
-const connection_id_urlUrl = './route.ts?connection-id-url'
-const { PATCH, DELETE } = (await import(connection_id_urlUrl)) as typeof import('./route.ts');
-test.after(() => hooks.deregister())
+const connection_id_urlUrl = "./route.ts?connection-id-url";
+const { PATCH, DELETE } = (await import(connection_id_urlUrl)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 const refused = [
   ["loopback IPv4", { url: "http://127.0.0.1/" }],

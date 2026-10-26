@@ -22,8 +22,7 @@ const routeState: RouteState = {
   pingCalls: 0,
   updateMatches: true,
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 function sqlText(query: unknown): string {
   const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
@@ -34,15 +33,12 @@ function sqlText(query: unknown): string {
       if (typeof chunk === "string") return chunk;
       const value = (chunk as { value?: unknown[] })?.value;
       if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks)
-        return sqlText(chunk);
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
     })
     .join("");
 }
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).connectionTestSqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).connectionTestSqlText = sqlText;
 
 stubModules({
   navigation: false,
@@ -50,6 +46,20 @@ stubModules({
   authz: false,
   features: false,
   extra: {
+    "@openbooks/engine/sync/connection-admin": `
+      const state = globalThis[Symbol.for("openbooks.connection-test-route-test")]
+      export async function loadConnectionProbeRow(orgId, id) {
+        const text = "select id, org_id, source, display_name, auth_kind, status, config, secrets, mirror_enabled, mirror_schedule, posted_change_policy, posted_change_authorized_by, posted_change_authorized_at, cursor, last_run_at, last_error, updated_at from connections where id = " + id + " and org_id = " + orgId
+        state.queries.push(text)
+        return { id, orgId, source: "test", displayName: "Test", authKind: "token", status: "active", config: state.config, secrets: null, updatedAt: "t0" }
+      }
+      export async function writeConnectionProbeOutcome(orgId, id, row, status, lastError) {
+        const text = "update connections set status = " + status + ", last_error = " + lastError + ", updated_at = now() where id = " + id + " and org_id = " + orgId + " and updated_at is not distinct from " + row.updatedAt + " and config is not distinct from " + JSON.stringify(row.config) + " and secrets is not distinct from " + row.secrets + " returning id"
+        state.queries.push(text)
+        state.updates.push(text)
+        return state.updateMatches
+      }
+    `,
     "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for("openbooks.connection-test-route-test")]
       const sqlText = globalThis.connectionTestSqlText

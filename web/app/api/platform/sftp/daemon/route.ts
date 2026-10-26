@@ -1,6 +1,5 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
-import { defineRoute } from '@/lib/api/route'
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
@@ -11,17 +10,19 @@ import {
   sftpDaemonConfigAuditSnapshot,
   updateDaemonConfig,
 } from "@openbooks/engine/sftp/manager";
-import { auditSetupChange } from "../../../../../lib/setup/audit";
-import { sftpStartupFailureText } from "../../../../../lib/sftp-daemon";
-import { guardSuperAdmin, lockSuperAdminActor, SuperAdminAuthorityError } from "../../../../../lib/super-admin";
+import { auditSetupChange } from "@/lib/setup/audit";
+import { sftpStartupFailureText } from "@/lib/sftp-daemon";
+import { guardSuperAdmin, lockSuperAdminActor, SuperAdminAuthorityError } from "@/lib/super-admin";
 
 export const runtime = "nodejs";
 
-const daemonConfigBody = z.object({
-  enabled: z.boolean().optional(),
-  port: z.number().int().min(1).max(65535).optional(),
-  advertisedHost: z.string().nullable().optional(),
-}).strict();
+const daemonConfigBody = z
+  .object({
+    enabled: z.boolean().optional(),
+    port: z.number().int().min(1).max(65535).optional(),
+    advertisedHost: z.string().nullable().optional(),
+  })
+  .strict();
 
 /**
  * audit_log.row_id is a uuid, but the daemon's singleton row is the text id
@@ -31,7 +32,7 @@ const daemonConfigBody = z.object({
 function daemonAuditRowId(): string {
   const bytes = [...createHash("sha256").update("sftp_daemon:default").digest("hex").slice(0, 32)];
   bytes[12] = "5"; // RFC 4122 version: name-derived
-  bytes[16] = (((parseInt(bytes[16]!, 16) & 0x3) | 0x8)).toString(16); // variant
+  bytes[16] = ((parseInt(bytes[16]!, 16) & 0x3) | 0x8).toString(16); // variant
   const hex = bytes.join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
@@ -47,40 +48,41 @@ function daemonAuditRowId(): string {
  * commits does the listener reconcile — never binding a port the database no
  * longer says we own.
  */
-async function updateDaemonRoute(req: Request) {
-  const gate = await guardSuperAdmin();
-  if (gate instanceof NextResponse) return gate;
-  const parsedBody = await parseJsonBody(req, daemonConfigBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  if (body.port !== undefined && (!Number.isInteger(body.port) || body.port < 1 || body.port > 65535)) {
-    return NextResponse.json({ error: "port must be between 1 and 65535" }, { status: 400 });
-  }
+async function updateDaemonRoute(
+  gate: { user: { orgId: string; id: string } },
+  body: z.output<typeof daemonConfigBody>,
+) {
   let cfg;
   try {
     // bypass: cross-org-by-design — the SFTP daemon configuration is installation-wide, edited by a platform operator.
-    cfg = await withBypassContext(() => db.transaction(async (tx) => {
-      const actor = await lockSuperAdminActor(tx, gate.user.id);
-      const before = sftpDaemonConfigAuditSnapshot(await loadDaemonConfig(tx));
-      const after = await updateDaemonConfig(
-        {
-          enabled: body.enabled,
-          port: body.port,
-          advertisedHost: body.advertisedHost !== undefined ? (body.advertisedHost?.trim() || null) : undefined,
-        },
-        actor.id,
-        tx,
-      );
-      await auditSetupChange({
-        orgId: gate.user.orgId,
-        table: "sftp_daemon",
-        rowId: daemonAuditRowId(),
-        action: "update",
-        changes: { before, after: sftpDaemonConfigAuditSnapshot(after) },
-        actorId: actor.id,
-      }, tx);
-      return after;
-    }));
+    cfg = await withBypassContext(() =>
+      db.transaction(async (tx) => {
+        const actor = await lockSuperAdminActor(tx, gate.user.id);
+        const before = sftpDaemonConfigAuditSnapshot(await loadDaemonConfig(tx));
+        const after = await updateDaemonConfig(
+          {
+            enabled: body.enabled,
+            port: body.port,
+            advertisedHost:
+              body.advertisedHost !== undefined ? body.advertisedHost?.trim() || null : undefined,
+          },
+          actor.id,
+          tx,
+        );
+        await auditSetupChange(
+          {
+            orgId: gate.user.orgId,
+            table: "sftp_daemon",
+            rowId: daemonAuditRowId(),
+            action: "update",
+            changes: { before, after: sftpDaemonConfigAuditSnapshot(after) },
+            actorId: actor.id,
+          },
+          tx,
+        );
+        return after;
+      }),
+    );
   } catch (e) {
     // A concurrent deactivation or super-admin revocation between the gate
     // and the protected write refuses by name: the operator gets the remedy
@@ -111,11 +113,26 @@ async function updateDaemonRoute(req: Request) {
       { status: 502 },
     );
   }
-  return NextResponse.json({ ok: true, enabled: cfg.enabled, port: cfg.port, advertisedHost: cfg.advertisedHost });
+  return NextResponse.json({
+    ok: true,
+    enabled: cfg.enabled,
+    port: cfg.port,
+    advertisedHost: cfg.advertisedHost,
+  });
 }
 
 export const PATCH = defineRoute({
   authorize: () => guardSuperAdmin(),
-  feature: { none: 'The SFTP daemon is a platform-wide operator surface guarded by super-admin authority.' },
-  handler: async ({ request }) => updateDaemonRoute(request),
-})
+  feature: {
+    none: "The SFTP daemon is a platform-wide operator surface guarded by super-admin authority.",
+  },
+  body: daemonConfigBody,
+  opaque: {
+    enabled:
+      "Optional configuration patches preserve the prior value when omitted; an empty patch remains a valid no-op.",
+    port: "Optional configuration patches preserve the prior value when omitted; an empty patch remains a valid no-op.",
+    advertisedHost:
+      "Optional configuration patches preserve the prior value when omitted; an empty patch remains a valid no-op.",
+  },
+  handler: async ({ authz, body }) => updateDaemonRoute(authz, body),
+});

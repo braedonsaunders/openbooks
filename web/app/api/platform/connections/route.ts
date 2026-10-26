@@ -1,12 +1,12 @@
-import { canonicalConnectionMappingConfig } from '@openbooks/engine/sync/connection-settings';
-import { parseJsonBody } from "@/lib/api/json";
-import { ConnectionMappingError, decodeEntityMappings } from '@openbooks/engine/sync/entity-mapping-contract';
-import { apiErrorResponse } from '@/lib/api/error-response';
-import { defineRoute } from '@/lib/api/route'
+import { canonicalConnectionMappingConfig } from "@openbooks/engine/sync/connection-settings";
+import {
+  ConnectionMappingError,
+  decodeEntityMappings,
+} from "@openbooks/engine/sync/entity-mapping-contract";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db, schema } from "@openbooks/engine/platform/db";
 import { sealJson } from "@openbooks/engine/platform/secrets";
 import {
   listConnections,
@@ -15,9 +15,12 @@ import {
   validateSourceConfig,
   validateSourceSecret,
 } from "@openbooks/engine/sync/connection";
+import {
+  createConnectionRecord,
+  loadConnectionDashboardData,
+} from "@openbooks/engine/sync/connection-admin";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
-import { connectionAuditChanges } from "@openbooks/schema/src/connections.ts";
-import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
+import { can, guardPermission, type Authz } from "@/lib/authz";
 import {
   callerOwnedConfigRefusal,
   connectionConfigUrlRefusal,
@@ -27,12 +30,14 @@ import {
 export const runtime = "nodejs";
 
 // Each connector manifest defines its own config keys and nested value types.
-const connectionCreateBody = z.object({
-  source: z.string().trim().min(1),
-  displayName: z.string().optional(),
-  config: z.record(z.string(), z.json()).optional(),
-  secrets: z.record(z.string(), z.string()).optional(),
-}).strict();
+const connectionCreateBody = z
+  .object({
+    source: z.string().trim().min(1),
+    displayName: z.string().optional(),
+    config: z.record(z.string(), z.json()).optional(),
+    secrets: z.record(z.string(), z.string()).optional(),
+  })
+  .strict();
 
 /** Strip the sealed credential blob before anything leaves the server. */
 function toClient(c: Awaited<ReturnType<typeof listConnections>>[number]) {
@@ -62,83 +67,42 @@ function toClient(c: Awaited<ReturnType<typeof listConnections>>[number]) {
  * payload carries `canManage` so the console hides its Add/Edit/Delete
  * controls from run-only callers instead of letting every edit fail.
  */
-async function listConnectionRoutes() {
-  // Either grant reads the console: a configure caller passes the first
-  // check, a run-only caller falls through to the second. Which check
-  // passed is the `canManage` flag below — no wider permission helper is
-  // needed, and neither refusal is dropped (a caller with neither sees the
-  // sync.run 403).
-  let gate = await guardPermission("admin.setup.manage");
-  let canManage = true;
-  if (gate instanceof NextResponse) {
-    const runGate = await guardPermission("sync.run");
-    if (runGate instanceof NextResponse) return runGate;
-    gate = runGate;
-    canManage = false;
-  }
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
+async function listConnectionRoutes(gate: Authz) {
+  // Either grant reads the console (see the route's authorize); a caller
+  // with neither sees the sync.run 403. `canManage` mirrors the configure
+  // grant so the console hides its edit controls from run-only callers.
+  const canManage = can(gate, "admin.setup.manage");
   const orgId = gate.user.orgId;
-  const rows = await listConnections(orgId);
-  const runs = (await db.execute<Record<string, unknown>>(sql`
-    select id, connection_id as "connectionId", source, kind, status,
-           started_at as "startedAt", finished_at as "finishedAt",
-           synced_through as "syncedThrough", stats, progress, error_message as "errorMessage", triggered_by as "triggeredBy"
-      from sync_runs where org_id = ${orgId} order by started_at desc limit 200`, "objects"));
-  const latestRuns = (await db.execute<Record<string, unknown>>(sql`
-    select distinct on (connection_id, kind)
-           id, connection_id as "connectionId", source, kind, status,
-           started_at as "startedAt", finished_at as "finishedAt",
-           synced_through as "syncedThrough", stats, progress,
-           error_message as "errorMessage", triggered_by as "triggeredBy"
-      from sync_runs
-     where org_id = ${orgId} and connection_id is not null
-     order by connection_id, kind, started_at desc, id desc`, "objects"));
-  // Configured currencies power any `optionsSource: 'currencies'` config field.
-  const currencies = (await db.execute<{ code: string; name: string }>(sql`
-    select code, name from currencies order by code`, "objects"));
-  const qbdStatuses = (await db.execute<{
-      connectionId: string;
-      heartbeat: Date | null;
-      captureStatus: string | null;
-      captureProgress: Record<string, number> | null;
-    }>(sql`
-    select c.id as "connectionId",
-           (select max(s.last_seen_at) from qbd_sessions s where s.connection_id = c.id and s.org_id = c.org_id) as heartbeat,
-           capture.status as "captureStatus", capture.progress as "captureProgress"
-      from connections c
-      left join lateral (
-        select status, progress from qbd_captures qc
-         where qc.connection_id = c.id and qc.org_id = c.org_id order by qc.created_at desc limit 1
-      ) capture on true
-     where c.org_id = ${orgId} and c.source = 'qbd'`, "objects"));
-  const qbdByConnection = new Map(
-    qbdStatuses.map((row) => [row.connectionId, row]),
-  );
+  const dashboard = await loadConnectionDashboardData(orgId);
+  const { connections: rows, runs, latestRuns, currencies, qbdStatuses } = dashboard;
+  const qbdByConnection = new Map(qbdStatuses.map((row) => [row.connectionId, row]));
   const runHealth = new Map<
     string,
     { mirror?: Record<string, unknown>; attachments?: Record<string, unknown> }
   >();
   for (const run of latestRuns) {
-    const connectionId =
-      typeof run.connectionId === "string" ? run.connectionId : null;
+    const connectionId = typeof run.connectionId === "string" ? run.connectionId : null;
     if (!connectionId) continue;
     const health = runHealth.get(connectionId) ?? {};
     if (run.kind === "incremental" && !health.mirror) health.mirror = run;
     const stats = run.stats as { attachments?: unknown } | null;
     const progress = run.progress as { phase?: string } | null;
-    const includesAttachments = run.kind === "attachments" || stats?.attachments != null || progress?.phase === "attachments";
-    if (includesAttachments && (!health.attachments || String(run.startedAt) > String(health.attachments.startedAt))) {
+    const includesAttachments =
+      run.kind === "attachments" || stats?.attachments != null || progress?.phase === "attachments";
+    if (
+      includesAttachments &&
+      (!health.attachments || String(run.startedAt) > String(health.attachments.startedAt))
+    ) {
       const summary = stats?.attachments as { failures?: number } | undefined;
-      health.attachments = { ...run, status: run.kind !== "attachments" && summary?.failures === 0 ? "ok" : run.status };
+      health.attachments = {
+        ...run,
+        status: run.kind !== "attachments" && summary?.failures === 0 ? "ok" : run.status,
+      };
     }
     runHealth.set(connectionId, health);
   }
-  const resolvedDeletions = (await db.execute<{ connectionId: string; sourceRef: string }>(sql`
-    select connection_id as "connectionId", source_ref as "sourceRef"
-      from source_deletion_resolutions where org_id = ${orgId}`, "objects"));
   const resolvedKeys = new Set(
-    resolvedDeletions.map((row) => `${row.connectionId}:${row.sourceRef}`),
+    dashboard.resolvedDeletions.map((row) => `${row.connectionId}:${row.sourceRef}`),
   );
   return NextResponse.json({
     connections: rows.map((row) => ({
@@ -147,8 +111,7 @@ async function listConnectionRoutes() {
       runHealth: runHealth.get(row.id) ?? {},
       unresolvedSourceDeletions: (() => {
         const latest = runHealth.get(row.id)?.mirror;
-        const stats = latest?.stats as
-          { deletedAtSource?: unknown[] } | undefined;
+        const stats = latest?.stats as { deletedAtSource?: unknown[] } | undefined;
         return (stats?.deletedAtSource ?? [])
           .map(String)
           .filter((sourceRef) => !resolvedKeys.has(`${row.id}:${sourceRef}`));
@@ -173,23 +136,13 @@ async function listConnectionRoutes() {
 }
 
 /** Create a connection. Secrets are sealed at rest and never echoed back. */
-async function createConnectionRoute(req: Request) {
-  const gate = await guardPermission("admin.setup.manage");
-  if (gate instanceof NextResponse) return gate;
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
+async function createConnectionRoute(gate: Authz, body: z.output<typeof connectionCreateBody>) {
   const orgId = gate.user.orgId;
   const actorId = gate.user.id;
-
-  const parsedBody = await parseJsonBody(req, connectionCreateBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
   const manifest = sourceType(String(body.source ?? ""));
-  if (!manifest)
-    return NextResponse.json({ error: "unknown source type" }, { status: 400 });
+  if (!manifest) return NextResponse.json({ error: "unknown source type" }, { status: 400 });
 
-  const displayName =
-    String(body.displayName ?? "").trim() || manifest.displayName;
+  const displayName = String(body.displayName ?? "").trim() || manifest.displayName;
   const suppliedConfig =
     body.config && typeof body.config === "object" && !Array.isArray(body.config)
       ? body.config
@@ -202,13 +155,14 @@ async function createConnectionRoute(req: Request) {
     );
   }
   let config = declaredSourceConfig(manifest, suppliedConfig);
-  try { config = canonicalConnectionMappingConfig(config, manifest.mappingGroups ?? []); }
-  catch (cause) {
+  try {
+    config = canonicalConnectionMappingConfig(config, manifest.mappingGroups ?? []);
+  } catch (cause) {
     // Mapping defects are typed 400 at their origin with the offending key;
     // anything else (a corrupt saved shape) answers the static fallback.
     if (cause instanceof ConnectionMappingError) return apiErrorResponse(cause);
-    console.error('[platform/connections] mapping config validation failed', cause);
-    return NextResponse.json({ error: 'Connection mappings are unavailable' }, { status: 400 });
+    console.error("[platform/connections] mapping config validation failed", cause);
+    return NextResponse.json({ error: "Connection mappings are unavailable" }, { status: 400 });
   }
   const urlError = await connectionConfigUrlRefusal(config);
   if (urlError) {
@@ -219,35 +173,33 @@ async function createConnectionRoute(req: Request) {
   }
 
   const configError = validateSourceConfig(manifest, config, { today: await businessToday(orgId) });
-  if (configError)
-    return NextResponse.json({ error: configError }, { status: 400 });
-  if (Object.values(decodeEntityMappings(config.entityMappings).entities).some(rows => rows.length)) return NextResponse.json({ error: 'Save the connection first, then select its source and native mapping fields' }, { status: 422 });
+  if (configError) return NextResponse.json({ error: configError }, { status: 400 });
+  if (
+    Object.values(decodeEntityMappings(config.entityMappings).entities).some((rows) => rows.length)
+  )
+    return NextResponse.json(
+      { error: "Save the connection first, then select its source and native mapping fields" },
+      { status: 422 },
+    );
 
   // Seal any provided secret fields (all-or-nothing per field).
   const provided: Record<string, string> = {};
   for (const f of manifest.secretFields) {
     const v = body.secrets?.[f.key];
     if (v !== undefined && v !== null && String(v) !== "") {
-      const secretError = validateSourceSecret(
-        manifest.source,
-        f.key,
-        String(v),
-      );
-      if (secretError)
-        return NextResponse.json({ error: secretError }, { status: 400 });
+      const secretError = validateSourceSecret(manifest.source, f.key, String(v));
+      if (secretError) return NextResponse.json({ error: secretError }, { status: 400 });
       provided[f.key] = String(v);
     }
   }
-  const hasAllSecrets = manifest.secretFields.every(
-    (f) => !f.required || provided[f.key],
-  );
+  const hasAllSecrets = manifest.secretFields.every((f) => !f.required || provided[f.key]);
   if (manifest.source === "qbd" && !hasAllSecrets) {
-    return NextResponse.json(
-      { error: "Web Connector password is required" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Web Connector password is required" }, { status: 400 });
   }
-  const sealed = Object.keys(provided).length > 0 ? sealJson(provided, { orgId, purpose: "connection.secrets" }) : null;
+  const sealed =
+    Object.keys(provided).length > 0
+      ? sealJson(provided, { orgId, purpose: "connection.secrets" })
+      : null;
   // OAuth connections still need the consent flow before they can run, even
   // once their app credentials are saved — so they start "unconfigured".
   const status =
@@ -258,36 +210,15 @@ async function createConnectionRoute(req: Request) {
         : "unconfigured";
 
   try {
-    const id = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .insert(schema.connections)
-        .values({
-          orgId,
-          source: manifest.source,
-          displayName,
-          authKind: manifest.authKind,
-          status,
-          config,
-          secrets: sealed,
-          createdBy: actorId,
-          updatedBy: actorId,
-        })
-        .returning();
-      if (!row) throw new Error("connection insert returned no row");
-      await tx.insert(schema.auditLog).values({
-        orgId,
-        tableName: "connections",
-        rowId: row.id,
-        action: "insert",
-        changes: connectionAuditChanges({
-          event: "connection_created",
-          before: null,
-          after: row,
-          credentialsChanged: sealed != null,
-        }),
-        actorId,
-      });
-      return row.id;
+    const id = await createConnectionRecord({
+      orgId,
+      actorId,
+      source: manifest.source,
+      displayName,
+      authKind: manifest.authKind,
+      status,
+      config,
+      secrets: sealed,
     });
     return NextResponse.json({ id });
   } catch (e) {
@@ -305,16 +236,21 @@ async function createConnectionRoute(req: Request) {
 
 export const GET = defineRoute({
   authorize: async () => {
-    const configure = await guardPermission('admin.setup.manage')
-    if (!(configure instanceof NextResponse)) return configure
-    return guardPermission('sync.run')
+    const configure = await guardPermission("admin.setup.manage");
+    if (!(configure instanceof NextResponse)) return configure;
+    return guardPermission("sync.run");
   },
-  feature: { none: 'Connection setup and synchronization permissions provide the access boundary for this org-wide platform surface.' },
-  handler: async () => listConnectionRoutes(),
-})
+  feature: {
+    none: "Connection setup and synchronization permissions provide the access boundary for this org-wide platform surface.",
+  },
+  scope: "unrestricted",
+  handler: async ({ authz }) => listConnectionRoutes(authz),
+});
 
 export const POST = defineRoute({
-  authorize: () => guardPermission('admin.setup.manage'),
-  feature: { none: 'Connection setup permission governs this org-wide platform configuration.' },
-  handler: async ({ request }) => createConnectionRoute(request),
-})
+  permission: "admin.setup.manage",
+  feature: { none: "Connection setup permission governs this org-wide platform configuration." },
+  scope: "unrestricted",
+  body: connectionCreateBody,
+  handler: async ({ authz, body }) => createConnectionRoute(authz, body),
+});

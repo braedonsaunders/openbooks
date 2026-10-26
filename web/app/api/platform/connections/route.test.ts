@@ -4,8 +4,7 @@ import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.connection-create-route-test");
 const routeState = { persisted: 0, restricted: false, listReads: 0 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
@@ -15,6 +14,7 @@ const mockSources = new Map<string, string>([
       export async function guardPermission() {
         return { user: { orgId: "org-1", id: "user-1" }, allowedSubsidiaryIds: state.restricted ? new Set(["sub-a"]) : null }
       }
+      export function can() { return true }
       export function guardUnrestrictedScope(authz) {
         return authz.allowedSubsidiaryIds === null
           ? null
@@ -49,6 +49,20 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
+    "mock:connection-admin",
+    `
+      const state = globalThis[Symbol.for("openbooks.connection-create-route-test")]
+      export async function loadConnectionDashboardData() {
+        state.listReads += 1
+        return { connections: [], runs: [], latestRuns: [], currencies: [], qbdStatuses: [], resolvedDeletions: [] }
+      }
+      export async function createConnectionRecord() {
+        state.persisted += 1
+        throw new Error("create must not persist a refused connector URL")
+      }
+    `,
+  ],
+  [
     "mock:db",
     `
       export const ambientTenantOrgId = () => null
@@ -73,26 +87,22 @@ const mockSources = new Map<string, string>([
         describeSealedBlob, fingerprintUnderKey, isNamedNonProductionEnvironment, keyedFingerprint,
         keyedFingerprintForComparison, loadDataKeyRing, matchKeyedFingerprint, parseKeyedFingerprint,
         requireDataKey, unsealJson, unsealSecret, sealSecret }
-        from '${import.meta.resolve('@openbooks/engine/platform/secrets')}'
+        from '${import.meta.resolve("@openbooks/engine/platform/secrets")}'
       export function sealJson() { return "sealed" }`,
   ],
-  [
-    "mock:business-date",
-    `export async function businessToday() { return "2026-09-20" }`,
-  ],
-  [
-    "mock:audit",
-    `export function connectionAuditChanges() { return {} }`,
-  ],
+  ["mock:business-date", `export async function businessToday() { return "2026-09-20" }`],
+  ["mock:audit", `export function connectionAuditChanges() { return {} }`],
 ]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked =
-      specifier === "../../../../lib/authz"
-          ? "mock:authz"
-          : specifier === "@openbooks/engine/sync/connection"
-            ? "mock:connection"
+      specifier === "../../../../lib/authz" || specifier === "@/lib/authz"
+        ? "mock:authz"
+        : specifier === "@openbooks/engine/sync/connection"
+          ? "mock:connection"
+          : specifier === "@openbooks/engine/sync/connection-admin"
+            ? "mock:connection-admin"
             : specifier === "@openbooks/engine/platform/db"
               ? "mock:db"
               : specifier === "@openbooks/engine/platform/secrets"
@@ -107,15 +117,14 @@ const hooks = registerHooks({
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);
   },
 });
 
-const connection_create_urlUrl = './route.ts?connection-create-url'
-const { GET, POST } = (await import(connection_create_urlUrl)) as typeof import('./route.ts');
-test.after(() => hooks.deregister())
+const connection_create_urlUrl = "./route.ts?connection-create-url";
+const { GET, POST } = (await import(connection_create_urlUrl)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 const refused = [
   ["loopback IPv4", "odoo", { url: "http://127.0.0.1/" }],
@@ -178,17 +187,23 @@ test("restricted connector managers cannot list org-wide connection and run meta
   const response = await GET(new Request("http://openbooks.test/api/platform/connections"));
   assert.equal(response.status, 403);
   assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
-  assert.equal(routeState.listReads, 0, "the org-wide connector registry and run metadata are not queried");
+  assert.equal(
+    routeState.listReads,
+    0,
+    "the org-wide connector registry and run metadata are not queried",
+  );
 });
 
 test("restricted connector managers cannot create org-wide connections", async () => {
   routeState.restricted = true;
   routeState.persisted = 0;
-  const response = await POST(new Request("http://openbooks.test/api/platform/connections", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ source: "odoo", config: { url: "https://1.1.1.1" } }),
-  }));
+  const response = await POST(
+    new Request("http://openbooks.test/api/platform/connections", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ source: "odoo", config: { url: "https://1.1.1.1" } }),
+    }),
+  );
   assert.equal(response.status, 403);
   assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
   assert.equal(routeState.persisted, 0);
