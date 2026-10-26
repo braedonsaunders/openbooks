@@ -859,6 +859,7 @@
     "./tax-returns/filing": "./src/tax-returns/filing.ts",
     "./tax-returns/income-tax-provision": "./src/tax-returns/income-tax-provision.ts",
     "./tax-returns/income-tax-provision-queries": "./src/tax-returns/income-tax-provision-queries.ts",
+    "./tax-returns/oss-fx-evidence": "./src/tax-returns/oss-fx-evidence.ts",
     "./tax-returns/pool-run": "./src/tax-returns/pool-run.ts",
     "./tax-returns/return": "./src/tax-returns/return.ts",
     "./tax-returns/return-queries": "./src/tax-returns/return-queries.ts",
