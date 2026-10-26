@@ -3,12 +3,9 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
-import { guardFeaturePermission } from "../../../../lib/feature-gates";
+import type { Authz } from "@/lib/authz";
 import { generateApiKey } from "../../../../lib/api-auth";
-import {
-  isCataloguePermission,
-  PERMISSION_CATALOGUE,
-} from "../../../../lib/permissions";
+import { isCataloguePermission, PERMISSION_CATALOGUE } from "../../../../lib/permissions";
 import {
   permissionsOutsideCeiling,
   resolveKeyScopeAuthority,
@@ -22,7 +19,8 @@ import { resolveUserAuthz } from "../../../../lib/authz-core";
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 
-const apiKeyExpirySchema = z.string()
+const apiKeyExpirySchema = z
+  .string()
   .datetime({ offset: true, error: "expiresAt must be an ISO date-time with a timezone or null" })
   .refine((value) => new Date(value).getTime() > Date.now(), {
     error: "expiresAt must be in the future",
@@ -32,10 +30,15 @@ const apiKeyExpirySchema = z.string()
 
 const createApiKeyBodySchema = z.object({
   name: z.string().trim().min(1),
-  scopes: z.array(z.string().trim().min(1), { error: "at least one scope is required" }).min(1, { error: "at least one scope is required" }),
+  scopes: z
+    .array(z.string().trim().min(1), { error: "at least one scope is required" })
+    .min(1, { error: "at least one scope is required" }),
   description: z.string().nullable().optional(),
   expiresAt: apiKeyExpirySchema,
-  rateLimitPerMin: z.union([z.number().int().positive(), z.string().regex(/^\d*$/)]).nullable().optional(),
+  rateLimitPerMin: z
+    .union([z.number().int().positive(), z.string().regex(/^\d*$/)])
+    .nullable()
+    .optional(),
 });
 
 const updateApiKeyBodySchema = z.object({
@@ -44,12 +47,17 @@ const updateApiKeyBodySchema = z.object({
   expiresAt: apiKeyExpirySchema,
   isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
   name: z.string().trim().min(1).optional(),
-  rateLimitPerMin: z.union([z.number().int().positive(), z.string().regex(/^\d*$/)]).nullable().optional(),
-  scopes: z.array(z.string().trim().min(1), { error: "at least one scope is required" }).min(1, { error: "at least one scope is required" }).optional(),
+  rateLimitPerMin: z
+    .union([z.number().int().positive(), z.string().regex(/^\d*$/)])
+    .nullable()
+    .optional(),
+  scopes: z
+    .array(z.string().trim().min(1), { error: "at least one scope is required" })
+    .min(1, { error: "at least one scope is required" })
+    .optional(),
 });
 
 const revokeApiKeyBodySchema = z.object({ id: uuidString() });
-
 
 export const runtime = "nodejs";
 
@@ -134,8 +142,13 @@ function inactiveOwnerRefusal() {
 
 /** Whether the key owner is currently active (unknown owners fail closed). */
 async function ownerIsActive(orgId: string, ownerId: string): Promise<boolean> {
-  const row = (await db.execute<{ isActive: boolean }>(sql`
-    select is_active as "isActive" from users where id = ${ownerId} and org_id = ${orgId}`, "objects"))[0];
+  const row = (
+    await db.execute<{ isActive: boolean }>(
+      sql`
+    select is_active as "isActive" from users where id = ${ownerId} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   return row?.isActive === true;
 }
 
@@ -146,35 +159,53 @@ async function ownerIsActive(orgId: string, ownerId: string): Promise<boolean> {
  * resume ceiling compares against authority the key would really confer.
  */
 async function ownerEffectivePermissions(orgId: string, ownerId: string): Promise<Set<string>> {
-  const identity = (await db.execute<{ isActive: boolean; isSuperAdmin: boolean }>(sql`
+  const identity = (
+    await db.execute<{ isActive: boolean; isSuperAdmin: boolean }>(
+      sql`
     select is_active as "isActive", is_super_admin as "isSuperAdmin"
-      from users where id = ${ownerId} and org_id = ${orgId}`, "objects"))[0];
+      from users where id = ${ownerId} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   if (!identity?.isActive) return new Set();
-  return (await resolveUserAuthz({
-    id: ownerId,
-    email: "",
-    name: "",
-    roles: [],
-    orgId,
-    envKind: "production",
-    productionOrgId: orgId,
-    isSuperAdmin: identity.isSuperAdmin,
-    homeUserId: ownerId,
-    homeOrgId: orgId,
-  }, db)).permissions;
+  return (
+    await resolveUserAuthz(
+      {
+        id: ownerId,
+        email: "",
+        name: "",
+        roles: [],
+        orgId,
+        envKind: "production",
+        productionOrgId: orgId,
+        isSuperAdmin: identity.isSuperAdmin,
+        homeUserId: ownerId,
+        homeOrgId: orgId,
+      },
+      db,
+    )
+  ).permissions;
 }
 
 /** A key must be owned by an active identity that belongs to its organization. */
 async function actorIsActiveInOrg(orgId: string, actorId: string): Promise<boolean> {
-  const row = (await db.execute<{ id: string }>(sql`
+  const row = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from users
-     where id = ${actorId} and org_id = ${orgId} and is_active`, "objects"))[0];
+     where id = ${actorId} and org_id = ${orgId} and is_active`,
+      "objects",
+    )
+  )[0];
   return !!row;
 }
 
 function actorIdentityRefusal() {
   return NextResponse.json(
-    { error: "API keys can only be owned by an active user in this organization; sign in as an organization user to create one" },
+    {
+      error:
+        "API keys can only be owned by an active user in this organization; sign in as an organization user to create one",
+    },
     { status: 403 },
   );
 }
@@ -218,46 +249,46 @@ async function audit(args: {
 
 /** The append-only `delete` audit record is the durable terminal marker. */
 async function hasRevocationRecord(orgId: string, rowId: string): Promise<boolean> {
-  const result = await db.execute(sql`
+  const result = await db.execute(
+    sql`
     select 1 from audit_log
      where org_id = ${orgId}
        and table_name = 'api_keys'
        and row_id = ${rowId}
        and action = 'delete'
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   return result.length > 0;
 }
 
 /** List all keys in the org (without secrets). */
-async function legacyGET() {
-  const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
-  if (gate instanceof NextResponse) return gate;
-
-  const r = ((await db.execute(sql`
+async function legacyGET(gate: Authz) {
+  const r = await db.execute(
+    sql`
     select k.id, k.name, k.description, k.key_prefix, k.key_preview, k.scopes,
            k.rate_limit_per_min, k.is_active, k.expires_at, k.last_used_at, k.created_at,
            u.name as owner_name, u.email as owner_email
       from api_keys k
       join users u on u.id = k.user_id
      where k.org_id = ${gate.user.orgId}
-     order by k.created_at desc`, "objects")));
+     order by k.created_at desc`,
+    "objects",
+  );
 
   return NextResponse.json({ keys: r });
 }
 
 /** Create a new key — returns the plaintext ONCE. */
 
-
 /** Update a key — name, description, scopes, suspension/resume, or rate limit. */
 
-
 /** Revoke a key permanently while preserving its row and event references. */
-
 
 export const GET = defineRoute({
   permission: "api.keys.manage",
   feature: "apiAccess",
-  handler: async () => legacyGET(),
+  handler: async ({ authz }) => legacyGET(authz),
 });
 
 export const POST = defineRoute({
@@ -266,15 +297,11 @@ export const POST = defineRoute({
   body: createApiKeyBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ body, authz: routeAuthz }) => {
-
     const gate = routeAuthz;
 
     const actor = gate.user;
 
     if (!(await actorIsActiveInOrg(actor.orgId, actor.id))) return actorIdentityRefusal();
-
-
-
 
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
@@ -307,7 +334,10 @@ export const POST = defineRoute({
 
     const rate = parseRate(body.rateLimitPerMin);
     if (rate === false) {
-      return NextResponse.json({ error: "rateLimitPerMin must be a positive integer or blank" }, { status: 400 });
+      return NextResponse.json(
+        { error: "rateLimitPerMin must be a positive integer or blank" },
+        { status: 400 },
+      );
     }
     // Default to 120/min when unspecified; null = unlimited.
     const rateValue = rate === undefined ? 120 : rate;
@@ -318,20 +348,25 @@ export const POST = defineRoute({
     // (omitted is kept as non-expiring for backward compatibility; new
     // clients should send null). No expiry policy table exists yet, so an
     // explicit null is currently allowed; a future policy may restrict it.
-    const expiresAt = body.expiresAt === undefined || body.expiresAt === null
-      ? null
-      : new Date(body.expiresAt).toISOString();
+    const expiresAt =
+      body.expiresAt === undefined || body.expiresAt === null
+        ? null
+        : new Date(body.expiresAt).toISOString();
 
     const gen = generateApiKey();
-    const description = typeof body.description === "string" ? body.description.trim() || null : null;
+    const description =
+      typeof body.description === "string" ? body.description.trim() || null : null;
     const insertedId = await withOrgTransaction(actor.orgId, async () => {
-      const inserted = await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(
+        sql`
         insert into api_keys (org_id, user_id, name, description, key_prefix, key_hash,
                               key_preview, scopes, rate_limit_per_min, is_active, expires_at, created_by, updated_by)
         values (${actor.orgId}, ${actor.id}, ${name}, ${description},
                 ${gen.keyPrefix}, ${gen.keyHash}, ${gen.keyPreview},
                 ${JSON.stringify(scopes)}, ${rateValue}, true, ${expiresAt}, ${actor.id}, ${actor.id})
-        returning id`, "objects");
+        returning id`,
+        "objects",
+      );
       const id = inserted[0]?.id;
       if (!id) throw new Error("api key insert did not return an id");
 
@@ -365,13 +400,9 @@ export const PATCH = defineRoute({
   body: updateApiKeyBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ body, authz: routeAuthz }) => {
-
     const gate = routeAuthz;
 
     const actor = gate.user;
-
-
-
 
     if (!body.id || !isUuid(body.id)) {
       return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -411,7 +442,10 @@ export const PATCH = defineRoute({
     if (body.rateLimitPerMin !== undefined) {
       const rate = parseRate(body.rateLimitPerMin);
       if (rate === false) {
-        return NextResponse.json({ error: "rateLimitPerMin must be a positive integer or blank" }, { status: 400 });
+        return NextResponse.json(
+          { error: "rateLimitPerMin must be a positive integer or blank" },
+          { status: 400 },
+        );
       }
       fields.rateLimitPerMin = rate;
     }
@@ -431,18 +465,21 @@ export const PATCH = defineRoute({
 
     return withOrgTransaction(actor.orgId, async () => {
       const existing = await db.execute<{
-          id: string;
-          user_id: string;
-          name: string;
-          description: string | null;
-          scopes: unknown;
-          rate_limit_per_min: number | null;
-          is_active: boolean;
-        }>(sql`
+        id: string;
+        user_id: string;
+        name: string;
+        description: string | null;
+        scopes: unknown;
+        rate_limit_per_min: number | null;
+        is_active: boolean;
+      }>(
+        sql`
         select id, user_id, name, description, scopes, rate_limit_per_min, is_active
           from api_keys
          where id = ${keyId} and org_id = ${actor.orgId}
-         for update`, "objects");
+         for update`,
+        "objects",
+      );
       const key = existing[0];
       if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
 
@@ -557,23 +594,27 @@ export const DELETE = defineRoute({
   feature: "apiAccess",
   body: revokeApiKeyBodySchema,
   handler: async ({ authz: routeAuthz, body }) => {
-
     const gate = routeAuthz;
 
     const actor = gate.user;
-
-
-
 
     const id = body.id;
     if (!id || !isUuid(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
 
     return withOrgTransaction(actor.orgId, async () => {
-      const existing = await db.execute<{ id: string; name: string; key_prefix: string; is_active: boolean }>(sql`
+      const existing = await db.execute<{
+        id: string;
+        name: string;
+        key_prefix: string;
+        is_active: boolean;
+      }>(
+        sql`
         select id, name, key_prefix, is_active
           from api_keys
          where id = ${id} and org_id = ${actor.orgId}
-         for update`, "objects");
+         for update`,
+        "objects",
+      );
       const key = existing[0];
       if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
 

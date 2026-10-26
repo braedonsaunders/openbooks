@@ -1,14 +1,13 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 
-import { applyFeatureChanges, normalizeFeatureChanges } from '../../../../../lib/features-admin'
+import { applyFeatureChanges, normalizeFeatureChanges } from "../../../../../lib/features-admin";
 
 const requestBodySchema = z.object({ features: z.record(z.string(), z.boolean()) });
 
-
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Toggle optional features on/off for the org. Only registry keys are
@@ -30,32 +29,37 @@ export const dynamic = 'force-dynamic'
  * blockers before the transaction would leave a window where both apply.
  */
 
-
 export const PUT = defineRoute({
   permission: "admin.setup.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "The organization feature switchboard must remain available when individual features are disabled.",
+  },
   body: requestBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
+    const gate = routeAuthz;
 
-    const gate = routeAuthz
+    const orgId = gate.user.orgId;
 
-    const orgId = gate.user.orgId
-
-
-
-    const normalized = normalizeFeatureChanges(body.features)
+    const normalized = normalizeFeatureChanges(body.features);
     if (!normalized.ok) {
-      return NextResponse.json(normalized.key ? { error: normalized.error, key: normalized.key } : { error: normalized.error }, { status: 422 })
+      return NextResponse.json(
+        normalized.key
+          ? { error: normalized.error, key: normalized.key }
+          : { error: normalized.error },
+        { status: 422 },
+      );
     }
     // The toggle itself — fence, dependency rules, audit, schedule refresh,
     // baseline provisioning — lives in web/lib/features-admin.ts so the
     // assistant/MCP `update_features` command is the same operation.
-    const result = await applyFeatureChanges(orgId, gate.user.id, normalized.changes)
+    const result = await applyFeatureChanges(orgId, gate.user.id, normalized.changes);
     if (!result.ok) {
-      const dependencyError: Record<string, unknown> = { ...result }
-      delete dependencyError.ok
-      return NextResponse.json(dependencyError, { status: result.error === 'not-found' ? 404 : 409 })
+      const dependencyError: Record<string, unknown> = { ...result };
+      delete dependencyError.ok;
+      return NextResponse.json(dependencyError, {
+        status: result.error === "not-found" ? 404 : 409,
+      });
     }
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true });
   },
 });

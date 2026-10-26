@@ -1,9 +1,12 @@
-import { commandOperationName, commandRefusalResponse, normalizeChannelLocationBody } from "./contracts";
+import {
+  commandOperationName,
+  commandRefusalResponse,
+  normalizeChannelLocationBody,
+} from "./contracts";
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
 import { notFound } from "@/lib/api/responses";
 import { can, getAuthz, type Authz } from "@/lib/authz";
 import { featureEnabled, resolvedFeatureState } from "@/lib/features";
@@ -26,11 +29,8 @@ import { recordEquityAccountPolicy } from "@openbooks/engine/equity";
 
 export const runtime = "nodejs";
 
-
-
 const paramsSchema = z.object({ entity: z.string() });
-
-
+const commandBodySchema = z.record(z.string(), z.json());
 
 const frameworkBody = z.strictObject({
   id: uuidString().nullish(),
@@ -50,29 +50,35 @@ const fundPairBody = z.strictObject({
   reason: z.string().trim().min(1),
 });
 
-const optionalSetupText = z.preprocess((value) =>
-  typeof value === "string" ? value.trim() || null : value,
+const optionalSetupText = z.preprocess(
+  (value) => (typeof value === "string" ? value.trim() || null : value),
   z.string().nullish(),
 );
 
 const functionalCategory = z.enum(["program", "management_general", "fundraising"]);
-const functionalMappingBody = z.strictObject({
-  id: uuidString().nullish(),
-  departmentId: optionalSetupText,
-  projectId: optionalSetupText,
-  function: functionalCategory.optional(),
-  functionKey: functionalCategory.optional(),
-  programKey: optionalSetupText,
-  effectiveFrom: z.string(),
-  effectiveTo: optionalSetupText,
-  reason: z.string(),
-}).refine((data) => {
-  const category = data.functionKey ?? data.function;
-  return category !== undefined && (!data.functionKey || !data.function || data.functionKey === data.function);
-}).transform(({ function: drawerFunction, functionKey, ...data }) => ({
-  ...data,
-  functionKey: functionKey ?? drawerFunction!,
-}));
+const functionalMappingBody = z
+  .strictObject({
+    id: uuidString().nullish(),
+    departmentId: optionalSetupText,
+    projectId: optionalSetupText,
+    function: functionalCategory.optional(),
+    functionKey: functionalCategory.optional(),
+    programKey: optionalSetupText,
+    effectiveFrom: z.string(),
+    effectiveTo: optionalSetupText,
+    reason: z.string(),
+  })
+  .refine((data) => {
+    const category = data.functionKey ?? data.function;
+    return (
+      category !== undefined &&
+      (!data.functionKey || !data.function || data.functionKey === data.function)
+    );
+  })
+  .transform(({ function: drawerFunction, functionKey, ...data }) => ({
+    ...data,
+    functionKey: functionKey ?? drawerFunction!,
+  }));
 
 const channelAccountMapBody = z.strictObject({
   channelId: uuidString(),
@@ -95,7 +101,10 @@ const channelLocationBody = z.strictObject({
 
 const portalSettingsBody = z.strictObject({
   portalName: z.string().min(1).max(80).optional(),
-  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  effectiveFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   sectionsInvoices: z.boolean().optional(),
   sectionsPaymentMethods: z.boolean().optional(),
   sectionsSubscriptions: z.boolean().optional(),
@@ -112,13 +121,18 @@ const portalSettingsBody = z.strictObject({
   resolutionExchange: z.boolean().optional(),
   resolutionStoreCredit: z.boolean().optional(),
   storeCreditBonusPercent: z.union([z.string(), z.number()]).optional(),
-  saveOffers: z.array(z.strictObject({
-    id: z.string().max(80).optional(),
-    label: z.string().min(1).max(120),
-    kind: z.enum(["pause", "discount"]),
-    promotionCode: z.string().max(32).optional(),
-    note: z.string().max(200).optional(),
-  })).max(10).optional(),
+  saveOffers: z
+    .array(
+      z.strictObject({
+        id: z.string().max(80).optional(),
+        label: z.string().min(1).max(120),
+        kind: z.enum(["pause", "discount"]),
+        promotionCode: z.string().max(32).optional(),
+        note: z.string().max(200).optional(),
+      }),
+    )
+    .max(10)
+    .optional(),
 });
 
 // The drawer also POSTs the row id on edits; the spend upserts by its
@@ -159,8 +173,6 @@ function invalidCommandBody(): Error {
   return Object.assign(new Error("invalid command body"), { status: 400, code: "invalid" });
 }
 
-
-
 /** Parse with the descriptor's literal schema and run the matching engine command. */
 async function runCommandBody(
   authz: Authz,
@@ -173,7 +185,12 @@ async function runCommandBody(
     case "setFramework": {
       const parsed = frameworkBody.safeParse(raw);
       if (!parsed.success) throw invalidCommandBody();
-      return setFramework({ orgId, actorId, framework: parsed.data.framework, reason: parsed.data.reason });
+      return setFramework({
+        orgId,
+        actorId,
+        framework: parsed.data.framework,
+        reason: parsed.data.reason,
+      });
     }
     case "setFundPair": {
       const parsed = fundPairBody.safeParse(raw);
@@ -182,7 +199,9 @@ async function runCommandBody(
       // The reason travels with the call so the fund-pair domain receives it;
       // the cast carries the boundary-required field the stored input type
       // gains with its reason implementation.
-      return setFundPair({ orgId, actorId, ...data } as Parameters<typeof setFundPair>[0] & { reason: string });
+      return setFundPair({ orgId, actorId, ...data } as Parameters<typeof setFundPair>[0] & {
+        reason: string;
+      });
     }
     case "setFunctionalMapping": {
       const parsed = functionalMappingBody.safeParse(raw);
@@ -232,10 +251,18 @@ async function runCommandBody(
     case "recordEquityAccountPolicy": {
       const parsed = equityAccountPolicyBody.safeParse(raw);
       if (!parsed.success) throw invalidCommandBody();
-      const { id: _ignored, interestExpenseAccountId, accruedInterestAccountId, earlyExerciseDepositAccountId, ...data } = parsed.data;
+      const {
+        id: _ignored,
+        interestExpenseAccountId,
+        accruedInterestAccountId,
+        earlyExerciseDepositAccountId,
+        ...data
+      } = parsed.data;
       // Governed: the answer is the new version, or the request an Equity action Flow holds for approval.
       return recordEquityAccountPolicy({
-        orgId, actorId, ...data,
+        orgId,
+        actorId,
+        ...data,
         interestExpenseAccountId: interestExpenseAccountId || null,
         accruedInterestAccountId: accruedInterestAccountId || null,
         earlyExerciseDepositAccountId: earlyExerciseDepositAccountId || null,
@@ -247,13 +274,19 @@ async function runCommandBody(
       const data = parsed.data;
       const sections = {
         ...(data.sectionsInvoices !== undefined ? { invoices: data.sectionsInvoices } : {}),
-        ...(data.sectionsPaymentMethods !== undefined ? { paymentMethods: data.sectionsPaymentMethods } : {}),
-        ...(data.sectionsSubscriptions !== undefined ? { subscriptions: data.sectionsSubscriptions } : {}),
+        ...(data.sectionsPaymentMethods !== undefined
+          ? { paymentMethods: data.sectionsPaymentMethods }
+          : {}),
+        ...(data.sectionsSubscriptions !== undefined
+          ? { subscriptions: data.sectionsSubscriptions }
+          : {}),
         ...(data.sectionsUsage !== undefined ? { usage: data.sectionsUsage } : {}),
         ...(data.sectionsOrders !== undefined ? { orders: data.sectionsOrders } : {}),
         ...(data.sectionsReturns !== undefined ? { returns: data.sectionsReturns } : {}),
         ...(data.sectionsGiftCards !== undefined ? { giftCards: data.sectionsGiftCards } : {}),
-        ...(data.sectionsServiceRequests !== undefined ? { serviceRequests: data.sectionsServiceRequests } : {}),
+        ...(data.sectionsServiceRequests !== undefined
+          ? { serviceRequests: data.sectionsServiceRequests }
+          : {}),
       };
       return savePortalSettings(orgId, actorId, {
         ...(data.portalName !== undefined ? { portalName: data.portalName } : {}),
@@ -261,27 +294,43 @@ async function runCommandBody(
         ...(Object.keys(sections).length > 0 ? { sections } : {}),
         ...(data.returnWindowDays !== undefined ? { returnWindowDays: data.returnWindowDays } : {}),
         ...(data.returnReasons !== undefined ? { returnReasons: data.returnReasons } : {}),
-        ...((data.resolutionRefund !== undefined || data.resolutionExchange !== undefined
-          || data.resolutionStoreCredit !== undefined || data.storeCreditBonusPercent !== undefined)
+        ...(data.resolutionRefund !== undefined ||
+        data.resolutionExchange !== undefined ||
+        data.resolutionStoreCredit !== undefined ||
+        data.storeCreditBonusPercent !== undefined
           ? {
-            returnResolutions: {
-              ...(data.resolutionRefund !== undefined ? { refund: data.resolutionRefund } : {}),
-              ...(data.resolutionExchange !== undefined ? { exchange: data.resolutionExchange } : {}),
-              ...(data.resolutionStoreCredit !== undefined ? { storeCredit: data.resolutionStoreCredit } : {}),
-              ...(data.storeCreditBonusPercent !== undefined ? { storeCreditBonusPercent: String(data.storeCreditBonusPercent) } : {}),
-            },
-          }
+              returnResolutions: {
+                ...(data.resolutionRefund !== undefined ? { refund: data.resolutionRefund } : {}),
+                ...(data.resolutionExchange !== undefined
+                  ? { exchange: data.resolutionExchange }
+                  : {}),
+                ...(data.resolutionStoreCredit !== undefined
+                  ? { storeCredit: data.resolutionStoreCredit }
+                  : {}),
+                ...(data.storeCreditBonusPercent !== undefined
+                  ? { storeCreditBonusPercent: String(data.storeCreditBonusPercent) }
+                  : {}),
+              },
+            }
           : {}),
         ...(data.saveOffers !== undefined
           ? {
-            saveOffers: data.saveOffers.map((offer, index) => ({
-              id: offer.id?.trim() || `offer-${index + 1}-${offer.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
-              kind: offer.kind,
-              label: offer.label.trim(),
-              ...(offer.promotionCode?.trim() ? { promotionCode: offer.promotionCode.trim() } : {}),
-              ...(offer.note?.trim() ? { note: offer.note.trim() } : {}),
-            })),
-          }
+              saveOffers: data.saveOffers.map((offer, index) => ({
+                id:
+                  offer.id?.trim() ||
+                  `offer-${index + 1}-${offer.label
+                    .trim()
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, "-")
+                    .replace(/^-|-$/g, "")}`,
+                kind: offer.kind,
+                label: offer.label.trim(),
+                ...(offer.promotionCode?.trim()
+                  ? { promotionCode: offer.promotionCode.trim() }
+                  : {}),
+                ...(offer.note?.trim() ? { note: offer.note.trim() } : {}),
+              })),
+            }
           : {}),
       });
     }
@@ -318,60 +367,81 @@ async function runCommand(
 /** The 403 names the missing grant and where an admin restores it. */
 function permissionRefusal(permission: string): NextResponse {
   return NextResponse.json(
-    { error: `missing permission: ${permission} — ask an administrator to grant it in Admin → Users & Roles`, code: "forbidden" },
+    {
+      error: `missing permission: ${permission} — ask an administrator to grant it in Admin → Users & Roles`,
+      code: "forbidden",
+    },
     { status: 403 },
   );
 }
 
-async function handler(request: Request, params: { entity: string }, authz: Authz): Promise<NextResponse> {
-  // Entity selection is URL + registry only. Unknown, marker-less, and
-  // feature-off entities are indistinguishable 404s — the same answer the
-  // generic route gives a disabled entity — and all of it happens before the
-  // body is read.
+async function handler(
+  request: Request,
+  params: { entity: string },
+  authz: Authz,
+  raw: Record<string, unknown>,
+): Promise<NextResponse> {
   const entity = SETUP_ENTITY_BY_KEY.get(params.entity);
   if (!entity?.command) return notFound("setup entity");
-  if (!featureEnabled(await resolvedFeatureState(authz.user.orgId), entity.command.feature)) {
-    return notFound("setup entity");
-  }
-  // The static gate already enforced one command grant, but the descriptor
-  // names the entity's own — so it is re-asserted here from the declaration
-  // itself, never a parallel map, before anything is parsed.
-  if (!can(authz, entity.command.permission)) return permissionRefusal(entity.command.permission);
-  // Creates are upserts keyed by the caller's idempotency key, mirroring the
-  // generic route's anti-double-submit contract; row identity stays
-  // engine-owned and every command runs through its domain handler.
   const requestId = request.headers.get("Idempotency-Key")?.trim() ?? "";
-  if (!requestId) {
-    return NextResponse.json({ error: "Idempotency-Key header is required", code: "invalid" }, { status: 400 });
-  }
-  if (!isUuid(requestId)) {
-    return NextResponse.json({ error: "Idempotency-Key must be a UUID", code: "invalid" }, { status: 400 });
-  }
-  const parsed = await parseJsonBody(request, z.record(z.string(), z.json()));
-  if (!parsed.ok) return parsed.response;
-  return runCommand(authz, params.entity, entity.command, requestId, parsed.data as Record<string, unknown>);
+  return runCommand(authz, params.entity, entity.command, requestId, raw);
 }
 
 /** Every grant a command descriptor may name. The handler re-asserts the entity's own. */
-const COMMAND_PERMISSIONS = ["funds.manage", "channels.manage", "documents.manage", "equity.manage"] as const satisfies readonly SetupCommandDescriptor["permission"][];
+const COMMAND_PERMISSIONS = [
+  "funds.manage",
+  "channels.manage",
+  "documents.manage",
+  "equity.manage",
+] as const satisfies readonly SetupCommandDescriptor["permission"][];
 
 export const POST = defineRoute({
-  authorize: async () => {
+  authorize: async ({ request, params }) => {
     // A command grant gates before params and body: the 403 names the grants
     // and where an admin restores them, so the operator never guesses.
     const authz = await getAuthz();
     if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    // Static pre-gate: the descriptor type admits only the grants above, and
-    // the handler re-asserts the entity's own before anything is parsed.
     if (!COMMAND_PERMISSIONS.some((permission) => can(authz, permission))) {
       return NextResponse.json(
-        { error: `missing permission: ${COMMAND_PERMISSIONS.join(" or ")} — ask an administrator to grant it in Admin → Users & Roles`, code: "forbidden" },
+        {
+          error: `missing permission: ${COMMAND_PERMISSIONS.join(" or ")} — ask an administrator to grant it in Admin → Users & Roles`,
+          code: "forbidden",
+        },
         { status: 403 },
+      );
+    }
+
+    const entityKey =
+      params && typeof params === "object" && "entity" in params
+        ? String((params as { entity: unknown }).entity)
+        : "";
+    const entity = SETUP_ENTITY_BY_KEY.get(entityKey);
+    if (!entity?.command) return notFound("setup entity");
+    if (!featureEnabled(await resolvedFeatureState(authz.user.orgId), entity.command.feature)) {
+      return notFound("setup entity");
+    }
+    if (!can(authz, entity.command.permission)) return permissionRefusal(entity.command.permission);
+
+    const requestId = request.headers.get("Idempotency-Key")?.trim() ?? "";
+    if (!requestId) {
+      return NextResponse.json(
+        { error: "Idempotency-Key header is required", code: "invalid" },
+        { status: 400 },
+      );
+    }
+    if (!isUuid(requestId)) {
+      return NextResponse.json(
+        { error: "Idempotency-Key must be a UUID", code: "invalid" },
+        { status: 400 },
       );
     }
     return authz;
   },
-  feature: { none: "This endpoint has no single route-wide feature gate; the descriptor's authoritative feature is checked per entity in the handler." },
+  feature: {
+    none: "Each setup command is governed by its registry descriptor's feature and permission.",
+  },
   params: paramsSchema,
-  handler: async ({ request, authz, params }) => handler(request, params as { entity: string }, authz),
+  body: commandBodySchema,
+  handler: async ({ request, authz, params, body }) =>
+    handler(request, params as { entity: string }, authz, body as Record<string, unknown>),
 });

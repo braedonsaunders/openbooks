@@ -8,20 +8,18 @@ import {
   syncCapabilitiesForOrg,
   updateCapabilityForOrg,
 } from "@openbooks/engine/hrm/ai/governance";
-import { aiRailsErrorResponse } from "../../../../lib/ai-rails";
-import { guardPermission } from "../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
-import { notFound } from "@/lib/api/responses";
-
+import { aiRailsErrorResponse } from "@/lib/ai-rails";
 
 export const runtime = "nodejs";
 
-const patchBody = z.object({
-  key: z.string().min(1),
-  autonomy: z.enum(["read_only", "draft", "propose", "act_with_confirmation"]).optional(),
-  reviewerRole: z.string().max(200).nullable().optional(),
-  markReviewed: z.boolean().optional(),
-}).strict();
+const patchBody = z
+  .object({
+    key: z.string().min(1),
+    autonomy: z.enum(["read_only", "draft", "propose", "act_with_confirmation"]).optional(),
+    reviewerRole: z.string().max(200).nullable().optional(),
+    markReviewed: z.boolean().optional(),
+  })
+  .strict();
 
 /**
  * AI capability registry mirror. GET lists the org rows; PATCH edits
@@ -30,56 +28,24 @@ const patchBody = z.object({
  * its data (Company Settings → Features). POST syncs the mirror from the
  * code registry. Ledger under the setup grant.
  */
-async function legacyGET() {
-  const gate = await guardPermission("admin.setup.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "aiGovernanceLedger"))) {
-    return notFound("record");
-  }
-  try {
-    const capabilities = await listCapabilities(db, gate.user.orgId);
-    return NextResponse.json({ capabilities });
-  } catch (e) {
-    return aiRailsErrorResponse(e);
-  }
-}
-
-
-
-async function legacyPOST() {
-  const gate = await guardPermission("admin.setup.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "aiGovernanceLedger"))) {
-    return notFound("record");
-  }
-  try {
-    const seeded = await syncCapabilitiesForOrg({ orgId: gate.user.orgId, actorId: gate.user.id });
-    return NextResponse.json({ seeded });
-  } catch (e) {
-    return aiRailsErrorResponse(e);
-  }
-}
-
 export const GET = defineRoute({
   permission: "admin.setup.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  handler: async () => legacyGET(),
+  feature: "aiGovernanceLedger",
+  handler: async ({ authz }) => {
+    try {
+      const capabilities = await listCapabilities(db, authz.user.orgId);
+      return NextResponse.json({ capabilities });
+    } catch (e) {
+      return aiRailsErrorResponse(e);
+    }
+  },
 });
 
 export const PATCH = defineRoute({
   permission: "admin.setup.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: "aiGovernanceLedger",
   body: patchBody,
-  handler: async ({ body, authz: routeAuthz }) => {
-
-    const gate = routeAuthz;
-
-    if (!(await isFeatureEnabled(gate.user.orgId, "aiGovernanceLedger"))) {
-      return notFound("record");
-    }
-
-
-
+  handler: async ({ body, authz: gate }) => {
     try {
       const capability = await updateCapabilityForOrg({
         orgId: gate.user.orgId,
@@ -98,6 +64,16 @@ export const PATCH = defineRoute({
 
 export const POST = defineRoute({
   permission: "admin.setup.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  handler: async () => legacyPOST(),
+  feature: "aiGovernanceLedger",
+  handler: async ({ authz }) => {
+    try {
+      const seeded = await syncCapabilitiesForOrg({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+      });
+      return NextResponse.json({ seeded });
+    } catch (e) {
+      return aiRailsErrorResponse(e);
+    }
+  },
 });

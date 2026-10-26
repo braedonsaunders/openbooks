@@ -1,195 +1,305 @@
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { updatePaymentBankProfile } from '@openbooks/engine/payments/operations'
-import { computeNextRunAt } from '@openbooks/engine/scripting/scripting'
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { updatePaymentBankProfile } from "@openbooks/engine/payments/operations";
+import { computeNextRunAt } from "@openbooks/engine/scripting/scripting";
 
-import { isFeatureEnabled } from '../../../../../../lib/features'
-import { isUuid } from '../../../../../../lib/list-params'
-import { normalizeCountryCode } from '../../../../../../lib/countries'
-import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
-import { canonicalDecimal } from '@openbooks/engine/money/decimal'
-import { moneyRefusal } from '@openbooks/engine/money/decimal-refusal'
-import { subsidiaryVisibleFilter } from '../../../../../../lib/subsidiaries'
-import { auditConfigChange } from '../../_lib'
+import { isFeatureEnabled } from "@/lib/features";
+import { isUuid } from "@/lib/list-params";
+import { normalizeCountryCode } from "@/lib/countries";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { canonicalDecimal } from "@openbooks/engine/money/decimal";
+import { moneyRefusal } from "@openbooks/engine/money/decimal-refusal";
+import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
+import { auditConfigChange } from "../../_lib";
 import { notFound } from "@/lib/api/responses";
 
-const countryPatchSchema = z.string().refine((value) => value.trim() === '' || normalizeCountryCode(value) !== null).nullable().optional()
-const currencyPatchSchema = z.string().regex(/^(?:[A-Za-z]{3})?$/).optional()
-const datePatchSchema = z.string().refine((value) => value === '' || isIsoCalendarDate(value)).optional()
+const countryPatchSchema = z
+  .string()
+  .refine((value) => value.trim() === "" || normalizeCountryCode(value) !== null)
+  .nullable()
+  .optional();
+const currencyPatchSchema = z
+  .string()
+  .regex(/^(?:[A-Za-z]{3})?$/)
+  .optional();
+const datePatchSchema = z
+  .string()
+  .refine((value) => value === "" || isIsoCalendarDate(value))
+  .optional();
 const scheduleAmountSchema = z.string().superRefine((value, ctx) => {
-  if (value !== '' && canonicalDecimal(value, 4) === null) {
-    ctx.addIssue({ code: 'custom', message: moneyRefusal('Payment schedule amount', value) })
+  if (value !== "" && canonicalDecimal(value, 4) === null) {
+    ctx.addIssue({ code: "custom", message: moneyRefusal("Payment schedule amount", value) });
   }
-})
+});
 const selectionCriteriaSchema = z.object({
   dueThroughDays: z.number().int().min(0).max(3650).optional(),
-  minimumAmount: scheduleAmountSchema.optional(), maximumRunAmount: scheduleAmountSchema.optional(),
-  captureDiscounts: z.boolean().optional(), applyCredits: z.boolean().optional(),
-})
-const requestBodySchema = z.object({
-  "action": z.enum(["create_draft", "submit_for_approval"], { error: 'action must be create_draft or submit_for_approval' }).optional(),
-  "bankAccountId": uuidString().optional(),
-  "contentType": z.string().optional(),
-  "country": countryPatchSchema,
-  "cron": z.string().optional(),
-  "currency": currencyPatchSchema,
-  "expiresOn": datePatchSchema,
-  "fileExtension": z.string().optional(),
-  "formatterScript": z.string().optional(),
-  "isActive": z.boolean().optional(),
-  "name": z.string().optional(),
-  "paymentBankProfileId": uuidString().optional(),
-  "paymentFormatId": uuidString().optional(),
-  "selectionCriteria": selectionCriteriaSchema.optional(),
-  "settings": z.record(z.string(), z.json()).optional(),
-  "originatorSecrets": z.record(z.string(), z.string()).nullable().optional(),
-  "sftpServerId": uuidString().nullable().optional(),
-  "sftpFolder": z.string().nullable().optional(),
-  "autoRemittance": z.boolean().optional(),
-  "signedOn": datePatchSchema,
-  "status": z.enum(["pending", "active", "suspended", "revoked", "expired"], { error: 'status must be pending, active, suspended, revoked, or expired' }).optional(),
-  "subsidiaryId": uuidString().nullable().optional(),
-  "timezone": z.string().optional(),
-  "validFrom": datePatchSchema,
-}).refine((body) => Object.keys(body).length > 0, 'At least one payment setting is required')
+  minimumAmount: scheduleAmountSchema.optional(),
+  maximumRunAmount: scheduleAmountSchema.optional(),
+  captureDiscounts: z.boolean().optional(),
+  applyCredits: z.boolean().optional(),
+});
+const requestBodySchema = z
+  .object({
+    action: z
+      .enum(["create_draft", "submit_for_approval"], {
+        error: "action must be create_draft or submit_for_approval",
+      })
+      .optional(),
+    bankAccountId: uuidString().optional(),
+    contentType: z.string().optional(),
+    country: countryPatchSchema,
+    cron: z.string().optional(),
+    currency: currencyPatchSchema,
+    expiresOn: datePatchSchema,
+    fileExtension: z.string().optional(),
+    formatterScript: z.string().optional(),
+    isActive: z.boolean().optional(),
+    name: z.string().optional(),
+    paymentBankProfileId: uuidString().optional(),
+    paymentFormatId: uuidString().optional(),
+    selectionCriteria: selectionCriteriaSchema.optional(),
+    settings: z.record(z.string(), z.json()).optional(),
+    originatorSecrets: z.record(z.string(), z.string()).nullable().optional(),
+    sftpServerId: uuidString().nullable().optional(),
+    sftpFolder: z.string().nullable().optional(),
+    autoRemittance: z.boolean().optional(),
+    signedOn: datePatchSchema,
+    status: z
+      .enum(["pending", "active", "suspended", "revoked", "expired"], {
+        error: "status must be pending, active, suspended, revoked, or expired",
+      })
+      .optional(),
+    subsidiaryId: uuidString().nullable().optional(),
+    timezone: z.string().optional(),
+    validFrom: datePatchSchema,
+  })
+  .refine((body) => Object.keys(body).length > 0, "At least one payment setting is required");
 
-
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 function optionalCountry(value: unknown): string | null | undefined {
-  if (value == null || (typeof value === 'string' && value.trim() === '')) return null
-  return normalizeCountryCode(value) ?? undefined
+  if (value == null || (typeof value === "string" && value.trim() === "")) return null;
+  return normalizeCountryCode(value) ?? undefined;
 }
 
 export const PATCH = defineRoute({
   permission: "admin.setup.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  params: z.object({ "resource": z.string(), "id": z.string() }),
+  feature: {
+    none: "Payment operation setup is available across features; currency fields are checked against Multi-Currency.",
+  },
+  params: z.object({ resource: z.string(), id: z.string() }),
   body: requestBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ request, body, params, authz: routeAuthz }) => {
+    const gate = routeAuthz;
 
-    const gate = routeAuthz
-
-    const { resource, id } = params
-    if (!isUuid(id) || !['formats', 'profiles', 'schedules', 'mandates'].includes(resource)) {
-      return notFound("record")
+    const { resource, id } = params;
+    if (!isUuid(id) || !["formats", "profiles", "schedules", "mandates"].includes(resource)) {
+      return notFound("record");
     }
-
-
 
     const patchFieldsByResource: Record<string, readonly string[]> = {
-      formats: ['name', 'country', 'currency', 'fileExtension', 'contentType', 'formatterScript', 'isActive'],
-      profiles: ['name', 'bankAccountId', 'paymentFormatId', 'subsidiaryId', 'country', 'currency', 'originatorSecrets', 'settings', 'sftpServerId', 'sftpFolder', 'autoRemittance', 'isActive'],
-      schedules: ['name', 'paymentBankProfileId', 'cron', 'timezone', 'selectionCriteria', 'action', 'isActive'],
-      mandates: ['status', 'signedOn', 'validFrom', 'expiresOn'],
-    }
-    const unsupportedFields = Object.keys(body).filter((field) => !patchFieldsByResource[resource]?.includes(field))
+      formats: [
+        "name",
+        "country",
+        "currency",
+        "fileExtension",
+        "contentType",
+        "formatterScript",
+        "isActive",
+      ],
+      profiles: [
+        "name",
+        "bankAccountId",
+        "paymentFormatId",
+        "subsidiaryId",
+        "country",
+        "currency",
+        "originatorSecrets",
+        "settings",
+        "sftpServerId",
+        "sftpFolder",
+        "autoRemittance",
+        "isActive",
+      ],
+      schedules: [
+        "name",
+        "paymentBankProfileId",
+        "cron",
+        "timezone",
+        "selectionCriteria",
+        "action",
+        "isActive",
+      ],
+      mandates: ["status", "signedOn", "validFrom", "expiresOn"],
+    };
+    const unsupportedFields = Object.keys(body).filter(
+      (field) => !patchFieldsByResource[resource]?.includes(field),
+    );
     if (unsupportedFields.length > 0) {
-      return NextResponse.json({ error: `Unsupported ${resource} settings: ${unsupportedFields.join(', ')}` }, { status: 400 })
+      return NextResponse.json(
+        { error: `Unsupported ${resource} settings: ${unsupportedFields.join(", ")}` },
+        { status: 400 },
+      );
     }
     try {
       if (body.country !== undefined) {
-        const country = optionalCountry(body.country)
-        if (country === undefined) return NextResponse.json({ error: 'country must be a valid ISO country code' }, { status: 400 })
-        body.country = country
+        const country = optionalCountry(body.country);
+        if (country === undefined)
+          return NextResponse.json(
+            { error: "country must be a valid ISO country code" },
+            { status: 400 },
+          );
+        body.country = country;
       }
-      if (resource === 'profiles') {
+      if (resource === "profiles") {
         // Profile currency is Multi-currency configuration. Turning that
         // switch off must refuse a write; omitting currency keeps the
         // stored profile.
         if (
           body.currency !== undefined &&
-          !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))
+          !(await isFeatureEnabled(gate.user.orgId, "multiCurrency"))
         ) {
-          return notFound("record")
+          return notFound("record");
         }
-        await updatePaymentBankProfile(id, gate.user.orgId, gate.user.id, body, gate.allowedSubsidiaryIds)
-      } else if (resource === 'formats') {
+        await updatePaymentBankProfile(
+          id,
+          gate.user.orgId,
+          gate.user.id,
+          body,
+          gate.allowedSubsidiaryIds,
+        );
+      } else if (resource === "formats") {
         // Format currency is Multi-currency configuration. Turning that
         // switch off must refuse a write; omitting currency keeps the
         // stored format.
         if (
           body.currency !== undefined &&
-          !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))
+          !(await isFeatureEnabled(gate.user.orgId, "multiCurrency"))
         ) {
-          return notFound("record")
+          return notFound("record");
         }
         // POST requires a non-empty name and formatter script. A blank PATCH
         // value would otherwise store '' / NULL: an empty name corrupts the
         // format contract, and a nulled script fails the next payment run
         // (renderPaymentFile throws for custom rails with no script).
-        if (body.name !== undefined && (typeof body.name !== 'string' || !body.name.trim())) {
-          return NextResponse.json({ error: 'name cannot be empty' }, { status: 400 })
+        if (body.name !== undefined && (typeof body.name !== "string" || !body.name.trim())) {
+          return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
         }
-        if (body.formatterScript !== undefined
-          && (typeof body.formatterScript !== 'string' || !body.formatterScript.trim())) {
-          return NextResponse.json({ error: 'formatterScript cannot be empty' }, { status: 400 })
+        if (
+          body.formatterScript !== undefined &&
+          (typeof body.formatterScript !== "string" || !body.formatterScript.trim())
+        ) {
+          return NextResponse.json({ error: "formatterScript cannot be empty" }, { status: 400 });
         }
         const formatWrite = await db.transaction(async (tx) => {
           // Lock the row before taking the audit snapshot. This serializes
           // concurrent edits so each audit event records the state immediately
           // preceding its own update rather than a stale pre-transaction read.
-          const before = (await tx.execute<Record<string, unknown>>(sql`
+          const before = await tx.execute<Record<string, unknown>>(
+            sql`
             select * from payment_formats where id = ${id} and org_id = ${gate.user.orgId} and rail = 'custom' for update
-          `, 'objects'))
-          if (!before[0]) return 'missing'
-          const updated = (await tx.execute<Record<string, unknown>>(sql`
+          `,
+            "objects",
+          );
+          if (!before[0]) return "missing";
+          const updated = await tx.execute<Record<string, unknown>>(
+            sql`
             update payment_formats set
               name = coalesce(${body.name?.trim() ?? null}, name),
               country = case when ${body.country === undefined} then country else ${body.country ?? null} end,
               currency = case when ${body.currency === undefined} then currency else ${body.currency?.trim().toUpperCase() || null} end,
-              file_extension = coalesce(${body.fileExtension?.trim().replace(/^\./, '') ?? null}, file_extension),
+              file_extension = coalesce(${body.fileExtension?.trim().replace(/^\./, "") ?? null}, file_extension),
               content_type = coalesce(${body.contentType?.trim() ?? null}, content_type),
               formatter_script = case when ${body.formatterScript === undefined} then formatter_script else ${body.formatterScript || null} end,
               is_active = coalesce(${body.isActive ?? null}, is_active), updated_at = now(), updated_by = ${gate.user.id}
             where id = ${id} and org_id = ${gate.user.orgId} and rail = 'custom'
             returning *
-          `, 'objects'))
-          if (!updated[0]) return 'missing'
-          await auditConfigChange(tx, gate.user.orgId, 'payment_formats', id, 'update',
-            { before: before[0], after: updated[0] }, gate.user.id, request.headers.get('X-Request-Id'))
-          return 'updated'
-        })
-        if (formatWrite === 'missing') {
-          return NextResponse.json({ error: 'built-in payment formats are read-only' }, { status: 409 })
+          `,
+            "objects",
+          );
+          if (!updated[0]) return "missing";
+          await auditConfigChange(
+            tx,
+            gate.user.orgId,
+            "payment_formats",
+            id,
+            "update",
+            { before: before[0], after: updated[0] },
+            gate.user.id,
+            request.headers.get("X-Request-Id"),
+          );
+          return "updated";
+        });
+        if (formatWrite === "missing") {
+          return NextResponse.json(
+            { error: "built-in payment formats are read-only" },
+            { status: 409 },
+          );
         }
-      } else if (resource === 'schedules') {
+      } else if (resource === "schedules") {
         // POST allowlists the scheduler action; PATCH must enforce the same
         // contract instead of storing an unknown action that silently degrades
         // to draft behaviour (auto-submit never fires).
         if (
           body.action !== undefined &&
-          body.action !== 'submit_for_approval' &&
-          body.action !== 'create_draft'
+          body.action !== "submit_for_approval" &&
+          body.action !== "create_draft"
         ) {
-          return NextResponse.json({ error: 'action must be submit_for_approval or create_draft' }, { status: 400 })
+          return NextResponse.json(
+            { error: "action must be submit_for_approval or create_draft" },
+            { status: 400 },
+          );
         }
-        const current = (await db.execute<{ cron: string; timezone: string }>(sql`select cron, timezone from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}`, 'objects'))
-        if (!current[0]) return notFound("record")
-        const next = body.cron || body.timezone ? computeNextRunAt(body.cron?.trim() || current[0].cron, new Date(), body.timezone?.trim() || current[0].timezone) : undefined
-        if ((body.cron || body.timezone) && !next) return NextResponse.json({ error: 'cron expression or time zone is invalid' }, { status: 400 })
+        const current = await db.execute<{ cron: string; timezone: string }>(
+          sql`select cron, timezone from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}`,
+          "objects",
+        );
+        if (!current[0]) return notFound("record");
+        const next =
+          body.cron || body.timezone
+            ? computeNextRunAt(
+                body.cron?.trim() || current[0].cron,
+                new Date(),
+                body.timezone?.trim() || current[0].timezone,
+              )
+            : undefined;
+        if ((body.cron || body.timezone) && !next)
+          return NextResponse.json(
+            { error: "cron expression or time zone is invalid" },
+            { status: 400 },
+          );
         if (body.paymentBankProfileId) {
-          const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`, 'objects'))
-          if (!profile[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
+          const profile = await db.execute(
+            sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`,
+            "objects",
+          );
+          if (!profile[0])
+            return NextResponse.json(
+              { error: "payment profile is invalid or inactive" },
+              { status: 400 },
+            );
         }
         // A write that matches zero rows is a failure, not a success: the row
         // may be missing or belong to another org (or have vanished between the
         // pre-read above and this transaction), and answering {ok:true} would
         // report a no-op as a save.
         const scheduleWrite = await db.transaction(async (tx) => {
-          const before = (await tx.execute<Record<string, unknown>>(sql`
+          const before = await tx.execute<Record<string, unknown>>(
+            sql`
             select * from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}
-          `, 'objects'))
-          if (!before[0]) return 'missing' as const
-          const updated = (await tx.execute<Record<string, unknown>>(sql`
+          `,
+            "objects",
+          );
+          if (!before[0]) return "missing" as const;
+          const updated = await tx.execute<Record<string, unknown>>(
+            sql`
             update payment_schedules set
               name = coalesce(${body.name?.trim() ?? null}, name),
               payment_bank_profile_id = coalesce(${body.paymentBankProfileId ?? null}::uuid, payment_bank_profile_id),
@@ -201,58 +311,90 @@ export const PATCH = defineRoute({
               is_active = coalesce(${body.isActive ?? null}, is_active), updated_at = now(), updated_by = ${gate.user.id}
             where id = ${id} and org_id = ${gate.user.orgId}
             returning *
-          `, 'objects'))
-          if (!updated[0]) return 'missing' as const
-          await auditConfigChange(tx, gate.user.orgId, 'payment_schedules', id, 'update',
-            { before: before[0], after: updated[0] }, gate.user.id, request.headers.get('X-Request-Id'))
-          return 'updated' as const
-        })
-        if (scheduleWrite === 'missing') return notFound("record")
+          `,
+            "objects",
+          );
+          if (!updated[0]) return "missing" as const;
+          await auditConfigChange(
+            tx,
+            gate.user.orgId,
+            "payment_schedules",
+            id,
+            "update",
+            { before: before[0], after: updated[0] },
+            gate.user.id,
+            request.headers.get("X-Request-Id"),
+          );
+          return "updated" as const;
+        });
+        if (scheduleWrite === "missing") return notFound("record");
       } else {
         // POST allowlists the mandate status; PATCH must enforce the same
         // contract instead of storing an unknown status that silently disables
         // direct-debit collection (only 'active' mandates join payment runs).
         if (
           body.status !== undefined &&
-          !['pending', 'active', 'suspended', 'revoked', 'expired'].includes(body.status)
+          !["pending", "active", "suspended", "revoked", "expired"].includes(body.status)
         ) {
-          return NextResponse.json({ error: 'status must be pending, active, suspended, revoked, or expired' }, { status: 400 })
+          return NextResponse.json(
+            { error: "status must be pending, active, suspended, revoked, or expired" },
+            { status: 400 },
+          );
         }
         // These cast straight to date: a non-calendar day would otherwise die
         // in Postgres with a raw driver failure, so require real calendar
         // dates before any write. Empty clears the date, like the update below.
         for (const [field, label] of [
-          ['signedOn', 'signed date'],
-          ['validFrom', 'valid-from date'],
-          ['expiresOn', 'expiry date'],
+          ["signedOn", "signed date"],
+          ["validFrom", "valid-from date"],
+          ["expiresOn", "expiry date"],
         ] as const) {
-          const value = body[field]
-          if (value !== undefined && value !== null && value !== '' && !isIsoCalendarDate(value)) {
-            return NextResponse.json({ error: `${label} must be a real calendar date (YYYY-MM-DD)` }, { status: 400 })
+          const value = body[field];
+          if (value !== undefined && value !== null && value !== "" && !isIsoCalendarDate(value)) {
+            return NextResponse.json(
+              { error: `${label} must be a real calendar date (YYYY-MM-DD)` },
+              { status: 400 },
+            );
           }
         }
         // A write that matches zero rows is a failure, not a success: a missing
         // or other-org id must answer 404, never {ok:true} for work no read can
         // observe.
         const mandateWrite = await db.transaction(async (tx) => {
-          const candidate = (await tx.execute<{ party_id: string }>(sql`
+          const candidate = (
+            await tx.execute<{ party_id: string }>(
+              sql`
             select party_id from payment_mandates where id = ${id} and org_id = ${gate.user.orgId}
-          `, 'objects'))[0]
-          if (!candidate) return 'missing' as const
+          `,
+              "objects",
+            )
+          )[0];
+          if (!candidate) return "missing" as const;
           // Mandates follow their counterparty's legal-entity ownership. Lock
           // the party before the mandate, matching party rehome lock order.
-          const party = (await tx.execute(sql`
+          const party = (
+            await tx.execute(
+              sql`
             select p.id from parties p
              where p.id = ${candidate.party_id} and p.org_id = ${gate.user.orgId} and p.is_active
                ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
              for update
-          `, 'objects'))[0]
-          if (!party) return 'missing' as const
-          const before = (await tx.execute<Record<string, unknown>>(sql`
+          `,
+              "objects",
+            )
+          )[0];
+          if (!party) return "missing" as const;
+          const before = (
+            await tx.execute<Record<string, unknown>>(
+              sql`
             select * from payment_mandates where id = ${id} and org_id = ${gate.user.orgId} for update
-          `, 'objects'))[0]
-          if (!before || before.party_id !== candidate.party_id) return 'missing' as const
-          const updated = (await tx.execute<Record<string, unknown>>(sql`
+          `,
+              "objects",
+            )
+          )[0];
+          if (!before || before.party_id !== candidate.party_id) return "missing" as const;
+          const updated = await tx.execute<Record<string, unknown>>(
+            sql`
             update payment_mandates set
               status = coalesce(${body.status ?? null}, status),
               signed_on = case when ${body.signedOn === undefined} then signed_on else ${body.signedOn || null}::date end,
@@ -261,19 +403,29 @@ export const PATCH = defineRoute({
               updated_at = now(), updated_by = ${gate.user.id}
             where id = ${id} and org_id = ${gate.user.orgId}
             returning *
-          `, 'objects'))
-          if (!updated[0]) return 'missing' as const
-          await auditConfigChange(tx, gate.user.orgId, 'payment_mandates', id, 'update',
-            { before, after: updated[0] }, gate.user.id, request.headers.get('X-Request-Id'))
-          return 'updated' as const
-        })
-        if (mandateWrite === 'missing') return notFound("record")
+          `,
+            "objects",
+          );
+          if (!updated[0]) return "missing" as const;
+          await auditConfigChange(
+            tx,
+            gate.user.orgId,
+            "payment_mandates",
+            id,
+            "update",
+            { before, after: updated[0] },
+            gate.user.id,
+            request.headers.get("X-Request-Id"),
+          );
+          return "updated" as const;
+        });
+        if (mandateWrite === "missing") return notFound("record");
       }
-      return NextResponse.json({ ok: true })
+      return NextResponse.json({ ok: true });
     } catch (error) {
       // ScopeNotFoundError carries status 404, so the shared boundary preserves
       // this route's uniform 404 for hidden parties.
-      return apiErrorResponse(error)
+      return apiErrorResponse(error);
     }
   },
 });

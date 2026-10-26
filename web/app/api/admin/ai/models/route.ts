@@ -3,18 +3,33 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
 
-import { isAiProvider, type AiProvider } from "../../../../../lib/assistant/client";
-import { getOrgAiConfig } from "../../../../../lib/assistant/ai-config";
-import { listModelsCached } from "../../../../../lib/assistant/models";
-import { classifyModelsError } from "../../../../../lib/assistant/models-error";
+import { isAiProvider, type AiProvider } from "@/lib/assistant/client";
+import { getOrgAiConfig } from "@/lib/assistant/ai-config";
+import { listModelsCached } from "@/lib/assistant/models";
+import { classifyModelsError } from "@/lib/assistant/models-error";
 
-const requestBodySchema = z.object({
-  "apiKey": z.string().optional(),
-  "baseUrl": z.string().optional(),
-  "provider": z.enum(["anthropic", "openai", "google", "openrouter", "groq", "xai", "deepseek", "mistral", "custom"]).optional(),
-  "refresh": z.boolean().optional(),
-}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
-
+const requestBodySchema = z
+  .object({
+    apiKey: z.string().optional(),
+    baseUrl: z.string().optional(),
+    provider: z
+      .enum([
+        "anthropic",
+        "openai",
+        "google",
+        "openrouter",
+        "groq",
+        "xai",
+        "deepseek",
+        "mistral",
+        "custom",
+      ])
+      .optional(),
+    refresh: z.boolean().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "At least one field must be provided.",
+  });
 
 export const runtime = "nodejs";
 
@@ -24,16 +39,14 @@ export const runtime = "nodejs";
  * provider is unchanged. The key never leaves the server in either direction.
  */
 
-
 export const POST = defineRoute({
   permission: "admin.ai.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "Administrators can inspect provider models while configuring optional AI capabilities.",
+  },
   body: requestBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
-
     const gate = routeAuthz;
-
-
 
     const provider: AiProvider = isAiProvider(body.provider) ? body.provider : "anthropic";
     let apiKey = String(body.apiKey ?? "").trim();
@@ -49,7 +62,10 @@ export const POST = defineRoute({
       return NextResponse.json({ ok: false, models: [], code: "missingKey" });
     }
     try {
-      const models = await listModelsCached({ provider, apiKey, baseUrl: baseUrl || null }, body.refresh === true);
+      const models = await listModelsCached(
+        { provider, apiKey, baseUrl: baseUrl || null },
+        body.refresh === true,
+      );
       if (!models.length) {
         return NextResponse.json({ ok: false, models: [], code: "empty" });
       }

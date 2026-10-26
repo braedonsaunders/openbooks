@@ -1,48 +1,95 @@
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import type { FinancialProfile } from '@openbooks/schema'
-import { backfillOverhead } from '@openbooks/engine/allocations/overhead-post'
-import { syncOverheadSystemRule } from '@openbooks/engine/allocations/overhead-sync'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
-import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
-import { publishProjectFinancialProfileInTransaction } from '@openbooks/engine/projects/financial-profile-versions'
-import { isUuid } from '../../../../../lib/list-params'
-import { guardUnrestrictedScope, subsidiariesInScope } from '../../../../../lib/authz'
-import { acquireFeatureGateLock } from '../../../../../lib/features'
-import { OverheadZeroOverStandardError, publishOverheadRates } from '../../../../../lib/overhead-publish'
-import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
-import { guardProjectsFeature } from '../../../../../lib/projects-gate'
-import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
-import { isIsoCalendarDate } from '@openbooks/engine/platform/iso-date'
-import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import type { FinancialProfile } from "@openbooks/schema";
+import { backfillOverhead } from "@openbooks/engine/allocations/overhead-post";
+import { syncOverheadSystemRule } from "@openbooks/engine/allocations/overhead-sync";
+import { lockAndCheckOrgFeature } from "@openbooks/engine/organization/org-feature-lock";
+import { lockLedgerSetupFence } from "@openbooks/engine/organization/ledger-setup";
+import { publishProjectFinancialProfileInTransaction } from "@openbooks/engine/projects/financial-profile-versions";
+import { isUuid } from "../../../../../lib/list-params";
+import { guardUnrestrictedScope, subsidiariesInScope } from "../../../../../lib/authz";
+import { acquireFeatureGateLock } from "../../../../../lib/features";
+import {
+  OverheadZeroOverStandardError,
+  publishOverheadRates,
+} from "../../../../../lib/overhead-publish";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/iso-date";
+import { moneyRefusal } from "../../../../../lib/payroll-decimal-refusal";
 import { wholeDigits } from "@openbooks/engine/money";
 
-const exactDecimalText = (field: string) => z.string().superRefine((value, ctx) => {
-  if (canonicalDecimal(value, 4) === null) ctx.addIssue({ code: "custom", message: moneyRefusal(field, value) });
-});
+const exactDecimalText = (field: string) =>
+  z.string().superRefine((value, ctx) => {
+    if (canonicalDecimal(value, 4) === null)
+      ctx.addIssue({ code: "custom", message: moneyRefusal(field, value) });
+  });
 const overheadProfileSchema = z.discriminatedUnion("method", [
   z.object({ method: z.literal("none") }),
-  z.object({ method: z.literal("percent_of_labor"), ratePercent: exactDecimalText("Overhead rate") }),
+  z.object({
+    method: z.literal("percent_of_labor"),
+    ratePercent: exactDecimalText("Overhead rate"),
+  }),
   z.object({ method: z.literal("per_labor_hour"), ratePerHour: exactDecimalText("Overhead rate") }),
-  z.object({ method: z.literal("rate_engine"), rateEngine: z.object({ rateSource: z.enum(["live", "standard"]), hoursBasis: z.enum(["billed_hours", "actual_hours", "total_hours"]), dimension: z.string().min(1), scope: z.enum(["flat", "department", "class"]) }) }),
-  z.object({ method: z.literal("posted_gl_account_group"), accountGroup: z.object({ dimension: z.string().min(1), groupKeys: z.array(z.string()).optional() }) }),
+  z.object({
+    method: z.literal("rate_engine"),
+    rateEngine: z.object({
+      rateSource: z.enum(["live", "standard"]),
+      hoursBasis: z.enum(["billed_hours", "actual_hours", "total_hours"]),
+      dimension: z.string().min(1),
+      scope: z.enum(["flat", "department", "class"]),
+    }),
+  }),
+  z.object({
+    method: z.literal("posted_gl_account_group"),
+    accountGroup: z.object({
+      dimension: z.string().min(1),
+      groupKeys: z.array(z.string()).optional(),
+    }),
+  }),
 ]);
 const requestBodySchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("publish"), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), rates: z.array(z.object({ departmentId: z.string().nullable(), ratePerHour: exactDecimalText("Overhead rate") })).max(500).optional(), acknowledgeZeroOverStandard: z.boolean().optional() }),
-  z.object({ action: z.literal("apply"), projectTypeIds: z.array(uuidString()).min(1).max(500), overhead: overheadProfileSchema, effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().max(500).optional() }),
-  z.object({ action: z.literal("set-lifecycle"), mode: z.enum(["manual", "scheduled", "live"]).optional(), cadence: z.enum(["monthly", "quarterly"]).optional() }),
-  z.object({ action: z.literal("set-application"), mode: z.enum(["report_only", "net_zero_pair", "off"]).optional(), accountId: uuidString().nullable().optional() }),
+  z.object({
+    action: z.literal("publish"),
+    effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    rates: z
+      .array(
+        z.object({
+          departmentId: z.string().nullable(),
+          ratePerHour: exactDecimalText("Overhead rate"),
+        }),
+      )
+      .max(500)
+      .optional(),
+    acknowledgeZeroOverStandard: z.boolean().optional(),
+  }),
+  z.object({
+    action: z.literal("apply"),
+    projectTypeIds: z.array(uuidString()).min(1).max(500),
+    overhead: overheadProfileSchema,
+    effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    reason: z.string().trim().max(500).optional(),
+  }),
+  z.object({
+    action: z.literal("set-lifecycle"),
+    mode: z.enum(["manual", "scheduled", "live"]).optional(),
+    cadence: z.enum(["monthly", "quarterly"]).optional(),
+  }),
+  z.object({
+    action: z.literal("set-application"),
+    mode: z.enum(["report_only", "net_zero_pair", "off"]).optional(),
+    accountId: uuidString().nullable().optional(),
+  }),
   z.object({ action: z.literal("backfill-overhead") }),
 ]);
 
-
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Typed refusal for an apply naming no such project type. A bare Error here
@@ -50,10 +97,10 @@ export const dynamic = 'force-dynamic'
  * the typed status raises the computed refusal as the named 422 instead.
  */
 class ProjectTypeNotFoundError extends Error {
-  readonly status = 422
+  readonly status = 422;
   constructor() {
-    super('project type not found')
-    this.name = 'ProjectTypeNotFoundError'
+    super("project type not found");
+    this.name = "ProjectTypeNotFoundError";
   }
 }
 
@@ -62,27 +109,27 @@ class ProjectTypeNotFoundError extends Error {
  * entity-owned; every other supported action writes org-wide policy/state. */
 function requiresUnrestrictedOverheadScope(body: Record<string, unknown>): boolean {
   switch (body.action) {
-    case 'publish':
-      return !Array.isArray(body.rates) || body.rates.length === 0
-    case 'apply':
-    case 'set-lifecycle':
-    case 'set-application':
-    case 'backfill-overhead':
-      return true
+    case "publish":
+      return !Array.isArray(body.rates) || body.rates.length === 0;
+    case "apply":
+    case "set-lifecycle":
+    case "set-application":
+    case "backfill-overhead":
+      return true;
     default:
-      return false
+      return false;
   }
 }
 
 /** Drizzle/node-postgres may expose the server error directly or as `cause`. */
 function postgresErrorCode(error: unknown): string | undefined {
-  let current = error
-  while (current && typeof current === 'object') {
-    const candidate = current as { code?: unknown; cause?: unknown }
-    if (typeof candidate.code === 'string') return candidate.code
-    current = candidate.cause
+  let current = error;
+  while (current && typeof current === "object") {
+    const candidate = current as { code?: unknown; cause?: unknown };
+    if (typeof candidate.code === "string") return candidate.code;
+    current = candidate.cause;
   }
-  return undefined
+  return undefined;
 }
 
 /**
@@ -98,53 +145,53 @@ function postgresErrorCode(error: unknown): string | undefined {
  *                  layout line) — one pass, nothing left half-configured.
  */
 
-
 export const POST = defineRoute({
   permission: "admin.setup.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: "projects",
   body: requestBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ body, authz: routeAuthz }) => {
+    const gate = routeAuthz;
 
-    const gate = routeAuthz
-
-    const orgId = gate.user.orgId
-    const feature = await guardProjectsFeature(orgId)
-    if (feature) return feature
-
-
+    const orgId = gate.user.orgId;
 
     if (requiresUnrestrictedOverheadScope(body)) {
-      const scopeDenied = guardUnrestrictedScope(gate)
-      if (scopeDenied) return scopeDenied
+      const scopeDenied = guardUnrestrictedScope(gate);
+      if (scopeDenied) return scopeDenied;
     }
 
-    if (body.action === 'publish') {
-      const effectiveFrom = typeof body.effectiveFrom === 'string' ? body.effectiveFrom : ''
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom ?? '') || !isIsoCalendarDate(effectiveFrom)) {
-        return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 400 })
+    if (body.action === "publish") {
+      const effectiveFrom = typeof body.effectiveFrom === "string" ? body.effectiveFrom : "";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom ?? "") || !isIsoCalendarDate(effectiveFrom)) {
+        return NextResponse.json({ error: "effectiveFrom (YYYY-MM-DD) required" }, { status: 400 });
       }
-      const rates: { departmentId: string; ratePerHour: string }[] = []
+      const rates: { departmentId: string; ratePerHour: string }[] = [];
       if (Array.isArray(body.rates)) {
         for (const r of body.rates as { departmentId: string; ratePerHour: string }[]) {
           // Department identity belongs to the publisher (which fails closed
           // on unknown ids through its foreign key): the route only requires
           // a present reference and exact money, so validation shapes the
           // payload without second-guessing the department registry.
-          if (typeof r.departmentId !== 'string' || !r.departmentId) {
-            return NextResponse.json({ error: 'departmentId is required' }, { status: 400 })
+          if (typeof r.departmentId !== "string" || !r.departmentId) {
+            return NextResponse.json({ error: "departmentId is required" }, { status: 400 });
           }
-          const exact = canonicalDecimal(r.ratePerHour, 4)
-          if (exact === null || compareDecimal(exact, '0') < 0) {
-            return NextResponse.json({ error: 'ratePerHour must be a non-negative amount' }, { status: 400 })
+          const exact = canonicalDecimal(r.ratePerHour, 4);
+          if (exact === null || compareDecimal(exact, "0") < 0) {
+            return NextResponse.json(
+              { error: "ratePerHour must be a non-negative amount" },
+              { status: 400 },
+            );
           }
           // overhead_rates.rate_percent is numeric(19,4): refuse whole-digit
           // widths the column cannot hold before any write, instead of throwing
           // the raw overflow out of the publish.
           if (wholeDigits(exact) > 15) {
-            return NextResponse.json({ error: 'ratePerHour must fit within numeric(19,4)' }, { status: 400 })
+            return NextResponse.json(
+              { error: "ratePerHour must fit within numeric(19,4)" },
+              { status: 400 },
+            );
           }
-          rates.push({ departmentId: r.departmentId, ratePerHour: exact })
+          rates.push({ departmentId: r.departmentId, ratePerHour: exact });
         }
       }
       try {
@@ -156,78 +203,101 @@ export const POST = defineRoute({
             // Every department in the publish must sit in the actor's scope
             // (departments.subsidiary_id): a restricted admin cannot replace
             // another entity's effective-dated rates.
-            const wanted = [...new Set(rates.map((r) => r.departmentId))]
-            const found = await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+            const wanted = [...new Set(rates.map((r) => r.departmentId))];
+            const found = await db.execute<{ id: string; subsidiary_id: string | null }>(
+              sql`
               select id, subsidiary_id from departments
-               where org_id = ${orgId} and id = any(${`{${wanted.join(',')}}`}::uuid[])
-            `, 'objects')
+               where org_id = ${orgId} and id = any(${`{${wanted.join(",")}}`}::uuid[])
+            `,
+              "objects",
+            );
             // Unknown and out-of-scope departments answer identically: the two
             // cases are indistinguishable, so a restricted caller cannot probe
             // another subsidiary's departments by id.
-            if (found.length !== wanted.length
-              || !subsidiariesInScope(gate, found.map((row) => row.subsidiary_id))) {
-              return NextResponse.json(
-                { error: 'unknown or out-of-scope department — publish only departments in your visible subsidiaries or ask an administrator for access' },
-                { status: 422 },
+            if (
+              found.length !== wanted.length ||
+              !subsidiariesInScope(
+                gate,
+                found.map((row) => row.subsidiary_id),
               )
+            ) {
+              return NextResponse.json(
+                {
+                  error:
+                    "unknown or out-of-scope department — publish only departments in your visible subsidiaries or ask an administrator for access",
+                },
+                { status: 422 },
+              );
             }
           }
         }
-        const result = await publishOverheadRates(orgId, gate.user.id, effectiveFrom, rates.length ? rates : undefined, gate.allowedSubsidiaryIds, {
-          acknowledgeZeroOverStandard: body.acknowledgeZeroOverStandard === true,
-        })
-        if (result.published === 0) return NextResponse.json({ error: 'no rates to publish' }, { status: 400 })
-        return NextResponse.json({ ok: true, published: result.published })
+        const result = await publishOverheadRates(
+          orgId,
+          gate.user.id,
+          effectiveFrom,
+          rates.length ? rates : undefined,
+          gate.allowedSubsidiaryIds,
+          {
+            acknowledgeZeroOverStandard: body.acknowledgeZeroOverStandard === true,
+          },
+        );
+        if (result.published === 0)
+          return NextResponse.json({ error: "no rates to publish" }, { status: 400 });
+        return NextResponse.json({ ok: true, published: result.published });
       } catch (e) {
         if (e instanceof OverheadZeroOverStandardError) {
           // The refusal names every department whose standard a zero would
           // replace; the client re-sends with acknowledgeZeroOverStandard to confirm.
           return NextResponse.json(
             {
-              error: `Publishing would replace a non-zero standard rate with zero for ${e.replacements.map((r) => r.departmentName).join(', ')}.`,
+              error: `Publishing would replace a non-zero standard rate with zero for ${e.replacements.map((r) => r.departmentName).join(", ")}.`,
               code: e.code,
               replacements: e.replacements,
-              remedy: 'Enter the department rate, or confirm the zero replacement to publish it.',
+              remedy: "Enter the department rate, or confirm the zero replacement to publish it.",
             },
             { status: 409 },
-          )
+          );
         }
         if (e instanceof ScopeNotFoundError) {
           return NextResponse.json(
-            { error: 'unknown or out-of-scope department — publish only departments in your visible subsidiaries or ask an administrator for access' },
+            {
+              error:
+                "unknown or out-of-scope department — publish only departments in your visible subsidiaries or ask an administrator for access",
+            },
             { status: 422 },
-          )
+          );
         }
         // A malformed or unknown department id surfaces as a Postgres input
         // (22P02) or foreign-key (23503) throw. Refuse the publish as a
         // request-state failure instead of a raw 500; anything else (overlap
         // guard, engine errors) keeps its existing behavior.
-        const code = postgresErrorCode(e)
-        if (code === '22P02' || code === '23503') {
-          return NextResponse.json({ error: 'unknown department' }, { status: 422 })
+        const code = postgresErrorCode(e);
+        if (code === "22P02" || code === "23503") {
+          return NextResponse.json({ error: "unknown department" }, { status: 422 });
         }
-        throw e
+        throw e;
       }
     }
 
-    if (body.action === 'apply') {
-      const typeIds: string[] = Array.isArray(body.projectTypeIds) ? body.projectTypeIds : []
-      const overhead = body.overhead as FinancialProfile['overhead'] | undefined
-      const effectiveFrom = String(body.effectiveFrom ?? '')
-      const reason = String(body.reason ?? '').trim()
+    if (body.action === "apply") {
+      const typeIds: string[] = Array.isArray(body.projectTypeIds) ? body.projectTypeIds : [];
+      const overhead = body.overhead as FinancialProfile["overhead"] | undefined;
+      const effectiveFrom = String(body.effectiveFrom ?? "");
+      const reason = String(body.reason ?? "").trim();
       if (!typeIds.length || !overhead?.method) {
-        return NextResponse.json({ error: 'projectTypeIds + overhead required' }, { status: 400 })
+        return NextResponse.json({ error: "projectTypeIds + overhead required" }, { status: 400 });
       }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) || !isIsoCalendarDate(effectiveFrom)) {
-        return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 400 })
+        return NextResponse.json({ error: "effectiveFrom (YYYY-MM-DD) required" }, { status: 400 });
       }
       if (typeIds.some((id) => !isUuid(id))) {
-        return NextResponse.json({ error: 'invalid projectTypeId' }, { status: 422 })
+        return NextResponse.json({ error: "invalid projectTypeId" }, { status: 422 });
       }
       try {
         await db.transaction(async (tx) => {
           for (const id of typeIds) {
-            const current = (await tx.execute<{ financial_profile: FinancialProfile }>(sql`
+            const current = await tx.execute<{ financial_profile: FinancialProfile }>(
+              sql`
               select version.financial_profile as financial_profile
                 from project_types pt
                 left join lateral (
@@ -242,27 +312,36 @@ export const POST = defineRoute({
                 ) version on true
                where pt.org_id = ${orgId} and pt.id = ${id}
                for update of pt
-            `, 'objects'))
-            const profile = current[0]?.financial_profile
-            if (!profile) throw new ProjectTypeNotFoundError()
-            const components = profile.totalCost.components.includes('overhead') || overhead.method === 'none'
-              ? profile.totalCost.components
-              : [...profile.totalCost.components, 'overhead' as const]
-            const layout = overhead.method === 'none'
-              ? profile.layout
-              : (() => {
-                  const overheadLine = profile.layout.find((line) => line.measure === 'overhead')
-                    ?? { measure: 'overhead' as const, variant: 'line' as const }
-                  const withoutOverhead = profile.layout.filter((line) => line.measure !== 'overhead')
-                  const totalCostIndex = withoutOverhead.findIndex((line) => line.measure === 'total_cost')
-                  return totalCostIndex >= 0
-                    ? [
-                        ...withoutOverhead.slice(0, totalCostIndex),
-                        overheadLine,
-                        ...withoutOverhead.slice(totalCostIndex),
-                      ]
-                    : [...withoutOverhead, overheadLine]
-                })()
+            `,
+              "objects",
+            );
+            const profile = current[0]?.financial_profile;
+            if (!profile) throw new ProjectTypeNotFoundError();
+            const components =
+              profile.totalCost.components.includes("overhead") || overhead.method === "none"
+                ? profile.totalCost.components
+                : [...profile.totalCost.components, "overhead" as const];
+            const layout =
+              overhead.method === "none"
+                ? profile.layout
+                : (() => {
+                    const overheadLine = profile.layout.find(
+                      (line) => line.measure === "overhead",
+                    ) ?? { measure: "overhead" as const, variant: "line" as const };
+                    const withoutOverhead = profile.layout.filter(
+                      (line) => line.measure !== "overhead",
+                    );
+                    const totalCostIndex = withoutOverhead.findIndex(
+                      (line) => line.measure === "total_cost",
+                    );
+                    return totalCostIndex >= 0
+                      ? [
+                          ...withoutOverhead.slice(0, totalCostIndex),
+                          overheadLine,
+                          ...withoutOverhead.slice(totalCostIndex),
+                        ]
+                      : [...withoutOverhead, overheadLine];
+                  })();
             await publishProjectFinancialProfileInTransaction(tx, {
               orgId,
               projectTypeId: id,
@@ -275,29 +354,29 @@ export const POST = defineRoute({
               },
               reason,
               actorId: gate.user.id,
-            })
+            });
           }
-        })
+        });
       } catch (e) {
-        return apiErrorResponse(e)
+        return apiErrorResponse(e);
       }
-      return NextResponse.json({ ok: true, applied: typeIds.length })
+      return NextResponse.json({ ok: true, applied: typeIds.length });
     }
 
     // Rate lifecycle: who maintains the published card — manual (a human
     // publishes), scheduled (the worker publishes each period), live (project
     // types read the live engine; the card is advisory).
-    if (body.action === 'set-lifecycle') {
-      const mode = body.mode === undefined ? 'manual' : body.mode
-      if (mode !== 'manual' && mode !== 'scheduled' && mode !== 'live') {
-        return NextResponse.json({ error: 'invalid mode' }, { status: 422 })
+    if (body.action === "set-lifecycle") {
+      const mode = body.mode === undefined ? "manual" : body.mode;
+      if (mode !== "manual" && mode !== "scheduled" && mode !== "live") {
+        return NextResponse.json({ error: "invalid mode" }, { status: 422 });
       }
       // Omission keeps the documented defaults; a SUPPLIED value outside the
       // enum is a different policy than requested, not a default — refuse it
       // before any write rather than silently storing manual/monthly.
-      const cadence = body.cadence === undefined ? 'monthly' : body.cadence
-      if (cadence !== 'monthly' && cadence !== 'quarterly') {
-        return NextResponse.json({ error: 'invalid cadence' }, { status: 422 })
+      const cadence = body.cadence === undefined ? "monthly" : body.cadence;
+      if (cadence !== "monthly" && cadence !== "quarterly") {
+        return NextResponse.json({ error: "invalid cadence" }, { status: 422 });
       }
       // Existing lock order: feature-gate fence first, then the authoritative
       // feature recheck, then the org row lock, then the write. Settings and
@@ -305,42 +384,52 @@ export const POST = defineRoute({
       // failure past the write rolls the policy back, never an unevidenced
       // change.
       const lifecycleDenied = await withOrgTransaction(orgId, async () => {
-        await lockLedgerSetupFence(db, orgId, "exclusive")
-        await acquireFeatureGateLock(orgId)
-        if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
-          return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
+        await lockLedgerSetupFence(db, orgId, "exclusive");
+        await acquireFeatureGateLock(orgId);
+        if (!(await lockAndCheckOrgFeature(db, orgId, "projects"))) {
+          return NextResponse.json({ error: "projects feature is disabled" }, { status: 404 });
         }
-        const current = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
-          select settings from orgs where id = ${orgId} for update`, 'objects')
-        const before = (current[0]?.settings as Record<string, unknown> | undefined)?.overheadRateLifecycle ?? null
-        const after = { mode, cadence }
+        const current = await db.execute<{ settings: Record<string, unknown> | null }>(
+          sql`
+          select settings from orgs where id = ${orgId} for update`,
+          "objects",
+        );
+        const before =
+          (current[0]?.settings as Record<string, unknown> | undefined)?.overheadRateLifecycle ??
+          null;
+        const after = { mode, cadence };
         await db.execute(sql`
           update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{overheadRateLifecycle}',
             ${JSON.stringify(after)}::jsonb)
-           where id = ${orgId}`)
+           where id = ${orgId}`);
         await db.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'orgs', ${orgId}, 'update',
-                  ${JSON.stringify({ overheadRateLifecycle: { before, after } })}, ${gate.user.id})`)
-        return null
-      })
-      if (lifecycleDenied) return lifecycleDenied
-      return NextResponse.json({ ok: true })
+                  ${JSON.stringify({ overheadRateLifecycle: { before, after } })}, ${gate.user.id})`);
+        return null;
+      });
+      if (lifecycleDenied) return lifecycleDenied;
+      return NextResponse.json({ ok: true });
     }
 
     // How overhead reaches the ledger: report_only (statistical, default),
     // net_zero_pair (DR overhead acct [project] / CR same acct untagged —
     // P&L nets to zero), or off.
-    if (body.action === 'set-application') {
+    if (body.action === "set-application") {
       // Omission keeps the documented default; a SUPPLIED value outside the
       // enum is a different policy than requested — refuse it before any write.
-      const mode = body.mode === undefined ? 'report_only' : body.mode
-      if (mode !== 'report_only' && mode !== 'net_zero_pair' && mode !== 'off') {
-        return NextResponse.json({ error: 'invalid mode' }, { status: 422 })
+      const mode = body.mode === undefined ? "report_only" : body.mode;
+      if (mode !== "report_only" && mode !== "net_zero_pair" && mode !== "off") {
+        return NextResponse.json({ error: "invalid mode" }, { status: 422 });
       }
-      const accountId = body.accountId ?? null
-      if (accountId !== null && (typeof accountId !== 'string' || !isUuid(accountId))) return NextResponse.json({ error: 'invalid accountId' }, { status: 422 })
-      if (mode === 'net_zero_pair' && !accountId) return NextResponse.json({ error: 'net_zero_pair requires an overhead applied account' }, { status: 422 })
+      const accountId = body.accountId ?? null;
+      if (accountId !== null && (typeof accountId !== "string" || !isUuid(accountId)))
+        return NextResponse.json({ error: "invalid accountId" }, { status: 422 });
+      if (mode === "net_zero_pair" && !accountId)
+        return NextResponse.json(
+          { error: "net_zero_pair requires an overhead applied account" },
+          { status: 422 },
+        );
       // Existing lock order: feature-gate fence first, then the authoritative
       // feature recheck, then row locks (org settings, then the referenced
       // account shared), then the write. A referenced account must be a real,
@@ -350,55 +439,63 @@ export const POST = defineRoute({
       // surcharge rule save). The locked before/after evidence commits with the
       // settings or not at all.
       const applicationDenied = await withOrgTransaction(orgId, async () => {
-        await lockLedgerSetupFence(db, orgId, "exclusive")
-        await acquireFeatureGateLock(orgId)
-        if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
-          return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
+        await lockLedgerSetupFence(db, orgId, "exclusive");
+        await acquireFeatureGateLock(orgId);
+        if (!(await lockAndCheckOrgFeature(db, orgId, "projects"))) {
+          return NextResponse.json({ error: "projects feature is disabled" }, { status: 404 });
         }
-        const current = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
-          select settings from orgs where id = ${orgId} for update`, 'objects')
+        const current = await db.execute<{ settings: Record<string, unknown> | null }>(
+          sql`
+          select settings from orgs where id = ${orgId} for update`,
+          "objects",
+        );
         if (accountId !== null) {
-          const found = await db.execute<{ id: string }>(sql`
+          const found = await db.execute<{ id: string }>(
+            sql`
             select id from accounts
              where org_id = ${orgId} and id = ${accountId} and not is_summary and is_active
-             limit 1 for share`, 'objects')
+             limit 1 for share`,
+            "objects",
+          );
           if (!found[0]) {
             return NextResponse.json(
-              { error: 'overhead applied account not found, inactive, or is a summary account' },
+              { error: "overhead applied account not found, inactive, or is a summary account" },
               { status: 422 },
-            )
+            );
           }
         }
-        const before = (current[0]?.settings as Record<string, unknown> | undefined)?.overheadApplication ?? null
-        const after = { mode, accountId }
+        const before =
+          (current[0]?.settings as Record<string, unknown> | undefined)?.overheadApplication ??
+          null;
+        const after = { mode, accountId };
         await db.execute(sql`
           update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{overheadApplication}',
             ${JSON.stringify(after)}::jsonb)
-           where id = ${orgId}`)
+           where id = ${orgId}`);
         await db.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'orgs', ${orgId}, 'update',
-                  ${JSON.stringify({ overheadApplication: { before, after } })}, ${gate.user.id})`)
+                  ${JSON.stringify({ overheadApplication: { before, after } })}, ${gate.user.id})`);
         // The kernel's system rule mirrors this policy: derive it in the same
         // transaction (this block already runs inside the org boundary).
-        await syncOverheadSystemRule(orgId, gate.user.id)
-        return null
-      })
-      if (applicationDenied) return applicationDenied
-      return NextResponse.json({ ok: true })
+        await syncOverheadSystemRule(orgId, gate.user.id);
+        return null;
+      });
+      if (applicationDenied) return applicationDenied;
+      return NextResponse.json({ ok: true });
     }
 
     // Overhead applies automatically as hours are approved; backfill only
     // carries hours approved before the mode was enabled (or imported).
-    if (body.action === 'backfill-overhead') {
+    if (body.action === "backfill-overhead") {
       try {
-        const result = await backfillOverhead(orgId, gate.user.id)
-        return NextResponse.json({ ok: true, ...result })
+        const result = await backfillOverhead(orgId, gate.user.id);
+        return NextResponse.json({ ok: true, ...result });
       } catch (e) {
-        return apiErrorResponse(e)
+        return apiErrorResponse(e);
       }
     }
 
-    return NextResponse.json({ error: 'unknown action' }, { status: 400 })
+    return NextResponse.json({ error: "unknown action" }, { status: 400 });
   },
 });

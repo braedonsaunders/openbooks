@@ -1,18 +1,21 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
 
 import { notFound } from "@/lib/api/responses";
-import { NextResponse } from 'next/server'
-import { guardPermission, type Authz } from '../../../../../lib/authz'
-import { isUuid } from '../../../../../lib/list-params'
-import { createSetupRecord, deleteSetupRecord, preflightSetupWrite, updateSetupRecord } from '../../../../../lib/setup/write'
-import { setupEntityRoutePermission } from '../../../../../lib/setup/route-auth'
+import { NextResponse } from "next/server";
+import { guardPermission, type Authz } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import {
+  createSetupRecord,
+  deleteSetupRecord,
+  preflightSetupWrite,
+  updateSetupRecord,
+} from "@/lib/setup/write";
+import { setupEntityRoutePermission } from "@/lib/setup/route-auth";
 
 const requestBodySchema = z.record(z.string(), z.json());
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Generic CRUD for every configuration entity in the Setup registry. The
@@ -24,10 +27,25 @@ export const runtime = 'nodejs'
  * module-owned crm.setup.manage gate. Writes remain org-scoped and audited.
  */
 async function authorizeSetupEntity({ params }: { request: Request; params: unknown }) {
-  const entityKey = params && typeof params === 'object' && 'entity' in params
+  const entityKey =
+    params && typeof params === "object" && "entity" in params
+      ? String((params as { entity: unknown }).entity)
+      : "";
+  return guardPermission(setupEntityRoutePermission(entityKey));
+}
+
+function setupActor(gate: Authz) {
+  return {
+    ...gate.user,
+    permissions: gate.permissions,
+    allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+  };
+}
+
+function setupEntityKey(params: unknown): string {
+  return params && typeof params === "object" && "entity" in params
     ? String((params as { entity: unknown }).entity)
-    : ''
-  return guardPermission(setupEntityRoutePermission(entityKey))
+    : "";
 }
 
 function setupWriteResponse(result: { status: number; body: Record<string, unknown> }) {
@@ -37,28 +55,64 @@ function setupWriteResponse(result: { status: number; body: Record<string, unkno
   return NextResponse.json(result.body, { status: result.status });
 }
 
+async function authorizeSetupCreate(ctx: { request: Request; params: unknown }) {
+  const gate = await authorizeSetupEntity(ctx);
+  if (gate instanceof NextResponse) return gate;
 
+  const requestId = ctx.request.headers.get("Idempotency-Key")?.trim() ?? "";
+  if (!requestId) {
+    return NextResponse.json(
+      { error: "Idempotency-Key header is required", code: "invalid" },
+      { status: 400 },
+    );
+  }
+  if (!isUuid(requestId)) {
+    return NextResponse.json(
+      { error: "Idempotency-Key must be a UUID", code: "invalid" },
+      { status: 400 },
+    );
+  }
 
+  const refused = await preflightSetupWrite(setupActor(gate), setupEntityKey(ctx.params), "create");
+  return refused ? setupWriteResponse(refused) : gate;
+}
 
+async function authorizeSetupUpdate(ctx: { request: Request; params: unknown }) {
+  const gate = await authorizeSetupEntity(ctx);
+  if (gate instanceof NextResponse) return gate;
+  const refused = await preflightSetupWrite(setupActor(gate), setupEntityKey(ctx.params), "update");
+  return refused ? setupWriteResponse(refused) : gate;
+}
 
-async function legacyDELETE(req: Request, { params }: { params: Promise<{ entity: string }> }, options: { reason?: string; auditReason?: string } = {}, gate: Authz) {
-  const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
-  const entityKey = (await params).entity
-  const refused = await preflightSetupWrite(actor, entityKey, 'delete')
-  if (refused) return setupWriteResponse(refused)
-  const url = new URL(req.url)
-  const id = url.searchParams.get('id') ?? ''
-  const result = await deleteSetupRecord(actor, entityKey, id, options)
-  return setupWriteResponse(result)
+async function legacyDELETE(
+  req: Request,
+  { params }: { params: Promise<{ entity: string }> },
+  options: { reason?: string; auditReason?: string } = {},
+  gate: Authz,
+) {
+  const actor = {
+    ...gate.user,
+    permissions: gate.permissions,
+    allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+  };
+  const entityKey = (await params).entity;
+  const refused = await preflightSetupWrite(actor, entityKey, "delete");
+  if (refused) return setupWriteResponse(refused);
+  const url = new URL(req.url);
+  const id = url.searchParams.get("id") ?? "";
+  const result = await deleteSetupRecord(actor, entityKey, id, options);
+  return setupWriteResponse(result);
 }
 
 export const POST = defineRoute({
-  authorize: authorizeSetupEntity,
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  params: z.object({ "entity": z.string() }),
-  handler: async ({ request, params, authz: routeAuthz }) => {
-
-    const gate = routeAuthz
+  authorize: authorizeSetupCreate,
+  feature: {
+    none: "Each setup entity uses the feature and permission declared in the setup registry.",
+  },
+  params: z.object({ entity: z.string() }),
+  body: requestBodySchema,
+  handler: async ({ request, params, body, authz: routeAuthz }) => {
+    const gate = routeAuthz;
 
     // Creates are idempotent on the caller's key, which becomes the new row's
     // id: the drawer mints one UUID per mounted create session and reuses it
@@ -67,51 +121,57 @@ export const POST = defineRoute({
     // preflight because the preflight reads feature state: a missing or
     // malformed key must fail with zero statements. A valid key on an
     // unknown/disabled entity still falls through to the preflight's 404/405.
-    const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
+    const requestId = request.headers.get("Idempotency-Key")?.trim() ?? "";
     if (!requestId) {
-      return NextResponse.json({ error: 'Idempotency-Key header is required', code: 'invalid' }, { status: 400 })
+      return NextResponse.json(
+        { error: "Idempotency-Key header is required", code: "invalid" },
+        { status: 400 },
+      );
     }
     if (!isUuid(requestId)) {
-      return NextResponse.json({ error: 'Idempotency-Key must be a UUID', code: 'invalid' }, { status: 400 })
+      return NextResponse.json(
+        { error: "Idempotency-Key must be a UUID", code: "invalid" },
+        { status: 400 },
+      );
     }
-    const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
-    const entityKey = (params).entity
-    const refused = await preflightSetupWrite(actor, entityKey, 'create')
-    if (refused) return setupWriteResponse(refused)
-    const parsedBody = await parseJsonBody(request, requestBodySchema)
-    if (!parsedBody.ok) return parsedBody.response
-
-
-    const result = await createSetupRecord(actor, entityKey, parsedBody.data as Record<string, unknown>, { requestId })
-    return setupWriteResponse(result)
+    const actor = setupActor(gate);
+    const entityKey = params.entity;
+    const result = await createSetupRecord(actor, entityKey, body as Record<string, unknown>, {
+      requestId,
+    });
+    return setupWriteResponse(result);
   },
 });
 
 export const PATCH = defineRoute({
-  authorize: authorizeSetupEntity,
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  params: z.object({ "entity": z.string() }),
-  handler: async ({ request, params, authz: routeAuthz }) => {
+  authorize: authorizeSetupUpdate,
+  feature: {
+    none: "Each setup entity uses the feature and permission declared in the setup registry.",
+  },
+  params: z.object({ entity: z.string() }),
+  body: requestBodySchema,
+  handler: async ({ params, body, authz: routeAuthz }) => {
+    const gate = routeAuthz;
 
-    const gate = routeAuthz
-
-    const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
-    const entityKey = (params).entity
-    const refused = await preflightSetupWrite(actor, entityKey, 'update')
-    if (refused) return setupWriteResponse(refused)
-    const parsedBody = await parseJsonBody(request, requestBodySchema)
-    if (!parsedBody.ok) return parsedBody.response
-
-
-    const result = await updateSetupRecord(actor, entityKey, parsedBody.data as Record<string, unknown>)
-    return setupWriteResponse(result)
+    const actor = setupActor(gate);
+    const entityKey = params.entity;
+    const result = await updateSetupRecord(actor, entityKey, body as Record<string, unknown>);
+    return setupWriteResponse(result);
   },
 });
 
 export const DELETE = defineRoute({
   authorize: authorizeSetupEntity,
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  params: z.object({ "entity": z.string() }),
-  body: z.strictObject({ reason: z.string().trim().min(1).max(2000).optional(), auditReason: z.string().trim().min(1).max(2000).optional() }).optional(),
-  handler: async ({ request, params, body, authz }) => legacyDELETE(request, { params: Promise.resolve(params) }, body, authz),
+  feature: {
+    none: "Each setup entity uses the feature and permission declared in the setup registry.",
+  },
+  params: z.object({ entity: z.string() }),
+  body: z
+    .strictObject({
+      reason: z.string().trim().min(1).max(2000).optional(),
+      auditReason: z.string().trim().min(1).max(2000).optional(),
+    })
+    .optional(),
+  handler: async ({ request, params, body, authz }) =>
+    legacyDELETE(request, { params: Promise.resolve(params) }, body, authz),
 });

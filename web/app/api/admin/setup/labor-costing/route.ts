@@ -3,75 +3,123 @@ import { uuidId } from "@/lib/api/json-schema";
 import { PAYROLL_AMOUNT_ROUNDING } from "@openbooks/engine/projects/payroll-wage-rounding";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 
-import { NextResponse } from 'next/server'
-import { sql, type SQL } from 'drizzle-orm'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
-import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
+import { NextResponse } from "next/server";
+import { sql, type SQL } from "drizzle-orm";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { lockAndCheckOrgFeature } from "@openbooks/engine/organization/org-feature-lock";
+import { lockLedgerSetupFence } from "@openbooks/engine/organization/ledger-setup";
 import {
   can,
-  guardPermission,
   guardSubsidiaryScope,
   guardUnrestrictedScope,
   subsidiaryScopeAllows,
   subsidiariesInScope,
   type Authz,
-} from '../../../../../lib/authz'
-import { isUuid } from '../../../../../lib/list-params'
+} from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
 import {
   LaborCostingFeatureDisabledError,
   laborClearingReconciliation,
   parseLaborCostComponents,
   postPayrollVariance,
   type LaborCostComponent,
-} from '@openbooks/engine/projects/labor-costing/operations'
+} from "@openbooks/engine/projects/labor-costing/operations";
 import {
   laborCostRateScopeLock,
   supersedeLaborCostRate,
-} from '@openbooks/engine/projects/labor-cost-rates'
-import { normalizeMoney } from '@openbooks/engine/money/money'
-import { PAY_RATE_BASES } from '@openbooks/engine/projects/pay-rate-basis'
-import { decimalNullRefusal } from '@openbooks/engine/money/decimal-refusal'
-import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
-import { isFeatureEnabled } from '../../../../../lib/features'
-import { acquireOrgFeatureGateLock } from '@openbooks/engine/organization/org-feature-lock'
-import { lockActorCommandAuthority } from '@openbooks/engine/organization/actor-command-authority'
+} from "@openbooks/engine/projects/labor-cost-rates";
+import { normalizeMoney } from "@openbooks/engine/money/money";
+import { PAY_RATE_BASES } from "@openbooks/engine/projects/pay-rate-basis";
+import { decimalNullRefusal } from "@openbooks/engine/money/decimal-refusal";
+import { canonicalDecimal, compareDecimal } from "@/lib/exact-decimal";
+import { isFeatureEnabled } from "@/lib/features";
+import { acquireOrgFeatureGateLock } from "@openbooks/engine/organization/org-feature-lock";
+import { lockActorCommandAuthority } from "@openbooks/engine/organization/actor-command-authority";
 import { notFound } from "@/lib/api/responses";
-import { assertValidControlAccountMappings, ControlAccountsIncompleteError } from '@openbooks/engine/records/control-accounts'
+import {
+  assertValidControlAccountMappings,
+  ControlAccountsIncompleteError,
+} from "@openbooks/engine/records/control-accounts";
 
-const decimalText = (field: string, noun: string) => z.unknown().transform((value, ctx) => {
-  if (typeof value !== "string" || canonicalDecimal(value, 4) === null) {
-    ctx.addIssue({ code: "custom", message: decimalNullRefusal(field, noun, value, 4) });
-    return z.NEVER;
-  }
-  return value;
-});
+const decimalText = (field: string, noun: string) =>
+  z.unknown().transform((value, ctx) => {
+    if (typeof value !== "string" || canonicalDecimal(value, 4) === null) {
+      ctx.addIssue({ code: "custom", message: decimalNullRefusal(field, noun, value, 4) });
+      return z.NEVER;
+    }
+    return value;
+  });
 const componentSchema = z.object({
-  key: z.string().max(40).nullable().optional(), name: z.string().max(120).nullable().optional(),
+  key: z.string().max(40).nullable().optional(),
+  name: z.string().max(120).nullable().optional(),
   kind: z.enum(["percent_of_wage", "per_hour", "per_day", "worker_comp"]),
-  value: decimalText("component value", "an exact decimal amount"), scaleWithOvertime: z.boolean().optional(),
+  value: decimalText("component value", "an exact decimal amount"),
+  scaleWithOvertime: z.boolean().optional(),
 });
 const laborSettingsSchema = z.object({
-  mode: z.enum(["off", "post"]).optional(), hoursPerDay: decimalText("hoursPerDay", "a number of hours").nullable().optional(),
+  mode: z.enum(["off", "post"]).optional(),
+  hoursPerDay: decimalText("hoursPerDay", "a number of hours").nullable().optional(),
   annualHours: decimalText("annualHours", "a number of hours").nullable().optional(),
-  components: z.array(componentSchema).max(100).optional(), allowUnratedTime: z.boolean().optional(),
+  components: z.array(componentSchema).max(100).optional(),
+  allowUnratedTime: z.boolean().optional(),
 });
-const accountFields = { laborWip: uuidId.nullable().optional(), laborClearing: uuidId.nullable().optional(), payrollVariance: uuidId.nullable().optional() };
+const accountFields = {
+  laborWip: uuidId.nullable().optional(),
+  laborClearing: uuidId.nullable().optional(),
+  payrollVariance: uuidId.nullable().optional(),
+};
 const settingsBodySchema = z.object({ settings: laborSettingsSchema, ...accountFields });
 const postBodySchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("save-rate"), currency: z.string().regex(/^[A-Z]{3}$/), rate: decimalText("rate", "an exact decimal rate"), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), basis: z.enum(PAY_RATE_BASES).optional(), annualHours: decimalText("annualHours", "a number of hours").nullable().optional(), payrollRateScale: z.number().int().min(0).max(4).optional(), payrollAmountRounding: z.enum(PAYROLL_AMOUNT_ROUNDING).optional(), employeePartyId: uuidId.nullable().optional(), jobTitle: z.string().trim().max(160).nullable().optional(), tradeId: uuidId.nullable().optional(), departmentId: uuidId.nullable().optional(), subsidiaryId: uuidId.nullable().optional(), notes: z.string().max(500).nullable().optional(), reason: z.string().trim().max(500).optional() }),
-  z.object({ action: z.literal("end-rate"), id: uuidId, effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), reason: z.string().trim().max(500).optional() }),
-  z.object({ action: z.literal("delete-rate"), id: uuidId, reason: z.string().trim().max(500).optional() }),
-  z.object({ action: z.literal("reconcile"), periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), subsidiaryId: uuidId }),
-  z.object({ action: z.literal("post-variance"), periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), subsidiaryId: uuidId }),
+  z.object({
+    action: z.literal("save-rate"),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    rate: decimalText("rate", "an exact decimal rate"),
+    effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    basis: z.enum(PAY_RATE_BASES).optional(),
+    annualHours: decimalText("annualHours", "a number of hours").nullable().optional(),
+    payrollRateScale: z.number().int().min(0).max(4).optional(),
+    payrollAmountRounding: z.enum(PAYROLL_AMOUNT_ROUNDING).optional(),
+    employeePartyId: uuidId.nullable().optional(),
+    jobTitle: z.string().trim().max(160).nullable().optional(),
+    tradeId: uuidId.nullable().optional(),
+    departmentId: uuidId.nullable().optional(),
+    subsidiaryId: uuidId.nullable().optional(),
+    notes: z.string().max(500).nullable().optional(),
+    reason: z.string().trim().max(500).optional(),
+  }),
+  z.object({
+    action: z.literal("end-rate"),
+    id: uuidId,
+    effectiveTo: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable()
+      .optional(),
+    reason: z.string().trim().max(500).optional(),
+  }),
+  z.object({
+    action: z.literal("delete-rate"),
+    id: uuidId,
+    reason: z.string().trim().max(500).optional(),
+  }),
+  z.object({
+    action: z.literal("reconcile"),
+    periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    subsidiaryId: uuidId,
+  }),
+  z.object({
+    action: z.literal("post-variance"),
+    periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    subsidiaryId: uuidId,
+  }),
 ]);
 
-
-
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Labor Costing workspace API — one route for the whole surface:
@@ -105,29 +153,52 @@ export const dynamic = 'force-dynamic'
  */
 
 function projectsDisabledResponse() {
-  return NextResponse.json({ error: 'Enable Projects or Manufacturing in Company Settings → Features to use labor costing.' }, { status: 404 })
+  return NextResponse.json(
+    {
+      error:
+        "Enable Projects or Manufacturing in Company Settings → Features to use labor costing.",
+    },
+    { status: 404 },
+  );
 }
 async function guardLaborFeature(orgId: string) {
-  return await isFeatureEnabled(orgId, 'projects') || await isFeatureEnabled(orgId, 'manufacturing') ? null : projectsDisabledResponse()
+  return (await isFeatureEnabled(orgId, "projects")) ||
+    (await isFeatureEnabled(orgId, "manufacturing"))
+    ? null
+    : projectsDisabledResponse();
 }
 async function pinLaborFeature(orgId: string, actorId: string, subsidiaryId: string | null = null) {
-  await acquireOrgFeatureGateLock(db, orgId)
-  const actor = (await db.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`, 'objects'))[0]
-  if (!actor) throw new ScopeNotFoundError()
-  const currentScope = await lockActorCommandAuthority(db, orgId, actorId, subsidiaryId, 'admin.setup.manage')
-  if (subsidiaryId === null && currentScope !== null) throw new ScopeNotFoundError()
-  return await lockAndCheckOrgFeature(db,orgId,'projects') || await lockAndCheckOrgFeature(db,orgId,'manufacturing')
+  await acquireOrgFeatureGateLock(db, orgId);
+  const actor = (
+    await db.execute(
+      sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`,
+      "objects",
+    )
+  )[0];
+  if (!actor) throw new ScopeNotFoundError();
+  const currentScope = await lockActorCommandAuthority(
+    db,
+    orgId,
+    actorId,
+    subsidiaryId,
+    "admin.setup.manage",
+  );
+  if (subsidiaryId === null && currentScope !== null) throw new ScopeNotFoundError();
+  return (
+    (await lockAndCheckOrgFeature(db, orgId, "projects")) ||
+    (await lockAndCheckOrgFeature(db, orgId, "manufacturing"))
+  );
 }
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** numeric(19,4) ceiling — rates above this must 422, not overflow mid-write. */
-const NUMERIC_19_4_MAX = '999999999999999.9999'
+const NUMERIC_19_4_MAX = "999999999999999.9999";
 
 /** Control-account keys this save owns (orgs.settings.controlAccounts paths). */
-const CONTROL_ACCOUNT_KEYS = ['laborWip', 'laborClearing', 'payrollVariance'] as const
+const CONTROL_ACCOUNT_KEYS = ["laborWip", "laborClearing", "payrollVariance"] as const;
 
-type Parsed<T> = { ok: true; value: T } | { ok: false; error: string }
+type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /**
  * Strict financial-policy boundary for burden components: the engine's
@@ -138,36 +209,50 @@ type Parsed<T> = { ok: true; value: T } | { ok: false; error: string }
  */
 function parseComponents(input: unknown): Parsed<LaborCostComponent[]> {
   try {
-    return { ok: true, value: parseLaborCostComponents(input) }
+    return { ok: true, value: parseLaborCostComponents(input) };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'components must be an array' }
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "components must be an array",
+    };
   }
 }
 
 async function configuredCurrencies(orgId: string): Promise<string[]> {
-  const result = await db.execute<{ code: string }>(sql`
+  const result = await db.execute<{ code: string }>(
+    sql`
     select code from (
       select base_currency as code from orgs where id = ${orgId}
       union
       select base_currency as code from subsidiaries where org_id = ${orgId} and is_active
-    ) configured order by code`, 'objects')
-  return result.map((row) => row.code)
+    ) configured order by code`,
+    "objects",
+  );
+  return result.map((row) => row.code);
 }
 
 /** The wage-scope tuple of a rate: at most one of these is non-null. */
 type WageScope = {
-  employeePartyId: string | null
-  jobTitle: string | null
-  tradeId: string | null
-  departmentId: string | null
-  subsidiaryId: string | null
-}
+  employeePartyId: string | null;
+  jobTitle: string | null;
+  tradeId: string | null;
+  departmentId: string | null;
+  subsidiaryId: string | null;
+};
 
 /** These selectors resolve across the organization, so every mutation of
  * their effective-dated rows requires an unrestricted setup actor. */
-function isOrgWideWageScope(scope: Pick<WageScope, 'employeePartyId' | 'jobTitle' | 'tradeId' | 'departmentId' | 'subsidiaryId'>): boolean {
-  return scope.jobTitle !== null || scope.tradeId !== null ||
+function isOrgWideWageScope(
+  scope: Pick<
+    WageScope,
+    "employeePartyId" | "jobTitle" | "tradeId" | "departmentId" | "subsidiaryId"
+  >,
+): boolean {
+  return (
+    scope.jobTitle !== null ||
+    scope.tradeId !== null ||
     (scope.employeePartyId === null && scope.departmentId === null && scope.subsidiaryId === null)
+  );
 }
 
 /**
@@ -185,69 +270,97 @@ async function lockedRateScope(
   gate: Authz,
   id: string,
 ): Promise<{ row: WageScope & { id: string } } | { response: NextResponse }> {
-  const missingRecord = { response: notFound("record") }
-  const located = await db.execute<WageScope & { id: string }>(sql`
+  const missingRecord = { response: notFound("record") };
+  const located = await db.execute<WageScope & { id: string }>(
+    sql`
     select r.id, r.employee_party_id as "employeePartyId", r.job_title as "jobTitle",
            r.trade_id as "tradeId", r.department_id as "departmentId", r.subsidiary_id as "subsidiaryId"
       from labor_cost_rates r
-     where r.org_id = ${orgId} and r.id = ${id}`, 'objects')
-  const row = located[0]
-  if (!row) return missingRecord
+     where r.org_id = ${orgId} and r.id = ${id}`,
+    "objects",
+  );
+  const row = located[0];
+  if (!row) return missingRecord;
   if (isOrgWideWageScope(row)) {
-    const denied = guardUnrestrictedScope(gate)
-    if (denied) return { response: denied }
-    if (!(await pinLaborFeature(orgId, gate.user.id))) return { response: projectsDisabledResponse() }
-    return { row }
+    const denied = guardUnrestrictedScope(gate);
+    if (denied) return { response: denied };
+    if (!(await pinLaborFeature(orgId, gate.user.id)))
+      return { response: projectsDisabledResponse() };
+    return { row };
   }
-  let employeeSubsidiary: string | null = null
+  let employeeSubsidiary: string | null = null;
   if (row.employeePartyId) {
-    const locked = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    const locked = (
+      await db.execute<{ subsidiaryId: string | null }>(
+        sql`
       select subsidiary_id as "subsidiaryId" from parties
-       where org_id = ${orgId} and id = ${row.employeePartyId} for share`, 'objects'))[0]
-    if (!locked) return missingRecord
-    employeeSubsidiary = locked.subsidiaryId
+       where org_id = ${orgId} and id = ${row.employeePartyId} for share`,
+        "objects",
+      )
+    )[0];
+    if (!locked) return missingRecord;
+    employeeSubsidiary = locked.subsidiaryId;
   }
-  let departmentSubsidiary: string | null = null
+  let departmentSubsidiary: string | null = null;
   if (row.departmentId) {
-    const locked = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    const locked = (
+      await db.execute<{ subsidiaryId: string | null }>(
+        sql`
       select subsidiary_id as "subsidiaryId" from departments
-       where org_id = ${orgId} and id = ${row.departmentId} for share`, 'objects'))[0]
-    if (!locked) return missingRecord
-    departmentSubsidiary = locked.subsidiaryId
+       where org_id = ${orgId} and id = ${row.departmentId} for share`,
+        "objects",
+      )
+    )[0];
+    if (!locked) return missingRecord;
+    departmentSubsidiary = locked.subsidiaryId;
   }
   if (row.employeePartyId !== null && employeeSubsidiary == null) {
     // A null-subsidiary employee is org-wide on save-rate; end/delete match it.
-    const denied = guardUnrestrictedScope(gate)
-    if (denied) return { response: denied }
-    if (!(await pinLaborFeature(orgId, gate.user.id))) return { response: projectsDisabledResponse() }
-    return { row }
+    const denied = guardUnrestrictedScope(gate);
+    if (denied) return { response: denied };
+    if (!(await pinLaborFeature(orgId, gate.user.id)))
+      return { response: projectsDisabledResponse() };
+    return { row };
   }
-  if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, row.subsidiaryId ?? employeeSubsidiary ?? departmentSubsidiary ?? null)) return missingRecord
-  if (row.subsidiaryId && !subsidiariesInScope(gate, [row.subsidiaryId])) return missingRecord
-  if (!(await pinLaborFeature(orgId, gate.user.id, row.subsidiaryId ?? employeeSubsidiary ?? departmentSubsidiary))) return { response: projectsDisabledResponse() }
-  return { row }
+  if (
+    !subsidiaryScopeAllows(
+      gate.allowedSubsidiaryIds,
+      row.subsidiaryId ?? employeeSubsidiary ?? departmentSubsidiary ?? null,
+    )
+  )
+    return missingRecord;
+  if (row.subsidiaryId && !subsidiariesInScope(gate, [row.subsidiaryId])) return missingRecord;
+  if (
+    !(await pinLaborFeature(
+      orgId,
+      gate.user.id,
+      row.subsidiaryId ?? employeeSubsidiary ?? departmentSubsidiary,
+    ))
+  )
+    return { response: projectsDisabledResponse() };
+  return { row };
 }
 
 /** Exact serialized state of one labor_cost_rates row — numeric read back as
  * text and dates as YYYY-MM-DD — the unit of audit before/after evidence. */
 type RateRow = {
-  id: string
-  rate: string
-  currency: string
-  basis: string
-  annualHours: string
-  effectiveFrom: string
-  effectiveTo: string | null
-  notes: string | null
-  isActive: boolean
-}
+  id: string;
+  rate: string;
+  currency: string;
+  basis: string;
+  annualHours: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  notes: string | null;
+  isActive: boolean;
+};
 
 const RATE_ROW_COLUMNS = sql`id, rate::text as rate, currency, basis,
        annual_hours::text as "annualHours", effective_from::text as "effectiveFrom",
-       effective_to::text as "effectiveTo", notes, is_active as "isActive"`
+       effective_to::text as "effectiveTo", notes, is_active as "isActive"`;
 
 /** A rate mutation either completes or returns the prepared denial response. */
-type RateMutation = { ok: true } | { ok: false; response: NextResponse }
+type RateMutation = { ok: true } | { ok: false; response: NextResponse };
 
 /**
  * Same-scope advisory lock via the canonical writer (engine
@@ -255,27 +368,30 @@ type RateMutation = { ok: true } | { ok: false; response: NextResponse }
  * exactly like save-rate does through the shared writer.
  */
 function scopeLock(orgId: string, scope: WageScope): SQL {
-  return laborCostRateScopeLock(orgId, scope)
+  return laborCostRateScopeLock(orgId, scope);
 }
 
 /** Client-supplied change reason, or a deterministic default so every audit
  * row always carries attributable evidence. */
 function bodyReason(raw: unknown, fallback: string): string {
-  return typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 500) : fallback
+  return typeof raw === "string" && raw.trim() ? raw.trim().slice(0, 500) : fallback;
 }
 
 /** The storage-enforced single-window conflict, anywhere in a cause chain
  * (same walk as the FX single-running-provider guard). */
 function isWageOverlapConflict(error: unknown): boolean {
-  let current: unknown = error
-  for (let depth = 0; depth < 5 && current && typeof current === 'object'; depth += 1) {
-    const candidate = current as { code?: string; constraint?: string; cause?: unknown }
-    if (candidate.code === '23P01' && candidate.constraint === 'labor_cost_rates_no_active_overlap') {
-      return true
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { code?: string; constraint?: string; cause?: unknown };
+    if (
+      candidate.code === "23P01" &&
+      candidate.constraint === "labor_cost_rates_no_active_overlap"
+    ) {
+      return true;
     }
-    current = candidate.cause
+    current = candidate.cause;
   }
-  return false
+  return false;
 }
 
 /**
@@ -285,13 +401,20 @@ function isWageOverlapConflict(error: unknown): boolean {
  * one sentence for all three.
  */
 async function subsidiaryProblem(orgId: string, subsidiaryId: string): Promise<string> {
-  const row = (await db.execute<{ name: string; isActive: boolean; isElimination: boolean }>(sql`
+  const row = (
+    await db.execute<{ name: string; isActive: boolean; isElimination: boolean }>(
+      sql`
     select name, is_active as "isActive", is_elimination as "isElimination"
       from subsidiaries
-     where org_id = ${orgId} and id = ${subsidiaryId}`, 'objects'))[0]
-  if (!row) return `no subsidiary "${subsidiaryId}" in this organization — check the id and try again`
-  if (!row.isActive) return `subsidiary "${row.name}" is inactive — reactivate it or choose an active subsidiary`
-  return `subsidiary "${row.name}" is an elimination entity — choose an operating subsidiary`
+     where org_id = ${orgId} and id = ${subsidiaryId}`,
+      "objects",
+    )
+  )[0];
+  if (!row)
+    return `no subsidiary "${subsidiaryId}" in this organization — check the id and try again`;
+  if (!row.isActive)
+    return `subsidiary "${row.name}" is inactive — reactivate it or choose an active subsidiary`;
+  return `subsidiary "${row.name}" is an elimination entity — choose an operating subsidiary`;
 }
 
 /** Storage refusals past validation must never leak driver text — the raw
@@ -300,203 +423,243 @@ async function subsidiaryProblem(orgId: string, subsidiaryId: string): Promise<s
  * to its own catalog copy; anything else is a generic safe refusal. */
 function rateStorageRefusal(error: unknown): { error: string; errorCode: string } {
   if (isWageOverlapConflict(error)) {
-    return { error: 'wage rate overlaps an existing rate in this scope', errorCode: 'overlap' }
+    return { error: "wage rate overlaps an existing rate in this scope", errorCode: "overlap" };
   }
-  return { error: 'could not save the wage rate', errorCode: 'save' }
+  return { error: "could not save the wage rate", errorCode: "save" };
 }
 
 /** GET ?employee=<partyId> → that employee's wage-rate history (confidential;
  * the employee record's Wages tab reads this). */
-async function legacyGET(req: Request) {
-  const gate = await guardPermission('admin.setup.manage')
-  if (gate instanceof NextResponse) return gate
-  const feature = await guardLaborFeature(gate.user.orgId)
-  if (feature) return feature
-  const url = new URL(req.url)
-  const employee = url.searchParams.get('employee')
-  if (!employee || !isUuid(employee)) return NextResponse.json({ error: 'employee required' }, { status: 422 })
+async function legacyGET(req: Request, gate: Authz) {
+  const feature = await guardLaborFeature(gate.user.orgId);
+  if (feature) return feature;
+  const url = new URL(req.url);
+  const employee = url.searchParams.get("employee");
+  if (!employee || !isUuid(employee))
+    return NextResponse.json({ error: "employee required" }, { status: 422 });
   return withOrgTransaction(gate.user.orgId, async () => {
     // Lock ownership before loading the confidential rates. A rehome waits
     // until the authorized response has been constructed.
-    const employeeContext = await db.execute<{ base_currency: string | null; subsidiaryId: string | null }>(sql`
+    const employeeContext = await db.execute<{
+      base_currency: string | null;
+      subsidiaryId: string | null;
+    }>(
+      sql`
       select s.base_currency, p.subsidiary_id as "subsidiaryId"
         from parties p
         left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id and s.is_active
        where p.org_id = ${gate.user.orgId} and p.id = ${employee}
-       for share of p`, 'objects')
-    if (employeeContext.length !== 1) return notFound("record")
+       for share of p`,
+      "objects",
+    );
+    if (employeeContext.length !== 1) return notFound("record");
     // Wage data is confidential per subsidiary: an employee outside the
     // caller's subsidiary scope is indistinguishable from a nonexistent one.
     const scopeDenied = guardSubsidiaryScope(gate, employeeContext[0]!.subsidiaryId, {
       orgWideNull: true,
-    })
-    if (scopeDenied) return scopeDenied
-    if (!(await pinLaborFeature(gate.user.orgId, gate.user.id, employeeContext[0]!.subsidiaryId))) return projectsDisabledResponse()
-    const today = await businessToday(gate.user.orgId)
+    });
+    if (scopeDenied) return scopeDenied;
+    if (!(await pinLaborFeature(gate.user.orgId, gate.user.id, employeeContext[0]!.subsidiaryId)))
+      return projectsDisabledResponse();
+    const today = await businessToday(gate.user.orgId);
     const [rates, org, currencies] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select id, rate, currency, basis, annual_hours, payroll_rate_scale, payroll_amount_rounding, effective_from::text as effective_from,
                effective_to::text as effective_to, notes,
                effective_from <= ${today} and (effective_to is null or effective_to >= ${today}) as is_current
           from labor_cost_rates
          where org_id = ${gate.user.orgId} and employee_party_id = ${employee} and is_active
-         order by effective_from desc`, 'objects'),
-      db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${gate.user.orgId}`, 'objects'),
+         order by effective_from desc`,
+        "objects",
+      ),
+      db.execute<{ base_currency: string }>(
+        sql`select base_currency from orgs where id = ${gate.user.orgId}`,
+        "objects",
+      ),
       configuredCurrencies(gate.user.orgId),
-    ])
-    const orgCurrency = org[0]?.base_currency ?? 'CAD'
+    ]);
+    const orgCurrency = org[0]?.base_currency ?? "CAD";
     return NextResponse.json({
       rates,
       currencies,
       defaultCurrency: employeeContext[0]!.base_currency ?? orgCurrency,
-    })
-  })
+    });
+  });
 }
-
-
-
-
 
 export const GET = defineRoute({
   permission: "admin.setup.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  handler: async ({ request }) => legacyGET(request as never),
+  feature: {
+    none: "Labor costing is available when either Projects or Manufacturing is enabled; the handler checks both gates.",
+  },
+  handler: async ({ request, authz }) => legacyGET(request, authz),
 });
 
 export const PUT = defineRoute({
   permission: "admin.setup.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "Labor costing is available when either Projects or Manufacturing is enabled; the handler checks both gates.",
+  },
   scope: "unrestricted",
   body: settingsBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
+    const gate = routeAuthz;
 
-    const gate = routeAuthz
-
-    const orgId = gate.user.orgId
-    const feature = await guardLaborFeature(orgId)
-    if (feature) return feature
-
-
-
-
-
+    const orgId = gate.user.orgId;
+    const feature = await guardLaborFeature(orgId);
+    if (feature) return feature;
 
     // Validate the ENTIRE payload before any write: a rejected save must leave
     // the stored policy exactly as it was.
-    const s = body.settings
-    if (s !== undefined && (typeof s !== 'object' || s === null || Array.isArray(s))) {
-      return NextResponse.json({ error: 'settings must be an object' }, { status: 422 })
+    const s = body.settings;
+    if (s !== undefined && (typeof s !== "object" || s === null || Array.isArray(s))) {
+      return NextResponse.json({ error: "settings must be an object" }, { status: 422 });
     }
-    const cfg = (s ?? {}) as Record<string, unknown>
+    const cfg = (s ?? {}) as Record<string, unknown>;
 
-    const hoursPerDayRaw = cfg.hoursPerDay == null || cfg.hoursPerDay === ''
-      ? '8'
-      : canonicalDecimal(cfg.hoursPerDay, 4)
+    const hoursPerDayRaw =
+      cfg.hoursPerDay == null || cfg.hoursPerDay === ""
+        ? "8"
+        : canonicalDecimal(cfg.hoursPerDay, 4);
     // Text-only boundary: a JSON number (or any other unreadable spelling) is
     // refused by name with the decimal-string remedy, not a bare 'invalid'.
     if (hoursPerDayRaw === null) {
-      return NextResponse.json({ error: decimalNullRefusal('hoursPerDay', 'a number of hours', cfg.hoursPerDay, 4) }, { status: 422 })
+      return NextResponse.json(
+        { error: decimalNullRefusal("hoursPerDay", "a number of hours", cfg.hoursPerDay, 4) },
+        { status: 422 },
+      );
     }
-    if (
-      compareDecimal(hoursPerDayRaw, '0') <= 0 ||
-      compareDecimal(hoursPerDayRaw, '24') > 0
-    ) {
-      return NextResponse.json({ error: 'invalid hoursPerDay' }, { status: 422 })
+    if (compareDecimal(hoursPerDayRaw, "0") <= 0 || compareDecimal(hoursPerDayRaw, "24") > 0) {
+      return NextResponse.json({ error: "invalid hoursPerDay" }, { status: 422 });
     }
-    let hoursPerDay: string
+    let hoursPerDay: string;
     try {
-      hoursPerDay = normalizeMoney(hoursPerDayRaw)
+      hoursPerDay = normalizeMoney(hoursPerDayRaw);
     } catch {
-      return NextResponse.json({ error: 'invalid hoursPerDay' }, { status: 422 })
+      return NextResponse.json({ error: "invalid hoursPerDay" }, { status: 422 });
     }
-    const annualHoursRaw = cfg.annualHours == null || cfg.annualHours === ''
-      ? '2080'
-      : canonicalDecimal(cfg.annualHours, 4)
+    const annualHoursRaw =
+      cfg.annualHours == null || cfg.annualHours === ""
+        ? "2080"
+        : canonicalDecimal(cfg.annualHours, 4);
     if (annualHoursRaw === null) {
-      return NextResponse.json({ error: decimalNullRefusal('annualHours', 'a number of hours', cfg.annualHours, 4) }, { status: 422 })
+      return NextResponse.json(
+        { error: decimalNullRefusal("annualHours", "a number of hours", cfg.annualHours, 4) },
+        { status: 422 },
+      );
     }
-    if (
-      compareDecimal(annualHoursRaw, '0') <= 0 ||
-      compareDecimal(annualHoursRaw, '8784') > 0
-    ) {
-      return NextResponse.json({ error: 'invalid annualHours' }, { status: 422 })
+    if (compareDecimal(annualHoursRaw, "0") <= 0 || compareDecimal(annualHoursRaw, "8784") > 0) {
+      return NextResponse.json({ error: "invalid annualHours" }, { status: 422 });
     }
-    let annualHours: string
+    let annualHours: string;
     try {
-      annualHours = normalizeMoney(annualHoursRaw)
+      annualHours = normalizeMoney(annualHoursRaw);
     } catch {
-      return NextResponse.json({ error: 'invalid annualHours' }, { status: 422 })
+      return NextResponse.json({ error: "invalid annualHours" }, { status: 422 });
     }
-    if (cfg.mode !== undefined && cfg.mode !== 'off' && cfg.mode !== 'post') {
-      return NextResponse.json({ error: 'invalid mode' }, { status: 422 })
+    if (cfg.mode !== undefined && cfg.mode !== "off" && cfg.mode !== "post") {
+      return NextResponse.json({ error: "invalid mode" }, { status: 422 });
     }
-    if (cfg.allowUnratedTime !== undefined && typeof cfg.allowUnratedTime !== 'boolean') {
-      return NextResponse.json({ error: 'invalid allowUnratedTime' }, { status: 422 })
+    if (cfg.allowUnratedTime !== undefined && typeof cfg.allowUnratedTime !== "boolean") {
+      return NextResponse.json({ error: "invalid allowUnratedTime" }, { status: 422 });
     }
-    const components = parseComponents(cfg.components)
-    if (!components.ok) return NextResponse.json({ error: components.error }, { status: 422 })
+    const components = parseComponents(cfg.components);
+    if (!components.ok) return NextResponse.json({ error: components.error }, { status: 422 });
     const settings = {
-      mode: cfg.mode === 'post' ? ('post' as const) : ('off' as const),
+      mode: cfg.mode === "post" ? ("post" as const) : ("off" as const),
       hoursPerDay,
       annualHours,
       components: components.value,
       allowUnratedTime: cfg.allowUnratedTime === true,
-    }
+    };
 
     // Control accounts ride the same save (existing controlAccounts keys).
-    const accounts: Record<string, string | null> = {}
+    const accounts: Record<string, string | null> = {};
     for (const key of CONTROL_ACCOUNT_KEYS) {
-      if (!(key in body)) continue
-      const v = body[key]
-      if (v !== null && (typeof v !== 'string' || !isUuid(v))) return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
-      accounts[key] = typeof v === 'string' ? v : null
+      if (!(key in body)) continue;
+      const v = body[key];
+      if (v !== null && (typeof v !== "string" || !isUuid(v)))
+        return NextResponse.json({ error: `invalid ${key}` }, { status: 422 });
+      accounts[key] = typeof v === "string" ? v : null;
     }
     // A referenced account must be a real, ACTIVE posting account in this org:
     // downstream labor/payroll postings reject inactive accounts, so accepting
     // one here would only move the failure into the ledger.
-    const accountIds = [...new Set(Object.values(accounts).filter((v): v is string => v !== null))]
+    const accountIds = [...new Set(Object.values(accounts).filter((v): v is string => v !== null))];
 
     // Settings + control accounts + audit evidence commit together or not at
     // all — no partial save can survive a failure past validation.
     const rejected = await withOrgTransaction(orgId, async () => {
-      if (!(await pinLaborFeature(orgId, gate.user.id))) return projectsDisabledResponse()
-      await lockLedgerSetupFence(db, orgId, "exclusive")
-      const current = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
-        select settings from orgs where id = ${orgId} for update`, 'objects')
+      if (!(await pinLaborFeature(orgId, gate.user.id))) return projectsDisabledResponse();
+      await lockLedgerSetupFence(db, orgId, "exclusive");
+      const current = await db.execute<{ settings: Record<string, unknown> | null }>(
+        sql`
+        select settings from orgs where id = ${orgId} for update`,
+        "objects",
+      );
       if (accountIds.length > 0) {
-        const found = await db.execute<{ id: string; type: string; isActive: boolean; isSummary: boolean }>(sql`
+        const found = await db.execute<{
+          id: string;
+          type: string;
+          isActive: boolean;
+          isSummary: boolean;
+        }>(
+          sql`
           select id, type, is_active as "isActive", is_summary as "isSummary" from accounts
            where org_id = ${orgId}
-             and id in (${sql.join(accountIds.map((id) => sql`${id}`), sql`, `)}) order by id for share`, 'objects')
+             and id in (${sql.join(
+               accountIds.map((id) => sql`${id}`),
+               sql`, `,
+             )}) order by id for share`,
+          "objects",
+        );
         // The same boundary the posting path enforces: an account of the
         // wrong type is refused here rather than saved and refused later.
         try {
           assertValidControlAccountMappings(
-            Object.fromEntries(Object.entries(accounts).filter((entry): entry is [string, string] => entry[1] !== null)),
+            Object.fromEntries(
+              Object.entries(accounts).filter(
+                (entry): entry is [string, string] => entry[1] !== null,
+              ),
+            ),
             found,
-          )
+          );
         } catch (error) {
           if (error instanceof ControlAccountsIncompleteError) {
-            return NextResponse.json({ error: error.message, code: 'invalid_control_account' }, { status: 422 })
+            return NextResponse.json(
+              { error: error.message, code: "invalid_control_account" },
+              { status: 422 },
+            );
           }
-          throw error
+          throw error;
         }
       }
-      const beforeSettings = (current[0]?.settings ?? {}) as Record<string, unknown>
-      const beforeControl = (beforeSettings.controlAccounts ?? {}) as Record<string, unknown>
-      if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
-        const beforeLabor = (beforeSettings.laborCosting ?? {}) as Record<string, unknown>
-        if (settings.mode !== (beforeLabor.mode ?? 'off') || ('laborWip' in accounts && accounts.laborWip !== (beforeControl.laborWip ?? null))) return NextResponse.json({ error: 'Project labor posting requires Projects. Production operations own their manufacturing WIP posting.' }, { status: 422 })
+      const beforeSettings = (current[0]?.settings ?? {}) as Record<string, unknown>;
+      const beforeControl = (beforeSettings.controlAccounts ?? {}) as Record<string, unknown>;
+      if (!(await lockAndCheckOrgFeature(db, orgId, "projects"))) {
+        const beforeLabor = (beforeSettings.laborCosting ?? {}) as Record<string, unknown>;
+        if (
+          settings.mode !== (beforeLabor.mode ?? "off") ||
+          ("laborWip" in accounts && accounts.laborWip !== (beforeControl.laborWip ?? null))
+        )
+          return NextResponse.json(
+            {
+              error:
+                "Project labor posting requires Projects. Production operations own their manufacturing WIP posting.",
+            },
+            { status: 422 },
+          );
       }
 
       // One single-assignment update: every jsonb_set nests around the last.
-      let nextSettings: SQL = sql`jsonb_set(coalesce(settings, '{}'::jsonb), '{laborCosting}', ${JSON.stringify(settings)}::jsonb)`
+      let nextSettings: SQL = sql`jsonb_set(coalesce(settings, '{}'::jsonb), '{laborCosting}', ${JSON.stringify(settings)}::jsonb)`;
       for (const [key, v] of Object.entries(accounts)) {
-        nextSettings = sql`jsonb_set(${nextSettings}, ${`{controlAccounts,${key}}`}::text[], ${JSON.stringify(v)}::jsonb)`
+        nextSettings = sql`jsonb_set(${nextSettings}, ${`{controlAccounts,${key}}`}::text[], ${JSON.stringify(v)}::jsonb)`;
       }
       await db.execute(sql`
         update orgs set settings = ${nextSettings}, updated_at = now(), updated_by = ${gate.user.id}
-         where id = ${orgId}`)
+         where id = ${orgId}`);
 
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -505,67 +668,93 @@ export const PUT = defineRoute({
           controlAccounts: Object.fromEntries(
             Object.entries(accounts).map(([key, v]) => [key, [beforeControl[key] ?? null, v]]),
           ),
-        })}, ${gate.user.id})`)
-      return null
-    })
-    if (rejected) return rejected
-    return NextResponse.json({ ok: true })
+        })}, ${gate.user.id})`);
+      return null;
+    });
+    if (rejected) return rejected;
+    return NextResponse.json({ ok: true });
   },
 });
 
 export const POST = defineRoute({
   permission: "admin.setup.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "Labor costing is available when either Projects or Manufacturing is enabled; the handler checks both gates.",
+  },
   body: postBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
+    const gate = routeAuthz;
 
-    const gate = routeAuthz
+    const orgId = gate.user.orgId;
+    const feature = await guardLaborFeature(orgId);
+    if (feature) return feature;
+    const userId = gate.user.id;
 
-    const orgId = gate.user.orgId
-    const feature = await guardLaborFeature(orgId)
-    if (feature) return feature
-    const userId = gate.user.id
-
-
-
-
-    if (body.action === 'save-rate') {
-      const employeePartyId = body.employeePartyId ?? null
-      const jobTitle = typeof body.jobTitle === 'string' && body.jobTitle.trim() ? body.jobTitle.trim().slice(0, 160) : null
-      const tradeId = body.tradeId ?? null
-      const departmentId = body.departmentId ?? null
-      const subsidiaryId = body.subsidiaryId ?? null
-      if (employeePartyId !== null && (typeof employeePartyId !== 'string' || !isUuid(employeePartyId))) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
-      if (tradeId !== null && (typeof tradeId !== 'string' || !isUuid(tradeId))) return NextResponse.json({ error: 'invalid trade' }, { status: 422 })
-      if (departmentId !== null && (typeof departmentId !== 'string' || !isUuid(departmentId))) return NextResponse.json({ error: 'invalid department' }, { status: 422 })
-      if (subsidiaryId !== null && (typeof subsidiaryId !== 'string' || !isUuid(subsidiaryId))) return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
-      if ([employeePartyId, jobTitle, tradeId, departmentId, subsidiaryId].filter(Boolean).length > 1) {
-        return NextResponse.json({ error: 'choose exactly one wage scope' }, { status: 422 })
+    if (body.action === "save-rate") {
+      const employeePartyId = body.employeePartyId ?? null;
+      const jobTitle =
+        typeof body.jobTitle === "string" && body.jobTitle.trim()
+          ? body.jobTitle.trim().slice(0, 160)
+          : null;
+      const tradeId = body.tradeId ?? null;
+      const departmentId = body.departmentId ?? null;
+      const subsidiaryId = body.subsidiaryId ?? null;
+      if (
+        employeePartyId !== null &&
+        (typeof employeePartyId !== "string" || !isUuid(employeePartyId))
+      )
+        return NextResponse.json({ error: "invalid employee" }, { status: 422 });
+      if (tradeId !== null && (typeof tradeId !== "string" || !isUuid(tradeId)))
+        return NextResponse.json({ error: "invalid trade" }, { status: 422 });
+      if (departmentId !== null && (typeof departmentId !== "string" || !isUuid(departmentId)))
+        return NextResponse.json({ error: "invalid department" }, { status: 422 });
+      if (subsidiaryId !== null && (typeof subsidiaryId !== "string" || !isUuid(subsidiaryId)))
+        return NextResponse.json({ error: "invalid subsidiary" }, { status: 422 });
+      if (
+        [employeePartyId, jobTitle, tradeId, departmentId, subsidiaryId].filter(Boolean).length > 1
+      ) {
+        return NextResponse.json({ error: "choose exactly one wage scope" }, { status: 422 });
       }
       // Job-title, trade, and unanchored default rates resolve across every
       // subsidiary. A subsidiary-limited setup actor may write only rates with
       // an employee, department, or subsidiary anchor.
       if (isOrgWideWageScope({ employeePartyId, jobTitle, tradeId, departmentId, subsidiaryId })) {
-        const scopeDenied = guardUnrestrictedScope(gate)
-        if (scopeDenied) return scopeDenied
+        const scopeDenied = guardUnrestrictedScope(gate);
+        if (scopeDenied) return scopeDenied;
       }
       const [employeeRef, tradeRef, departmentRef, subsidiaryRef] = await Promise.all([
         employeePartyId
-          ? db.execute<{ subsidiaryId: string | null }>(sql`
+          ? db.execute<{ subsidiaryId: string | null }>(
+              sql`
               select p.subsidiary_id as "subsidiaryId"
                 from parties p
                 join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
-               where p.org_id = ${orgId} and p.id = ${employeePartyId} and p.is_active`, 'objects')
+               where p.org_id = ${orgId} and p.id = ${employeePartyId} and p.is_active`,
+              "objects",
+            )
           : null,
-        tradeId ? db.execute(sql`select 1 from trades where org_id = ${orgId} and id = ${tradeId} and is_active`, 'objects') : null,
+        tradeId
+          ? db.execute(
+              sql`select 1 from trades where org_id = ${orgId} and id = ${tradeId} and is_active`,
+              "objects",
+            )
+          : null,
         departmentId
-          ? db.execute<{ subsidiaryId: string | null }>(sql`
+          ? db.execute<{ subsidiaryId: string | null }>(
+              sql`
               select subsidiary_id as "subsidiaryId"
                 from departments
-               where org_id = ${orgId} and id = ${departmentId} and is_active`, 'objects')
+               where org_id = ${orgId} and id = ${departmentId} and is_active`,
+              "objects",
+            )
           : null,
-        subsidiaryId ? db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination`, 'objects') : null,
-      ])
+        subsidiaryId
+          ? db.execute(
+              sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination`,
+              "objects",
+            )
+          : null,
+      ]);
       // One scope tuple, four different failed lookups: the refusal names which
       // scope failed and the id it was given — never one sentence for all four.
       // The four reads above stay a single round trip on the success path; only
@@ -579,90 +768,133 @@ export const POST = defineRoute({
               ? `department wage scope "${departmentId}" is not available — no active department in this organization`
               : subsidiaryId !== null && subsidiaryRef?.length !== 1
                 ? `subsidiary wage scope "${subsidiaryId}" is not available — no active, non-elimination subsidiary in this organization`
-                : null
+                : null;
       if (missingScope) {
-        return NextResponse.json({ error: missingScope }, { status: 422 })
+        return NextResponse.json({ error: missingScope }, { status: 422 });
       }
       // An employee selector with no subsidiary is effectively organization-wide:
       // costing resolution matches it for projects in every legal entity.
       if (employeePartyId !== null && employeeRef?.[0]?.subsidiaryId == null) {
-        const scopeDenied = guardUnrestrictedScope(gate)
-        if (scopeDenied) return scopeDenied
+        const scopeDenied = guardUnrestrictedScope(gate);
+        if (scopeDenied) return scopeDenied;
       }
       // Wages are confidential per subsidiary: an employee/department/subsidiary
       // outside the caller's scope is indistinguishable from a missing one.
-      if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, employeeRef?.[0]?.subsidiaryId ?? null, { orgWideNull: true })) {
-        return notFound("record")
+      if (
+        !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, employeeRef?.[0]?.subsidiaryId ?? null, {
+          orgWideNull: true,
+        })
+      ) {
+        return notFound("record");
       }
-      if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, departmentRef?.[0]?.subsidiaryId ?? null)) {
-        return notFound("record")
+      if (
+        !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, departmentRef?.[0]?.subsidiaryId ?? null)
+      ) {
+        return notFound("record");
       }
       if (subsidiaryId && !subsidiariesInScope(gate, [subsidiaryId])) {
-        return notFound("record")
+        return notFound("record");
       }
-      const currencies = await configuredCurrencies(orgId)
-      const currency = typeof body.currency === 'string' ? body.currency.toUpperCase() : ''
-      if (!currencies.includes(currency)) return NextResponse.json({ error: 'currency is not configured for this organization' }, { status: 422 })
-      const rateRaw = canonicalDecimal(body.rate, 4)
+      const currencies = await configuredCurrencies(orgId);
+      const currency = typeof body.currency === "string" ? body.currency.toUpperCase() : "";
+      if (!currencies.includes(currency))
+        return NextResponse.json(
+          { error: "currency is not configured for this organization" },
+          { status: 422 },
+        );
+      const rateRaw = canonicalDecimal(body.rate, 4);
       if (rateRaw === null) {
-        return NextResponse.json({ error: decimalNullRefusal('rate', 'an exact decimal rate', body.rate, 4) }, { status: 422 })
+        return NextResponse.json(
+          { error: decimalNullRefusal("rate", "an exact decimal rate", body.rate, 4) },
+          { status: 422 },
+        );
       }
-      if (compareDecimal(rateRaw, '0') < 0 || compareDecimal(rateRaw, NUMERIC_19_4_MAX) > 0) {
-        return NextResponse.json({ error: 'invalid rate' }, { status: 422 })
+      if (compareDecimal(rateRaw, "0") < 0 || compareDecimal(rateRaw, NUMERIC_19_4_MAX) > 0) {
+        return NextResponse.json({ error: "invalid rate" }, { status: 422 });
       }
-      const rate = normalizeMoney(rateRaw)
-      const basis = body.basis ?? 'hour'
-      const annualHoursRaw = body.annualHours == null || body.annualHours === ''
-        ? '2080'
-        : canonicalDecimal(body.annualHours, 4)
+      const rate = normalizeMoney(rateRaw);
+      const basis = body.basis ?? "hour";
+      const annualHoursRaw =
+        body.annualHours == null || body.annualHours === ""
+          ? "2080"
+          : canonicalDecimal(body.annualHours, 4);
       if (annualHoursRaw === null) {
-        return NextResponse.json({ error: decimalNullRefusal('annualHours', 'a number of hours', body.annualHours, 4) }, { status: 422 })
+        return NextResponse.json(
+          { error: decimalNullRefusal("annualHours", "a number of hours", body.annualHours, 4) },
+          { status: 422 },
+        );
       }
-      if (compareDecimal(annualHoursRaw, '0') <= 0 || compareDecimal(annualHoursRaw, NUMERIC_19_4_MAX) > 0) {
-        return NextResponse.json({ error: 'invalid annualHours' }, { status: 422 })
+      if (
+        compareDecimal(annualHoursRaw, "0") <= 0 ||
+        compareDecimal(annualHoursRaw, NUMERIC_19_4_MAX) > 0
+      ) {
+        return NextResponse.json({ error: "invalid annualHours" }, { status: 422 });
       }
-      let annualHours: string
+      let annualHours: string;
       try {
-        annualHours = normalizeMoney(annualHoursRaw)
+        annualHours = normalizeMoney(annualHoursRaw);
       } catch {
-        return NextResponse.json({ error: 'invalid annualHours' }, { status: 422 })
+        return NextResponse.json({ error: "invalid annualHours" }, { status: 422 });
       }
-      const effectiveFrom = body.effectiveFrom
+      const effectiveFrom = body.effectiveFrom;
       // Shape alone admits impossible dates ('2026-02-30') that PostgreSQL
       // then refuses with a driver error instead of this field error.
-      if (typeof effectiveFrom !== 'string' || !DATE_RE.test(effectiveFrom) || !isIsoCalendarDate(effectiveFrom)) {
-        return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 422 })
+      if (
+        typeof effectiveFrom !== "string" ||
+        !DATE_RE.test(effectiveFrom) ||
+        !isIsoCalendarDate(effectiveFrom)
+      ) {
+        return NextResponse.json({ error: "effectiveFrom (YYYY-MM-DD) required" }, { status: 422 });
       }
-      const reason = bodyReason(body.reason, 'wage rate saved')
-      const scope: WageScope = { employeePartyId, jobTitle, tradeId, departmentId, subsidiaryId }
+      const reason = bodyReason(body.reason, "wage rate saved");
+      const scope: WageScope = { employeePartyId, jobTitle, tradeId, departmentId, subsidiaryId };
 
       try {
         const outcome = await withOrgTransaction(orgId, async (): Promise<RateMutation> => {
-          let liveSubsidiary = subsidiaryId
+          let liveSubsidiary = subsidiaryId;
           // The anchor scope decision above ran on unlocked reads. Relock the
           // anchor rows here — a rehome landing between the check and this
           // write must deny rather than save into the new subsidiary.
           // Missing anchors fail closed. Row locks precede the scope advisory
           // lock below, the same order end/delete uses.
           if (employeePartyId) {
-            const lockedEmployee = (await db.execute<{ subsidiaryId: string | null }>(sql`
+            const lockedEmployee = (
+              await db.execute<{ subsidiaryId: string | null }>(
+                sql`
               select p.subsidiary_id as "subsidiaryId" from parties p
-               where p.org_id = ${orgId} and p.id = ${employeePartyId} for share`, 'objects'))[0]
-            if (!lockedEmployee || !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, lockedEmployee.subsidiaryId, { orgWideNull: true })) {
-              return { ok: false, response: notFound("record") }
+               where p.org_id = ${orgId} and p.id = ${employeePartyId} for share`,
+                "objects",
+              )
+            )[0];
+            if (
+              !lockedEmployee ||
+              !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, lockedEmployee.subsidiaryId, {
+                orgWideNull: true,
+              })
+            ) {
+              return { ok: false, response: notFound("record") };
             }
-            liveSubsidiary = lockedEmployee.subsidiaryId
+            liveSubsidiary = lockedEmployee.subsidiaryId;
           }
           if (departmentId) {
-            const lockedDepartment = (await db.execute<{ subsidiaryId: string | null }>(sql`
+            const lockedDepartment = (
+              await db.execute<{ subsidiaryId: string | null }>(
+                sql`
               select subsidiary_id as "subsidiaryId" from departments
-               where org_id = ${orgId} and id = ${departmentId} for share`, 'objects'))[0]
-            if (!lockedDepartment || !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, lockedDepartment.subsidiaryId)) {
-              return { ok: false, response: notFound("record") }
+               where org_id = ${orgId} and id = ${departmentId} for share`,
+                "objects",
+              )
+            )[0];
+            if (
+              !lockedDepartment ||
+              !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, lockedDepartment.subsidiaryId)
+            ) {
+              return { ok: false, response: notFound("record") };
             }
-            liveSubsidiary = lockedDepartment.subsidiaryId
+            liveSubsidiary = lockedDepartment.subsidiaryId;
           }
-          if (!(await pinLaborFeature(orgId, userId, liveSubsidiary))) return { ok: false, response: projectsDisabledResponse() }
+          if (!(await pinLaborFeature(orgId, userId, liveSubsidiary)))
+            return { ok: false, response: projectsDisabledResponse() };
           // The canonical writer (engine/src/projects/labor-cost-rates.ts):
           // same-scope lock, close, upsert-or-correct, and audit evidence in
           // one unit — the compensation push calls the same service, so the
@@ -680,43 +912,55 @@ export const POST = defineRoute({
             payrollAmountRounding: body.payrollAmountRounding,
             notes: body.notes ? String(body.notes).slice(0, 500) : null,
             reason,
-          })
-          return { ok: true }
-        })
-        if (!outcome.ok) return outcome.response
+          });
+          return { ok: true };
+        });
+        if (!outcome.ok) return outcome.response;
       } catch (e) {
         // A storage refusal past validation (exclusion constraint, injected
         // error) rolls back close + upsert + audit together: no committed gap.
         // The refusal is mapped, never the driver text (see rateStorageRefusal).
-        return NextResponse.json(rateStorageRefusal(e), { status: 422 })
+        return NextResponse.json(rateStorageRefusal(e), { status: 422 });
       }
-      return NextResponse.json({ ok: true })
+      return NextResponse.json({ ok: true });
     }
 
-    if (body.action === 'end-rate') {
+    if (body.action === "end-rate") {
       // Capture the validated id so the locked statements keep a string.
-      const id = body.id
-      if (typeof id !== 'string' || !isUuid(id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
-      const to = body.effectiveTo
-      if (to !== null && (typeof to !== 'string' || !DATE_RE.test(to) || !isIsoCalendarDate(to))) {
-        return NextResponse.json({ error: 'invalid effectiveTo' }, { status: 422 })
+      const id = body.id;
+      if (typeof id !== "string" || !isUuid(id))
+        return NextResponse.json({ error: "invalid id" }, { status: 422 });
+      const to = body.effectiveTo;
+      if (to !== null && (typeof to !== "string" || !DATE_RE.test(to) || !isIsoCalendarDate(to))) {
+        return NextResponse.json({ error: "invalid effectiveTo" }, { status: 422 });
       }
-      const reason = bodyReason(body.reason, to ? 'wage rate ended' : 'wage rate end date cleared')
+      const reason = bodyReason(body.reason, to ? "wage rate ended" : "wage rate end date cleared");
       try {
         const outcome = await withOrgTransaction(orgId, async (): Promise<RateMutation> => {
           // Scope columns are immutable on this path: resolve the anchors
           // under lock with the save-rate policy, then re-read
           // authoritatively under the scope lock.
-          const scoped = await lockedRateScope(orgId, gate, id)
-          if ('response' in scoped) return { ok: false, response: scoped.response }
-          const row = scoped.row
+          const scoped = await lockedRateScope(orgId, gate, id);
+          if ("response" in scoped) return { ok: false, response: scoped.response };
+          const row = scoped.row;
 
-          await db.execute(scopeLock(orgId, row))
-          const before = (await db.execute<RateRow & { employeePartyId: string | null; departmentId: string | null; subsidiaryId: string | null }>(sql`
+          await db.execute(scopeLock(orgId, row));
+          const before = (
+            await db.execute<
+              RateRow & {
+                employeePartyId: string | null;
+                departmentId: string | null;
+                subsidiaryId: string | null;
+              }
+            >(
+              sql`
               select ${RATE_ROW_COLUMNS}, employee_party_id as "employeePartyId",
                      department_id as "departmentId", subsidiary_id as "subsidiaryId"
                 from labor_cost_rates
-                where org_id = ${orgId} and id = ${id} for update`, 'objects'))[0]!
+                where org_id = ${orgId} and id = ${id} for update`,
+              "objects",
+            )
+          )[0]!;
           // The rate row itself can be re-pointed between the locked locate
           // and this re-read: a changed scope tuple denies rather than ending
           // another subsidiary's rate.
@@ -725,52 +969,67 @@ export const POST = defineRoute({
             before.departmentId !== row.departmentId ||
             before.subsidiaryId !== row.subsidiaryId
           ) {
-            return { ok: false, response: notFound("record") }
+            return { ok: false, response: notFound("record") };
           }
           if (to !== null && to < before.effectiveFrom) {
             return {
               ok: false,
-              response: NextResponse.json({ error: 'effectiveTo precedes effectiveFrom' }, { status: 422 }),
-            }
+              response: NextResponse.json(
+                { error: "effectiveTo precedes effectiveFrom" },
+                { status: 422 },
+              ),
+            };
           }
           await db.execute(sql`
             update labor_cost_rates set effective_to = ${to}, updated_at = now(), updated_by = ${userId}
-             where org_id = ${orgId} and id = ${id}`)
-          const after: RateRow = { ...before, effectiveTo: to }
+             where org_id = ${orgId} and id = ${id}`);
+          const after: RateRow = { ...before, effectiveTo: to };
           await db.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${orgId}, 'labor_cost_rates', ${id}, 'update',
-                    ${JSON.stringify({ reason, before, after })}, ${userId})`)
-          return { ok: true }
-        })
-        if (!outcome.ok) return outcome.response
+                    ${JSON.stringify({ reason, before, after })}, ${userId})`);
+          return { ok: true };
+        });
+        if (!outcome.ok) return outcome.response;
       } catch (e) {
         // Overlap/valid-range refusals from storage roll data and audit back
         // together — the update never survives without its evidence. Mapped,
         // never the driver text (see rateStorageRefusal).
-        return NextResponse.json(rateStorageRefusal(e), { status: 422 })
+        return NextResponse.json(rateStorageRefusal(e), { status: 422 });
       }
-      return NextResponse.json({ ok: true })
+      return NextResponse.json({ ok: true });
     }
 
-    if (body.action === 'delete-rate') {
+    if (body.action === "delete-rate") {
       // Capture the validated id so the locked statements keep a string.
-      const id = body.id
-      if (typeof id !== 'string' || !isUuid(id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
-      const reason = bodyReason(body.reason, 'wage rate deleted')
+      const id = body.id;
+      if (typeof id !== "string" || !isUuid(id))
+        return NextResponse.json({ error: "invalid id" }, { status: 422 });
+      const reason = bodyReason(body.reason, "wage rate deleted");
       try {
         const outcome = await withOrgTransaction(orgId, async (): Promise<RateMutation> => {
           // Same locked anchor resolution as end-rate.
-          const scoped = await lockedRateScope(orgId, gate, id)
-          if ('response' in scoped) return { ok: false, response: scoped.response }
-          const row = scoped.row
+          const scoped = await lockedRateScope(orgId, gate, id);
+          if ("response" in scoped) return { ok: false, response: scoped.response };
+          const row = scoped.row;
 
-          await db.execute(scopeLock(orgId, row))
-          const before = (await db.execute<RateRow & { employeePartyId: string | null; departmentId: string | null; subsidiaryId: string | null }>(sql`
+          await db.execute(scopeLock(orgId, row));
+          const before = (
+            await db.execute<
+              RateRow & {
+                employeePartyId: string | null;
+                departmentId: string | null;
+                subsidiaryId: string | null;
+              }
+            >(
+              sql`
               select ${RATE_ROW_COLUMNS}, employee_party_id as "employeePartyId",
                      department_id as "departmentId", subsidiary_id as "subsidiaryId"
                 from labor_cost_rates
-                where org_id = ${orgId} and id = ${id} for update`, 'objects'))[0]!
+                where org_id = ${orgId} and id = ${id} for update`,
+              "objects",
+            )
+          )[0]!;
           // The rate row itself can be re-pointed between the locked locate
           // and this re-read: a changed scope tuple denies rather than
           // deleting another subsidiary's rate.
@@ -779,76 +1038,120 @@ export const POST = defineRoute({
             before.departmentId !== row.departmentId ||
             before.subsidiaryId !== row.subsidiaryId
           ) {
-            return { ok: false, response: notFound("record") }
+            return { ok: false, response: notFound("record") };
           }
           // Keep the resolved-rate provenance on approved time entries intact:
           // deactivation, never a physical delete.
           await db.execute(sql`
             update labor_cost_rates
                set is_active = false, updated_at = now(), updated_by = ${userId}
-             where org_id = ${orgId} and id = ${id}`)
-          const after: RateRow = { ...before, isActive: false }
+             where org_id = ${orgId} and id = ${id}`);
+          const after: RateRow = { ...before, isActive: false };
           await db.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${orgId}, 'labor_cost_rates', ${id}, 'delete',
-                    ${JSON.stringify({ reason, before, after })}, ${userId})`)
-          return { ok: true }
-        })
-        if (!outcome.ok) return outcome.response
+                    ${JSON.stringify({ reason, before, after })}, ${userId})`);
+          return { ok: true };
+        });
+        if (!outcome.ok) return outcome.response;
       } catch (e) {
-        return NextResponse.json(rateStorageRefusal(e), { status: 422 })
+        return NextResponse.json(rateStorageRefusal(e), { status: 422 });
       }
-      return NextResponse.json({ ok: true })
+      return NextResponse.json({ ok: true });
     }
 
     // Payroll true-up: read the clearing wash for a period / post its residue.
     // An impossible date that passes the shape check reaches the engine, whose
     // SQL date comparisons throw past the route's 422 mapping as a 500.
-    const DATE_OK = (v: unknown): v is string => typeof v === 'string' && DATE_RE.test(v) && isIsoCalendarDate(v)
-    if (body.action === 'reconcile') {
-      if (!DATE_OK(body.periodStart) || !DATE_OK(body.periodEnd) || body.periodEnd < body.periodStart) {
-        return NextResponse.json({ error: 'periodStart/periodEnd (YYYY-MM-DD) required' }, { status: 422 })
+    const DATE_OK = (v: unknown): v is string =>
+      typeof v === "string" && DATE_RE.test(v) && isIsoCalendarDate(v);
+    if (body.action === "reconcile") {
+      if (
+        !DATE_OK(body.periodStart) ||
+        !DATE_OK(body.periodEnd) ||
+        body.periodEnd < body.periodStart
+      ) {
+        return NextResponse.json(
+          { error: "periodStart/periodEnd (YYYY-MM-DD) required" },
+          { status: 422 },
+        );
       }
-      if (typeof body.subsidiaryId !== 'string' || !isUuid(body.subsidiaryId)) return NextResponse.json({ error: 'subsidiary required' }, { status: 422 })
-      const subsidiary = await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`, 'objects')
+      if (typeof body.subsidiaryId !== "string" || !isUuid(body.subsidiaryId))
+        return NextResponse.json({ error: "subsidiary required" }, { status: 422 });
+      const subsidiary = await db.execute(
+        sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`,
+        "objects",
+      );
       if (subsidiary.length !== 1) {
-        return NextResponse.json({ error: await subsidiaryProblem(orgId, body.subsidiaryId) }, { status: 422 })
+        return NextResponse.json(
+          { error: await subsidiaryProblem(orgId, body.subsidiaryId) },
+          { status: 422 },
+        );
       }
-      if (!subsidiariesInScope(gate, [body.subsidiaryId])) return notFound("record")
+      if (!subsidiariesInScope(gate, [body.subsidiaryId])) return notFound("record");
       try {
-        const rec = await laborClearingReconciliation(orgId, body.periodStart, body.periodEnd, body.subsidiaryId)
-        if (!rec) return NextResponse.json({ error: 'labor clearing account is not configured' }, { status: 422 })
-        return NextResponse.json({ ok: true, ...rec })
+        const rec = await laborClearingReconciliation(
+          orgId,
+          body.periodStart,
+          body.periodEnd,
+          body.subsidiaryId,
+        );
+        if (!rec)
+          return NextResponse.json(
+            { error: "labor clearing account is not configured" },
+            { status: 422 },
+          );
+        return NextResponse.json({ ok: true, ...rec });
       } catch (e) {
-        if (e instanceof LaborCostingFeatureDisabledError) return projectsDisabledResponse()
-        throw e
+        if (e instanceof LaborCostingFeatureDisabledError) return projectsDisabledResponse();
+        throw e;
       }
     }
 
-    if (body.action === 'post-variance') {
-      if (!DATE_OK(body.periodStart) || !DATE_OK(body.periodEnd) || body.periodEnd < body.periodStart) {
-        return NextResponse.json({ error: 'periodStart/periodEnd (YYYY-MM-DD) required' }, { status: 422 })
+    if (body.action === "post-variance") {
+      if (
+        !DATE_OK(body.periodStart) ||
+        !DATE_OK(body.periodEnd) ||
+        body.periodEnd < body.periodStart
+      ) {
+        return NextResponse.json(
+          { error: "periodStart/periodEnd (YYYY-MM-DD) required" },
+          { status: 422 },
+        );
       }
-      if (typeof body.subsidiaryId !== 'string' || !isUuid(body.subsidiaryId)) return NextResponse.json({ error: 'subsidiary required' }, { status: 422 })
+      if (typeof body.subsidiaryId !== "string" || !isUuid(body.subsidiaryId))
+        return NextResponse.json({ error: "subsidiary required" }, { status: 422 });
       // Posting payroll variance writes GL journals — setup authority alone is
       // not posting authority (same boundary as every journal action).
-      if (!can(gate, 'gl.post')) {
-        return NextResponse.json({ error: 'missing permission: gl.post' }, { status: 403 })
+      if (!can(gate, "gl.post")) {
+        return NextResponse.json({ error: "missing permission: gl.post" }, { status: 403 });
       }
-      const subsidiary = await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`, 'objects')
+      const subsidiary = await db.execute(
+        sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`,
+        "objects",
+      );
       if (subsidiary.length !== 1) {
-        return NextResponse.json({ error: await subsidiaryProblem(orgId, body.subsidiaryId) }, { status: 422 })
+        return NextResponse.json(
+          { error: await subsidiaryProblem(orgId, body.subsidiaryId) },
+          { status: 422 },
+        );
       }
-      if (!subsidiariesInScope(gate, [body.subsidiaryId])) return notFound("record")
+      if (!subsidiariesInScope(gate, [body.subsidiaryId])) return notFound("record");
       try {
-        const result = await postPayrollVariance({ orgId, actorId: userId, periodStart: body.periodStart, periodEnd: body.periodEnd, subsidiaryId: body.subsidiaryId })
-        return NextResponse.json({ ok: true, ...result })
+        const result = await postPayrollVariance({
+          orgId,
+          actorId: userId,
+          periodStart: body.periodStart,
+          periodEnd: body.periodEnd,
+          subsidiaryId: body.subsidiaryId,
+        });
+        return NextResponse.json({ ok: true, ...result });
       } catch (e) {
-        if (e instanceof LaborCostingFeatureDisabledError) return projectsDisabledResponse()
-        return apiErrorResponse(e)
+        if (e instanceof LaborCostingFeatureDisabledError) return projectsDisabledResponse();
+        return apiErrorResponse(e);
       }
     }
 
-    return NextResponse.json({ error: 'unknown action' }, { status: 400 })
+    return NextResponse.json({ error: "unknown action" }, { status: 400 });
   },
 });
