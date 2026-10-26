@@ -299,11 +299,22 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
         select count(*)::int as n from documents
          where org_id = ${orgId} and kind = 'field_ticket'
            and status in ('draft', 'pending_approval')`),
+      // Open documents are few and posted ones are many: walk the organization's
+      // kinds through the (org, kind, status) index and read each kind's open
+      // statuses, rather than scanning every document it ever posted.
       () => countRows(sql`
-        select count(*)::int as n from documents
-         where org_id = ${orgId} and project_id is not null
-           and kind <> 'field_ticket'
-           and status in ('draft', 'pending_approval', 'approved')`),
+        with recursive kinds(kind) as (
+          select min(kind) from documents where org_id = ${orgId}
+          union all
+          select (select min(d.kind) from documents d where d.org_id = ${orgId} and d.kind > kinds.kind)
+            from kinds where kinds.kind is not null
+        )
+        select count(*)::int as n
+          from kinds
+          join documents d on d.org_id = ${orgId} and d.kind = kinds.kind
+         where kinds.kind <> 'field_ticket'
+           and d.status in ('draft', 'pending_approval', 'approved')
+           and d.project_id is not null`),
       () => countRows(sql`
         select count(*)::int as n from time_entries
          where org_id = ${orgId} and project_id is not null
