@@ -1,4 +1,4 @@
-import { CloseError, NON_POSTING_DOCUMENT_KINDS } from "../periods/period-policy.ts";
+import { NON_POSTING_DOCUMENT_KINDS } from "../periods/period-policy.ts";
 import {
   projectLossPolicyMode,
   unassessedLossContracts,
@@ -8,6 +8,7 @@ import { incompletePostingEffectsCount } from "../periods/period-locks.ts";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { revaluationReadiness } from "./fx-revaluation.ts";
+import { loadCloseRunContext } from "./readiness-context.ts";
 import { resolveFxRateAgeLimit } from "../fx/rate-age-policy.ts";
 import { commerceCloseChecks, type CommerceCloseCheck } from "./commerce-close.ts";
 import { sourceEvidencePolicyActive } from "../banking/banking.ts";
@@ -38,38 +39,7 @@ type ReadinessCheck = {
 };
 
 export async function readinessChecks(orgId: string, runId: string): Promise<ReadinessCheck[]> {
-  const context = await db.execute<{
-    period_id: string;
-    book_id: string;
-    scope: { subsidiaryIds?: string[] };
-    system_blueprint: boolean;
-    starts_on: string;
-    ends_on: string;
-    fiscal_calendar_id: string;
-    period_number: number;
-    is_adjustment: boolean;
-    base_currency: string;
-    elimination_currency: string;
-  }>(
-    sql`
-    select r.period_id, r.book_id, r.scope, p.starts_on, p.ends_on,
-           b.name = 'close.defaultData.blueprint.name' as system_blueprint,
-           p.fiscal_calendar_id, p.period_number, p.is_adjustment,
-           o.base_currency,
-           coalesce(
-             (select s.base_currency from subsidiaries s
-               where s.org_id = o.id and s.is_elimination and s.is_active
-               order by s.created_at, s.id limit 1),
-             o.base_currency) as elimination_currency
-      from close_runs r
-      join close_blueprints b on b.id=r.blueprint_id and b.org_id=r.org_id
-      join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
-      join orgs o on o.id = r.org_id
-     where r.id = ${runId} and r.org_id = ${orgId}`,
-    "objects",
-  );
-  const ctx = context[0];
-  if (!ctx) throw new CloseError("close run not found");
+  const ctx = await loadCloseRunContext(orgId, runId);
   const subsidiaryIds = ctx.scope?.subsidiaryIds ?? [];
   const scoped = subsidiaryIds.length > 0;
   const inScope = (entity: SQL) => closeEntityScope(subsidiaryIds, entity);

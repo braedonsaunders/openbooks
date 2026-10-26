@@ -237,9 +237,7 @@ async function proposeRoeSeparationFacts(
   };
 }
 
-export async function readRoeSeparationFactsContext(
-  input: RoeEmployeeScope,
-): Promise<{
+export async function readRoeSeparationFactsContext(input: RoeEmployeeScope): Promise<{
   employee: RoeSeparationEmployee;
   record: RoeSeparationFacts | null;
   proposal: RoeSeparationProposal | null;

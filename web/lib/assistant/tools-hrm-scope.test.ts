@@ -92,14 +92,12 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   );
   assert.throws(() => byName.get("hrm_qualifications")!.inputSchema.parse({ status: "lapsed" }));
   byName.get("hrm_dispatch_check")!.inputSchema.parse({});
-  byName
-    .get("hrm_dispatch_check")!
-    .inputSchema.parse({
-      employmentId: UUID,
-      subjectKind: "equipment",
-      subjectId: UUID,
-      on: "2026-09-01",
-    });
+  byName.get("hrm_dispatch_check")!.inputSchema.parse({
+    employmentId: UUID,
+    subjectKind: "equipment",
+    subjectId: UUID,
+    on: "2026-09-01",
+  });
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ subjectKind: "crew" }));
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ subjectId: "nope" }));
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ on: "tomorrow" }));

@@ -119,9 +119,7 @@ function slimCategory(c: CategoryWeekly) {
 /** The org's AP capacity-scheduling knobs, exactly as the AP/AR/Cash pages
  *  build them from the cashflow analytics config — plus the configured
  *  default horizon and runway caution the cash position status reads. */
-async function loadApSettings(
-  orgId: string,
-): Promise<{
+async function loadApSettings(orgId: string): Promise<{
   weeklyCap: string;
   restrictToSafe: boolean;
   runwayCautionWeeks: number;

@@ -91,12 +91,10 @@ export function scanMoneyNumberConversions(source, path = "<source>") {
       if (ts.isObjectBindingPattern(node.name)) {
         for (const element of node.name.elements) {
           if (ts.isIdentifier(element.name))
-            bindings
-              .get(scope)
-              .set(element.name.text, {
-                field: (element.propertyName ?? element.name).getText(file),
-                initializer: element.initializer,
-              });
+            bindings.get(scope).set(element.name.text, {
+              field: (element.propertyName ?? element.name).getText(file),
+              initializer: element.initializer,
+            });
         }
       }
     }

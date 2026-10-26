@@ -47,13 +47,12 @@ for (const f of files) {
     }
   }
 }
-const policy = new Set(
-  [
-    ...readFileSync(join(root, "engine/src/sandbox/tenant-table-policies.ts"), "utf8").matchAll(
-      /^\s+"([a-z0-9_]+)":\s*"/gm,
-    ),
-  ].map((m) => m[1]),
-);
+function policyEntries(text) {
+  // A bare identifier and a quoted key name the same table.
+  return [...text.matchAll(/^\s+"?([a-z0-9_]+)"?:\s*"([^"]+)"/gm)];
+}
+const policyText = readFileSync(join(root, "engine/src/sandbox/tenant-table-policies.ts"), "utf8");
+const policy = new Set(policyEntries(policyText).map((m) => m[1]));
 const missing = [...tables]
   .filter(([t, org]) => org && !policy.has(t))
   .map(([t]) => t)
@@ -62,13 +61,7 @@ const missing = [...tables]
 // refuses at runtime when they drift: every skip:no-copy table is in EXCLUDE,
 // and every clone:parent-filter table has a PARENT_FILTER entry. Compare them
 // here too.
-const policies = new Map(
-  [
-    ...readFileSync(join(root, "engine/src/sandbox/tenant-table-policies.ts"), "utf8").matchAll(
-      /^\s+"([a-z0-9_]+)":\s*"([^"]+)"/gm,
-    ),
-  ].map((m) => [m[1], m[2]]),
-);
+const policies = new Map(policyEntries(policyText).map((m) => [m[1], m[2]]));
 const catalog = readFileSync(join(root, "engine/src/sandbox/catalog.ts"), "utf8").replace(
   /^\s*\/\/.*$/gm,
   "",

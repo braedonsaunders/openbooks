@@ -249,20 +249,18 @@ export async function createDirectDebitRun(opts: {
       await db.execute(
         sql`update payment_runs r set payment_count = x.n, total_amount = x.total, updated_at = now(), updated_by = ${opts.createdBy} from (select payment_run_id, count(*)::int as n, coalesce(sum(amount), 0) as total from payment_instructions where org_id = ${opts.orgId} and payment_run_id = ${run.id} group by payment_run_id) x where r.id = x.payment_run_id and r.org_id = ${opts.orgId}`,
       );
-      await db
-        .insert(schema.paymentEvents)
-        .values({
-          orgId: opts.orgId,
-          paymentRunId: run.id,
-          eventType: "run_created",
-          toStatus: "draft",
-          details: {
-            paymentBankProfileId: profile.id,
-            sourceCount: result.rows.length,
-            direction: "inbound",
-          },
-          actorId: opts.createdBy,
-        });
+      await db.insert(schema.paymentEvents).values({
+        orgId: opts.orgId,
+        paymentRunId: run.id,
+        eventType: "run_created",
+        toStatus: "draft",
+        details: {
+          paymentBankProfileId: profile.id,
+          sourceCount: result.rows.length,
+          direction: "inbound",
+        },
+        actorId: opts.createdBy,
+      });
       await db.execute(sql`release savepoint direct_debit_run_assembly`);
       return { kind: "success" as const, run };
     } catch (error) {
@@ -286,20 +284,18 @@ export async function createDirectDebitRun(opts: {
           sql`delete from documents where id in ${createdReceiptIds} and org_id = ${opts.orgId} and status = 'draft'`,
         );
       }
-      await db
-        .insert(schema.paymentEvents)
-        .values({
-          orgId: opts.orgId,
-          paymentRunId: run.id,
-          eventType: "run_creation_failed",
-          fromStatus: "draft",
-          toStatus: "cancelled",
-          details: {
-            error: error instanceof Error ? error.message : String(error),
-            direction: "inbound",
-          },
-          actorId: opts.createdBy,
-        });
+      await db.insert(schema.paymentEvents).values({
+        orgId: opts.orgId,
+        paymentRunId: run.id,
+        eventType: "run_creation_failed",
+        fromStatus: "draft",
+        toStatus: "cancelled",
+        details: {
+          error: error instanceof Error ? error.message : String(error),
+          direction: "inbound",
+        },
+        actorId: opts.createdBy,
+      });
       return { kind: "failure" as const, error: failure };
     }
   });

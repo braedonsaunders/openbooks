@@ -98,17 +98,15 @@ async function propose(f: Fixture, extraComponents = 2) {
       scrapPct: null,
       isByproduct: false,
     })),
-    ...spares
-      .slice(0, extraComponents)
-      .map((componentItemId) => ({
-        componentItemId,
-        quantityPer: "1",
-        effectiveFrom: today,
-        effectiveTo: null,
-        operationSeq: null,
-        scrapPct: null,
-        isByproduct: false,
-      })),
+    ...spares.slice(0, extraComponents).map((componentItemId) => ({
+      componentItemId,
+      quantityPer: "1",
+      effectiveFrom: today,
+      effectiveTo: null,
+      operationSeq: null,
+      scrapPct: null,
+      isByproduct: false,
+    })),
   ];
   const proposal = await run(f.org.orgId, (tx) =>
     saveBomPolicy(tx, f.org.orgId, f.actorId, {

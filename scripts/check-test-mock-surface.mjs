@@ -1016,9 +1016,64 @@ export function unescapeTemplate(body) {
   return out;
 }
 
+/**
+ * Indexes that sit inside a string, template text, or comment. A mock-block
+ * pattern is syntax (`["mock:name", body]`), so a copy of that pattern inside
+ * a string — a fixture passed to this checker — is not an authored block.
+ * Formatting may turn escaped quotes into a nested literal; the string boundary
+ * is what decides, not the quote characters.
+ */
+function stringInterior(src) {
+  const inside = new Uint8Array(src.length);
+  const n = src.length;
+  let i = 0;
+  const mark = (from, to) => {
+    for (let j = from; j < to && j < n; j++) inside[j] = 1;
+  };
+  while (i < n) {
+    const char = src[i];
+    if (char === "/" && src[i + 1] === "/") {
+      const start = i;
+      while (i < n && src[i] !== "\n") i++;
+      mark(start, i);
+      continue;
+    }
+    if (char === "/" && src[i + 1] === "*") {
+      const start = i;
+      i += 2;
+      while (i < n && !(src[i] === "*" && src[i + 1] === "/")) i++;
+      i = Math.min(n, i + 2);
+      mark(start, i);
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      const start = i;
+      const quote = char;
+      i++;
+      while (i < n) {
+        if (src[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (src[i] === quote || src[i] === "\n") {
+          i++;
+          break;
+        }
+        i++;
+      }
+      mark(start + 1, i - 1);
+      continue;
+    }
+    i++;
+  }
+  return inside;
+}
+
 // Mock source bodies: ['mock:X', `...`] | ["mock:X", "..."] | .set('mock:X', `...`)
 export function mockBlocks(src, raw) {
   const blocks = new Map();
+  const interior = stringInterior(src);
+  const inText = (index) => interior[index] === 1;
   // Bodies slice from `raw` (same length as the projection): the projection
   // blanks template text, but a mock body IS code at runtime and must be
   // parsed whole. Offsets line up because the projection preserves length.
@@ -1050,17 +1105,18 @@ export function mockBlocks(src, raw) {
     return source.slice(start, i);
   };
   for (const match of src.matchAll(/\[\s*['"`]mock:([^'"`]+)['"`]\s*,\s*`/g)) {
-    if (!blocks.has(match[1]))
-      blocks.set(match[1], unescapeTemplate(takeTemplate(match.index + match[0].length)));
+    if (inText(match.index) || blocks.has(match[1])) continue;
+    blocks.set(match[1], unescapeTemplate(takeTemplate(match.index + match[0].length)));
   }
   for (const match of src.matchAll(
     /\[\s*['"`]mock:([^'"`]+)['"`]\s*,\s*(['"])((?:\\\2|(?!\2).)*)\2\s*\]/g,
   )) {
-    if (!blocks.has(match[1])) blocks.set(match[1], match[3].replace(/\\(['"`\\])/g, "$1"));
+    if (inText(match.index) || blocks.has(match[1])) continue;
+    blocks.set(match[1], match[3].replace(/\\(['"`\\])/g, "$1"));
   }
   for (const match of src.matchAll(/\.set\(\s*['"`]mock:([^'"`]+)['"`]\s*,\s*`/g)) {
-    if (!blocks.has(match[1]))
-      blocks.set(match[1], unescapeTemplate(takeTemplate(match.index + match[0].length)));
+    if (inText(match.index) || blocks.has(match[1])) continue;
+    blocks.set(match[1], unescapeTemplate(takeTemplate(match.index + match[0].length)));
   }
   // INLINE data-URL stubs are mock bodies too, and used to be invisible here.
   // A loader hook may answer `url: 'data:text/javascript,export function a(){}'`

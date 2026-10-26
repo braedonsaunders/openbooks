@@ -149,9 +149,7 @@ export class RefResolver {
   private sequenceKinds: Promise<Set<string>> | null = null;
   constructor(private orgId: string) {}
 
-  private spec(
-    target: ResourceRefTarget,
-  ): {
+  private spec(target: ResourceRefTarget): {
     table: string;
     keyCol: string;
     idCol: string;

@@ -168,9 +168,10 @@ function expected(input: { expectedId: string | null; expectedUpdatedAt: string 
   )
     throw new PayrollError("Reload the current reporting evidence before replacing it");
 }
-export function validateRoePriorPeriod(
-  input: RoePriorPeriodInput,
-): Omit<RoePriorPeriodInput, "insurableEarnings" | "insurableHours"> & {
+export function validateRoePriorPeriod(input: RoePriorPeriodInput): Omit<
+  RoePriorPeriodInput,
+  "insurableEarnings" | "insurableHours"
+> & {
   insurableEarnings: string;
   insurableHours: string;
 } {

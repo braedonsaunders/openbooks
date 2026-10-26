@@ -784,11 +784,11 @@ export async function reverseSubcontractServiceCost(
       "subcontract_zero_cost_correction",
       "Correct the zero-value bill through Payables; the retained production evidence has no journal to reverse.",
     );
-  // Live entries only: subcontract commands act on standing production and service cost
   if (
     (
       await tx.execute(
-        sql`select entry.id from journal_entries entry where entry.org_id=${orgId} and entry.origin='manufacturing' and entry.custom->>'work_order_number'=(select number from mfg_work_orders where org_id=${orgId} and id=${record.workOrderId}) and entry.status='posted' and entry.reverses_entry_id is null and entry.custom ? 'completion_quantity' limit 1`,
+        sql`select entry.id from journal_entries entry where entry.org_id=${orgId} and entry.origin='manufacturing' and entry.custom->>'work_order_number'=(select number from mfg_work_orders where org_id=${orgId} and id=${record.workOrderId}) and entry.status='posted' -- Live entries only: subcontract commands act on standing production and service cost
+          and entry.reverses_entry_id is null and entry.custom ? 'completion_quantity' limit 1`,
         "objects",
       )
     ).length

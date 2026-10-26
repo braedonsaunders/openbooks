@@ -670,9 +670,7 @@ export async function assessLeaseLateFees(
  * never a historical lease author and never an org-wide first actor.
  * Interactive callers attribute their own authenticated user instead.
  */
-export async function runDuePropertyBilling(
-  asOf?: string,
-): Promise<{
+export async function runDuePropertyBilling(asOf?: string): Promise<{
   billed: number;
   invoices: number;
   lateFees: number;

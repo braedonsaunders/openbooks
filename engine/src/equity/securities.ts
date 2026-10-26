@@ -332,9 +332,7 @@ export function parUnits(
 }
 
 /** Issue a security (equity.manage). Returns the security and the entry it posted, if any. */
-export async function issueSecurity(
-  input: IssueSecurityInput,
-): Promise<{
+export async function issueSecurity(input: IssueSecurityInput): Promise<{
   id: string;
   securityNumber: string;
   journalEntryId: string | null;

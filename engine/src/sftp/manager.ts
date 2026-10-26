@@ -87,6 +87,7 @@ export async function loadDaemonConfig(runner: SqlExecutor = db): Promise<Daemon
   const inserted = await runner.execute<DaemonRow>(
     sql`
     insert into sftp_daemon (id, enabled, port, host_key) values ('default', false, 2222, ${hostKey})
+    -- Losing the insert is benign: the winner's persisted host key is the one advertised.
     on conflict (id) do nothing
     returning enabled, port, host_key, advertised_host
   `,

@@ -1061,12 +1061,12 @@ export async function consumeSubcontractMaterials(
         "idempotency_key_conflict",
         "Reload the subcontract or use a new request for a separate consumption.",
       );
-    // Live entries only: a consumption already reversed by a standing entry cannot be reversed again
     if (
       prior.status !== "posted" ||
       (
         await tx.execute(
-          sql`select id from journal_entries where org_id=${orgId} and reverses_entry_id=${prior.id} and status='posted' limit 1`,
+          sql`select id from journal_entries where org_id=${orgId} and reverses_entry_id=${prior.id} and status='posted' -- Live entries only: a consumption already reversed by a standing entry cannot be reversed again
+            limit 1`,
           "objects",
         )
       ).length

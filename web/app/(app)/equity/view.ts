@@ -1315,13 +1315,11 @@ async function overviewData(
                 convertible: compact(raisedFigures.parts[1]!),
               })
             : null,
-          ...others
-            .slice(functional ? 0 : 1)
-            .map((row) =>
-              t("overview.tiles.raisedOther", {
-                amount: compact(additiveRounding(row.total, []).total, row.currency),
-              }),
-            ),
+          ...others.slice(functional ? 0 : 1).map((row) =>
+            t("overview.tiles.raisedOther", {
+              amount: compact(additiveRounding(row.total, []).total, row.currency),
+            }),
+          ),
         ]
           .filter(Boolean)
           .join(" · ") || t("overview.tiles.noRaise"),

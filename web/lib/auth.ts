@@ -1800,13 +1800,14 @@ const renderUser = cache(
         ? await resolveActiveEnv(homeUser, activeOrgId)
         : null) ?? homeEnvironment(homeUser, home.orgName ?? undefined);
     setRequestOrg(activeEnvironment.orgId);
-    const roles =
-      activeEnvironment.orgId === homeUser.orgId && activeEnvironment.actingUserId === homeUser.id
-        ? home.homeRoles
-        : // bypass: identity-bootstrap — roles are resolved for the active environment before the request's organization scope is in force.
-          await withBypassContext(async () => {
-            const result = await db.execute<{ key: string; name: string }>(
-              sql`
+    const useHomeRoles =
+      activeEnvironment.orgId === homeUser.orgId && activeEnvironment.actingUserId === homeUser.id;
+    // bypass: identity-bootstrap — roles are resolved for the active environment before the request's organization scope is in force.
+    const roles = useHomeRoles
+      ? home.homeRoles
+      : await withBypassContext(async () => {
+          const result = await db.execute<{ key: string; name: string }>(
+            sql`
         select r.key, r.name
           from role_assignments assignment
           join app_roles r on r.id = assignment.role_id and r.org_id = assignment.org_id
@@ -1814,10 +1815,10 @@ const renderUser = cache(
            and assignment.user_id = ${activeEnvironment.actingUserId}
          order by r.is_built_in desc, r.name, r.key
       `,
-              "objects",
-            );
-            return result;
-          });
+            "objects",
+          );
+          return result;
+        });
     if (!homeUser.isSuperAdmin && roles.length === 0) return null;
     return {
       id: activeEnvironment.actingUserId,

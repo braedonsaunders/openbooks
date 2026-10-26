@@ -31,9 +31,7 @@ const HISTORY_FIELDS = [
 
 /** Option 2's income-tax window is distinct from the full year's CPP/EI
  * ceilings. Off-cycle cheques never become additional scheduled periods. */
-export async function cumulativeHistory(
-  ctx: PayrollStatutoryComputeContext,
-): Promise<{
+export async function cumulativeHistory(ctx: PayrollStatutoryComputeContext): Promise<{
   averaging: T4127Averaging;
   bonusYtd: Pick<
     T4127Ytd,

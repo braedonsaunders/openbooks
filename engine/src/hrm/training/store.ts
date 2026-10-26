@@ -955,9 +955,7 @@ export async function getTrainingParticipant(
     return { participant: row, session: delivery, feedback };
   });
 }
-export async function listOwnTraining(
-  input: TrainingActor,
-): Promise<
+export async function listOwnTraining(input: TrainingActor): Promise<
   (TrainingParticipant & {
     sessionName: string;
     startsAt: string;

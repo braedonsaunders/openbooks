@@ -535,9 +535,7 @@ export async function generateAgreementVisits(
  * through its horizon. One agreement's refusal (a missing policy, a closed
  * job) is reported and never stops the others.
  */
-export async function maintainServiceAgreements(
-  orgId: string,
-): Promise<{
+export async function maintainServiceAgreements(orgId: string): Promise<{
   agreements: number;
   generated: number;
   failures: { agreementId: string; error: string }[];

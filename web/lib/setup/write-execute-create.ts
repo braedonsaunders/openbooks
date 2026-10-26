@@ -33,6 +33,7 @@ import { normalizeHrmDocumentTemplateInput } from "./hrm-document-template";
 import { applyRuleSlotColumns } from "./hrm-rule-slots";
 import { normalizeTaxReturnFormInput } from "./tax-return-form";
 import { saveSetupBook } from "./books";
+import { setupBookMatch } from "./write-execute-book-match";
 import {
   createUsageMeter,
   deactivateUsageMeter,
@@ -228,26 +229,6 @@ export async function createSetupRecord(
     return { status: 400, body: { error: integrityError, code: "invalid" } };
   }
 
-  // Request-controlled match image for the book entities: submitted values
-  // only. The selected/active flags derive from concurrent table state
-  // (first-book auto-promotion), so comparing them would turn a genuine
-  // retry into a conflict; the claim compares this image against the stored
-  // one, never against the derived row.
-  const setupBookMatch = (): Record<string, unknown> => ({
-    code: String(body.code),
-    name: String(body.name),
-    ...(entity.key === "accounting-books"
-      ? { is_primary: body.isPrimary === undefined ? null : coerceBoolean(body.isPrimary) }
-      : { is_default: body.isDefault === undefined ? null : coerceBoolean(body.isDefault) }),
-    is_active: body.isActive === undefined ? null : coerceBoolean(body.isActive),
-    ...(entity.key === "accounting-books" || body.currency === undefined
-      ? {}
-      : { currency: String(body.currency) }),
-    org_id: orgId,
-    created_by: actorId,
-    updated_by: actorId,
-  });
-
   if (entity.key === "accounting-books") {
     try {
       const id = await setupWriteTransaction(
@@ -258,7 +239,7 @@ export async function createSetupRecord(
         (tx) =>
           saveSetupBook(entity, orgId, actorId, body, tx, {
             idempotencyKey: requestId,
-            match: setupBookMatch(),
+            match: setupBookMatch({ body, entity, orgId, actorId }),
           }),
         { ...scopeOptions, idempotencyKey: requestId },
       );
@@ -287,7 +268,7 @@ export async function createSetupRecord(
         (tx) =>
           saveSetupBook(entity, orgId, actorId, body, tx, {
             idempotencyKey: requestId,
-            match: setupBookMatch(),
+            match: setupBookMatch({ body, entity, orgId, actorId }),
           }),
         { ...scopeOptions, idempotencyKey: requestId },
       );

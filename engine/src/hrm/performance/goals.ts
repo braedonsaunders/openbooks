@@ -433,11 +433,7 @@ export async function requireGoalReadAuthority(
  * One goal with its progress evidence, newest last: the subject, their
  * manager as of today, or HR reads — the same scope as the goal list.
  */
-export async function getGoal(args: {
-  orgId: string;
-  actorId: string;
-  goalId: string;
-}): Promise<{
+export async function getGoal(args: { orgId: string; actorId: string; goalId: string }): Promise<{
   goal: GoalDTO;
   updates: { progressPercent: number; note: string | null; recordedAt: string }[];
 }> {

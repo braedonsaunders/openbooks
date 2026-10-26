@@ -23,7 +23,7 @@ const BESPOKE_SETUP_KEYS = new Set(["company", "period-close", "fx-provider"]);
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, "..", "..", "..");
 const view = readFileSync(join(here, "view.ts"), "utf8");
-const hrefs = [...new Set([...view.matchAll(/href: '([^']+)'/g)].map((m) => m[1]!))];
+const hrefs = [...new Set([...view.matchAll(/href:\s*(['"])([^'"]+)\1/g)].map((m) => m[2]!))];
 
 test("the readiness guide links only to routes that exist", () => {
   assert.ok(hrefs.length > 0, "the loader emits guide hrefs");
@@ -42,6 +42,10 @@ test("the readiness guide links only to routes that exist", () => {
 });
 
 test("the bank-accounts action lands on the chart of accounts", () => {
-  assert.match(view, /href: '\/accounts'/, "area 5 links at /accounts, not a setup subpath");
+  assert.match(
+    view,
+    /href:\s*['"]\/accounts['"]/,
+    "area 5 links at /accounts, not a setup subpath",
+  );
   assert.doesNotMatch(view, /admin\/setup\/accounts/, "the dead setup/accounts target is gone");
 });

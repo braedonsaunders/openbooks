@@ -166,7 +166,7 @@ const TOKEN_SURFACES: TokenSurface[] = [
     kind: "api",
     tokenMarker:
       /resolvePortalSession|requestPortalLink|requestPortalReturn|portalReturnableSources/,
-    refusalMarker: /public: 'token'/,
+    refusalMarker: /public:\s*['"]token['"]/,
   },
   {
     // Token pages only: the request page carries no credential to verify

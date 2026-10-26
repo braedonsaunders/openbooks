@@ -606,9 +606,8 @@ export async function runScenario(
   const docCount = await one<{ n: string }>(
     sql`select count(*) n from documents where org_id = ${orgId}`,
   );
-  // Live entries only: the checkpoint counts documents that stand posted today.
   const postedDocs = await one<{ n: string }>(
-    sql`select count(*) n from documents where org_id = ${orgId} and status = 'posted'`,
+    sql`select count(*) n from documents where org_id = ${orgId} and status = 'posted' -- Live entries only: the checkpoint counts documents that stand posted today.`,
   );
   const entryCount = await one<{ n: string }>(
     sql`select count(*) n from journal_entries where org_id = ${orgId} and status in ('posted','reversed')`,

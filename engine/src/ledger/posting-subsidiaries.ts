@@ -313,9 +313,9 @@ export async function applySubsidiaries(
     ];
     let translated = stampPaymentWithholdingCurrency(doc, nativeTranslated);
     if (options.regeneration && doc.kind === "vendor_payment" && doc.postedEntryId) {
-      // Live entries only: regeneration compares against the payment's standing posting
       const existing = await runner.execute<{ accountId: string; currency: string }>(
-        sql`select l.account_id as "accountId",l.currency from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${doc.orgId} and e.source_document_id=${doc.id} and e.status='posted' and ${options.bookId ? sql`e.book_id=${options.bookId}` : sql`e.id=${doc.postedEntryId}`} and l.memo='Contractor withholding' and l.contributor_kind is null`,
+        sql`select l.account_id as "accountId",l.currency from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${doc.orgId} and e.source_document_id=${doc.id} and e.status='posted' -- Live entries only: regeneration compares against the payment's standing posting
+          and ${options.bookId ? sql`e.book_id=${options.bookId}` : sql`e.id=${doc.postedEntryId}`} and l.memo='Contractor withholding' and l.contributor_kind is null`,
         "objects",
       );
       translated = translated.map((line, index) =>

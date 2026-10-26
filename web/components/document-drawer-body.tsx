@@ -5,15 +5,14 @@ import { PeriodClosedRefusal } from "@/components/period-closed-refusal";
 import { Button, FieldLabel, Input, SearchSelect, Select } from "@openbooks/ui";
 import { PromotionApplyControl } from "./promotion-apply";
 import { LineGrid } from "./line-grid";
-import { DistributionDialog } from "./allocations/DistributionDialog";
 import { CustomFieldInputs } from "./custom-field-inputs";
 import { HeaderFields } from "./transaction-form/header-fields";
 import { BillMatchDialog } from "./bill-match-dialog";
-import { ApprovalHistory } from "./approval-history";
 import { DocumentFxRateField } from "./document-drawer-fx-rate";
 import { lineText, type LineRow } from "./document-drawer-types";
 import { emptyLine } from "./document-drawer-lines";
 import type { DocumentDrawerHeaderScope } from "./document-drawer-header";
+import { renderDocumentDrawerBodyTail } from "./document-drawer-body-tail";
 import { DateField } from "./date-field";
 import { currencyMinorUnits } from "../lib/iso-currencies";
 import { CONTROL_ACCOUNT_DETAIL, entryHeaderLayout } from "./document-drawer-entry";
@@ -32,7 +31,6 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
     router,
     doc,
     payload,
-    mode,
     editable,
     isCreate,
     createMode,
@@ -102,14 +100,6 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
     rows,
     handleGridRowsChange,
     distribution,
-    dist,
-    distCoordKey,
-    distCodings,
-    splitTarget,
-    setSplitTarget,
-    applyDialogRule,
-    applyDialogChildren,
-    afterContent,
     explicitFx,
     setExplicitFx,
     subsidiaryId,
@@ -772,33 +762,7 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
           ) : null}
         </div>
       ) : null}
-      {splitTarget !== null && rows[splitTarget] ? (
-        <DistributionDialog
-          key={`${splitTarget}:${rows[splitTarget]!.amount}:${rows[splitTarget]!.distributionKey}`}
-          open
-          lineAmount={rows[splitTarget]!.amount || "0"}
-          candidates={dist.cache.get(distCoordKey(rows[splitTarget]!)) ?? []}
-          candidatesFailed={dist.failed.has(distCoordKey(rows[splitTarget]!))}
-          accountOptions={accounts.map((a) => ({
-            value: a.id,
-            label: `${a.number ?? ""} ${a.name ?? ""}`.trim(),
-          }))}
-          codings={distCodings}
-          initialRuleKey={rows[splitTarget]!.distributionKey || null}
-          onClose={() => setSplitTarget(null)}
-          onApplyRule={applyDialogRule}
-          onApplyChildren={applyDialogChildren}
-        />
-      ) : null}
-
-      {mode === "view" && !isCreate ? (
-        // The record's tenant-authored Flow approval timeline. Renders
-        // nothing when no approval flow applies. Never in create mode:
-        // no persisted record exists to carry a timeline yet.
-        <ApprovalHistory subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
-      ) : null}
-
-      {mode === "view" ? afterContent : null}
+      {renderDocumentDrawerBodyTail(scope)}
     </div>
   );
 }

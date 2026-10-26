@@ -2003,9 +2003,9 @@ export async function runSignatureReminderScan(): Promise<SignatureReminderScanR
     reminded: 0,
     orgErrors: [],
   };
-  const orgRows = // bypass: scheduler-tick — the unscoped run lists every production
+  // bypass: scheduler-tick — the unscoped run lists every production
   // organization that switched quote-to-cash on.
-  (
+  const orgRows = (
     await withBypass(async () => {
       return await db.execute<{ orgId: string }>(sql`
         select distinct organization.id as "orgId"

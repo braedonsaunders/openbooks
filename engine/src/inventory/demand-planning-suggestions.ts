@@ -173,9 +173,7 @@ export async function listPlanSuggestions(
  * share one. Pure over resolved rows, so the web bulk-convert route and the
  * tests share this grouping instead of each inventing one.
  */
-export function groupSuggestionsBySupplier(
-  suggestions: readonly PlanSuggestion[],
-): Array<{
+export function groupSuggestionsBySupplier(suggestions: readonly PlanSuggestion[]): Array<{
   supplierId: string | null;
   supplierName: string | null;
   suggestions: PlanSuggestion[];

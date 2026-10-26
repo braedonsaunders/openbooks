@@ -89,8 +89,8 @@ export function MigrationPlanPanel({
   // A narrow-screen drawer may reopen after changes made in the conversation.
   // Read current evidence whenever its panel mounts.
   // State changes in load follow the awaited response from the server.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 

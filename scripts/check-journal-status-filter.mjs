@@ -99,10 +99,14 @@ function isSqlTemplateNode(node) {
 
 function templateText(template, sourceFile) {
   if (ts.isNoSubstitutionTemplateLiteral(template)) return template.text;
+  // Blank each interpolation, including the newlines around `${` and `}`, so a
+  // predicate's offset lands on the same source line as the template text.
   let out = template.head.text;
+  let cursor = template.head.end;
   for (const span of template.templateSpans) {
-    const expression = span.expression.getText(sourceFile);
-    out += ` ${"\n".repeat((expression.match(/\n/g) ?? []).length)} ${span.literal.text}`;
+    const hole = sourceFile.text.slice(cursor, span.literal.getStart(sourceFile));
+    out += ` ${"\n".repeat((hole.match(/\n/g) ?? []).length)} ${span.literal.text}`;
+    cursor = span.literal.end;
   }
   return out;
 }

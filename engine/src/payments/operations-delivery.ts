@@ -572,20 +572,18 @@ export async function recordPaymentFileDeliveryFailure(opts: {
       "objects",
     );
     if (!file[0]) throw new PaymentError("payment file not found");
-    await db
-      .insert(schema.paymentFileDeliveries)
-      .values({
-        orgId: opts.orgId,
-        paymentFileId: opts.fileId,
-        channel: opts.channel,
-        targetRef: opts.targetRef,
-        status: "failed",
-        attemptCount: 1,
-        lastAttemptAt: new Date(),
-        error: opts.error,
-        createdBy: opts.userId,
-        updatedBy: opts.userId,
-      });
+    await db.insert(schema.paymentFileDeliveries).values({
+      orgId: opts.orgId,
+      paymentFileId: opts.fileId,
+      channel: opts.channel,
+      targetRef: opts.targetRef,
+      status: "failed",
+      attemptCount: 1,
+      lastAttemptAt: new Date(),
+      error: opts.error,
+      createdBy: opts.userId,
+      updatedBy: opts.userId,
+    });
     await event({
       orgId: opts.orgId,
       runId: file[0].payment_run_id,

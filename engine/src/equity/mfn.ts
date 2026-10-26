@@ -178,9 +178,7 @@ export interface ElectMfnInput extends EquityCommand {
  * (equity.manage; a governed action an Equity action Flow may require
  * approval for).
  */
-export async function electMfnTerms(
-  input: ElectMfnInput,
-): Promise<{
+export async function electMfnTerms(input: ElectMfnInput): Promise<{
   amendmentId: string | null;
   replayed: boolean;
   status: GovernedStatus;
@@ -462,9 +460,7 @@ export interface ReverseMfnInput extends EquityCommand {
  * action an Equity action Flow may require approval for). From the reversal
  * date the SAFE carries the terms in force before the election again.
  */
-export async function reverseMfnElection(
-  input: ReverseMfnInput,
-): Promise<{
+export async function reverseMfnElection(input: ReverseMfnInput): Promise<{
   amendmentId: string | null;
   replayed: boolean;
   status: GovernedStatus;

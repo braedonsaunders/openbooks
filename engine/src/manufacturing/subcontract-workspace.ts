@@ -168,11 +168,11 @@ export async function readSubcontractWorkspace(
     posting = await payablesScope("ap.post");
   const canReadBills = reading.canUse,
     canRecordService = posting.canUse;
-  // Live entries only: the workspace reports standing production and service cost
   const hasOutput =
     (
       await tx.execute(
-        sql`select id from inventory_movements where org_id=${orgId} and kind='assembly_build' and journal_entry_id in (select id from journal_entries where org_id=${orgId} and origin='manufacturing' and custom->>'work_order_number'=(select number from mfg_work_orders where org_id=${orgId} and id=${workOrderId}) and status='posted' and reverses_entry_id is null) limit 1`,
+        sql`select id from inventory_movements where org_id=${orgId} and kind='assembly_build' and journal_entry_id in (select id from journal_entries where org_id=${orgId} and origin='manufacturing' and custom->>'work_order_number'=(select number from mfg_work_orders where org_id=${orgId} and id=${workOrderId}) and status='posted' -- Live entries only: the workspace reports standing production and service cost
+          and reverses_entry_id is null) limit 1`,
         "objects",
       )
     ).length > 0;

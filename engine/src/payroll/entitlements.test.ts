@@ -651,14 +651,12 @@ test("service tiers resolve plan rates and component eligibility together", () =
 test("legal-employer service ladder overrides the default without leaking to another employer", () => {
   const rows = [
     ...vacationLadder,
-    ...vacationLadder
-      .slice(0, 2)
-      .map((row) => ({
-        ...row,
-        id: `employer-${row.id}`,
-        employerSubsidiaryId: "employer-a",
-        accrualValue: "7.0000",
-      })),
+    ...vacationLadder.slice(0, 2).map((row) => ({
+      ...row,
+      id: `employer-${row.id}`,
+      employerSubsidiaryId: "employer-a",
+      accrualValue: "7.0000",
+    })),
   ];
   assert.equal(
     resolveServiceTiersFrom(rows, 120, "2016-01-01", "employer-a").planAccrualValues.get(

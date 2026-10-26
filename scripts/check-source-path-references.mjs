@@ -26,7 +26,8 @@
  *
  * A reference to a path that intentionally does not exist (a synthetic
  * fixture) is opted out with a `// source-path: synthetic` comment on the
- * same line as the first segment.
+ * reference's statement. Formatting may place that comment on the statement's
+ * closing line rather than the line that holds the path.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -70,7 +71,21 @@ export function stripComments(source) {
 // Only files this repository owns as source or fixtures. Environment files,
 // workflow YAML and other operator artefacts are not this check's business.
 const CHECKED_TARGET = /\.(?:[cm]?[jt]sx?|json|sql|md)$/;
-const lineText = (source, line) => source.split("\n")[line - 1] ?? "";
+// The marker opts out the statement that contains the reference. A trailing
+// comment prettier wraps onto the closing line, or onto the comment-only line
+// immediately after that closer, still covers the path.
+function syntheticStatement(original, index) {
+  const lines = original.split("\n");
+  const start = lineAt(original, index);
+  let end = start;
+  for (let i = start; i <= lines.length; i++) {
+    end = i;
+    if (lines[i - 1].includes(";")) break;
+  }
+  const window = lines.slice(start - 1, end);
+  if (end < lines.length && /^\s*\/\//.test(lines[end])) window.push(lines[end]);
+  return OPT_OUT.test(window.join("\n"));
+}
 
 // 1. join(..., "engine", "src", <segments>) — quoted segments separated by
 // commas and any whitespace, so a call broken across lines still matches.
@@ -110,7 +125,7 @@ export function analyze(root = ROOT) {
     const source = stripComments(original);
     const report = (index, target, shape) => {
       const line = lineAt(source, index);
-      if (OPT_OUT.test(lineText(original, line))) return;
+      if (syntheticStatement(original, index)) return;
       if (!CHECKED_TARGET.test(target)) return;
       // A reference whose purpose is to prove ABSENCE is not stale.
       if (/existsSync\(\s*$/.test(source.slice(Math.max(0, index - 40), index))) return;

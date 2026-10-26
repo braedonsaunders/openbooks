@@ -343,9 +343,7 @@ export class DynamicsClient {
     return out;
   }
 
-  async attachmentContent(
-    id: string,
-  ): Promise<{
+  async attachmentContent(id: string): Promise<{
     id: string;
     fileName: string;
     parentId: string;

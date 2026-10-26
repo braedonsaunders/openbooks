@@ -15,9 +15,7 @@ import { postDocument } from "./posting-document.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function setup(
-  org: ScratchOrg,
-): Promise<{
+async function setup(org: ScratchOrg): Promise<{
   documentId: string;
   secondaryBookId: string;
   actorId: string;

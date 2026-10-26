@@ -676,13 +676,12 @@ export async function assertWithholdingDepositCurrent(
     : [];
   let previousTotal = "0";
   if (source.carrying?.previousDocumentIds.length) {
-    // Live entries only: a correction carries forward only deposits that still stand
     const prior = (
       await executor.execute<{ amount: string; count: number }>(
         sql`select coalesce(sum(case when kind='vendor_credit' then -total when kind='journal' then 0 else total end),0)::text as amount,count(*)::int as count from documents where org_id=${orgId} and id in (${sql.join(
           source.carrying.previousDocumentIds.map((id) => sql`${id}::uuid`),
           sql`,`,
-        )}) and status='posted'`,
+        )}) and status='posted' -- Live entries only: a correction carries forward only deposits that still stand`,
         "objects",
       )
     )[0]!;

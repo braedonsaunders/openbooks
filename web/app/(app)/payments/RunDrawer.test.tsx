@@ -53,8 +53,8 @@ test("posting confirmation sums live instruction amounts with exact decimal prec
   await act(async () => {
     // The providers type `children` as required, so React.createElement's
     // object overload needs the children field even with runtime children.
-    // eslint-disable-next-line react/no-children-prop
     root.render(
+      // eslint-disable-next-line react/no-children-prop
       React.createElement(MoneyProvider, {
         currency: "USD",
         children:

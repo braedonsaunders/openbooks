@@ -228,9 +228,8 @@ async function snapshot(
       ),
     });
   }
-  // Live entries only: only standing service cost counts as recorded
   const contracts = await tx.execute<{ id: string; costRecorded: boolean }>(
-    sql`select contract.id,exists(select 1 from mfg_subcontract_service_bills claim join documents bill on bill.org_id=claim.org_id and bill.id=claim.bill_id and bill.status='posted' and bill.posted_entry_id=claim.source_entry_id join journal_entries source on source.org_id=claim.org_id and source.id=claim.source_entry_id and source.status='posted' left join journal_entries cost on cost.org_id=claim.org_id and cost.id=claim.capitalization_entry_id where claim.org_id=contract.org_id and claim.subcontract_id=contract.id and claim.reversal_entry_id is null and (claim.amount=0 or cost.status='posted')) as "costRecorded" from mfg_subcontracts contract where contract.org_id=${orgId} and contract.work_order_id=${workOrderId} and contract.status<>'cancelled' order by id for share of contract`,
+    sql`select contract.id,exists(select 1 from mfg_subcontract_service_bills claim join documents bill on bill.org_id=claim.org_id and bill.id=claim.bill_id and bill.status='posted' and bill.posted_entry_id=claim.source_entry_id join journal_entries source on source.org_id=claim.org_id and source.id=claim.source_entry_id and source.status='posted' left join journal_entries cost on cost.org_id=claim.org_id and cost.id=claim.capitalization_entry_id where claim.org_id=contract.org_id and claim.subcontract_id=contract.id and claim.reversal_entry_id is null and (claim.amount=0 or cost.status='posted')) as "costRecorded" from mfg_subcontracts contract where contract.org_id=${orgId} and contract.work_order_id=${workOrderId} and contract.status<>'cancelled' order by id for share of contract -- Live entries only: only standing service cost counts as recorded`,
     "objects",
   );
   if (contracts.length) {

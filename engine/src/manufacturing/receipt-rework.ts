@@ -51,10 +51,10 @@ export async function receiptReworkIssuedQuantity(
   workOrderId: string,
   repair: NonNullable<Awaited<ReturnType<typeof loadReceiptRework>>>,
 ) {
-  // Live entries only: rework draws on unreversed receipts only
   return (
     await tx.execute<{ quantity: string }>(
-      sql`select coalesce(sum(-movement.quantity),0)::text as quantity from inventory_movements movement join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id where movement.org_id=${orgId} and entry.origin='manufacturing' and entry.custom->>'work_order_number'=(select number from mfg_work_orders where org_id=${orgId} and id=${workOrderId}) and entry.status='posted' and entry.reverses_entry_id is null and movement.kind='assembly_consume' and movement.item_id=${repair.itemId} and movement.lot_id is not distinct from ${repair.lotId}::uuid and movement.serial_id is not distinct from ${repair.serialId}::uuid`,
+      sql`select coalesce(sum(-movement.quantity),0)::text as quantity from inventory_movements movement join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id where movement.org_id=${orgId} and entry.origin='manufacturing' and entry.custom->>'work_order_number'=(select number from mfg_work_orders where org_id=${orgId} and id=${workOrderId}) and entry.status='posted' -- Live entries only: rework draws on unreversed receipts only
+        and entry.reverses_entry_id is null and movement.kind='assembly_consume' and movement.item_id=${repair.itemId} and movement.lot_id is not distinct from ${repair.lotId}::uuid and movement.serial_id is not distinct from ${repair.serialId}::uuid`,
       "objects",
     )
   )[0]!.quantity;
@@ -113,11 +113,11 @@ export async function assertReceiptReworkIssue(
       remedy:
         "Resolve the independent hold without clearing this failed inspection’s retained disposition.",
     });
-  // Live entries only: rework draws on unreversed receipts only
   if (
     (
       await tx.execute(
-        sql`select movement.id from inventory_movements movement join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id where movement.org_id=${orgId} and entry.origin='manufacturing' and entry.custom->>'work_order_number'=(select number from mfg_work_orders where org_id=${orgId} and id=${workOrderId}) and entry.status='posted' and movement.kind='assembly_consume' limit 1`,
+        sql`select movement.id from inventory_movements movement join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id where movement.org_id=${orgId} and entry.origin='manufacturing' and entry.custom->>'work_order_number'=(select number from mfg_work_orders where org_id=${orgId} and id=${workOrderId}) and entry.status='posted' -- Live entries only: rework draws on unreversed receipts only
+          and movement.kind='assembly_consume' limit 1`,
         "objects",
       )
     ).length

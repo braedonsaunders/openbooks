@@ -62,6 +62,14 @@ for (const file of viewsUsingBookPicker()) {
       return false;
     };
     let reads = 0;
+    let threadsPrimaryFilter = false;
+    let bookParam = false;
+    const propertyName = (name: ts.PropertyName): string => {
+      if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+        return name.text;
+      }
+      return name.getText(tree);
+    };
     const visit = (node: ts.Node) => {
       if (
         ts.isCallExpression(node) &&
@@ -90,14 +98,35 @@ for (const file of viewsUsingBookPicker()) {
           assert.match(book.initializer.getText(tree), /selectedBook\??\.id/);
         }
       }
+      if (ts.isPropertyAssignment(node) && propertyName(node.name) === "primaryFilter") {
+        const init = node.initializer;
+        const arg = ts.isCallExpression(init) ? init.arguments[0] : undefined;
+        if (
+          ts.isCallExpression(init) &&
+          init.expression.getText(tree) === "f" &&
+          arg !== undefined &&
+          ts.isStringLiteral(arg) &&
+          arg.text === "primaryFilter"
+        ) {
+          threadsPrimaryFilter = true;
+        }
+      }
+      if (
+        ts.isPropertyAssignment(node) &&
+        propertyName(node.name) === "paramKey" &&
+        ts.isStringLiteral(node.initializer) &&
+        node.initializer.text === "book"
+      ) {
+        bookParam = true;
+      }
       ts.forEachChild(node, visit);
     };
     visit(tree);
     assert.equal(reads, 1);
+    assert.equal(threadsPrimaryFilter, true, "the spec threads primaryFilter through f()");
+    assert.equal(bookParam, true, "the book picker is keyed paramKey book");
     assert.match(source, /reportBookSelection\(/);
     assert.match(source, /sp\.book/);
-    assert.match(source, /primaryFilter:\s*f\('primaryFilter'\)/);
-    assert.match(source, /paramKey:\s*'book'/);
     assert.match(source, /selectedBook\.name/);
   });
 }

@@ -508,11 +508,10 @@ export async function assertInspectionScrapIssue(
     throw new InventoryError(
       "Scrap must dispose exactly the failed receipt inspection's stock, quantity and legal entity.",
     );
-  // Live entries only: only an unreversed receipt can be inspected
   if (
     !(
       await tx.execute(
-        sql`select source.id from inventory_movements source join journal_entries entry on entry.org_id=source.org_id and entry.id=source.journal_entry_id where source.org_id=${orgId} and source.id=${inspection.receiptMovementId} and source.status='posted' and entry.status='posted'
+        sql`select source.id from inventory_movements source join journal_entries entry on entry.org_id=source.org_id and entry.id=source.journal_entry_id where source.org_id=${orgId} and source.id=${inspection.receiptMovementId} and source.status='posted' and entry.status='posted' -- Live entries only: only an unreversed receipt can be inspected
     and not exists(select 1 from inventory_movements reversal where reversal.org_id=source.org_id and reversal.reverses_movement_id=source.id and reversal.status='posted')`,
         "objects",
       )

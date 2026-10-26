@@ -69,10 +69,12 @@ export function describeView(file, source) {
   // requires an opener or a line start before it — never a comment slash.
   // A view rendered at several mounts declares `routes: [...]` instead; each
   // entry must be a literal, for the same reason `route:` must be one.
-  const routesMatch = /(?:^|[{,(])\s*routes:\s*\[((?:\s*'[^']*'\s*,?)+)\s*\]/m.exec(source);
+  const routesMatch = /(?:^|[{,(])\s*routes\s*:\s*\[((?:\s*(['"])[^'"]*\2\s*,?)+)\s*\]/m.exec(
+    source,
+  );
   const routes = routesMatch
-    ? [...routesMatch[1].matchAll(/'([^']*)'/g)].map((match) => match[1])
-    : [/(?:^|[{,(])\s*route: (['"])([^'"]+)\1/m.exec(source)?.[2]];
+    ? [...routesMatch[1].matchAll(/(['"])([^'"]*)\1/g)].map((match) => match[2])
+    : [/(?:^|[{,(])\s*route\s*:\s*(['"])([^'"]+)\1/m.exec(source)?.[2]];
   if (routes.length === 0 || routes.some((route) => !route)) {
     throw new Error(
       `${file}: no literal \`route:\` or \`routes:\` field — a page without one cannot be customized`,
@@ -102,7 +104,8 @@ export function describeView(file, source) {
     // registry cannot supply, so the generated call omits it and the
     // default applies.
     const optional =
-      /^[A-Za-z0-9_]+\?\s*:/.test(param) || /^[A-Za-z0-9_]+\s*:[^=]*=\s*'[^']*'$/.test(param);
+      /^[A-Za-z0-9_]+\?\s*:/.test(param) ||
+      /^[A-Za-z0-9_]+\s*:[^=]*=\s*(['"])[^'"]*\1$/.test(param);
     if (optional && !/^[A-Za-z0-9_]+\??\s*:\s*Record</.test(param)) {
       return { kind: "options" };
     }

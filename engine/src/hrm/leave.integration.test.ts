@@ -133,9 +133,7 @@ async function absencesOf(
   return rows;
 }
 
-async function inputsOf(
-  requestId: string,
-): Promise<
+async function inputsOf(requestId: string): Promise<
   Array<{
     absence_date: string;
     hours: string;

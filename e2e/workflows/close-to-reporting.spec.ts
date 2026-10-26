@@ -617,14 +617,12 @@ test.describe.serial("close to reporting", () => {
       // The book picker is a custom listbox over a native select: read the
       // options (values are book ids) from any unstarted row, untouched —
       // Primary is the default selection, the book under test.
-      const bookOptions = await page
-        .locator("tr select option")
-        .evaluateAll((els) =>
-          els.map((e) => ({
-            value: (e as HTMLOptionElement).value,
-            label: (e.textContent ?? "").trim(),
-          })),
-        );
+      const bookOptions = await page.locator("tr select option").evaluateAll((els) =>
+        els.map((e) => ({
+          value: (e as HTMLOptionElement).value,
+          label: (e.textContent ?? "").trim(),
+        })),
+      );
       SEED.primaryBookId = bookOptions.find((o) => o.label.includes("Primary"))?.value ?? "";
       expect(SEED.primaryBookId, "primary book resolved").toBeTruthy();
       const resume = row.getByRole("link", { name: "Resume" });

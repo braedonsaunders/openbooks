@@ -49,13 +49,13 @@ function mountedKeys(): Set<string> {
   );
   for (const file of trees) {
     const source = readFileSync(file, "utf8");
-    for (const match of source.matchAll(/entityKey:\s*'([^']+)'/g)) mounted.add(match[1]!);
-    for (const match of source.matchAll(/SETUP_ENTITY_BY_KEY\.get\('([^']+)'\)/g))
+    for (const match of source.matchAll(/entityKey:\s*['"]([^'"]+)['"]/g)) mounted.add(match[1]!);
+    for (const match of source.matchAll(/SETUP_ENTITY_BY_KEY\.get\(\s*['"]([^'"]+)['"]\s*\)/g))
       mounted.add(match[1]!);
     for (const match of source.matchAll(/\b([A-Z][A-Z0-9]*_ENTITY)\.key\b/g)) {
       const name = match[1]!;
       const from = source.match(
-        new RegExp(`import\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*'([^']+)'`),
+        new RegExp(`import\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*['"]([^'"]+)['"]`),
       );
       assert.ok(from, `${file}: cannot trace ${name} to its defining module`);
       const defining = resolve(dirname(file), from[1]!);
@@ -65,10 +65,10 @@ function mountedKeys(): Set<string> {
       const key =
         readFileSync(found, "utf8").match(
           new RegExp(
-            `${name.replace(/[A-Z_]+/, "[A-Z_]+")}\\s*=\\s*\\{[^}]*key:\\s*'([^']+)'`,
+            `${name.replace(/[A-Z_]+/, "[A-Z_]+")}\\s*=\\s*\\{[^}]*key:\\s*['"]([^'"]+)['"]`,
             "s",
           ),
-        ) ?? readFileSync(found, "utf8").match(/key:\s*'([^']+)'/);
+        ) ?? readFileSync(found, "utf8").match(/key:\s*['"]([^'"]+)['"]/);
       assert.ok(key, `${file}: no key literal for ${name} in ${found}`);
       mounted.add(key[1]!);
     }

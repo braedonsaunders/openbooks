@@ -17,9 +17,7 @@ const WORKSPACES = LOCAL_NAVIGATION.filter((set) => !set.inline);
 const NAMESPACES = [...new Set(LOCAL_NAVIGATION.flatMap((set) => set.tabs.map((tab) => tab.ns)))];
 
 /** Resolve every native local workspace once, from the same menu snapshot. */
-export async function resolveLocalNavigation(
-  authz: Authz,
-): Promise<{
+export async function resolveLocalNavigation(authz: Authz): Promise<{
   groups: ViewTabGroup[];
   ownership: ViewTabOwnership[];
   preferences: LocalNavigationPreferences;

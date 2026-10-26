@@ -472,9 +472,7 @@ function lineEndingFor(row: ProfileRow, format: PayRunBankFileFormat): "lf" | "c
 }
 
 /** Active payroll-capable originator profiles, for the operator's picker. */
-export async function payrollBankProfiles(
-  orgId: string,
-): Promise<
+export async function payrollBankProfiles(orgId: string): Promise<
   {
     id: string;
     name: string;
