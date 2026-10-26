@@ -17,7 +17,6 @@ import {
 } from "../records/transaction-audit.ts";
 import { reverseFieldTicketProgressInTransaction } from "../projects/progress.ts";
 import { voidRemedyHooks } from "../journal/void-remedy-contributors.ts";
-import { PROVIDER_COMMIT_KINDS, requestProviderVoidTx } from "../tax/provider-commit.ts";
 import { AmortizationError } from "../amortization/errors.ts";
 import { cancelAmortizationForVoidedSource } from "../amortization/source-void.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
@@ -309,9 +308,7 @@ export async function completeRequestedDocumentVoid(
       // commit rows here, inside the void transaction, so the void can
       // never commit while the provider still shows the sale as live. The
       // tax_provider_commit scan performs the provider void call.
-      if (PROVIDER_COMMIT_KINDS[String(doc.kind)]) {
-        await requestProviderVoidTx(tx, { orgId, documentId });
-      }
+      await voidRemedyHooks.require("tax").requestProviderVoid(tx, { orgId, documentId, kind: String(doc.kind) });
       return {
         reversalEntryId,
         kind: String(doc.kind),

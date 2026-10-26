@@ -196,6 +196,7 @@
         "scripting",
         "service",
         "stored-value",
+        "tax",
         "tax-returns",
         "webhooks"
       ]
@@ -905,6 +906,7 @@
         "connectors",
         "country-tax-packs",
         "fx",
+        "journal",
         "money",
         "organization",
         "platform"

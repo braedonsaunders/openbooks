@@ -7,6 +7,7 @@ import { registerPaymentsCorePostingContributors } from "../payments-core/postin
 import { registerPayrollPostingContributors } from "../payroll/posting-contributors.ts";
 import { registerScriptingPostingContributors } from "../scripting/posting-contributors.ts";
 import { registerStoredValuePostingContributors } from "../stored-value/posting-contributors.ts";
+import { registerTaxPostingContributors } from "../tax/posting-contributors.ts";
 import { registerWebhooksPostingContributors } from "../webhooks/posting-contributors.ts";
 
 /**
@@ -28,5 +29,6 @@ export function installPostingContributors(): void {
   registerPayrollPostingContributors();
   registerScriptingPostingContributors();
   registerStoredValuePostingContributors();
+  registerTaxPostingContributors();
   registerWebhooksPostingContributors();
 }

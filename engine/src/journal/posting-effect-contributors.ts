@@ -80,6 +80,19 @@ export interface PostingEffectContributors {
     /** Completes the payment acceptance a posted customer payment settles. */
     finalizeAcceptance(paymentDocumentId: string): Promise<void>;
   };
+  tax: {
+    /** Queues the external tax provider commit of a sale or return, inside the posting transaction. */
+    trackProviderCommit(
+      runner: SqlExecutor,
+      input: {
+        orgId: string;
+        documentId: string;
+        kind: string;
+        documentNumber: string;
+        actorId: string | null;
+      },
+    ): Promise<void>;
+  };
 }
 
 export const postingEffectHooks = postingContributorRegistry<PostingEffectContributors>("effect");

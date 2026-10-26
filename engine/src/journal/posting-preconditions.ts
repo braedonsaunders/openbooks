@@ -173,6 +173,19 @@ export interface PostingPreconditions {
       actualAccountIds: readonly (string | null)[],
     ): Promise<void>;
   };
+  tax: {
+    /**
+     * Refuses, with a PostingError, a document whose goods-tax selection or
+     * cross-border supply evidence no longer matches its lines. persist
+     * records the cross-border verdict inside the posting transaction.
+     */
+    assertSupplyEvidence(
+      runner: SqlExecutor,
+      orgId: string,
+      documentId: string,
+      options?: { persist?: boolean },
+    ): Promise<void>;
+  };
 }
 
 export const postingPreconditionHooks =

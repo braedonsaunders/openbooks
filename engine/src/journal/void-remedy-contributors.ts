@@ -98,6 +98,13 @@ export interface VoidRemedyContributors {
       },
     ): Promise<void>;
   };
+  tax: {
+    /** Marks a voided sale or return's provider transaction for its provider void. */
+    requestProviderVoid(
+      executor: SqlExecutor,
+      input: { orgId: string; documentId: string; kind: string },
+    ): Promise<void>;
+  };
 }
 
 export const voidRemedyHooks = postingContributorRegistry<VoidRemedyContributors>("void remedy");

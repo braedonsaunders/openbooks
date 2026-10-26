@@ -2,11 +2,7 @@ import { lockLedgerSetupFence } from '../organization/ledger-setup-fence.ts';
 import { normalizeJournalCurrencyLines } from "./journal-currency.ts";
 import { assertWithholdingDepositCurrent } from "../contractor-withholding/deposits.ts";
 import { assertWithholdingRemittanceCurrent, ContractorWithholdingError } from "../contractor-withholding/service.ts";
-import { PlaceOfSupplyError } from '../tax/place-of-supply.ts';
-import { assertCanadianGoodsTaxEvidence } from '../tax/goods-selection.ts'
-import { assertCrossBorderSupplyEvidence } from '../tax/cross-border-posting.ts';
 import { documentTaxDate, staleTaxRateLine } from '../tax/document-tax-date.ts';
-import { CrossBorderTaxError } from '../tax/cross-border-place-of-supply.ts';
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
@@ -71,8 +67,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       `document ${doc.documentNumber} is ${doc.status}; it must complete the approval submission lifecycle before posting`,
     );
   }
-  try {await assertCanadianGoodsTaxEvidence(db,doc.orgId,doc.id)} catch(error) {if(error instanceof PlaceOfSupplyError)throw new PostingError(error.message);throw error}
-  try {await assertCrossBorderSupplyEvidence(db,doc.orgId,doc.id)} catch(error) {if(error instanceof CrossBorderTaxError)throw new PostingError(error.message);throw error}
+  await postingPreconditionHooks.require("tax").assertSupplyEvidence(db, doc.orgId, doc.id);
   // A credit correcting an earlier supply is taxed at that supply's rates. Its
   // correction can be recorded after its lines were priced, so posting holds
   // the calculated tax to the corrected document's date.

@@ -11,10 +11,6 @@ import {
   ContractorWithholdingError,
 } from "../contractor-withholding/service.ts";
 import { assertWithholdingDepositCurrent } from "../contractor-withholding/deposits.ts";
-import { PlaceOfSupplyError } from "../tax/place-of-supply.ts";
-import { assertCanadianGoodsTaxEvidence } from "../tax/goods-selection.ts";
-import { assertCrossBorderSupplyEvidence } from "../tax/cross-border-posting.ts";
-import { CrossBorderTaxError } from "../tax/cross-border-place-of-supply.ts";
 import { and, eq, sql } from "drizzle-orm";
 import { inDbTransaction, schema } from "../platform/db.ts";
 
@@ -42,7 +38,6 @@ import { consolidationSourceRefusal } from "../records/consolidation-source-poli
 import { postingPreconditionHooks } from "../journal/posting-preconditions.ts";
 import { enqueuePostingEffects } from "./posting-effects.ts";
 import { redeemCashSaleTenders, TenderRefusal } from "../sales/document-tenders.ts";
-import { enqueueProviderCommitTx, PROVIDER_COMMIT_KINDS } from "../tax/provider-commit.ts";
 import { insertAuditRecord } from "../journal/kernel-audit.ts";
 import { holdPeriodPostingFence } from "../journal/kernel-fences.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
@@ -146,18 +141,7 @@ async function assertSourcesCurrent(tx: PostingTx, prepared: PreparedPosting): P
       await assertEntityPostingDate(tx, doc.orgId, subsidiaryId, postingDate);
     }
   }
-  try {
-    await assertCanadianGoodsTaxEvidence(tx, doc.orgId, documentId);
-  } catch (error) {
-    if (error instanceof PlaceOfSupplyError) throw new PostingError(error.message);
-    throw error;
-  }
-  try {
-    await assertCrossBorderSupplyEvidence(tx, doc.orgId, documentId, { persist: true });
-  } catch (error) {
-    if (error instanceof CrossBorderTaxError) throw new PostingError(error.message);
-    throw error;
-  }
+  await postingPreconditionHooks.require("tax").assertSupplyEvidence(tx, doc.orgId, documentId, { persist: true });
   if (doc.kind === "vendor_bill" || doc.kind === "vendor_credit") {
     await postingPreconditionHooks.require("payroll").assertRemittanceBillCurrent(doc.orgId, documentId, tx);
   }
@@ -393,8 +377,8 @@ async function trackProviderCommit(
   actorId: string | null,
 ): Promise<void> {
   const { doc, deps, effectiveDoc } = prepared;
-  if (deps.migration || !PROVIDER_COMMIT_KINDS[doc.kind]) return;
-  await enqueueProviderCommitTx(tx, {
+  if (deps.migration) return;
+  await postingEffectHooks.require("tax").trackProviderCommit(tx, {
     orgId: doc.orgId,
     documentId: doc.id,
     kind: doc.kind,
