@@ -1,6 +1,5 @@
-import { makeGET, makePATCH, makeDELETE } from "../../_order/handlers";
+import { jsonObject, makeGET, makePATCH, makeDELETE } from "../../_order/handlers";
 import { defineRoute } from "@/lib/api/route";
-import { jsonObject } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
 import { z } from "zod";
 
