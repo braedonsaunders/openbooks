@@ -152,6 +152,7 @@ import {
 import { releaseResourcingRequestApproval } from "../resourcing/flow-release.ts";
 import { releaseWorkOrderApproval } from "../manufacturing/flow-release.ts";
 import { installPostingContributors } from "./posting-contributors.ts";
+import { postingPreconditionHooks } from "../journal/posting-preconditions.ts";
 
 /**
  * Composition root: the one place that wires engine
@@ -880,4 +881,12 @@ export function installEngineSeams(): void {
       await rejectRequestedDocumentVoid(subjectId, orgId, userId, comment);
     },
   });
+}
+
+/**
+ * Whether this module graph has installed the engine seams. A host that runs
+ * several module graphs in one process checks each graph it serves.
+ */
+export function engineSeamsInstalled(): boolean {
+  return postingPreconditionHooks.installed().length > 0;
 }

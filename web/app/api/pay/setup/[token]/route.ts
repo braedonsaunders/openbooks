@@ -8,6 +8,7 @@ import {
 } from "@openbooks/engine/payments/autopay";
 import { isFeatureEnabled } from "@/lib/features";
 import { notFound } from "@/lib/api/responses";
+import { ensureRequestSeams } from "@/lib/process-seams";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,7 @@ export const runtime = "nodejs";
  * (and the token) off-site before they save a method.
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ token: string }> }) {
+  await ensureRequestSeams();
   const { token } = await params;
   if (!token || token.length < 16) {
     return NextResponse.json({ error: "invalid token" }, { status: 400 });

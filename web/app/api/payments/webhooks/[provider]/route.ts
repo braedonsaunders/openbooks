@@ -6,6 +6,7 @@ import {
   type ProviderWebhookResult,
 } from "@openbooks/engine/payments/acceptance/operations";
 import { readBoundedBodyText } from "../../../../../lib/bounded-body";
+import { ensureRequestSeams } from "@/lib/process-seams";
 
 export const runtime = "nodejs";
 
@@ -37,6 +38,7 @@ function webhookResponse(result: ProviderWebhookResult, status = 200) {
  * an unverifiable delivery is a 401 and no org context is ever resolved.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ provider: string }> }) {
+  await ensureRequestSeams();
   const { provider } = await params;
   if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
     return NextResponse.json({ error: "unknown provider" }, { status: 404 });

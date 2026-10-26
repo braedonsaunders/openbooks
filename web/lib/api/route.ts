@@ -171,6 +171,12 @@ export function defineRoute(options: LooseOptions) {
     context?: { params?: Promise<unknown> },
   ): Promise<Response> => {
     try {
+      // Request handlers run in their own module graph; install the engine
+      // and web hooks there before any handler can post or resolve a flow.
+      if (process.env.NEXT_RUNTIME === "nodejs") {
+        const { ensureRequestSeams } = await import("@/lib/process-seams");
+        await ensureRequestSeams();
+      }
       let authz: Authz | null;
       if (options.permission !== undefined) {
         const permission = options.permission;

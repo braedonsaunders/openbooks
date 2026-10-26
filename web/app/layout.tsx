@@ -14,6 +14,7 @@ import { IntlClientProvider } from "../components/intl-client-provider";
 import { PwaRegistration } from "../components/pwa-registration";
 import { clientCatalogUrl, publishClientCatalog } from "../i18n/catalog";
 import type { Locale } from "../i18n/config";
+import { ensureRequestSeams } from "../lib/process-seams";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("shell");
@@ -58,6 +59,9 @@ export const viewport: Viewport = {
 export const dynamic = "force-dynamic";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Pages and their server actions share this module graph; install the
+  // engine and web hooks here before any of them can post.
+  await ensureRequestSeams();
   // Locale: users.locale ?? orgs.settings.defaultLocale ?? 'en' (i18n/request.ts).
   const [locale, messages, timeZone, requestHeaders] = await Promise.all([
     getLocale(),
