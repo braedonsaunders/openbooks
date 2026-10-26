@@ -43,9 +43,9 @@ import { AnalyticsHeader } from '../../app/(app)/analytics/_ui/AnalyticsHeader'
 import { CellView } from './cells'
 import { WidgetSlot, WidgetBlockView } from './widget-slot'
 import { toneClass } from './tone'
-import { alignClass, bodyCellClassName, leafOf } from './table-cells'
-import { VirtualReportRows } from './virtual-report-rows'
-import { rowsRenderInBrowser, windowedColumns, WINDOWED_ROWS_FROM } from './windowed-rows'
+import { pickScope, rowsRenderInBrowser, sectionScopeSpecs, sectionsRenderInBrowser, WINDOWED_ROWS_FROM } from './windowed-rows'
+import { WindowedGroups } from './windowed-groups'
+import { SpanRow, TableView } from './table-view'
 import { nestedScope } from './list-scope'
 import Link from 'next/link'
 import { Badge } from '@openbooks/ui'
@@ -142,8 +142,7 @@ export class UnknownFrameError extends Error {
   readonly name = 'UnknownFrameError'
 }
 
-/** A spanning summary row (opening / closing / totals). Resolves against the
- *  table's own scope, not a row scope. */
+/** A spanning summary row rendered with the full (server) cell renderer. */
 export function SpanRowView({
   row,
   scope,
@@ -153,38 +152,7 @@ export function SpanRowView({
   scope: unknown
   primitives: ReturnType<typeof tablePrimitives>
 }) {
-  const { TableRow, TableCell } = primitives
-  return (
-    <TableRow className={row.className}>
-      <TableCell
-        colSpan={row.labelColSpan > 1 ? row.labelColSpan : undefined}
-        className={row.labelClassName}
-      >
-        {resolveText(row.label, scope)}
-      </TableCell>
-      {row.cells.map((entry, index) => {
-        // Tone is applied by the container here exactly as it is for body
-        // cells; a span row that skipped it would silently drop the negative
-        // treatment on a closing balance.
-        const leaf = leafOf(entry.cell)
-        const tone = toneClass(
-          'tone' in leaf
-            ? (resolveValue(leaf.tone as never, scope) as Tone | undefined)
-            : undefined,
-        )
-        return (
-          <TableCell
-            key={index}
-            className={
-              cn(alignClass(entry.align), entry.className, tone) || undefined
-            }
-          >
-            <CellView spec={entry.cell} scope={scope} />
-          </TableCell>
-        )
-      })}
-    </TableRow>
-  )
+  return <SpanRow row={row} scope={scope} primitives={primitives} Cell={CellView} />
 }
 
 /**
@@ -229,8 +197,6 @@ function TableBlockView({
   // `repeat` would silently change what its headers resolve to.
   const scope = nestedScope(rawScope, rawScope)
   const primitives = tablePrimitives(spec.variant)
-  const { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } =
-    primitives
   const rows = resolveRows(spec.rows, scope)
   // Long report tables render their rows in the browser, a window at a time:
   // thousands of server-rendered rows cost tens of megabytes of markup and a
@@ -265,100 +231,39 @@ function TableBlockView({
     )
   }
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          {spec.columns.map((column, index) => {
-            const label = resolveText(column.header, scope)
-            const headClass =
-              cn(alignClass(column.align), column.headerClassName) || undefined
-            // A column with a sort key renders the shared sort link header
-            // instead of a plain one — the same component the native lists use,
-            // so the markup is identical rather than approximated.
-            if (column.sort && spec.sorting) {
-              return (
-                <SortTh
-                  key={index}
-                  basePath={resolveText(spec.sorting.basePath, scope)}
-                  currentParams={searchParams}
-                  column={column.sort}
-                  sort={resolveText(spec.sorting.sort, scope)}
-                  dir={
-                    (resolveText(spec.sorting.dir, scope) as 'asc' | 'desc') ||
-                    'asc'
-                  }
-                  align={column.align === 'right' ? 'right' : 'left'}
-                  className={column.headerClassName}
-                  sortParamKey={spec.sorting.sortParamKey}
-                  dirParamKey={spec.sorting.dirParamKey}
-                  pageParamKey={spec.sorting.pageParamKey}
-                >
-                  {label}
-                </SortTh>
-              )
+    <TableView
+      spec={spec}
+      scope={scope}
+      rows={rows}
+      primitives={primitives}
+      Cell={CellView}
+      windowed={windowed}
+      head={(column, index, label) =>
+        // A column with a sort key renders the shared sort link header
+        // instead of a plain one — the same component the native lists use,
+        // so the markup is identical rather than approximated.
+        column.sort && spec.sorting ? (
+          <SortTh
+            key={index}
+            basePath={resolveText(spec.sorting.basePath, scope)}
+            currentParams={searchParams}
+            column={column.sort}
+            sort={resolveText(spec.sorting.sort, scope)}
+            dir={
+              (resolveText(spec.sorting.dir, scope) as 'asc' | 'desc') ||
+              'asc'
             }
-            return (
-              <TableHead key={index} className={headClass}>
-                {column.srOnlyHeader ? (
-                  <span className="sr-only">{label}</span>
-                ) : (
-                  label
-                )}
-              </TableHead>
-            )
-          })}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {spec.leading?.map((row, index) => (
-          <SpanRowView
-            key={`lead-${index}`}
-            row={row}
-            scope={scope}
-            primitives={primitives}
-          />
-        ))}
-        {rows.length === 0 && spec.emptyRow ? (
-          <TableRow>
-            <TableCell
-              colSpan={spec.emptyRow.colSpan}
-              className={spec.emptyRow.className}
-            >
-              {resolveText(spec.emptyRow.text, scope)}
-            </TableCell>
-          </TableRow>
-        ) : null}
-        {windowed ? (
-          <VirtualReportRows rows={rows} columns={windowedColumns(spec.columns)} rowKey={spec.rowKey} />
-        ) : rows.map((row, rowIndex) => {
-          // Cells resolve against the row, with the page scope reachable at
-          // `$root` for shared constants (placeholder text, labels). One fixed
-          // name, not a parent-traversal operator.
-          const rowScope = nestedScope(row, scope)
-          return (
-            <TableRow
-              key={String(
-                resolveText(spec.rowKey, rowScope) || `row-${rowIndex}`,
-              )}
-            >
-              {spec.columns.map((column, index) => (
-                <TableCell key={index} className={bodyCellClassName(column, rowScope)}>
-                  <CellView spec={column.cell} scope={rowScope} />
-                </TableCell>
-              ))}
-            </TableRow>
-          )
-        })}
-        {spec.trailing?.map((row, index) => (
-          <SpanRowView
-            key={`trail-${index}`}
-            row={row}
-            scope={scope}
-            primitives={primitives}
-          />
-        ))}
-      </TableBody>
-    </Table>
+            align={column.align === 'right' ? 'right' : 'left'}
+            className={column.headerClassName}
+            sortParamKey={spec.sorting.sortParamKey}
+            dirParamKey={spec.sorting.dirParamKey}
+            pageParamKey={spec.sorting.pageParamKey}
+          >
+            {label}
+          </SortTh>
+        ) : undefined
+      }
+    />
   )
 }
 
@@ -579,6 +484,24 @@ export function BlockView({
             {resolveText(block.empty.text, scope)}
           </p>
         ) : null
+      }
+      // Long grouped reports (a section per account or party) render their
+      // sections in the browser, a window at a time, when every section is
+      // made of browser-safe headings and report tables. Each section ships
+      // only the slice of its scope its headings and span rows read.
+      if (!block.unwrapped && sectionsRenderInBrowser(block.blocks)) {
+        const groups = items.map((item, index) => {
+          const itemScope = nestedScope(item, scope)
+          return {
+            key: String(resolveText(block.itemKey, itemScope) || `item-${index}`),
+            scope: pickScope(sectionScopeSpecs(block.blocks), itemScope),
+            rows: block.blocks.map((inner) => (inner.kind === 'table' ? resolveRows(inner.rows, itemScope) : [])),
+          }
+        })
+        const rowTotal = groups.reduce((total, group) => total + group.rows.reduce((sum, rows) => sum + rows.length, 0), 0)
+        if (rowTotal > WINDOWED_ROWS_FROM) {
+          return <WindowedGroups blocks={block.blocks} groups={groups} className={block.className} itemClassName={block.itemClassName} />
+        }
       }
       const list = items.map((item, index) => {
         // Same scoping contract as a table row: the item is the scope, the page

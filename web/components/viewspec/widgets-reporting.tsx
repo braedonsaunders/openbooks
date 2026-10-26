@@ -1,5 +1,5 @@
 import { GlAuditNumberCommand } from '../gl-audit-number-command'
-import { BROWSER_CELL_WIDGETS } from './browser-cell-widgets'
+import { BROWSER_BLOCK_WIDGETS, BROWSER_CELL_WIDGETS } from './browser-widgets'
 import { type ComponentProps } from 'react'
 import {
   ExportMenu,
@@ -29,8 +29,6 @@ import {
   NlAskPanel,
 } from './native-widgets.client'
 import { JournalEntryHeading } from '../../app/(app)/reports/journal/sections'
-import { AccountHeading } from '../../app/(app)/reports/general-ledger/sections'
-import { PartyHeading } from '../../app/(app)/reports/registers/sections'
 import { AgingStrip } from '../../app/(app)/reports/statements/[partyId]/sections'
 import { StatementRows, ReconciliationNote } from '../../app/(app)/reports/StatementRows'
 import { ReportNameCell } from '../../app/(app)/reports/custom/sections'
@@ -71,26 +69,9 @@ export const REPORTING_WIDGETS = {
       memo={(props.memo as string | null) ?? null}
     />
   ),
-  'account-heading': (props) => (
-    <AccountHeading
-      accountId={str(props, 'accountId') ?? ''}
-      from={str(props, 'from') ?? ''}
-      to={str(props, 'to') ?? ''}
-      number={(props.number as string | null) ?? null}
-      name={str(props, 'name') ?? ''}
-    />
-  ),
+  'account-heading': BROWSER_BLOCK_WIDGETS['account-heading'],
   'entry-cell': BROWSER_CELL_WIDGETS['entry-cell'],
-  'party-heading': (props) => (
-    <PartyHeading
-      partyId={(props.partyId as string | null) ?? null}
-      partyName={str(props, 'partyName') ?? ''}
-      statementHref={str(props, 'statementHref') ?? ''}
-      closingLabel={str(props, 'closingLabel') ?? ''}
-      closing={str(props, 'closing') ?? ''}
-      closingDrill={props.closingDrill as ComponentProps<typeof PartyHeading>['closingDrill']}
-    />
-  ),
+  'party-heading': BROWSER_BLOCK_WIDGETS['party-heading'],
   'party-link-cell': BROWSER_CELL_WIDGETS['party-link-cell'],
   'aging-strip': (props) => (
     <AgingStrip

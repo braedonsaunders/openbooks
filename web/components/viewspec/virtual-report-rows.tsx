@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { resolveText, type CellSpec, type TableBlock } from '@braedonsaunders/appkit-viewspec'
 import { TableCell, TableRow } from '../../app/(app)/reports/ReportTable'
 import { InlineCellView } from './cell-leaves'
-import { BROWSER_CELL_WIDGETS } from './browser-cell-widgets'
+import { BROWSER_CELL_WIDGETS } from './browser-widgets'
 import { bodyCellClassName } from './table-cells'
 import { resolveWidgetProps, type WidgetRenderer } from './widget-props'
 import type { WindowedColumn } from './windowed-rows'
@@ -16,12 +16,12 @@ const OVERSCAN = 40
 /** Report rows are one line of statement type until measured. */
 const ESTIMATED_ROW_PX = 33
 
-function BrowserCell({ cell, scope }: { cell: CellSpec; scope: unknown }) {
-  if (cell.kind === 'widget') {
-    const render = (BROWSER_CELL_WIDGETS as Record<string, WidgetRenderer | undefined>)[cell.widget]
-    return render ? <>{render(resolveWidgetProps(cell.props ?? {}, scope), scope)}</> : null
+export function BrowserCell({ spec, scope }: { spec: CellSpec; scope: unknown }) {
+  if (spec.kind === 'widget') {
+    const render = (BROWSER_CELL_WIDGETS as Record<string, WidgetRenderer | undefined>)[spec.widget]
+    return render ? <>{render(resolveWidgetProps(spec.props ?? {}, scope), scope)}</> : null
   }
-  return <InlineCellView spec={cell} scope={scope} />
+  return <InlineCellView spec={spec} scope={scope} />
 }
 
 function scrollContainer(element: HTMLElement): HTMLElement | null {
@@ -113,7 +113,7 @@ export function VirtualReportRows({
         <TableRow key={String(resolveText(rowKey, row) || `row-${start + offset}`)}>
           {columns.map((column, index) => (
             <TableCell key={index} className={bodyCellClassName(column, row)}>
-              <BrowserCell cell={column.cell} scope={row} />
+              <BrowserCell spec={column.cell} scope={row} />
             </TableCell>
           ))}
         </TableRow>
