@@ -7,13 +7,14 @@ import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { Badge, EmptyState, PageHeader, TableHead } from '@openbooks/ui'
 import { getRecordType, listColumnMeta, recordTypeForFeatureState } from '@openbooks/customization'
 import { isFeatureEnabled } from '../lib/features'
 import { SearchInput } from './search-input'
 import { FilterChips } from './filter-bar'
 import { ShowInactivesToggle } from './show-inactives-toggle'
 import { Pagination } from './pagination'
+import { PagedTable, type PagedColumn } from './paged-table'
 import { SortTh } from './sortable-th'
 import { ViewsMenu } from './views-menu'
 import { buildListDrawerHref, hasActiveListFilters, parseListParams, pickString } from '../lib/list-params'
@@ -439,7 +440,25 @@ export async function EntityListView({
     return buildListDrawerHref(basePath, sp, target.param, target.id, source.exclusiveDrawerParams)
   }
 
-  const cell = (row: Record<string, unknown>, c: ListColDesc) => {
+  const cellClass = (row: Record<string, unknown>, c: ListColDesc): string | undefined => {
+    const v = row[c.key]
+    switch (c.kind) {
+      case 'reference':
+        return 'font-medium'
+      case 'amount':
+        return 'text-right tabular-nums'
+      case 'status':
+        return undefined
+      case 'date':
+        return 'whitespace-nowrap text-slate-600 dark:text-slate-400'
+      case 'custom':
+        return 'text-slate-700 dark:text-slate-300'
+      default:
+        return v == null || v === '' ? 'text-slate-400' : 'text-slate-600 dark:text-slate-400'
+    }
+  }
+
+  const cellContent = (row: Record<string, unknown>, c: ListColDesc): ReactNode => {
     const RecordLink = source.overlayDrawer ? OverlayLink : Link
     const v = row[c.key]
     switch (c.kind) {
@@ -450,15 +469,13 @@ export async function EntityListView({
           ? ''
           : hasOptions ? optionLabel(c.key, String(v)) : String(v)
         return (
-          <TableCell key={c.key} className="font-medium">
-            <RecordLink
-              href={(href)}
-              title={display}
-              className="block max-w-[18rem] truncate text-teal-700 hover:underline dark:text-teal-300"
-            >
-              {display}
-            </RecordLink>
-          </TableCell>
+          <RecordLink
+            href={(href)}
+            title={display}
+            className="block max-w-[18rem] truncate text-teal-700 hover:underline dark:text-teal-300"
+          >
+            {display}
+          </RecordLink>
         )
       }
       case 'amount': {
@@ -481,50 +498,62 @@ export async function EntityListView({
               period: currentPeriod.presetId,
             })
           : null
-        return (
-          <TableCell key={c.key} className="text-right tabular-nums">
-            {drill ? (
-              <ReportDrillLink target={drill} className={DRILL_LINK_CLASS}>
-                {formatted}
-              </ReportDrillLink>
-            ) : formatted}
-          </TableCell>
-        )
+        return drill ? (
+          <ReportDrillLink target={drill} className={DRILL_LINK_CLASS}>
+            {formatted}
+          </ReportDrillLink>
+        ) : formatted
       }
       case 'status':
-        return (
-          <TableCell key={c.key}>
-            {v == null || v === ''
-              ? <span className="text-slate-400">—</span>
-              : <Badge variant={source.statusVariant?.(row, v, c.key) ?? STATUS_VARIANT[String(v)] ?? 'secondary'}>{source.statusDisplayName ? source.statusDisplayName(String(v), label) : optionLabel(c.key, String(v))}</Badge>}
-          </TableCell>
-        )
+        return v == null || v === ''
+          ? <span className="text-slate-400">—</span>
+          : <Badge variant={source.statusVariant?.(row, v, c.key) ?? STATUS_VARIANT[String(v)] ?? 'secondary'}>{source.statusDisplayName ? source.statusDisplayName(String(v), label) : optionLabel(c.key, String(v))}</Badge>
       case 'date':
-        return (
-          <TableCell key={c.key} className="whitespace-nowrap text-slate-600 dark:text-slate-400">
-            {v == null || v === '' ? <span className="text-slate-400">—</span> : String(v)}
-          </TableCell>
-        )
+        return v == null || v === '' ? <span className="text-slate-400">—</span> : String(v)
       case 'custom': {
         const def = showInListDefs.find((d) => d.key === c.defKey)
         let display: string
         if (Array.isArray(v)) display = v.join(', ')
         else if (def?.fieldType === 'boolean') display = v ? tCommon('labels.yes') : tCommon('labels.no')
         else display = v != null && v !== '' ? String(v) : '—'
-        return <TableCell key={c.key} className="text-slate-700 dark:text-slate-300">{display}</TableCell>
+        return display
       }
       default: {
         const hasOptions = meta.listFilters.some((f) => f.key === c.key && f.options?.length)
         const display = formatValue?.(row, c.key, v)
           ?? (v == null || v === '' ? '—' : hasOptions ? optionLabel(c.key, String(v)) : String(v))
-        return (
-          <TableCell key={c.key} className={v == null || v === '' ? 'text-slate-400' : 'text-slate-600 dark:text-slate-400'}>
-            <span className="block max-w-[16rem] truncate" title={typeof display === 'string' ? display : undefined}>{display}</span>
-          </TableCell>
-        )
+        return <span className="block max-w-[16rem] truncate" title={typeof display === 'string' ? display : undefined}>{display}</span>
       }
     }
   }
+
+  const columns: PagedColumn<Record<string, unknown>>[] = cols.map((c) => ({
+    key: c.key,
+    header: c.label,
+    headerCell: c.sortable && c.sortKey ? (
+      <SortTh
+        key={c.key}
+        basePath={basePath}
+        currentParams={sp}
+        column={c.sortKey}
+        sort={params.sort}
+        dir={params.dir}
+        align={c.kind === 'amount' ? 'right' : undefined}
+      >
+        {c.label}
+      </SortTh>
+    ) : (
+      <TableHead
+        key={c.key}
+        className={c.kind === 'amount' ? 'text-right' : undefined}
+        style={c.width ? { width: c.width } : undefined}
+      >
+        {c.label}
+      </TableHead>
+    ),
+    cell: (row) => cellContent(row, c),
+    cellClassName: (row) => cellClass(row, c),
+  }))
 
   return (
     <>
@@ -569,45 +598,20 @@ export async function EntityListView({
         </div>
       ) : (
         <div className="mt-3">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {cols.map((c) =>
-                  c.sortable && c.sortKey ? (
-                    <SortTh
-                      key={c.key}
-                      basePath={basePath}
-                      currentParams={sp}
-                      column={c.sortKey}
-                      sort={params.sort}
-                      dir={params.dir}
-                      align={c.kind === 'amount' ? 'right' : undefined}
-                    >
-                      {c.label}
-                    </SortTh>
-                  ) : (
-                    <TableHead
-                      key={c.key}
-                      className={c.kind === 'amount' ? 'text-right' : undefined}
-                      style={c.width ? { width: c.width } : undefined}
-                    >
-                      {c.label}
-                    </TableHead>
-                  ),
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={String(row.id)}>
-                  {cols.map((c) => cell(row, c))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <div className="mt-3">
-            <Pagination basePath={basePath} currentParams={sp} total={filteredTotal} page={params.page} perPage={params.perPage} />
-          </div>
+          {/* The host owns the empty state; an out-of-range page keeps its
+              headers and the pager that leads back. */}
+          <PagedTable
+            serverWindow={{ total: filteredTotal, page: params.page, perPage: params.perPage }}
+            framed={false}
+            showPerPage={false}
+            basePath={basePath}
+            currentParams={sp}
+            rows={rows}
+            rowKey={(row) => String(row.id)}
+            columns={columns}
+            empty={null}
+            emptyRow={false}
+          />
         </div>
       )}
       {drawer}

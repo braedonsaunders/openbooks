@@ -16,14 +16,16 @@ export interface ListTableColumn<T> {
   cell: (row: T) => ReactNode
   search?: (row: T) => string
   className?: string
+  /** Per-row cell class, for columns whose tone follows the value. */
+  cellClassName?: (row: T) => string | undefined
   headerClassName?: string
   /** A shared sortable header rendered on the server. */
   headerCell?: ReactNode
   style?: CSSProperties
 }
 
-/** Shared row rendering for loaded-data and SQL-paginated lists. Pagination
- * and authorization stay with their owning source; cells are composed here. */
+/** PagedTable's row and cell body, shared by its loaded and server-window
+ * compositions. Pagination and authorization stay with the owning source. */
 export function ListTable<T>({
   rows,
   columns,
@@ -41,6 +43,7 @@ export function ListTable<T>({
   rowSelected,
   rowInteractive,
   contained = false,
+  emptyRow = true,
 }: {
   rows: T[]
   columns: ListTableColumn<T>[]
@@ -59,6 +62,8 @@ export function ListTable<T>({
   rowInteractive?: (row: T) => boolean
   /** Keep scrolling inside the table while its host toolbar stays fixed. */
   contained?: boolean
+  /** Hosts that render their own empty state suppress the spanning row. */
+  emptyRow?: boolean
 }) {
   return (
     <Table containerClassName={contained ? 'app-scroll min-h-0 flex-1 overflow-auto' : undefined}>
@@ -92,14 +97,16 @@ export function ListTable<T>({
       <TableBody>
         {leading}
         {rows.length === 0 ? (
-          <TableRow>
-            <TableCell
-              colSpan={columns.length + (selectionCell ? 1 : 0)}
-              className="px-3 py-8 text-center text-slate-500 dark:text-slate-400"
-            >
-              {empty}
-            </TableCell>
-          </TableRow>
+          emptyRow ? (
+            <TableRow>
+              <TableCell
+                colSpan={columns.length + (selectionCell ? 1 : 0)}
+                className="px-3 py-8 text-center text-slate-500 dark:text-slate-400"
+              >
+                {empty}
+              </TableCell>
+            </TableRow>
+          ) : null
         ) : (
           rows.map((row, index) => (
             <InteractiveTableRow
@@ -132,6 +139,7 @@ export function ListTable<T>({
                 <TableCell
                   key={column.key}
                   className={
+                    column.cellClassName?.(row) ??
                     column.className ??
                     (column.align === 'right'
                       ? 'text-right tabular-nums'

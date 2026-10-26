@@ -1,19 +1,13 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { PagedTable, type PagedUrlState } from './paged-table'
+import { PagedTable, type PagedColumn, type PagedUrlState } from './paged-table'
+import type { PreparedTableRow } from './paged-table-client'
 import type { PreparedListSourceKey } from '../lib/list/prepared-sources'
-import type { ListTableColumn } from './list-table'
 
-export interface PreparedTableRow {
-  id: string
-  cells: ReactNode[]
-  searchText: string
-  className?: string
-}
+export type { PreparedTableRow } from './paged-table-client'
 
-/** Server-rendered cells cross the RSC boundary as nodes, never callbacks,
- * database rows or translators. Filtering and paging use the shared table. */
+/** @deprecated Render PagedTable with `prepared`. */
 export function PreparedPagedTable({
   source,
   rows,
@@ -32,7 +26,7 @@ export function PreparedPagedTable({
 }: {
   source: PreparedListSourceKey
   rows: PreparedTableRow[]
-  columns: Omit<ListTableColumn<PreparedTableRow>, 'cell' | 'search'>[]
+  columns: Omit<PagedColumn<PreparedTableRow>, 'cell' | 'search'>[]
   empty: ReactNode
   emptyFiltered?: ReactNode
   filtersActive?: boolean
