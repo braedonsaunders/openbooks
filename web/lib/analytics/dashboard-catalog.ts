@@ -100,4 +100,6 @@ export interface AnalyticsSpotlight {
   panels: SpotlightPanel[]
   /** A refusal or caveat from the owning dashboard, stated in its words. */
   notice?: string
+  /** Served from the previous projection while a newer one builds; observedAt says when it was calculated. */
+  refreshing?: boolean
 }

@@ -8,6 +8,9 @@ import { presentationCurrency } from "../fx-presentation";
 import { ForbiddenError, requirePermission } from "../authz";
 import { analyticsDashboardAvailable } from "./dashboard-access";
 import { readAnalyticsDashboard } from "./dashboard-reader";
+import { requestAuthzContext, withAuthzContext } from "../authz-context";
+import { analyticsCacheIdentity, cachedAnalyticsRead } from "./preview-cache";
+import { withAnalyticsRead } from "./read-context";
 import { ANALYTICS_TABS, type AnalyticsSlug } from "./dashboard-tabs";
 import { analyticsSourceQuery } from "./query-params";
 import { RISK_SCORE_BANDS } from "./sentinel-scoring";
@@ -52,11 +55,7 @@ export async function analyticsDashboardSpotlight(
         await readAnalyticsDashboard("receivables-intelligence", query),
       );
     case "financial-health":
-      return financialHealthSpotlight(
-        t,
-        orgId,
-        await readAnalyticsDashboard("financial-health", query),
-      );
+      return financialHealthSpotlight(t, orgId, await readFinancialHealthSummary(query));
     case "customer-intelligence":
       return customerSpotlight(
         t,
@@ -386,7 +385,44 @@ async function receivablesSpotlight(
   };
 }
 
-type HealthRead = Awaited<ReturnType<typeof readAnalyticsDashboard<"financial-health">>>;
+/**
+ * Financial Health's summary projection: the health evaluation, monthly
+ * series and findings the spotlight draws, without the per-tab sections
+ * (segments, drivers, items, budget, forecast) the dashboard reads for its
+ * own tabs. Same loader, grants, scope and shared cache as the Analytics hub
+ * card for the dashboard.
+ */
+async function readFinancialHealthSummary(query: Record<string, string | undefined>) {
+  const authz = await requirePermission("reports.read");
+  const source = analyticsSourceQuery(query, "financial-health");
+  return withAuthzContext(authz, async () => {
+    const authority = requestAuthzContext()!;
+    const identity = await analyticsCacheIdentity(authority.user.orgId);
+    const read = {
+      authz: authority,
+      slug: "financial-health",
+      tab: "",
+      projection: "summary" as const,
+      ...identity,
+      observedAt: Date.now(),
+    };
+    return withAnalyticsRead(read, async () => {
+      const result = await cachedAnalyticsRead(
+        authority,
+        "summary:financial-health",
+        source,
+        async () =>
+          (
+            await import("../../app/(app)/analytics/financial-health/view")
+          ).loadFinancialHealthPreview(source),
+        { identity },
+      );
+      return { ...result, observedAt: new Date(read.observedAt).toISOString() };
+    });
+  });
+}
+
+type HealthRead = Awaited<ReturnType<typeof readFinancialHealthSummary>>;
 async function financialHealthSpotlight(
   t: Translate,
   orgId: string,
@@ -541,13 +577,11 @@ async function financialHealthSpotlight(
         kind: "insights",
         title: t("spotlight.findings"),
         empty: t("spotlight.noFindings"),
-        items: data.insights
-          .slice(0, RANK_ROWS)
-          .map((insight) => ({
-            tone: severityTone[insight.severity] ?? "neutral",
-            title: insight.title,
-            detail: insight.detail,
-          })),
+        items: data.insights.slice(0, RANK_ROWS).map((insight) => ({
+          tone: severityTone[insight.severity] ?? "neutral",
+          title: insight.title,
+          detail: insight.detail,
+        })),
       },
     ],
   };
@@ -679,13 +713,11 @@ async function customerSpotlight(
         kind: "insights",
         title: t("customer.panels.insights"),
         empty: t("spotlight.noFindings"),
-        items: data.insights
-          .slice(0, RANK_ROWS)
-          .map((insight) => ({
-            tone: insightTone[insight.type] ?? "neutral",
-            title: insight.title,
-            detail: insight.message,
-          })),
+        items: data.insights.slice(0, RANK_ROWS).map((insight) => ({
+          tone: insightTone[insight.type] ?? "neutral",
+          title: insight.title,
+          detail: insight.message,
+        })),
       },
     ],
   };
@@ -943,13 +975,11 @@ async function spendVelocitySpotlight(
         kind: "insights",
         title: t("spendVelocity.panels.insights"),
         empty: t("spotlight.noFindings"),
-        items: data.insights
-          .slice(0, RANK_ROWS)
-          .map((insight) => ({
-            tone: insightTone[insight.type] ?? "neutral",
-            title: insight.title,
-            detail: insight.message,
-          })),
+        items: data.insights.slice(0, RANK_ROWS).map((insight) => ({
+          tone: insightTone[insight.type] ?? "neutral",
+          title: insight.title,
+          detail: insight.message,
+        })),
       },
     ],
   };
@@ -1247,12 +1277,10 @@ async function utilizationSpotlight(
         kind: "insights",
         title: t("utilization.panels.alerts"),
         empty: t("spotlight.noFindings"),
-        items: data.company.alerts
-          .slice(0, RANK_ROWS)
-          .map((alert) => ({
-            tone: alert.type === "danger" ? ("negative" as const) : ("caution" as const),
-            title: alert.message,
-          })),
+        items: data.company.alerts.slice(0, RANK_ROWS).map((alert) => ({
+          tone: alert.type === "danger" ? ("negative" as const) : ("caution" as const),
+          title: alert.message,
+        })),
       },
     ],
   };
@@ -1367,13 +1395,11 @@ async function sentinelSpotlight(
         kind: "insights",
         title: t("sentinel.panels.topRiskAreas"),
         empty: t("spotlight.noFindings"),
-        items: s.topRiskAreas
-          .slice(0, RANK_ROWS)
-          .map((area) => ({
-            tone: severityTone[area.severity] ?? "neutral",
-            title: area.area,
-            detail: area.message,
-          })),
+        items: s.topRiskAreas.slice(0, RANK_ROWS).map((area) => ({
+          tone: severityTone[area.severity] ?? "neutral",
+          title: area.area,
+          detail: area.message,
+        })),
       },
       {
         kind: "ranking",

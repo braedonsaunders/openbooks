@@ -4,7 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { ANALYTICS_DASHBOARD_MAP } from "@/lib/analytics/dashboard-catalog";
 import { analyticsDashboardAvailable } from "@/lib/analytics/dashboard-access";
-import { analyticsDashboardSpotlight } from "@/lib/analytics/dashboard-spotlight";
+import { cachedDashboardSpotlight } from "@/lib/analytics/spotlight-cache";
 
 export const runtime = "nodejs";
 export const GET = defineRoute({
@@ -18,7 +18,7 @@ export const GET = defineRoute({
         return notFound("analytics dashboard");
       const sp = Object.fromEntries(new URL(request.url).searchParams.entries());
       const started = performance.now();
-      const spotlight = await analyticsDashboardSpotlight(dashboard, sp, authz.user.orgId);
+      const spotlight = await cachedDashboardSpotlight(dashboard, sp, authz.user.orgId);
       return Response.json(spotlight, {
         headers: {
           "Cache-Control": "private, no-store",

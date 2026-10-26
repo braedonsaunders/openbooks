@@ -10,6 +10,7 @@ import {
   Clock,
   Coins,
   Maximize2,
+  RefreshCw,
   ShieldAlert,
   Truck,
   Users,
@@ -75,6 +76,9 @@ type SpotlightState =
   | { status: "ready"; data: AnalyticsSpotlight }
   | { status: "failed"; message: string };
 
+/** Re-asks for a refreshing projection: 1.5 s, 3 s, 6 s, 12 s, 24 s. */
+const REFRESH_PASSES = 5;
+
 function useSpotlight(
   slug: string,
   fallback: string,
@@ -88,23 +92,35 @@ function useSpotlight(
     const settle = (state: SpotlightState) => {
       if (!controller.signal.aborted) setResult({ key, state });
     };
-    void (async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // A projection served while its replacement builds is shown at once;
+    // the card asks again, backing off, until the current one is ready.
+    // Later passes never replace shown figures with an error.
+    const load = async (pass: number) => {
       try {
         const response = await fetch(`/api/analytics/spotlights/${encodeURIComponent(slug)}`, {
           signal: controller.signal,
           cache: "no-store",
         });
         if (!response.ok) {
-          settle({ status: "failed", message: await readApiErrorMessage(response, fallback) });
+          if (pass === 0)
+            settle({ status: "failed", message: await readApiErrorMessage(response, fallback) });
           return;
         }
-        settle({ status: "ready", data: (await response.json()) as AnalyticsSpotlight });
+        const data = (await response.json()) as AnalyticsSpotlight;
+        settle({ status: "ready", data });
+        if (data.refreshing && pass < REFRESH_PASSES)
+          timer = setTimeout(() => void load(pass + 1), 1500 * 2 ** pass);
       } catch {
-        settle({ status: "failed", message: fallback });
+        if (pass === 0) settle({ status: "failed", message: fallback });
       }
-    })();
+    };
+    void load(0);
     // Leaving the dashboard or retrying discards the earlier response.
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (timer) clearTimeout(timer);
+    };
   }, [key, slug, fallback]);
   return {
     state: result?.key === key ? result.state : { status: "loading" },
@@ -121,6 +137,7 @@ function SpotlightCard({ widgetId }: { widgetId: string }) {
   const href = `/analytics/${slug}`;
   const title = t(meta.labelKey);
   const { state, retry } = useSpotlight(slug, t("spotlight.loadFailed"));
+  const { dateTime } = useViewerFormat();
   const [expanded, setExpanded] = useState(false);
   const Icon = look.icon;
   const data = state.status === "ready" ? state.data : null;
@@ -207,8 +224,19 @@ function SpotlightCard({ widgetId }: { widgetId: string }) {
           >
             {title}
           </Link>
-          <p className="truncate text-[11px] text-slate-400 dark:text-slate-500">
-            {data?.periodLabel ?? " "}
+          <p className="flex items-center gap-1 truncate text-[11px] text-slate-400 dark:text-slate-500">
+            {data?.refreshing ? (
+              <>
+                <RefreshCw size={10} aria-hidden className="shrink-0 animate-spin" />
+                <span className="truncate">
+                  {t("spotlight.updated", {
+                    time: dateTime(new Date(data.observedAt), { timeStyle: "short" }),
+                  })}
+                </span>
+              </>
+            ) : (
+              <span className="truncate">{data?.periodLabel ?? " "}</span>
+            )}
           </p>
         </div>
         <button
