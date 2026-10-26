@@ -1,43 +1,38 @@
-import { EmptyState, cn } from '@openbooks/ui'
-import type {
-  CellSpec,
-  TableBlock,
-  Tone,
-  WidgetRef,
-} from '@braedonsaunders/appkit-viewspec'
+import { EmptyState, cn } from "@openbooks/ui";
+import type { CellSpec, TableBlock, Tone, WidgetRef } from "@braedonsaunders/appkit-viewspec";
 import {
   resolvePath,
   resolveRows,
   resolveText,
   resolveValue,
-} from '@braedonsaunders/appkit-viewspec'
+} from "@braedonsaunders/appkit-viewspec";
 import {
   preparedListSource,
   preparedPageState,
   type PreparedListSourceKey,
-} from '../../lib/list/prepared-sources'
-import { PagedTable } from '../paged-table'
-import { CellView } from './cells'
-import { WidgetSlot } from './widget-slot'
-import { nestedScope } from './list-scope'
-import { SpanRowView, tablePrimitives } from './blocks'
-import { toneClass } from './tone'
+} from "../../lib/list/prepared-sources";
+import { PagedTable } from "../paged-table";
+import { CellView } from "./cells";
+import { WidgetSlot } from "./widget-slot";
+import { nestedScope } from "./list-scope";
+import { SpanRowView, tablePrimitives } from "./blocks";
+import { toneClass } from "./tone";
 
 /** Search text comes only from displayed values. Internal reader fields must
  * not cross the client boundary merely to support client-side filtering. */
 export function listCellSearchText(cell: CellSpec, scope: unknown): string {
-  const leaf = cell.kind === 'drill' || cell.kind === 'txn' ? cell.inner : cell
-  if ('field' in leaf) {
-    const text = resolveText(leaf.field, scope)
-    return leaf.kind === 'text'
+  const leaf = cell.kind === "drill" || cell.kind === "txn" ? cell.inner : cell;
+  if ("field" in leaf) {
+    const text = resolveText(leaf.field, scope);
+    return leaf.kind === "text"
       ? [
           text,
-          leaf.prefix ? resolveText(leaf.prefix.field, scope) : '',
-          leaf.suffix ? resolveText(leaf.suffix.field, scope) : '',
-        ].join(' ')
-      : text
+          leaf.prefix ? resolveText(leaf.prefix.field, scope) : "",
+          leaf.suffix ? resolveText(leaf.suffix.field, scope) : "",
+        ].join(" ")
+      : text;
   }
-  return ''
+  return "";
 }
 
 /** Domain cells on the universal registered list renderer. The source owns
@@ -50,22 +45,20 @@ export function RegisteredListBlockView({
   searchParams,
   toolbar,
 }: {
-  source: PreparedListSourceKey
-  spec: TableBlock
-  toolbar?: WidgetRef[]
-  scope: unknown
-  searchParams: Record<string, string | string[] | undefined>
+  source: PreparedListSourceKey;
+  spec: TableBlock;
+  toolbar?: WidgetRef[];
+  scope: unknown;
+  searchParams: Record<string, string | string[] | undefined>;
 }) {
-  const source = preparedListSource(key)
-  if (spec.kind !== 'table' || !Array.isArray(spec.columns))
-    throw new Error('Invalid registered list definition: ' + key)
-  if (!spec.rows || !('$' in spec.rows) || spec.rows.$ !== source.rowsField) {
-    throw new Error(
-      'The record-list collection does not match its registered source: ' + key,
-    )
+  const source = preparedListSource(key);
+  if (spec.kind !== "table" || !Array.isArray(spec.columns))
+    throw new Error("Invalid registered list definition: " + key);
+  if (!spec.rows || !("$" in spec.rows) || spec.rows.$ !== source.rowsField) {
+    throw new Error("The record-list collection does not match its registered source: " + key);
   }
-  const tableScope = nestedScope(scope, scope)
-  const rows = resolveRows(spec.rows, tableScope)
+  const tableScope = nestedScope(scope, scope);
+  const rows = resolveRows(spec.rows, tableScope);
   const empty = spec.emptyRow ? (
     resolveText(spec.emptyRow.text, tableScope)
   ) : spec.empty ? (
@@ -74,113 +67,89 @@ export function RegisteredListBlockView({
       description={resolveText(spec.empty.description, tableScope) || undefined}
     />
   ) : (
-    ''
-  )
-  const primitives = tablePrimitives('app')
+    ""
+  );
+  const primitives = tablePrimitives("app");
   return (
     <PagedTable
       prepared
       source={key}
       rows={rows}
       rowKey={(row) => {
-        const identity = resolvePath(row, source.rowKeyField ?? '')
-        return typeof identity === 'string' ? identity : ''
+        const identity = resolvePath(row, source.rowKeyField ?? "");
+        return typeof identity === "string" ? identity : "";
       }}
       empty={empty}
       basePath={
-        source.basePathField
-          ? String(resolvePath(tableScope, source.basePathField))
-          : source.route
+        source.basePathField ? String(resolvePath(tableScope, source.basePathField)) : source.route
       }
       serverWindow={
-        source.mode === 'loaded'
+        source.mode === "loaded"
           ? undefined
-          : source.mode === 'server'
+          : source.mode === "server"
             ? preparedPageState(source, tableScope)
             : true
       }
       currentParams={searchParams}
       pageParamKey={source.paging?.pageParamKey ?? spec.sorting?.pageParamKey}
-      sort={
-        spec.sorting ? resolveText(spec.sorting.sort, tableScope) : undefined
-      }
-      dir={
-        spec.sorting
-          ? (resolveText(spec.sorting.dir, tableScope) as 'asc' | 'desc')
-          : undefined
-      }
+      sort={spec.sorting ? resolveText(spec.sorting.sort, tableScope) : undefined}
+      dir={spec.sorting ? (resolveText(spec.sorting.dir, tableScope) as "asc" | "desc") : undefined}
       sortParamKey={spec.sorting?.sortParamKey}
       dirParamKey={spec.sorting?.dirParamKey}
       searchable={source.clientSearch !== false}
       toolbarAfter={
-        toolbar?.length ? (
-          <WidgetSlot widgets={toolbar} scope={tableScope} />
-        ) : undefined
+        toolbar?.length ? <WidgetSlot widgets={toolbar} scope={tableScope} /> : undefined
       }
       paging={false}
       leading={spec.leading?.map((row, index) => (
-        <SpanRowView
-          key={index}
-          row={row}
-          scope={tableScope}
-          primitives={primitives}
-        />
+        <SpanRowView key={index} row={row} scope={tableScope} primitives={primitives} />
       ))}
       footer={spec.trailing?.map((row, index) => (
-        <SpanRowView
-          key={index}
-          row={row}
-          scope={tableScope}
-          primitives={primitives}
-        />
+        <SpanRowView key={index} row={row} scope={tableScope} primitives={primitives} />
       ))}
       columns={spec.columns.map((column, index) => ({
         key: String(index),
         header: column.srOnlyHeader ? (
-          <span className="sr-only">
-            {resolveText(column.header, tableScope)}
-          </span>
+          <span className="sr-only">{resolveText(column.header, tableScope)}</span>
         ) : (
           resolveText(column.header, tableScope)
         ),
         headerClassName: cn(
-          column.align === 'right' && 'text-right',
-          column.align === 'center' && 'text-center',
+          column.align === "right" && "text-right",
+          column.align === "center" && "text-center",
           column.headerClassName,
         ),
         sortKey: column.sort,
         align: column.align,
         className: cn(
-          column.align === 'right' && 'text-right',
-          column.align === 'center' && 'text-center',
+          column.align === "right" && "text-right",
+          column.align === "center" && "text-center",
           column.className,
         ),
         cell: (row) => {
-          const rowScope = nestedScope(row, tableScope)
+          const rowScope = nestedScope(row, tableScope);
           const leaf =
-            column.cell.kind === 'drill' || column.cell.kind === 'txn'
+            column.cell.kind === "drill" || column.cell.kind === "txn"
               ? column.cell.inner
-              : column.cell
+              : column.cell;
           const tone = toneClass(
-            'tone' in leaf
+            "tone" in leaf
               ? (resolveValue(leaf.tone as never, rowScope) as Tone | undefined)
               : undefined,
-          )
+          );
           return (
             <span
               className={cn(
-                (leaf.kind === 'money' || leaf.kind === 'number') &&
-                  'tabular-nums',
+                (leaf.kind === "money" || leaf.kind === "number") && "tabular-nums",
                 tone,
               )}
             >
               <CellView spec={column.cell} scope={rowScope} />
             </span>
-          )
+          );
         },
-        search: (row) =>
-          listCellSearchText(column.cell, nestedScope(row, tableScope)),
+        search: (row) => listCellSearchText(column.cell, nestedScope(row, tableScope)),
       }))}
     />
-  )
+  );
 }

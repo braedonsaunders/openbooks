@@ -1,6 +1,6 @@
 "use client";
 
-import { useIdentityState } from '@/lib/use-identity-state'
+import { useIdentityState } from "@/lib/use-identity-state";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -15,7 +15,7 @@ import { useDirtyClose } from "@/lib/use-dirty-close";
 import { promptDialog } from "@/lib/prompt";
 import { readApiErrorMessage } from "@/lib/api-error";
 import type { InventoryInquiry } from "@openbooks/engine/inventory/contracts";
-import { DateField } from '@/components/date-field'
+import { DateField } from "@/components/date-field";
 
 type Row = Record<string, unknown>;
 export interface StockControlPickers {
@@ -37,16 +37,7 @@ const headings: Record<InventoryInquiry, string[]> = {
     "serial",
     "date",
   ],
-  cycle_due: [
-    "item",
-    "entity",
-    "class",
-    "interval",
-    "tolerance",
-    "last_count",
-    "due_on",
-    "status",
-  ],
+  cycle_due: ["item", "entity", "class", "interval", "tolerance", "last_count", "due_on", "status"],
   layers: [
     "date",
     "entity",
@@ -131,9 +122,7 @@ export function StockControls({
   const urlSearch = url.get(searchKey) ?? "";
   const urlClosed = url.get("layerIncludeClosed") === "true";
   const page =
-    Number.isSafeInteger(requestedPage) &&
-    requestedPage >= 1 &&
-    requestedPage <= 100001
+    Number.isSafeInteger(requestedPage) && requestedPage >= 1 && requestedPage <= 100001
       ? requestedPage - 1
       : 0;
   const [rows, setRows] = useState<Row[]>([]),
@@ -177,16 +166,14 @@ export function StockControls({
         const response = await fetch(`/api/inventory/controls?${params}`, {
           signal,
         });
-        if (!response.ok)
-          throw new Error(await readApiErrorMessage(response, t("loadFailed")));
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t("loadFailed")));
         const data = await response.json();
         if (signal?.aborted) return;
         setRows(data.rows);
         setTotal(data.totalCount);
         setError(null);
       } catch (e) {
-        if (!signal?.aborted)
-          setError(e instanceof Error ? e.message : t("loadFailed"));
+        if (!signal?.aborted) setError(e instanceof Error ? e.message : t("loadFailed"));
       } finally {
         if (!signal?.aborted) setLoading(false);
       }
@@ -230,8 +217,7 @@ export function StockControls({
           idempotencyKey: holdRetry.current.key,
         }),
       });
-      if (!response.ok)
-        throw new Error(await readApiErrorMessage(response, t("saveFailed")));
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t("saveFailed")));
       setRevision((r) => r + 1);
       holdRetry.current = null;
     } catch (e) {
@@ -252,8 +238,7 @@ export function StockControls({
             ? t(`ownership.${value}`)
             : key === "kind" && view === "holds"
               ? t(value)
-              : ["kind", "source_kind"].includes(key) &&
-                  inventory.has(`kind.${value}`)
+              : ["kind", "source_kind"].includes(key) && inventory.has(`kind.${value}`)
                 ? inventory(`kind.${value}`)
                 : value;
       if (
@@ -263,10 +248,7 @@ export function StockControls({
         return (
           <Link
             className="text-teal-700 hover:underline"
-            href={recordHref(
-              view === "layers" ? "costLayer" : "custody",
-              String(row.id),
-            )}
+            href={recordHref(view === "layers" ? "costLayer" : "custody", String(row.id))}
           >
             {label}
           </Link>
@@ -279,12 +261,7 @@ export function StockControls({
       key: "action",
       header: t("action"),
       cell: (row) => (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={busy}
-          onClick={() => void hold(row)}
-        >
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void hold(row)}>
           {row.reason ? t("release") : t("hold")}
         </Button>
       ),
@@ -350,9 +327,7 @@ export function StockControls({
           currentParams={{
             ...Object.fromEntries(url.entries()),
             [searchKey]: search,
-            ...(view === "layers"
-              ? { layerIncludeClosed: String(closed) }
-              : {}),
+            ...(view === "layers" ? { layerIncludeClosed: String(closed) } : {}),
           }}
           pageParamKey={pageKey}
           showPerPage={false}
@@ -369,11 +344,7 @@ export function StockControls({
           pending={false}
           size="xl"
         >
-          <StockControls
-            key={selectedLayer}
-            view="consumptions"
-            layerId={selectedLayer}
-          />
+          <StockControls key={selectedLayer} view="consumptions" layerId={selectedLayer} />
         </AsyncUrlDrawer>
       ) : null}
       {selectedCustody && canPost && pickers ? (
@@ -417,13 +388,11 @@ function CustodyDrawerHost({
   useEffect(() => {
     if (stockId === "new") return;
     const abort = new AbortController();
-    void fetch(
-      `/api/inventory/controls?${new URLSearchParams({ view: "consignment", stockId })}`,
-      { signal: abort.signal },
-    )
+    void fetch(`/api/inventory/controls?${new URLSearchParams({ view: "consignment", stockId })}`, {
+      signal: abort.signal,
+    })
       .then(async (response) => {
-        if (!response.ok)
-          throw new Error(await readApiErrorMessage(response, t("loadFailed")));
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t("loadFailed")));
         const data = await response.json();
         if (abort.signal.aborted) return;
         if (!data.rows[0]) throw new Error(t("empty"));
@@ -446,9 +415,7 @@ function CustodyDrawerHost({
       pending={pending}
       error={error}
       onRetry={() => setRevision((value) => value + 1)}
-      beforeClose={() =>
-        guard.current ? guard.current() : Promise.resolve(true)
-      }
+      beforeClose={() => (guard.current ? guard.current() : Promise.resolve(true))}
       title={stockId === "new" ? t("newReceipt") : t("custodyOperation")}
       size="lg"
     >
@@ -484,9 +451,7 @@ function CustodyForm({
     [item, setItem] = useState(""),
     [location, setLocation] = useState(""),
     [subsidiary, setSubsidiary] = useState("");
-  const [quantity, setQuantity] = useState(
-      source ? String(source.quantity) : "",
-    ),
+  const [quantity, setQuantity] = useState(source ? String(source.quantity) : ""),
     [cost, setCost] = useState(""),
     [offset, setOffset] = useState(""),
     [reason, setReason] = useState("");
@@ -546,8 +511,7 @@ function CustodyForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...request, idempotencyKey: retry.current.key }),
       });
-      if (!response.ok)
-        throw new Error(await readApiErrorMessage(response, t("saveFailed")));
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t("saveFailed")));
       onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : t("saveFailed"));
@@ -627,20 +591,13 @@ function CustodyForm({
         </div>
         <div>
           <Label>{t("columns.date")}</Label>
-          <DateField
-            value={date}
-            onChange={(value) => setDate(value)}
-          />
+          <DateField value={date} onChange={(value) => setDate(value)} />
         </div>
         {action === "take_ownership" ? (
           <>
             <div>
               <Label>{t("columns.unit_cost")}</Label>
-              <Input
-                inputMode="decimal"
-                value={cost}
-                onChange={(e) => setCost(e.target.value)}
-              />
+              <Input inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} />
             </div>
             <div>
               <Label>{t("offset")}</Label>

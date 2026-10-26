@@ -2,20 +2,29 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React, { Children, isValidElement, type ReactNode } from "react";
 
-import { installCompensationReadFixture } from '../../../../testing/compensation-read-fixture';
+import { installCompensationReadFixture } from "../../../../testing/compensation-read-fixture";
 const fixture = installCompensationReadFixture();
 
 const { loadCompensationHome, loadEquity } = await import("../../../../lib/hrm/compensation.ts");
-const { CompensationError } = await import(
-  "@openbooks/engine/hrm/compensation/errors"
-);
+const { CompensationError } = await import("@openbooks/engine/hrm/compensation/errors");
 const { HrmAuthorizationError } = await import("@openbooks/engine/hrm/authorization");
 
 Object.assign(globalThis, { React });
-const identity = { orgId: "019f655b-2900-7000-8000-000000000001", id: "019f655b-2900-7000-8000-000000000002" };
-const permissions = new Set(["hrm.compensation.read", "hrm.compensation.manage", "admin.setup.manage"]);
+const identity = {
+  orgId: "019f655b-2900-7000-8000-000000000001",
+  id: "019f655b-2900-7000-8000-000000000002",
+};
+const permissions = new Set([
+  "hrm.compensation.read",
+  "hrm.compensation.manage",
+  "admin.setup.manage",
+]);
 const authz = { user: identity, permissions, allowedSubsidiaryIds: null } as never;
-const scopedAuthz = { user: identity, permissions, allowedSubsidiaryIds: new Set(["019f655b-2900-7000-8000-000000000003"]) } as never;
+const scopedAuthz = {
+  user: identity,
+  permissions,
+  allowedSubsidiaryIds: new Set(["019f655b-2900-7000-8000-000000000003"]),
+} as never;
 
 function overviewFixture(empty = false) {
   const value = {
@@ -23,9 +32,25 @@ function overviewFixture(empty = false) {
     families: empty ? [] : [{ id: "family-a" }, { id: "family-b" }],
     levels: empty ? [] : [{ id: "level-a" }, { id: "level-b" }, { id: "level-c" }],
     versions: empty ? [] : [{ id: "version-a" }, { id: "version-b" }],
-    wages: { asOf: "2026-09-22", workers: empty ? 0 : 7, covered: empty ? 0 : 5,
-      missing: empty ? 0 : 1, ambiguous: empty ? 0 : 1,
-      groups: empty ? [] : [{ basis: "hour", currency: "CAD", workers: 5, average: "34.5000", min: "34.5000", max: "34.5000" }] },
+    wages: {
+      asOf: "2026-09-22",
+      workers: empty ? 0 : 7,
+      covered: empty ? 0 : 5,
+      missing: empty ? 0 : 1,
+      ambiguous: empty ? 0 : 1,
+      groups: empty
+        ? []
+        : [
+            {
+              basis: "hour",
+              currency: "CAD",
+              workers: 5,
+              average: "34.5000",
+              min: "34.5000",
+              max: "34.5000",
+            },
+          ],
+    },
     error: null as Error | null,
     wageInput: null as unknown,
     architectureInput: null as unknown,
@@ -103,7 +128,9 @@ test("equity surfaces a refused snapshot read with the named remedy, not an empt
 
 test("equity surfaces an authorization refusal the same way", async () => {
   fixture.snapshot = {
-    error: new HrmAuthorizationError("compensation reads need the hrm.compensation.read grant in this organization."),
+    error: new HrmAuthorizationError(
+      "compensation reads need the hrm.compensation.read grant in this organization.",
+    ),
   };
   const data = await loadEquity(authz);
   assert.ok(data?.refusal, "the auth refusal travels as data");
@@ -133,7 +160,11 @@ test("equity preserves a valid snapshot untouched", async () => {
 
 test("equity propagates an unexpected system failure instead of an empty page", async () => {
   fixture.snapshot = { error: new TypeError("connection terminated") };
-  await assert.rejects(loadEquity(authz), /connection terminated/, "the failure reaches the caller, never a null snapshot");
+  await assert.rejects(
+    loadEquity(authz),
+    /connection terminated/,
+    "the failure reaches the caller, never a null snapshot",
+  );
 });
 
 test("the architecture overview never requests a frozen aggregate unavailable to a scoped reader", async () => {
@@ -141,11 +172,30 @@ test("the architecture overview never requests a frozen aggregate unavailable to
   fixture.snapshot = { error: new CompensationError("REFUSED", SCOPE_REFUSAL) };
   const data = await loadCompensationHome(scopedAuthz);
   assert.ok(data, "the home loader still resolves");
-  assert.equal(fixture.gapReads, 0, "the scoped architecture cockpit does not request an organization-wide frozen aggregate");
-  assert.equal(data.refusal, null, "an unrelated aggregate refusal is not represented as a failed architecture read");
-  assert.deepEqual(data.overview?.wages, facts.wages, "the overview retains authorized native wage facts");
-  assert.deepEqual(facts.wageInput, { orgId: identity.orgId, actorId: identity.id }, "the native wage reader resolves scope from the attributable actor");
-  assert.ok(data.tiles.every((tile) => tile.label !== "Joint assessment flags"), "the cockpit makes no unrequested equity claim");
+  assert.equal(
+    fixture.gapReads,
+    0,
+    "the scoped architecture cockpit does not request an organization-wide frozen aggregate",
+  );
+  assert.equal(
+    data.refusal,
+    null,
+    "an unrelated aggregate refusal is not represented as a failed architecture read",
+  );
+  assert.deepEqual(
+    data.overview?.wages,
+    facts.wages,
+    "the overview retains authorized native wage facts",
+  );
+  assert.deepEqual(
+    facts.wageInput,
+    { orgId: identity.orgId, actorId: identity.id },
+    "the native wage reader resolves scope from the attributable actor",
+  );
+  assert.ok(
+    data.tiles.every((tile) => tile.label !== "Joint assessment flags"),
+    "the cockpit makes no unrequested equity claim",
+  );
 });
 
 test("the architecture overview preserves genuine empty native registers without inventing equity measurements", async () => {
@@ -153,7 +203,11 @@ test("the architecture overview preserves genuine empty native registers without
   fixture.snapshot = { snapshot: null };
   const data = await loadCompensationHome(authz);
   assert.equal(data?.refusal, null, "absence is not a refusal");
-  assert.deepEqual(data?.tiles.map((tile) => tile.value), ["0", "0", "0", "0"], "zero is supported by the empty worker, family, level and band registers");
+  assert.deepEqual(
+    data?.tiles.map((tile) => tile.value),
+    ["0", "0", "0", "0"],
+    "zero is supported by the empty worker, family, level and band registers",
+  );
   assert.deepEqual(data?.wageTiles, [], "no average is invented without a wage population");
   assert.equal(fixture.gapReads, 0);
 });
@@ -163,18 +217,44 @@ test("the architecture overview measures current wage and architecture facts ind
   fixture.snapshot = { snapshot: validSnapshot() };
   const data = await loadCompensationHome(authz);
   assert.equal(data?.refusal, null, "success carries no refusal");
-  assert.deepEqual(data?.tiles.map((tile) => tile.value), ["7", "2", "3", "1"]);
-  assert.equal(data?.overview?.bandVersions, 2, "effective-date history remains separate from the current band count");
-  assert.equal(data?.wageTiles[0]?.value, "34.50 CAD", "actual wage basis and currency are retained without annualization or FX");
-  assert.equal(data?.overview?.wages.missing, 1, "missing wages remain visible rather than becoming nil wages");
-  assert.equal(data?.overview?.wages.ambiguous, 1, "overlapping wage facts remain visible rather than being guessed");
+  assert.deepEqual(
+    data?.tiles.map((tile) => tile.value),
+    ["7", "2", "3", "1"],
+  );
+  assert.equal(
+    data?.overview?.bandVersions,
+    2,
+    "effective-date history remains separate from the current band count",
+  );
+  assert.equal(
+    data?.wageTiles[0]?.value,
+    "34.50 CAD",
+    "actual wage basis and currency are retained without annualization or FX",
+  );
+  assert.equal(
+    data?.overview?.wages.missing,
+    1,
+    "missing wages remain visible rather than becoming nil wages",
+  );
+  assert.equal(
+    data?.overview?.wages.ambiguous,
+    1,
+    "overlapping wage facts remain visible rather than being guessed",
+  );
   assert.equal(fixture.gapReads, 0);
 });
 
 test("the architecture overview raises refused or failed native wage reads instead of substituting zero", async () => {
-  for (const error of [new Error("db went away"), new HrmAuthorizationError("Ask an administrator for compensation access to this employer.")]) {
+  for (const error of [
+    new Error("db went away"),
+    new HrmAuthorizationError("Ask an administrator for compensation access to this employer."),
+  ]) {
     overviewFixture().error = error;
-    await assert.rejects(loadCompensationHome(authz), (actual) => actual === error, "the exact native failure reaches the caller, never a zero-population summary");
+    await assert.rejects(
+      loadCompensationHome(authz),
+      (actual) => actual === error,
+      "the exact native failure reaches the caller, never a zero-population summary",
+    );
   }
 });
 
@@ -182,7 +262,10 @@ test("the architecture overview raises refused or failed native wage reads inste
 // Exercise that workspace's actual refusal branch, including suppression of
 // aggregate rows and metrics, rather than assuming an older block layout.
 
-function elementsOfType(node: ReactNode, type: unknown): React.ReactElement<Record<string, unknown>>[] {
+function elementsOfType(
+  node: ReactNode,
+  type: unknown,
+): React.ReactElement<Record<string, unknown>>[] {
   return Children.toArray(node).flatMap((child) => {
     if (!isValidElement<Record<string, unknown>>(child)) return [];
     return [
@@ -202,14 +285,30 @@ test("the computed equity refusal reaches the native workspace and suppresses it
   const equity = await loadEquity(authz);
   assert.ok(equity);
   const spec = equitySpec(equity) as { body?: { widget?: string; props?: { data?: unknown } }[] };
-  assert.equal(spec.body?.find((block) => block.widget === "hrm-comp-equity-workspace")?.props?.data, equity, "the spec forwards the complete refused data to its native renderer");
+  assert.equal(
+    spec.body?.find((block) => block.widget === "hrm-comp-equity-workspace")?.props?.data,
+    equity,
+    "the spec forwards the complete refused data to its native renderer",
+  );
   const body = EquityWorkspace({ data: equity });
   const [banner] = elementsOfType(body, EmptyState);
   assert.ok(banner, "the real native workspace renders the refusal");
   assert.equal(banner.props.title, "Pay equity");
-  assert.equal(banner.props.description, SCOPE_REFUSAL, "the actual rendered banner receives the full remedy");
-  assert.deepEqual(elementsOfType(body, PagedTable), [], "the refused workspace exposes no aggregate category rows");
-  assert.deepEqual(elementsOfType(body, KpiStrip), [], "the refused workspace exposes no aggregate metric tiles");
+  assert.equal(
+    banner.props.description,
+    SCOPE_REFUSAL,
+    "the actual rendered banner receives the full remedy",
+  );
+  assert.deepEqual(
+    elementsOfType(body, PagedTable),
+    [],
+    "the refused workspace exposes no aggregate category rows",
+  );
+  assert.deepEqual(
+    elementsOfType(body, KpiStrip),
+    [],
+    "the refused workspace exposes no aggregate metric tiles",
+  );
 });
 
 test("genuine no-snapshot equity keeps its table distinct from a refusal", async () => {
@@ -226,5 +325,9 @@ test("genuine no-snapshot equity keeps its table distinct from a refusal", async
   assert.deepEqual(categories.props.rows, []);
   assert.equal(categories.props.source, "hrm_compensation_equity");
   const [empty] = elementsOfType(categories.props.empty as ReactNode, EmptyState);
-  assert.equal(empty?.props.title, "No snapshot yet", "genuine absence retains its precise empty state, separate from an access refusal");
+  assert.equal(
+    empty?.props.title,
+    "No snapshot yet",
+    "genuine absence retains its precise empty state, separate from an access refusal",
+  );
 });

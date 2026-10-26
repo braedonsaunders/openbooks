@@ -1,27 +1,20 @@
-import { Fragment, type CSSProperties, type ReactNode } from 'react'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@openbooks/ui'
-import { InteractiveTableRow } from './interactive-table-row'
+import { Fragment, type CSSProperties, type ReactNode } from "react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
+import { InteractiveTableRow } from "./interactive-table-row";
 
 export interface ListTableColumn<T> {
-  key: string
-  header: ReactNode
-  align?: 'left' | 'right' | 'center'
-  cell: (row: T) => ReactNode
-  search?: (row: T) => string
-  className?: string
+  key: string;
+  header: ReactNode;
+  align?: "left" | "right" | "center";
+  cell: (row: T) => ReactNode;
+  search?: (row: T) => string;
+  className?: string;
   /** Per-row cell class, for columns whose tone follows the value. */
-  cellClassName?: (row: T) => string | undefined
-  headerClassName?: string
+  cellClassName?: (row: T) => string | undefined;
+  headerClassName?: string;
   /** A shared sortable header rendered on the server. */
-  headerCell?: ReactNode
-  style?: CSSProperties
+  headerCell?: ReactNode;
+  style?: CSSProperties;
 }
 
 /** PagedTable's row and cell body, shared by its loaded and server-window
@@ -45,28 +38,28 @@ export function ListTable<T>({
   contained = false,
   emptyRow = true,
 }: {
-  rows: T[]
-  columns: ListTableColumn<T>[]
-  rowKey: (row: T, index: number) => string
-  empty: ReactNode
-  rowClassName?: (row: T) => string | undefined
-  onRowClick?: (row: T) => void
-  footer?: ReactNode
-  leading?: ReactNode
-  headerCell?: (column: ListTableColumn<T>) => ReactNode
-  selectionHeader?: ReactNode
-  selectionCell?: (row: T) => ReactNode
-  rowLabel?: (row: T) => string
-  rowRole?: 'link' | 'button'
-  rowSelected?: (row: T) => boolean
-  rowInteractive?: (row: T) => boolean
+  rows: T[];
+  columns: ListTableColumn<T>[];
+  rowKey: (row: T, index: number) => string;
+  empty: ReactNode;
+  rowClassName?: (row: T) => string | undefined;
+  onRowClick?: (row: T) => void;
+  footer?: ReactNode;
+  leading?: ReactNode;
+  headerCell?: (column: ListTableColumn<T>) => ReactNode;
+  selectionHeader?: ReactNode;
+  selectionCell?: (row: T) => ReactNode;
+  rowLabel?: (row: T) => string;
+  rowRole?: "link" | "button";
+  rowSelected?: (row: T) => boolean;
+  rowInteractive?: (row: T) => boolean;
   /** Keep scrolling inside the table while its host toolbar stays fixed. */
-  contained?: boolean
+  contained?: boolean;
   /** Hosts that render their own empty state suppress the spanning row. */
-  emptyRow?: boolean
+  emptyRow?: boolean;
 }) {
   return (
-    <Table containerClassName={contained ? 'app-scroll min-h-0 flex-1 overflow-auto' : undefined}>
+    <Table containerClassName={contained ? "app-scroll min-h-0 flex-1 overflow-auto" : undefined}>
       <TableHeader>
         <TableRow>
           {selectionHeader}
@@ -80,10 +73,10 @@ export function ListTable<T>({
                 key={column.key}
                 className={
                   column.headerClassName ??
-                  (column.align === 'right'
-                    ? 'text-right'
-                    : column.align === 'center'
-                      ? 'text-center'
+                  (column.align === "right"
+                    ? "text-right"
+                    : column.align === "center"
+                      ? "text-center"
                       : column.className)
                 }
                 style={column.style}
@@ -113,10 +106,10 @@ export function ListTable<T>({
               key={rowKey(row, index)}
               aria-label={rowLabel?.(row)}
               role={rowRole}
-              data-state={rowSelected?.(row) ? 'selected' : undefined}
+              data-state={rowSelected?.(row) ? "selected" : undefined}
               className={
                 onRowClick && (rowInteractive?.(row) ?? true)
-                  ? `cursor-pointer ${rowClassName?.(row) ?? ''}`
+                  ? `cursor-pointer ${rowClassName?.(row) ?? ""}`
                   : rowClassName?.(row)
               }
               onClick={
@@ -124,12 +117,12 @@ export function ListTable<T>({
                   ? (event) => {
                       // Buttons, links and inputs retain their own action; opening a
                       // record must not cover an action's result or refusal.
-                      const target = event.target as Element | null
+                      const target = event.target as Element | null;
                       const action = target?.closest?.(
                         'button, a, input, select, textarea, label, [role="button"], [role="menuitem"], [data-row-action]',
-                      )
-                      if (action && action !== event.currentTarget) return
-                      onRowClick(row)
+                      );
+                      if (action && action !== event.currentTarget) return;
+                      onRowClick(row);
                     }
                   : undefined
               }
@@ -141,9 +134,7 @@ export function ListTable<T>({
                   className={
                     column.cellClassName?.(row) ??
                     column.className ??
-                    (column.align === 'right'
-                      ? 'text-right tabular-nums'
-                      : undefined)
+                    (column.align === "right" ? "text-right tabular-nums" : undefined)
                   }
                   style={column.style}
                 >
@@ -156,5 +147,5 @@ export function ListTable<T>({
         {footer}
       </TableBody>
     </Table>
-  )
+  );
 }

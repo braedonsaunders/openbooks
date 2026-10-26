@@ -1,25 +1,33 @@
-import { can, type Authz } from '@/lib/authz'
-import { isFeatureEnabled } from '@/lib/features'
-import { subsidiaryVisibleFilter } from '@/lib/subsidiaries'
-import { paymentRunScopeSql, paymentSharedSubsidiaryFilter } from '@/lib/payment-run-access'
-import { getMoneyFormatter } from '@/lib/money-server'
-import Link from 'next/link'
-import { getLocale, getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
+import { can, type Authz } from "@/lib/authz";
+import { isFeatureEnabled } from "@/lib/features";
+import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
+import { paymentRunScopeSql, paymentSharedSubsidiaryFilter } from "@/lib/payment-run-access";
+import { getMoneyFormatter } from "@/lib/money-server";
+import Link from "next/link";
+import { getLocale, getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
 import { paymentRunReadiness } from "@openbooks/engine/payments/run-readiness";
 import { payeeBankStateSql } from "@openbooks/engine/payments/run-readiness";
-import { paymentRunSubjectKind } from '@openbooks/engine/flows'
-import { Alert, AlertDescription, AlertTitle, Badge, UrlDrawer } from '@openbooks/ui'
-import { SearchInput } from '../../../components/search-input'
-import { FilterChips } from '../../../components/filter-bar'
-import { Pagination } from '../../../components/pagination'
-import { PagedTable, type PagedColumn } from '../../../components/paged-table'
-import { isUuid, parsePrefixedListParams, pickString } from '../../../lib/list-params'
-import { dateTime } from '../../../lib/format'
-import { RunBuilder, type RunBill } from './RunBuilder'
-import { RunDrawer, type PaymentEventClient, type PaymentFileClient, type PaymentInstructionClient, type PaymentRunClient, type PaymentRunItemClient, type RunBlockerClient } from './RunDrawer'
+import { paymentRunSubjectKind } from "@openbooks/engine/flows";
+import { Alert, AlertDescription, AlertTitle, Badge, UrlDrawer } from "@openbooks/ui";
+import { SearchInput } from "../../../components/search-input";
+import { FilterChips } from "../../../components/filter-bar";
+import { Pagination } from "../../../components/pagination";
+import { PagedTable, type PagedColumn } from "../../../components/paged-table";
+import { isUuid, parsePrefixedListParams, pickString } from "../../../lib/list-params";
+import { dateTime } from "../../../lib/format";
+import { RunBuilder, type RunBill } from "./RunBuilder";
+import {
+  RunDrawer,
+  type PaymentEventClient,
+  type PaymentFileClient,
+  type PaymentInstructionClient,
+  type PaymentRunClient,
+  type PaymentRunItemClient,
+  type RunBlockerClient,
+} from "./RunDrawer";
 
 /**
  * Payment-run view: pick posted-open bills across vendors into an EFT run,
@@ -27,28 +35,28 @@ import { RunDrawer, type PaymentEventClient, type PaymentFileClient, type Paymen
  * URL-driven with prefixed params (bills*, runs*).
  */
 
-const RUN_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline' | 'default'> = {
-  confirmed: 'success',
-  exported: 'default',
-  draft: 'secondary',
-  cancelled: 'outline',
-}
+const RUN_VARIANT: Record<string, "success" | "secondary" | "warning" | "outline" | "default"> = {
+  confirmed: "success",
+  exported: "default",
+  draft: "secondary",
+  cancelled: "outline",
+};
 
 // payment_runs.status enum → common.status.* message keys (confirmed/exported
 // live in payments.runs.status.*; fallback: raw value).
 const RUN_STATUS_COMMON_KEY: Record<string, string> = {
-  draft: 'draft',
-  pending_approval: 'pendingApproval',
-  approved: 'approved',
-  cancelled: 'cancelled',
-}
+  draft: "draft",
+  pending_approval: "pendingApproval",
+  approved: "approved",
+  cancelled: "cancelled",
+};
 
 const BILL_SORTS = {
   number: sql`document_number`,
   vendor: sql`vendor`,
   due: sql`due_date`,
   open: sql`open`,
-} as const
+} as const;
 
 const RUN_SORTS = {
   number: sql`r.run_number`,
@@ -59,94 +67,107 @@ const RUN_SORTS = {
   payments: sql`count(i.id) filter (where i.status <> 'cancelled')`,
   total: sql`coalesce(sum(i.amount) filter (where i.status <> 'cancelled'), 0)`,
   status: sql`r.status`,
-} as const
+} as const;
 
 export async function RunsSection({
   sp,
   authz,
   canApprove,
-  direction = 'outbound',
-  basePath = '/payments',
+  direction = "outbound",
+  basePath = "/payments",
 }: {
-  sp: Record<string, string | string[] | undefined>
-  authz: Authz
-  canApprove: boolean
-  direction?: 'outbound' | 'inbound'
-  basePath?: '/payments' | '/receipts'
+  sp: Record<string, string | string[] | undefined>;
+  authz: Authz;
+  canApprove: boolean;
+  direction?: "outbound" | "inbound";
+  basePath?: "/payments" | "/receipts";
 }) {
-  if (!can(authz, direction === 'inbound' ? 'ar.pay' : 'ap.pay')) return null
-  const orgId = authz.user.orgId
-  const runScope = paymentRunScopeSql(authz)
-  const sourceScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)
-  const profileScope = paymentSharedSubsidiaryFilter(sql`p.subsidiary_id`, authz)
-  const { money } = await getMoneyFormatter()
-  const today = await businessToday(orgId)
-  const t = await getTranslations('payments')
-  const tCommon = await getTranslations('common')
-  const locale = await getLocale()
-  const building = pickString(sp.newRun) === '1'
-  const collections = direction === 'inbound'
+  if (!can(authz, direction === "inbound" ? "ar.pay" : "ap.pay")) return null;
+  const orgId = authz.user.orgId;
+  const runScope = paymentRunScopeSql(authz);
+  const sourceScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds);
+  const profileScope = paymentSharedSubsidiaryFilter(sql`p.subsidiary_id`, authz);
+  const { money } = await getMoneyFormatter();
+  const today = await businessToday(orgId);
+  const t = await getTranslations("payments");
+  const tCommon = await getTranslations("common");
+  const locale = await getLocale();
+  const building = pickString(sp.newRun) === "1";
+  const collections = direction === "inbound";
   const runStatusLabel = (status: string) => {
-    if (status === 'confirmed' || status === 'exported') return t(`runs.status.${status}`)
-    const key = RUN_STATUS_COMMON_KEY[status]
-    return key ? tCommon(`status.${key}`) : status.replace('_', ' ')
-  }
-  const profileCount = ((await db.execute(sql`
+    if (status === "confirmed" || status === "exported") return t(`runs.status.${status}`);
+    const key = RUN_STATUS_COMMON_KEY[status];
+    return key ? tCommon(`status.${key}`) : status.replace("_", " ");
+  };
+  const profileCount = await db.execute(
+    sql`
     select count(*)::int as n from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
      where p.org_id = ${orgId} and p.is_active ${profileScope}
        and (${collections} = false or (f.direction <> 'credit' and f.rail in ('nacha_debit', 'sepa_debit', 'custom')))
        and (${collections} = true or f.direction <> 'debit')
-  `, 'objects')))
-  const hasPaymentProfile = Number(profileCount[0]?.n ?? 0) > 0
+  `,
+    "objects",
+  );
+  const hasPaymentProfile = Number(profileCount[0]?.n ?? 0) > 0;
 
-  const billParams = parsePrefixedListParams(sp, 'bills', {
-    sort: 'due',
-    dir: 'asc',
+  const billParams = parsePrefixedListParams(sp, "bills", {
+    sort: "due",
+    dir: "asc",
     perPage: 25,
-    allowedSorts: ['number', 'vendor', 'due', 'open'] as const,
-  })
-  const runParams = parsePrefixedListParams(sp, 'runs', {
-    sort: 'created',
-    dir: 'desc',
+    allowedSorts: ["number", "vendor", "due", "open"] as const,
+  });
+  const runParams = parsePrefixedListParams(sp, "runs", {
+    sort: "created",
+    dir: "desc",
     perPage: 25,
-    allowedSorts: ['number', 'created', 'bank', 'method', 'scheduled', 'payments', 'total', 'status'] as const,
-  })
+    allowedSorts: [
+      "number",
+      "created",
+      "bank",
+      "method",
+      "scheduled",
+      "payments",
+      "total",
+      "status",
+    ] as const,
+  });
   /** One payment run with its bank join and instruction rollup. `scheduled_for`
    *  is a `date` (ISO string); counts and sums arrive as strings. */
   type PaymentRunRow = {
-    id: string
-    run_number: string
-    method: string
-    status: string
-    currency: string | null
-    scheduled_for: string | null
-    created_at: Date
-    bank_number: string | null
-    bank_name: string | null
-    instruction_count: string
-    total: string
-  }
+    id: string;
+    run_number: string;
+    method: string;
+    status: string;
+    currency: string | null;
+    scheduled_for: string | null;
+    created_at: Date;
+    bank_number: string | null;
+    bank_name: string | null;
+    instruction_count: string;
+    total: string;
+  };
 
   /** Bank profiles backing the run builder's profile picker. */
   type BankProfileRow = {
-    id: string
-    name: string
-    currency: string
-    format_name: string
-    bank_number: string | null
-    bank_name: string
-  }
+    id: string;
+    name: string;
+    currency: string;
+    format_name: string;
+    bank_number: string | null;
+    bank_name: string;
+  };
 
-  const runStatus = pickString(sp.runsStatus)
+  const runStatus = pickString(sp.runsStatus);
 
   const billWhere = billParams.q
-    ? sql` and (document_number ilike ${'%' + billParams.q + '%'} or vendor ilike ${'%' + billParams.q + '%'} or reference_number ilike ${'%' + billParams.q + '%'})`
-    : sql``
+    ? sql` and (document_number ilike ${"%" + billParams.q + "%"} or vendor ilike ${"%" + billParams.q + "%"} or reference_number ilike ${"%" + billParams.q + "%"})`
+    : sql``;
   const runSearchWhere = runParams.q
-    ? sql` and (r.run_number ilike ${'%' + runParams.q + '%'} or a.number ilike ${'%' + runParams.q + '%'} or a.name ilike ${'%' + runParams.q + '%'})`
-    : sql``
-  const runStatusWhere = runStatus ? sql` and r.status = ${runStatus}` : sql``
-  const openBillsCte = collections ? sql`
+    ? sql` and (r.run_number ilike ${"%" + runParams.q + "%"} or a.number ilike ${"%" + runParams.q + "%"} or a.name ilike ${"%" + runParams.q + "%"})`
+    : sql``;
+  const runStatusWhere = runStatus ? sql` and r.status = ${runStatus}` : sql``;
+  const openBillsCte = collections
+    ? sql`
     select d.id, d.document_number, d.document_date, d.due_date, d.reference_number, d.currency,
            p.display_name as vendor,
            abs(jl.amount) - coalesce((select sum(a.amount) from applications a where a.to_line_id = jl.id and a.org_id = ${orgId} and a.unapplied_at is null), 0) as open,
@@ -155,7 +176,8 @@ export async function RunsSection({
       join parties p on p.id = d.party_id and p.org_id = d.org_id
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status in ('posted', 'reversed')
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount > 0
-     where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted' ${sourceScope}` : sql`
+     where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted' ${sourceScope}`
+    : sql`
     select d.id, d.document_number, d.document_date, d.due_date, d.reference_number, d.currency,
            p.display_name as vendor,
            abs(jl.amount) - coalesce((
@@ -167,20 +189,31 @@ export async function RunsSection({
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status in ('posted', 'reversed')
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount < 0
      where d.org_id = ${orgId} and d.kind in ('vendor_bill', 'expense_report') and d.status = 'posted'
-       and d.payment_hold_reason is null ${sourceScope}`
+       and d.payment_hold_reason is null ${sourceScope}`;
 
   const [bills, billCount, runs, runCounts, runFilteredCount, bankProfiles] = await Promise.all([
-    building ? (db.execute(sql`
+    building
+      ? db.execute(
+          sql`
       with open_bills as (${openBillsCte})
       select * from open_bills where open > 0 ${billWhere}
-      order by ${BILL_SORTS[billParams.sort]} ${billParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, document_number
+      order by ${BILL_SORTS[billParams.sort]} ${billParams.dir === "asc" ? sql`asc` : sql`desc`} nulls last, document_number
       limit ${billParams.perPage} offset ${(billParams.page - 1) * billParams.perPage}
-    `, 'objects')) : Promise.resolve([]),
-    building ? (db.execute(sql`
+    `,
+          "objects",
+        )
+      : Promise.resolve([]),
+    building
+      ? db.execute(
+          sql`
       with open_bills as (${openBillsCte})
       select count(*) as n from open_bills where open > 0 ${billWhere}
-    `, 'objects')) : Promise.resolve([{ n: 0 }]),
-    (db.execute<PaymentRunRow>(sql`
+    `,
+          "objects",
+        )
+      : Promise.resolve([{ n: 0 }]),
+    db.execute<PaymentRunRow>(
+      sql`
       select r.id, r.run_number, r.method, r.status, r.currency, r.scheduled_for, r.exported_at, r.created_at,
              a.number as bank_number, a.name as bank_name,
              count(i.id) filter (where i.status <> 'cancelled') as instruction_count,
@@ -190,54 +223,74 @@ export async function RunsSection({
         left join payment_instructions i on i.payment_run_id = r.id and i.org_id = r.org_id
        where ${runScope} and r.direction = ${direction} ${runStatusWhere} ${runSearchWhere}
        group by r.id, a.number, a.name
-       order by ${RUN_SORTS[runParams.sort]} ${runParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, r.run_number
+       order by ${RUN_SORTS[runParams.sort]} ${runParams.dir === "asc" ? sql`asc` : sql`desc`} nulls last, r.run_number
        limit ${runParams.perPage} offset ${(runParams.page - 1) * runParams.perPage}
-    `, 'objects')),
-    (db.execute<{ status: string; n: string }>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<{ status: string; n: string }>(
+      sql`
       select r.status, count(*) as n from payment_runs r where ${runScope} and r.direction = ${direction} group by r.status
-    `, 'objects')),
-    (db.execute(sql`
+    `,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select count(*) as n
         from payment_runs r
         left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
        where ${runScope} and r.direction = ${direction} ${runStatusWhere} ${runSearchWhere}
-    `, 'objects')),
-    building ? db.execute<BankProfileRow>(sql`
+    `,
+      "objects",
+    ),
+    building
+      ? db.execute<BankProfileRow>(
+          sql`
       select p.id, p.name, p.currency, f.name as format_name,
              a.number as bank_number, a.name as bank_name
         from payment_bank_profiles p
         join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
         join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
                            and a.type = 'asset_bank' and a.is_active and not a.is_summary
-       where p.org_id = ${orgId} and p.is_active ${profileScope} and f.direction <> ${collections ? 'credit' : 'debit'}
+       where p.org_id = ${orgId} and p.is_active ${profileScope} and f.direction <> ${collections ? "credit" : "debit"}
          and (${collections} = false or f.rail in ('nacha_debit', 'sepa_debit', 'custom'))
        order by p.name
-    `, 'objects') : Promise.resolve([]),
-  ])
+    `,
+          "objects",
+        )
+      : Promise.resolve([]),
+  ]);
 
   // Bills handed over from the AP cockpit's pay-run planner (?preselect=id,id).
   // Fetched by id so they pre-check regardless of the list's pagination.
-  const preselectIds = (pickString(sp.preselect)?.split(',') ?? []).filter(isUuid)
-  const preselected = building && preselectIds.length
-    ? (await db.execute<RunBill>(sql`
+  const preselectIds = (pickString(sp.preselect)?.split(",") ?? []).filter(isUuid);
+  const preselected =
+    building && preselectIds.length
+      ? await db.execute<RunBill>(
+          sql`
         with open_bills as (${openBillsCte})
-        select * from open_bills where open > 0 and id in (${sql.join(preselectIds.map((id) => sql`${id}`), sql`, `)})
-      `, 'objects'))
-    : []
+        select * from open_bills where open > 0 and id in (${sql.join(
+          preselectIds.map((id) => sql`${id}`),
+          sql`, `,
+        )})
+      `,
+          "objects",
+        )
+      : [];
 
-  const runsTotal = runCounts.reduce((a: number, r) => a + Number(r.n), 0)
-  const runsFilteredTotal = Number(runFilteredCount[0]?.n ?? 0)
+  const runsTotal = runCounts.reduce((a: number, r) => a + Number(r.n), 0);
+  const runsFilteredTotal = Number(runFilteredCount[0]?.n ?? 0);
   // Pre-rendered server cells for the shared registered runs table. Search,
   // status filter, sort and paging stay URL-driven against the loader's
   // server window — the table never filters or reslices that window again.
   const runColumns: PagedColumn<PaymentRunRow>[] = [
     {
-      key: 'number',
-      header: <>{t('runs.columns.run')}</>,
-      sortKey: 'number',
+      key: "number",
+      header: <>{t("runs.columns.run")}</>,
+      sortKey: "number",
       cell: (r) => (
         <Link
-          href={(`${basePath}?view=runs&run=${r.id}`)}
+          href={`${basePath}?view=runs&run=${r.id}`}
           className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300"
         >
           {r.run_number}
@@ -245,62 +298,69 @@ export async function RunsSection({
       ),
     },
     {
-      key: 'created',
-      header: <>{tCommon('labels.created')}</>,
-      sortKey: 'created',
-      cell: (r) => <span className="text-slate-600 dark:text-slate-300">{dateTime(r.created_at, locale)}</span>,
-    },
-    {
-      key: 'bank',
-      header: <>{t('runs.columns.bankAccount')}</>,
-      sortKey: 'bank',
-      cell: (r) => <>{`${r.bank_number ?? ''} ${r.bank_name ?? ''}`.trim() || '—'}</>,
-    },
-    {
-      key: 'method',
-      header: <>{t('runs.columns.method')}</>,
-      sortKey: 'method',
-      cell: (r) => <Badge variant="outline">{t(`runs.method.${String(r.method)}`)}</Badge>,
-    },
-    {
-      key: 'scheduled',
-      header: <>{t('runs.columns.fundsDate')}</>,
-      sortKey: 'scheduled',
-      cell: (r) => <span className="text-slate-600 dark:text-slate-300">{r.scheduled_for ?? '—'}</span>,
-    },
-    {
-      key: 'payments',
-      header: <>{t('runs.columns.payments')}</>,
-      align: 'right',
-      sortKey: 'payments',
-      cell: (r) => <span className="tabular-nums">{r.instruction_count}</span>,
-    },
-    {
-      key: 'total',
-      header: <>{tCommon('labels.total')}</>,
-      align: 'right',
-      sortKey: 'total',
+      key: "created",
+      header: <>{tCommon("labels.created")}</>,
+      sortKey: "created",
       cell: (r) => (
-        <span className="tabular-nums">{money(r.total, { currency: r.currency ?? undefined, useGrouping: 'always' })}</span>
+        <span className="text-slate-600 dark:text-slate-300">{dateTime(r.created_at, locale)}</span>
       ),
     },
     {
-      key: 'status',
-      header: <>{tCommon('labels.status')}</>,
-      sortKey: 'status',
+      key: "bank",
+      header: <>{t("runs.columns.bankAccount")}</>,
+      sortKey: "bank",
+      cell: (r) => <>{`${r.bank_number ?? ""} ${r.bank_name ?? ""}`.trim() || "—"}</>,
+    },
+    {
+      key: "method",
+      header: <>{t("runs.columns.method")}</>,
+      sortKey: "method",
+      cell: (r) => <Badge variant="outline">{t(`runs.method.${String(r.method)}`)}</Badge>,
+    },
+    {
+      key: "scheduled",
+      header: <>{t("runs.columns.fundsDate")}</>,
+      sortKey: "scheduled",
       cell: (r) => (
-        <Badge variant={RUN_VARIANT[r.status] ?? 'secondary'}>
+        <span className="text-slate-600 dark:text-slate-300">{r.scheduled_for ?? "—"}</span>
+      ),
+    },
+    {
+      key: "payments",
+      header: <>{t("runs.columns.payments")}</>,
+      align: "right",
+      sortKey: "payments",
+      cell: (r) => <span className="tabular-nums">{r.instruction_count}</span>,
+    },
+    {
+      key: "total",
+      header: <>{tCommon("labels.total")}</>,
+      align: "right",
+      sortKey: "total",
+      cell: (r) => (
+        <span className="tabular-nums">
+          {money(r.total, { currency: r.currency ?? undefined, useGrouping: "always" })}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: <>{tCommon("labels.status")}</>,
+      sortKey: "status",
+      cell: (r) => (
+        <Badge variant={RUN_VARIANT[r.status] ?? "secondary"}>
           {runStatusLabel(String(r.status))}
         </Badge>
       ),
     },
-  ]
+  ];
 
   // -- ?run= flyout ----------------------------------------------------------
-  const runId = typeof sp.run === 'string' && isUuid(sp.run) ? sp.run : undefined
-  let drawer: React.ReactNode = null
+  const runId = typeof sp.run === "string" && isUuid(sp.run) ? sp.run : undefined;
+  let drawer: React.ReactNode = null;
   if (runId && !building) {
-    const run = ((await db.execute(sql`
+    const run = await db.execute(
+      sql`
       select r.*, a.number as bank_number, a.name as bank_name,
              p.name as profile_name, f.name as format_name, f.rail,
              p.sftp_server_id as profile_sftp_server_id
@@ -309,38 +369,45 @@ export async function RunsSection({
         left join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
         left join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
        where r.id = ${runId} and ${runScope} and r.direction = ${direction}
-    `, 'objects')))
+    `,
+      "objects",
+    );
     if (run[0]) {
       // Approval belongs to Flows; with Flows off there is no run approval
       // to show or decide.
-      const flowsOn = await isFeatureEnabled(orgId, 'flows')
+      const flowsOn = await isFeatureEnabled(orgId, "flows");
       // Payees outside the caller's subsidiary fence read as missing here,
       // exactly as GET /api/payments/runs/[id] scopes them: the same
       // visible-payee set filters the instructions, the source-document
       // items, and the readiness verdicts (names, amounts, bank blockers,
       // compliance reasons).
-      const payees = await db.execute<{ id: string }>(sql`
+      const payees = await db.execute<{ id: string }>(
+        sql`
         select p.id from parties p
          where p.org_id = ${orgId} and p.id in (
            select i.payee_party_id from payment_instructions i
             where i.payment_run_id = ${runId} and i.org_id = ${orgId}
          )
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-      `, 'objects')
-      const visiblePayeeIds = authz.allowedSubsidiaryIds === null
-        ? null
-        : new Set(payees.map((payee) => payee.id))
-      const payeeScope = visiblePayeeIds === null
-        ? sql``
-        : sql`and i.payee_party_id = any (${`{${[...visiblePayeeIds].join(",")}}`}::uuid[])`
+      `,
+        "objects",
+      );
+      const visiblePayeeIds =
+        authz.allowedSubsidiaryIds === null ? null : new Set(payees.map((payee) => payee.id));
+      const payeeScope =
+        visiblePayeeIds === null
+          ? sql``
+          : sql`and i.payee_party_id = any (${`{${[...visiblePayeeIds].join(",")}}`}::uuid[])`;
       // Items name the source document's party rather than the instruction
       // payee; the same visible set applies. A null party names nobody, so
       // those rows stay.
-      const itemPartyScope = visiblePayeeIds === null
-        ? sql``
-        : sql`and (d.party_id is null or d.party_id = any (${`{${[...visiblePayeeIds].join(",")}}`}::uuid[]))`
+      const itemPartyScope =
+        visiblePayeeIds === null
+          ? sql``
+          : sql`and (d.party_id is null or d.party_id = any (${`{${[...visiblePayeeIds].join(",")}}`}::uuid[]))`;
       const [instructions, readiness, files, events, items] = await Promise.all([
-        (db.execute(sql`
+        db.execute(
+          sql`
           select i.id, i.amount, i.currency, i.status, p.display_name as payee,
                  i.payment_document_id, d.document_number, d.status as payment_status,
                  ps.effective_on as settlement_effective_on, ps.bank_reference,
@@ -351,9 +418,12 @@ export async function RunsSection({
             left join payment_settlements ps on ps.payment_instruction_id = i.id and ps.org_id = i.org_id
            where i.payment_run_id = ${runId} and i.org_id = ${orgId} ${payeeScope}
            order by p.display_name
-        `, 'objects')),
+        `,
+          "objects",
+        ),
         paymentRunReadiness(runId, orgId, visiblePayeeIds),
-        (db.execute(sql`
+        db.execute(
+          sql`
           select pf.id, pf.sequence_number, pf.filename, pf.content_hash, pf.status,
                  pf.payment_count, pf.total_amount, pf.currency, pf.generated_at,
                  pf.approved_at, pf.rejection_reason,
@@ -363,14 +433,20 @@ export async function RunsSection({
             left join payment_file_deliveries d on d.payment_file_id = pf.id and d.org_id = pf.org_id
            where pf.payment_run_id = ${runId} and pf.org_id = ${orgId}
            group by pf.id order by pf.sequence_number desc
-        `, 'objects')),
-        (db.execute(sql`
+        `,
+          "objects",
+        ),
+        db.execute(
+          sql`
           select e.id, e.event_type, e.from_status, e.to_status, e.details, e.created_at,
                  u.name as actor_name
             from payment_events e left join users u on u.id = e.actor_id
            where e.payment_run_id = ${runId} and e.org_id = ${orgId} order by e.created_at desc limit 100
-        `, 'objects')),
-        (db.execute(sql`
+        `,
+          "objects",
+        ),
+        db.execute(
+          sql`
           select ri.id, ri.kind, ri.gross_amount, ri.discount_amount, ri.credit_amount,
                  ri.payment_amount, ri.currency, ri.status, d.document_number,
                  p.display_name as party_name
@@ -379,8 +455,10 @@ export async function RunsSection({
             left join parties p on p.id = d.party_id and p.org_id = d.org_id
            where ri.payment_run_id = ${runId} and ri.org_id = ${orgId} ${itemPartyScope}
            order by p.display_name, d.document_number
-        `, 'objects')),
-      ])
+        `,
+          "objects",
+        ),
+      ]);
       drawer = (
         <RunDrawer
           run={run[0] as unknown as PaymentRunClient}
@@ -396,7 +474,7 @@ export async function RunsSection({
           closeHref={`${basePath}?view=runs`}
           paymentBasePath={basePath}
         />
-      )
+      );
     }
   }
 
@@ -404,19 +482,38 @@ export async function RunsSection({
     <div className="space-y-4">
       {!hasPaymentProfile ? (
         <Alert variant="warning">
-          <AlertTitle>{t(collections ? 'configuration.collectionsNotConfiguredTitle' : 'configuration.notConfiguredTitle')}</AlertTitle>
+          <AlertTitle>
+            {t(
+              collections
+                ? "configuration.collectionsNotConfiguredTitle"
+                : "configuration.notConfiguredTitle",
+            )}
+          </AlertTitle>
           <AlertDescription>
-            {t.rich(collections ? 'configuration.collectionsNotConfiguredDescription' : 'configuration.notConfiguredDescription', {
-              setup: (chunks) => <Link href="/admin/setup/payment-operations" className="font-medium underline">{chunks}</Link>,
-            })}
+            {t.rich(
+              collections
+                ? "configuration.collectionsNotConfiguredDescription"
+                : "configuration.notConfiguredDescription",
+              {
+                setup: (chunks) => (
+                  <Link href="/admin/setup/payment-operations" className="font-medium underline">
+                    {chunks}
+                  </Link>
+                ),
+              },
+            )}
           </AlertDescription>
         </Alert>
       ) : null}
 
       <section className="space-y-3">
         <div>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t(collections ? 'runs.collectionRunsHeading' : 'runs.runsHeading')}</h2>
-          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{t(collections ? 'runs.collectionDescription' : 'runs.description')}</p>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            {t(collections ? "runs.collectionRunsHeading" : "runs.runsHeading")}
+          </h2>
+          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+            {t(collections ? "runs.collectionDescription" : "runs.description")}
+          </p>
         </div>
 
         <PagedTable
@@ -428,11 +525,15 @@ export async function RunsSection({
           empty={
             <p className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-12 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
               {runsTotal === 0
-                ? t(collections ? 'runs.noCollectionRunsYet' : 'runs.noRunsYet')
-                : tCommon('feedback.noResults')}
+                ? t(collections ? "runs.noCollectionRunsYet" : "runs.noRunsYet")
+                : tCommon("feedback.noResults")}
             </p>
           }
-          serverWindow={{ total: runsFilteredTotal, page: runParams.page, perPage: runParams.perPage }}
+          serverWindow={{
+            total: runsFilteredTotal,
+            page: runParams.page,
+            perPage: runParams.perPage,
+          }}
           basePath={basePath}
           currentParams={sp}
           sort={runParams.sort}
@@ -443,12 +544,16 @@ export async function RunsSection({
           perPageParamKey="runsPerPage"
           toolbarAfter={
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-              <SearchInput placeholder={t('runs.searchPlaceholder')} paramKey="runsQ" pageParamKey="runsPage" />
+              <SearchInput
+                placeholder={t("runs.searchPlaceholder")}
+                paramKey="runsQ"
+                pageParamKey="runsPage"
+              />
               <FilterChips
                 basePath={basePath}
                 currentParams={sp}
                 paramKey="runsStatus"
-                label={tCommon('labels.status')}
+                label={tCommon("labels.status")}
                 pageParamKey="runsPage"
                 options={runCounts.map((r) => ({
                   value: r.status,
@@ -466,8 +571,10 @@ export async function RunsSection({
           open
           closeHref={`${basePath}?view=runs`}
           size="2xl"
-          title={t(collections ? 'runBuilder.collectionTitle' : 'runBuilder.title')}
-          description={t(collections ? 'runBuilder.collectionDescription' : 'runBuilder.description')}
+          title={t(collections ? "runBuilder.collectionTitle" : "runBuilder.title")}
+          description={t(
+            collections ? "runBuilder.collectionDescription" : "runBuilder.description",
+          )}
           bodyClassName="overflow-hidden"
         >
           <RunBuilder
@@ -476,16 +583,26 @@ export async function RunsSection({
             sp={sp}
             sort={billParams.sort}
             dir={billParams.dir}
-            mode={collections ? 'collections' : 'payments'}
+            mode={collections ? "collections" : "payments"}
             basePath={basePath}
             preselected={preselected}
             toolbar={
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t(collections ? 'runs.openInvoicesHeading' : 'runs.openBillsHeading')}</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{t(collections ? 'runs.openInvoicesDescription' : 'runs.openBillsDescription')}</p>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {t(collections ? "runs.openInvoicesHeading" : "runs.openBillsHeading")}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {t(collections ? "runs.openInvoicesDescription" : "runs.openBillsDescription")}
+                  </p>
                 </div>
-                <SearchInput placeholder={t(collections ? 'runs.invoicesSearchPlaceholder' : 'runs.billsSearchPlaceholder')} paramKey="billsQ" pageParamKey="billsPage" />
+                <SearchInput
+                  placeholder={t(
+                    collections ? "runs.invoicesSearchPlaceholder" : "runs.billsSearchPlaceholder",
+                  )}
+                  paramKey="billsQ"
+                  pageParamKey="billsPage"
+                />
               </div>
             }
             pagination={
@@ -503,5 +620,5 @@ export async function RunsSection({
       ) : null}
       {drawer}
     </div>
-  )
+  );
 }

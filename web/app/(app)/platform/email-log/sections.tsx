@@ -1,12 +1,12 @@
-import { PagedTable } from '../../../../components/paged-table'
-import { Badge, PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { SearchInput } from '../../../../components/search-input'
-import { FilterChips } from '../../../../components/filter-bar'
-import { asDate } from '../../../../lib/platform-console'
-import type { PlatformEmail } from '../../../../lib/platform-admin'
-import { ViewerDateTime } from '../../../../components/viewer-format'
-import { getTranslations } from 'next-intl/server'
+import { PagedTable } from "../../../../components/paged-table";
+import { Badge, PageHeader } from "@openbooks/ui";
+import { ListPageLayout } from "../../../../components/page-layout";
+import { SearchInput } from "../../../../components/search-input";
+import { FilterChips } from "../../../../components/filter-bar";
+import { asDate } from "../../../../lib/platform-console";
+import type { PlatformEmail } from "../../../../lib/platform-admin";
+import { ViewerDateTime } from "../../../../components/viewer-format";
+import { getTranslations } from "next-intl/server";
 
 /**
  * Composite cells in the platform email log.
@@ -21,7 +21,7 @@ export function EmailSubjectCell({ subject, category }: { subject: string; categ
       <div className="max-w-md truncate font-medium">{subject}</div>
       {category ? <div className="text-xs text-slate-500">{category}</div> : null}
     </>
-  )
+  );
 }
 
 /** Provider and send time, plus the delivery error when one was recorded. */
@@ -35,18 +35,18 @@ export function EmailEvidenceCell({ summary, error }: { summary: string; error: 
         </div>
       ) : null}
     </>
-  )
+  );
 }
 
 const STATUS_VARIANT = {
-  sent: 'success',
-  queued: 'outline',
-  failed: 'destructive',
-  suppressed: 'warning',
-  uncertain: 'warning',
-} as const
+  sent: "success",
+  queued: "outline",
+  failed: "destructive",
+  suppressed: "warning",
+  uncertain: "warning",
+} as const;
 
-const STATUSES = ['queued', 'sent', 'failed', 'suppressed', 'uncertain'] as const
+const STATUSES = ["queued", "sent", "failed", "suppressed", "uncertain"] as const;
 
 /**
  * The operator email log on the house list composition (toolbar + sortable
@@ -72,39 +72,106 @@ export async function EmailLogList({
   basePath,
   currentParams,
 }: {
-  rows: PlatformEmail[]
-  total: number
-  page: number
-  perPage: number
-  sort: 'created' | 'organization' | 'recipient' | 'subject' | 'status'
-  dir: 'asc' | 'desc'
-  status: PlatformEmail['status'] | undefined
-  statusCounts: Record<string, number>
-  basePath: string
-  currentParams: Record<string, string | string[] | undefined>
+  rows: PlatformEmail[];
+  total: number;
+  page: number;
+  perPage: number;
+  sort: "created" | "organization" | "recipient" | "subject" | "status";
+  dir: "asc" | "desc";
+  status: PlatformEmail["status"] | undefined;
+  statusCounts: Record<string, number>;
+  basePath: string;
+  currentParams: Record<string, string | string[] | undefined>;
 }) {
-  const t = await getTranslations('platform.emailLog')
-  const filtered = currentParams.q !== undefined || status !== undefined
+  const t = await getTranslations("platform.emailLog");
+  const filtered = currentParams.q !== undefined || status !== undefined;
   return (
-    <ListPageLayout header={<PageHeader title={t('title')} description={t('description')} back={{ href: '/platform', label: t('backToPlatform') }} />}>
+    <ListPageLayout
+      header={
+        <PageHeader
+          title={t("title")}
+          description={t("description")}
+          back={{ href: "/platform", label: t("backToPlatform") }}
+        />
+      }
+    >
       <div className="space-y-5">
-
         <PagedTable
-          rows={rows} rowKey={(row) => row.id}
+          rows={rows}
+          rowKey={(row) => row.id}
           serverWindow={{ total, page, perPage }}
-          basePath={basePath} currentParams={currentParams} sort={sort} dir={dir}
-          empty={filtered ? t('emptyFiltered') : t('empty')}
-          toolbarAfter={<><SearchInput placeholder={t('searchPlaceholder')} /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label={t('status')} options={STATUSES.map((value) => ({ value, label: t(`statuses.${value}`), count: Number(statusCounts[value] ?? 0) }))} /></>}
+          basePath={basePath}
+          currentParams={currentParams}
+          sort={sort}
+          dir={dir}
+          empty={filtered ? t("emptyFiltered") : t("empty")}
+          toolbarAfter={
+            <>
+              <SearchInput placeholder={t("searchPlaceholder")} />
+              <FilterChips
+                basePath={basePath}
+                currentParams={currentParams}
+                paramKey="status"
+                label={t("status")}
+                options={STATUSES.map((value) => ({
+                  value,
+                  label: t(`statuses.${value}`),
+                  count: Number(statusCounts[value] ?? 0),
+                }))}
+              />
+            </>
+          }
           columns={[
-          { key: 'subject', header: t('columns.subject'), sortKey: 'subject', cell: (row) => <EmailSubjectCell subject={row.subject} category={row.categoryKey ?? ''} /> },
-          { key: 'organization', header: t('columns.organization'), sortKey: 'organization', cell: (row) => row.orgName },
-          { key: 'recipient', header: t('columns.recipient'), sortKey: 'recipient', cell: (row) => row.recipientPrimary ?? row.recipients[0] ?? '—' },
-          { key: 'status', header: t('status'), sortKey: 'status', cell: (row) => <Badge variant={STATUS_VARIANT[row.status] ?? 'secondary'}>{t(`statuses.${row.status}`)}</Badge> },
-          { key: 'delivery', header: t('columns.delivery'), cell: (row) => <EmailEvidenceCell summary={row.provider ?? t('unknownProvider')} error={row.errorMessage ?? ''} /> },
-          { key: 'created', header: t('columns.logged'), sortKey: 'created', cell: (row) => asDate(row.createdAt) ? <ViewerDateTime value={asDate(row.createdAt)!} /> : '—' },
-        ]}
+            {
+              key: "subject",
+              header: t("columns.subject"),
+              sortKey: "subject",
+              cell: (row) => (
+                <EmailSubjectCell subject={row.subject} category={row.categoryKey ?? ""} />
+              ),
+            },
+            {
+              key: "organization",
+              header: t("columns.organization"),
+              sortKey: "organization",
+              cell: (row) => row.orgName,
+            },
+            {
+              key: "recipient",
+              header: t("columns.recipient"),
+              sortKey: "recipient",
+              cell: (row) => row.recipientPrimary ?? row.recipients[0] ?? "—",
+            },
+            {
+              key: "status",
+              header: t("status"),
+              sortKey: "status",
+              cell: (row) => (
+                <Badge variant={STATUS_VARIANT[row.status] ?? "secondary"}>
+                  {t(`statuses.${row.status}`)}
+                </Badge>
+              ),
+            },
+            {
+              key: "delivery",
+              header: t("columns.delivery"),
+              cell: (row) => (
+                <EmailEvidenceCell
+                  summary={row.provider ?? t("unknownProvider")}
+                  error={row.errorMessage ?? ""}
+                />
+              ),
+            },
+            {
+              key: "created",
+              header: t("columns.logged"),
+              sortKey: "created",
+              cell: (row) =>
+                asDate(row.createdAt) ? <ViewerDateTime value={asDate(row.createdAt)!} /> : "—",
+            },
+          ]}
         />
       </div>
     </ListPageLayout>
-  )
+  );
 }

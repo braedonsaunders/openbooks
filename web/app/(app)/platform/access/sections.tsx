@@ -1,18 +1,22 @@
-import { PagedTable } from '../../../../components/paged-table'
-import { Badge, Button, PageHeader } from '@openbooks/ui'
-import { ListPageLayout } from '../../../../components/page-layout'
-import { SearchInput } from '../../../../components/search-input'
-import { FilterChips } from '../../../../components/filter-bar'
-import { asDate } from '../../../../lib/platform-console'
-import type { PlatformGrant, PlatformOrganization, PlatformUser } from '../../../../lib/platform-admin'
-import { revokeAccessAction } from '../actions'
-import { GrantAccessForm } from '../_components/GrantAccessForm'
-import { PlatformMutationButton } from '../_components/PlatformMutationButton'
-import { ViewerDateTime } from '../../../../components/viewer-format'
-import { getTranslations } from 'next-intl/server'
-import Link from 'next/link'
-import { platformDrawerHref } from '../../../../lib/platform-console'
-import { useTranslations } from 'next-intl'
+import { PagedTable } from "../../../../components/paged-table";
+import { Badge, Button, PageHeader } from "@openbooks/ui";
+import { ListPageLayout } from "../../../../components/page-layout";
+import { SearchInput } from "../../../../components/search-input";
+import { FilterChips } from "../../../../components/filter-bar";
+import { asDate } from "../../../../lib/platform-console";
+import type {
+  PlatformGrant,
+  PlatformOrganization,
+  PlatformUser,
+} from "../../../../lib/platform-admin";
+import { revokeAccessAction } from "../actions";
+import { GrantAccessForm } from "../_components/GrantAccessForm";
+import { PlatformMutationButton } from "../_components/PlatformMutationButton";
+import { ViewerDateTime } from "../../../../components/viewer-format";
+import { getTranslations } from "next-intl/server";
+import Link from "next/link";
+import { platformDrawerHref } from "../../../../lib/platform-console";
+import { useTranslations } from "next-intl";
 
 /**
  * Two composite cells in the cross-org access list.
@@ -30,7 +34,7 @@ export function IdentityCell({ name, detail }: { name: string; detail: string })
       <div className="font-medium">{name}</div>
       <div className="text-xs text-slate-500">{detail}</div>
     </>
-  )
+  );
 }
 
 /** Plain name over a muted email. */
@@ -40,25 +44,42 @@ export function ActingCell({ name, email }: { name: string; email: string }) {
       <div>{name}</div>
       <div className="text-xs text-slate-500">{email}</div>
     </>
-  )
+  );
 }
 
 /** Revoke button while the grant is live; a history note once it is not. */
-export function AccessControlCell({ grantId, isActive, labels }: { grantId: string; isActive: boolean; labels?: { preserved: string; revoked: string; requestFailed?: string; working?: string; revoke?: string } }) {
-  const t = useTranslations('platform.access')
-  if (!isActive) return <span className="text-xs text-slate-400">{labels?.preserved ?? t('historyPreserved')}</span>
+export function AccessControlCell({
+  grantId,
+  isActive,
+  labels,
+}: {
+  grantId: string;
+  isActive: boolean;
+  labels?: {
+    preserved: string;
+    revoked: string;
+    requestFailed?: string;
+    working?: string;
+    revoke?: string;
+  };
+}) {
+  const t = useTranslations("platform.access");
+  if (!isActive)
+    return (
+      <span className="text-xs text-slate-400">{labels?.preserved ?? t("historyPreserved")}</span>
+    );
   return (
     <PlatformMutationButton
       action={revokeAccessAction.bind(null, grantId)}
-      success={labels?.revoked ?? t('mutation.revoked')}
-      fallbackError={labels?.requestFailed ?? t('mutation.requestFailed')}
-      pendingLabel={labels?.working ?? t('mutation.working')}
+      success={labels?.revoked ?? t("mutation.revoked")}
+      fallbackError={labels?.requestFailed ?? t("mutation.requestFailed")}
+      pendingLabel={labels?.working ?? t("mutation.working")}
       size="sm"
       variant="ghost"
     >
-      {labels?.revoke ?? t('revoke')}
+      {labels?.revoke ?? t("revoke")}
     </PlatformMutationButton>
-  )
+  );
 }
 
 /**
@@ -87,47 +108,146 @@ export async function AccessList({
   organizations,
   actingUsers,
 }: {
-  grants: PlatformGrant[]
-  total: number
-  page: number
-  perPage: number
-  sort: 'member' | 'organization' | 'actingUser' | 'updated'
-  dir: 'asc' | 'desc'
-  status: 'active' | 'inactive' | undefined
-  statusCounts: Record<string, number>
-  basePath: string
-  currentParams: Record<string, string | string[] | undefined>
-  members: Pick<PlatformUser, 'id' | 'name' | 'email' | 'orgName' | 'orgId'>[]
-  organizations: Pick<PlatformOrganization, 'id' | 'name'>[]
-  actingUsers: Pick<PlatformUser, 'id' | 'name' | 'email' | 'orgName' | 'orgId'>[]
+  grants: PlatformGrant[];
+  total: number;
+  page: number;
+  perPage: number;
+  sort: "member" | "organization" | "actingUser" | "updated";
+  dir: "asc" | "desc";
+  status: "active" | "inactive" | undefined;
+  statusCounts: Record<string, number>;
+  basePath: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  members: Pick<PlatformUser, "id" | "name" | "email" | "orgName" | "orgId">[];
+  organizations: Pick<PlatformOrganization, "id" | "name">[];
+  actingUsers: Pick<PlatformUser, "id" | "name" | "email" | "orgName" | "orgId">[];
 }) {
-  const t = await getTranslations('platform.access')
-  const filtered = currentParams.q !== undefined || status !== undefined
-  const drawerOpen = (Array.isArray(currentParams.grant) ? currentParams.grant[0] : currentParams.grant) === 'new'
-  const drawerCloseHref = platformDrawerHref(basePath, currentParams, 'grant')
+  const t = await getTranslations("platform.access");
+  const filtered = currentParams.q !== undefined || status !== undefined;
+  const drawerOpen =
+    (Array.isArray(currentParams.grant) ? currentParams.grant[0] : currentParams.grant) === "new";
+  const drawerCloseHref = platformDrawerHref(basePath, currentParams, "grant");
   return (
-    <ListPageLayout header={<PageHeader title={t('title')} description={t('description')} back={{ href: '/platform', label: t('backToPlatform') }} actions={<Button asChild><Link href={platformDrawerHref(basePath, currentParams, 'grant', 'new') as never}>{t('grantAccess')}</Link></Button>} />}>
+    <ListPageLayout
+      header={
+        <PageHeader
+          title={t("title")}
+          description={t("description")}
+          back={{ href: "/platform", label: t("backToPlatform") }}
+          actions={
+            <Button asChild>
+              <Link href={platformDrawerHref(basePath, currentParams, "grant", "new") as never}>
+                {t("grantAccess")}
+              </Link>
+            </Button>
+          }
+        />
+      }
+    >
       <div className="space-y-5">
-        {drawerOpen ? <GrantAccessForm open closeHref={drawerCloseHref} members={members} organizations={organizations} actingUsers={actingUsers} /> : null}
+        {drawerOpen ? (
+          <GrantAccessForm
+            open
+            closeHref={drawerCloseHref}
+            members={members}
+            organizations={organizations}
+            actingUsers={actingUsers}
+          />
+        ) : null}
         <PagedTable
-          rows={grants} rowKey={(row) => row.id}
+          rows={grants}
+          rowKey={(row) => row.id}
           serverWindow={{ total, page, perPage }}
-          basePath={basePath} currentParams={currentParams} sort={sort} dir={dir}
-          empty={filtered ? t('emptyFiltered') : t('empty')}
-          toolbarAfter={<><SearchInput placeholder={t('searchPlaceholder')} /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label={t('status')} options={[
-            { value: 'active', label: t('statuses.active'), count: Number(statusCounts.active ?? 0) },
-            { value: 'inactive', label: t('statuses.revoked'), count: Number(statusCounts.inactive ?? 0) },
-          ]} /></>}
+          basePath={basePath}
+          currentParams={currentParams}
+          sort={sort}
+          dir={dir}
+          empty={filtered ? t("emptyFiltered") : t("empty")}
+          toolbarAfter={
+            <>
+              <SearchInput placeholder={t("searchPlaceholder")} />
+              <FilterChips
+                basePath={basePath}
+                currentParams={currentParams}
+                paramKey="status"
+                label={t("status")}
+                options={[
+                  {
+                    value: "active",
+                    label: t("statuses.active"),
+                    count: Number(statusCounts.active ?? 0),
+                  },
+                  {
+                    value: "inactive",
+                    label: t("statuses.revoked"),
+                    count: Number(statusCounts.inactive ?? 0),
+                  },
+                ]}
+              />
+            </>
+          }
           columns={[
-          { key: 'member', header: t('columns.member'), sortKey: 'member', cell: (grant) => <IdentityCell name={grant.memberName} detail={`${grant.memberEmail} · ${grant.memberOrgName}`} /> },
-          { key: 'organization', header: t('columns.organization'), sortKey: 'organization', cell: (grant) => grant.orgName },
-          { key: 'actingUser', header: t('columns.actingUser'), sortKey: 'actingUser', cell: (grant) => <ActingCell name={grant.actingName} email={grant.actingEmail} /> },
-          { key: 'status', header: t('status'), cell: (grant) => <Badge variant={grant.isActive ? 'success' : 'secondary'}>{grant.isActive ? t('statuses.active') : t('statuses.revoked')}</Badge> },
-          { key: 'updated', header: t('columns.lastChanged'), sortKey: 'updated', cell: (grant) => asDate(grant.updatedAt) ? <ViewerDateTime value={asDate(grant.updatedAt)!} /> : '—' },
-          { key: 'revoke', header: <span className="sr-only">{t('revoke')}</span>, className: 'w-px whitespace-nowrap px-2 text-center', style: { width: 64 }, cell: (grant) => <AccessControlCell grantId={grant.id} isActive={grant.isActive} labels={{ preserved: t('historyPreserved'), revoked: t('mutation.revoked'), requestFailed: t('mutation.requestFailed'), working: t('mutation.working'), revoke: t('revoke') }} /> },
-        ]}
+            {
+              key: "member",
+              header: t("columns.member"),
+              sortKey: "member",
+              cell: (grant) => (
+                <IdentityCell
+                  name={grant.memberName}
+                  detail={`${grant.memberEmail} · ${grant.memberOrgName}`}
+                />
+              ),
+            },
+            {
+              key: "organization",
+              header: t("columns.organization"),
+              sortKey: "organization",
+              cell: (grant) => grant.orgName,
+            },
+            {
+              key: "actingUser",
+              header: t("columns.actingUser"),
+              sortKey: "actingUser",
+              cell: (grant) => <ActingCell name={grant.actingName} email={grant.actingEmail} />,
+            },
+            {
+              key: "status",
+              header: t("status"),
+              cell: (grant) => (
+                <Badge variant={grant.isActive ? "success" : "secondary"}>
+                  {grant.isActive ? t("statuses.active") : t("statuses.revoked")}
+                </Badge>
+              ),
+            },
+            {
+              key: "updated",
+              header: t("columns.lastChanged"),
+              sortKey: "updated",
+              cell: (grant) =>
+                asDate(grant.updatedAt) ? <ViewerDateTime value={asDate(grant.updatedAt)!} /> : "—",
+            },
+            {
+              key: "revoke",
+              header: <span className="sr-only">{t("revoke")}</span>,
+              className: "w-px whitespace-nowrap px-2 text-center",
+              style: { width: 64 },
+              cell: (grant) => (
+                <AccessControlCell
+                  grantId={grant.id}
+                  isActive={grant.isActive}
+                  labels={{
+                    preserved: t("historyPreserved"),
+                    revoked: t("mutation.revoked"),
+                    requestFailed: t("mutation.requestFailed"),
+                    working: t("mutation.working"),
+                    revoke: t("revoke"),
+                  }}
+                />
+              ),
+            },
+          ]}
         />
       </div>
     </ListPageLayout>
-  )
+  );
 }

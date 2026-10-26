@@ -1,31 +1,31 @@
-import { PagedTable } from '../../../../components/paged-table'
-import { Badge } from '@openbooks/ui'
-import { SortTh } from '../../../../components/sortable-th'
+import { PagedTable } from "../../../../components/paged-table";
+import { Badge } from "@openbooks/ui";
+import { SortTh } from "../../../../components/sortable-th";
 import {
   RoleAssignmentButton,
   ActiveToggle,
   ResendInviteButton,
   LinkPersonButton,
-} from './UserActions'
+} from "./UserActions";
 
 export interface AdminUserRow {
-  id: string
-  name: string
-  email: string
-  isActive: boolean
-  isSelf: boolean
+  id: string;
+  name: string;
+  email: string;
+  isActive: boolean;
+  isSelf: boolean;
   /** The viewer is the sole active user administrator and may link their own login. */
-  selfLinkAllowed: boolean
+  selfLinkAllowed: boolean;
   /** Invited but never signed in while a set-password link is outstanding. */
-  isPending: boolean
-  statusLabel: string
-  statusVariant: 'success' | 'destructive' | 'warning'
-  lastSignIn: string
-  assigned: { id: string; name: string }[]
+  isPending: boolean;
+  statusLabel: string;
+  statusVariant: "success" | "destructive" | "warning";
+  lastSignIn: string;
+  assigned: { id: string; name: string }[];
   /** Native linked person (users.party_id) with display evidence, if any. */
-  partyId: string | null
-  partyName: string | null
-  partyKind: string | null
+  partyId: string | null;
+  partyName: string | null;
+  partyKind: string | null;
 }
 
 /** Native record cells and actions compose the shared table primitives. */
@@ -38,26 +38,26 @@ export function AdminUsersTable({
   dir,
   labels,
 }: {
-  users: AdminUserRow[]
-  allRoles: { id: string; name: string; isBuiltIn: boolean; description?: string | null }[]
-  basePath: string
-  currentParams: Record<string, string | string[] | undefined>
-  sort: string
-  dir: 'asc' | 'desc'
+  users: AdminUserRow[];
+  allRoles: { id: string; name: string; isBuiltIn: boolean; description?: string | null }[];
+  basePath: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  sort: string;
+  dir: "asc" | "desc";
   labels: {
-    name: string
-    email: string
-    roles: string
-    status: string
-    lastSignIn: string
-    actions: string
-    you: string
-    unassignedRole: string
-    linkedPerson: string
-    unlinkedPerson: string
-  }
+    name: string;
+    email: string;
+    roles: string;
+    status: string;
+    lastSignIn: string;
+    actions: string;
+    you: string;
+    unassignedRole: string;
+    linkedPerson: string;
+    unlinkedPerson: string;
+  };
 }) {
-  const sortProps = { basePath, currentParams, sort, dir }
+  const sortProps = { basePath, currentParams, sort, dir };
   return (
     <PagedTable
       prepared
@@ -66,17 +66,17 @@ export function AdminUsersTable({
       rows={users}
       rowKey={(u) => u.id}
       empty=""
-      rowClassName={() => 'hover:bg-slate-50/50 dark:hover:bg-slate-800/60'}
+      rowClassName={() => "hover:bg-slate-50/50 dark:hover:bg-slate-800/60"}
       columns={[
         {
-          key: 'column_0',
+          key: "column_0",
           header: <>{labels.name}</>,
           headerCell: (
             <SortTh column="name" {...sortProps}>
               {labels.name}
             </SortTh>
           ),
-          className: 'px-3 py-2 font-medium text-slate-900 dark:text-slate-100',
+          className: "px-3 py-2 font-medium text-slate-900 dark:text-slate-100",
           cell: (u) => (
             <>
               {u.name}
@@ -89,35 +89,29 @@ export function AdminUsersTable({
           ),
           search: (u) =>
             Object.values(u)
-              .filter(
-                (value) =>
-                  typeof value === 'string' || typeof value === 'number',
-              )
-              .join(' '),
+              .filter((value) => typeof value === "string" || typeof value === "number")
+              .join(" "),
         },
         {
-          key: 'column_1',
+          key: "column_1",
           header: <>{labels.email}</>,
           headerCell: (
             <SortTh column="email" {...sortProps}>
               {labels.email}
             </SortTh>
           ),
-          className: 'px-3 py-2 text-slate-600 dark:text-slate-400',
+          className: "px-3 py-2 text-slate-600 dark:text-slate-400",
           cell: (u) => <>{u.email}</>,
           search: (u) =>
             Object.values(u)
-              .filter(
-                (value) =>
-                  typeof value === 'string' || typeof value === 'number',
-              )
-              .join(' '),
+              .filter((value) => typeof value === "string" || typeof value === "number")
+              .join(" "),
         },
         {
-          key: 'column_2',
+          key: "column_2",
           header: <>{labels.roles}</>,
-          headerClassName: 'px-3 py-2',
-          className: 'px-3 py-2',
+          headerClassName: "px-3 py-2",
+          className: "px-3 py-2",
           cell: (u) => (
             <>
               <div className="flex flex-wrap items-center gap-1">
@@ -143,17 +137,14 @@ export function AdminUsersTable({
           ),
           search: (u) =>
             Object.values(u)
-              .filter(
-                (value) =>
-                  typeof value === 'string' || typeof value === 'number',
-              )
-              .join(' '),
+              .filter((value) => typeof value === "string" || typeof value === "number")
+              .join(" "),
         },
         {
-          key: 'column_3',
+          key: "column_3",
           header: <>{labels.linkedPerson}</>,
-          headerClassName: 'px-3 py-2',
-          className: 'px-3 py-2 text-slate-600 dark:text-slate-400',
+          headerClassName: "px-3 py-2",
+          className: "px-3 py-2 text-slate-600 dark:text-slate-400",
           cell: (u) => (
             <>
               {u.partyId && u.partyName ? (
@@ -166,25 +157,20 @@ export function AdminUsersTable({
                   ) : null}
                 </span>
               ) : (
-                <span className="text-slate-400 dark:text-slate-500">
-                  {labels.unlinkedPerson}
-                </span>
+                <span className="text-slate-400 dark:text-slate-500">{labels.unlinkedPerson}</span>
               )}
             </>
           ),
           search: (u) =>
             Object.values(u)
-              .filter(
-                (value) =>
-                  typeof value === 'string' || typeof value === 'number',
-              )
-              .join(' '),
+              .filter((value) => typeof value === "string" || typeof value === "number")
+              .join(" "),
         },
         {
-          key: 'column_4',
+          key: "column_4",
           header: <>{labels.status}</>,
-          headerClassName: 'px-3 py-2',
-          className: 'px-3 py-2',
+          headerClassName: "px-3 py-2",
+          className: "px-3 py-2",
           cell: (u) => (
             <>
               <Badge variant={u.statusVariant}>{u.statusLabel}</Badge>
@@ -192,35 +178,29 @@ export function AdminUsersTable({
           ),
           search: (u) =>
             Object.values(u)
-              .filter(
-                (value) =>
-                  typeof value === 'string' || typeof value === 'number',
-              )
-              .join(' '),
+              .filter((value) => typeof value === "string" || typeof value === "number")
+              .join(" "),
         },
         {
-          key: 'column_5',
+          key: "column_5",
           header: <>{labels.lastSignIn}</>,
           headerCell: (
             <SortTh column="last_login" {...sortProps}>
               {labels.lastSignIn}
             </SortTh>
           ),
-          className: 'px-3 py-2 text-slate-600 dark:text-slate-400',
+          className: "px-3 py-2 text-slate-600 dark:text-slate-400",
           cell: (u) => <>{u.lastSignIn}</>,
           search: (u) =>
             Object.values(u)
-              .filter(
-                (value) =>
-                  typeof value === 'string' || typeof value === 'number',
-              )
-              .join(' '),
+              .filter((value) => typeof value === "string" || typeof value === "number")
+              .join(" "),
         },
         {
-          key: 'column_6',
+          key: "column_6",
           header: <>{labels.actions}</>,
-          headerClassName: 'px-3 py-2 text-right',
-          className: 'px-3 py-2 text-right',
+          headerClassName: "px-3 py-2 text-right",
+          className: "px-3 py-2 text-right",
           cell: (u) => (
             <>
               <div className="flex items-center justify-end gap-2">
@@ -232,11 +212,7 @@ export function AdminUsersTable({
                   isSelf={u.isSelf}
                   selfLinkAllowed={u.selfLinkAllowed}
                 />
-                <ResendInviteButton
-                  userId={u.id}
-                  userEmail={u.email}
-                  isPending={u.isPending}
-                />
+                <ResendInviteButton userId={u.id} userEmail={u.email} isPending={u.isPending} />
                 <ActiveToggle
                   userId={u.id}
                   userName={u.name}
@@ -248,13 +224,10 @@ export function AdminUsersTable({
           ),
           search: (u) =>
             Object.values(u)
-              .filter(
-                (value) =>
-                  typeof value === 'string' || typeof value === 'number',
-              )
-              .join(' '),
+              .filter((value) => typeof value === "string" || typeof value === "number")
+              .join(" "),
         },
       ]}
     />
-  )
+  );
 }

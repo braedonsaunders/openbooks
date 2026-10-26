@@ -1,8 +1,8 @@
-import Link from 'next/link'
-import { Badge } from '@openbooks/ui'
-import { PagedTable } from '../../../../components/paged-table'
-import { stateTone, type ComplianceMatrix } from '../../../../lib/compliance'
-import { decimalCmp } from '../../../../lib/statement-format'
+import Link from "next/link";
+import { Badge } from "@openbooks/ui";
+import { PagedTable } from "../../../../components/paged-table";
+import { stateTone, type ComplianceMatrix } from "../../../../lib/compliance";
+import { decimalCmp } from "../../../../lib/statement-format";
 
 /**
  * The subcontractor compliance matrix: one row per classified vendor, one cell
@@ -25,21 +25,21 @@ export function VendorComplianceMatrix({
   stateFilter,
   labels,
 }: {
-  rows: ComplianceMatrix['rows']
-  columns: ComplianceMatrix['policies']
-  classId: string | null
-  stateFilter: string | null
+  rows: ComplianceMatrix["rows"];
+  columns: ComplianceMatrix["policies"];
+  classId: string | null;
+  stateFilter: string | null;
   /** Pre-resolved labels: the component takes strings, not a translator, so
    *  it stays free of request-scoped context. */
   labels: {
-    vendor: string
-    class: string
-    status: string
-    exposure: string
-    states: Record<string, string>
-    reasons: Record<string, string>
-    money: Record<string, string>
-  }
+    vendor: string;
+    class: string;
+    status: string;
+    exposure: string;
+    states: Record<string, string>;
+    reasons: Record<string, string>;
+    money: Record<string, string>;
+  };
 }) {
   return (
     <PagedTable
@@ -51,10 +51,10 @@ export function VendorComplianceMatrix({
       empty=""
       columns={[
         {
-          key: 'vendor',
+          key: "vendor",
           header: labels.vendor,
-          className: 'sticky left-0 bg-white font-medium dark:bg-slate-900',
-          headerClassName: 'sticky left-0 bg-white dark:bg-slate-900',
+          className: "sticky left-0 bg-white font-medium dark:bg-slate-900",
+          headerClassName: "sticky left-0 bg-white dark:bg-slate-900",
           search: (row) => row.vendorName,
           cell: (row) => (
             <Link
@@ -66,14 +66,14 @@ export function VendorComplianceMatrix({
           ),
         },
         {
-          key: 'class',
+          key: "class",
           header: labels.class,
-          search: (row) => row.className ?? '',
+          search: (row) => row.className ?? "",
           cell: (row) => row.className,
-          className: 'text-slate-500 dark:text-slate-400',
+          className: "text-slate-500 dark:text-slate-400",
         },
         {
-          key: 'status',
+          key: "status",
           header: labels.status,
           search: (row) => labels.states[row.overall] ?? row.overall,
           cell: (row) => (
@@ -85,48 +85,39 @@ export function VendorComplianceMatrix({
         ...columns.map((policy) => ({
           key: `policy:${policy.id}`,
           header: policy.code,
-          align: 'center' as const,
-          headerClassName: 'whitespace-nowrap text-center',
-          cell: (row: ComplianceMatrix['rows'][number]) => {
-            const finding = row.findings.find(
-              (f) => f.requirementId === policy.id,
-            )
-            if (!finding)
-              return (
-                <span className="text-slate-300 dark:text-slate-600">—</span>
-              )
+          align: "center" as const,
+          headerClassName: "whitespace-nowrap text-center",
+          cell: (row: ComplianceMatrix["rows"][number]) => {
+            const finding = row.findings.find((f) => f.requirementId === policy.id);
+            if (!finding) return <span className="text-slate-300 dark:text-slate-600">—</span>;
             return (
               <span
-                title={`${labels.states[finding.state] ?? finding.state}${finding.expiresOn ? ` · ${finding.expiresOn}` : ''}${finding.reasons.length ? ` · ${finding.reasons.map((r) => labels.reasons[r] ?? r).join(', ')}` : ''}`}
+                title={`${labels.states[finding.state] ?? finding.state}${finding.expiresOn ? ` · ${finding.expiresOn}` : ""}${finding.reasons.length ? ` · ${finding.reasons.map((r) => labels.reasons[r] ?? r).join(", ")}` : ""}`}
               >
                 <Badge variant={stateTone(finding.state)}>
-                  {finding.state === 'compliant'
-                    ? '✓'
-                    : finding.state === 'expiring'
+                  {finding.state === "compliant"
+                    ? "✓"
+                    : finding.state === "expiring"
                       ? `${finding.daysToExpiry ?? 0}d`
-                      : finding.state === 'waived'
-                        ? '~'
-                        : '!'}
+                      : finding.state === "waived"
+                        ? "~"
+                        : "!"}
                 </Badge>
               </span>
-            )
+            );
           },
         })),
         {
-          key: 'exposure',
+          key: "exposure",
           header: labels.exposure,
-          align: 'right',
-          className: 'text-right tabular-nums',
+          align: "right",
+          className: "text-right tabular-nums",
           cell: (row) =>
-            decimalCmp(row.openBalance, '0') > 0 ? (
+            decimalCmp(row.openBalance, "0") > 0 ? (
               <span
-                className={
-                  row.blocksPayment
-                    ? 'font-semibold text-red-600 dark:text-red-400'
-                    : ''
-                }
+                className={row.blocksPayment ? "font-semibold text-red-600 dark:text-red-400" : ""}
               >
-                {labels.money[row.partyId] ?? ''}
+                {labels.money[row.partyId] ?? ""}
               </span>
             ) : (
               <span className="text-slate-300 dark:text-slate-600">—</span>
@@ -134,5 +125,5 @@ export function VendorComplianceMatrix({
         },
       ]}
     />
-  )
+  );
 }

@@ -1,56 +1,73 @@
-'use client'
+"use client";
 
-import { ApprovalActions } from '@/components/approval-actions'
+import { ApprovalActions } from "@/components/approval-actions";
 
-import { DirectedExecutionForm,useDirectedExecution } from '@/components/directed-execution'
-import { InventoryTrackingFields } from '@/components/inventory-tracking-fields'
-import { promptDialog } from '@/lib/prompt'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Plus } from 'lucide-react'
-import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
-import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
-import { AsyncUrlDrawer } from '../../../../components/async-url-drawer'
-import { SearchInput } from '../../../../components/search-input'
-import { useBusinessToday } from '../../../../components/business-date-provider'
-import { useDirtyClose } from '../../../../lib/use-dirty-close'
-import { optionalScanResolver } from '../../../../lib/scan'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import type { StockCountDetail, StockCountSummary } from '@openbooks/engine/inventory/stock-count-queries'
-import { hasUnsavedObservation, SECOND_COUNT_REASON_MIN_LENGTH, secondObservationNeedsReason } from './observation-reason'
-import { DateField } from '@/components/date-field'
-import { mergeHref } from '@/lib/list-params'
+import { DirectedExecutionForm, useDirectedExecution } from "@/components/directed-execution";
+import { InventoryTrackingFields } from "@/components/inventory-tracking-fields";
+import { promptDialog } from "@/lib/prompt";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Plus } from "lucide-react";
+import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from "@openbooks/ui";
+import { PagedTable, type PagedColumn } from "../../../../components/paged-table";
+import { AsyncUrlDrawer } from "../../../../components/async-url-drawer";
+import { SearchInput } from "../../../../components/search-input";
+import { useBusinessToday } from "../../../../components/business-date-provider";
+import { useDirtyClose } from "../../../../lib/use-dirty-close";
+import { optionalScanResolver } from "../../../../lib/scan";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import type {
+  StockCountDetail,
+  StockCountSummary,
+} from "@openbooks/engine/inventory/stock-count-queries";
+import {
+  hasUnsavedObservation,
+  SECOND_COUNT_REASON_MIN_LENGTH,
+  secondObservationNeedsReason,
+} from "./observation-reason";
+import { DateField } from "@/components/date-field";
+import { mergeHref } from "@/lib/list-params";
 
 /** Source id under which the count editor reports unsaved observations to the drawer guard. */
-const COUNT_DETAIL_DIRTY_SOURCE = 'count-detail'
+const COUNT_DETAIL_DIRTY_SOURCE = "count-detail";
 
-const field = 'space-y-1.5'
-const OPEN_NEW_COUNT = 'openbooks:inventory-new-count'
+const field = "space-y-1.5";
+const OPEN_NEW_COUNT = "openbooks:inventory-new-count";
 
 /** Header action that opens the already-loaded count editor synchronously. */
-export function NewCountButton({ label, currentParams = {} }: {
-  label: string
-  currentParams?: Record<string, string | string[] | undefined>
+export function NewCountButton({
+  label,
+  currentParams = {},
+}: {
+  label: string;
+  currentParams?: Record<string, string | string[] | undefined>;
 }) {
-  const router = useRouter()
+  const router = useRouter();
   return (
     <Button
       onClick={() => {
-        window.dispatchEvent(new Event(OPEN_NEW_COUNT))
-        router.replace(mergeHref('/inventory', { inventoryView: 'counts', ...currentParams }, {
-          inventoryView: 'counts',
-          count: 'new',
-          countId: null,
-          page: 1,
-        }) as never, { scroll: false })
+        window.dispatchEvent(new Event(OPEN_NEW_COUNT));
+        router.replace(
+          mergeHref(
+            "/inventory",
+            { inventoryView: "counts", ...currentParams },
+            {
+              inventoryView: "counts",
+              count: "new",
+              countId: null,
+              page: 1,
+            },
+          ) as never,
+          { scroll: false },
+        );
       }}
     >
       <Plus size={15} /> {label}
     </Button>
-  )
+  );
 }
 
 /**
@@ -65,44 +82,49 @@ async function countAction(
   body: Record<string, unknown>,
   fallback: string,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch('/api/inventory/counts', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
+  const res = await fetch("/api/inventory/counts", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify({ idempotencyKey: crypto.randomUUID(), ...body }),
-  })
+  });
   // The status is checked before the body parses, and the translated
   // fallback (never a hard-coded English string) carries the status when
   // the server names no refusal.
-  if (!res.ok) throw new Error(await readApiErrorMessage(res, fallback))
-  return (await res.json()) as Record<string, unknown>
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, fallback));
+  return (await res.json()) as Record<string, unknown>;
 }
 
 function StatusBadge({ status, label }: { status: string; label: string }) {
   const variant =
-    status === 'posted'
-      ? 'success'
-      : status === 'review'
-        ? 'warning'
-        : status === 'cancelled'
-          ? 'secondary'
-          : 'default'
+    status === "posted"
+      ? "success"
+      : status === "review"
+        ? "warning"
+        : status === "cancelled"
+          ? "secondary"
+          : "default";
   return (
-    <Badge variant={variant as 'success' | 'warning' | 'secondary' | 'default'}>
-      {label}
-    </Badge>
-  )
+    <Badge variant={variant as "success" | "warning" | "secondary" | "default"}>{label}</Badge>
+  );
 }
 
-function CountLink({ id, params, children }: {
-  id: string
-  params: Record<string, string | string[] | undefined>
-  children: ReactNode
+function CountLink({
+  id,
+  params,
+  children,
+}: {
+  id: string;
+  params: Record<string, string | string[] | undefined>;
+  children: ReactNode;
 }) {
   return (
-    <Link className="font-medium text-teal-700 hover:underline dark:text-teal-300" href={mergeHref('/inventory', params, { countId: id, count: null }) as never}>
+    <Link
+      className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+      href={mergeHref("/inventory", params, { countId: id, count: null }) as never}
+    >
       {children}
     </Link>
-  )
+  );
 }
 
 export function CountsList({
@@ -124,97 +146,101 @@ export function CountsList({
   selectedCountId,
   currentParams = {},
 }: {
-  counts: StockCountSummary[]
-  totalCount: number
-  page?: number
-  perPage?: number
-  locations: { id: string; name: string | null }[]
-  subsidiaries: { id: string; name: string | null }[]
-  items: { id: string; code: string | null; name: string | null }[]
-  stockLocations: { id: string; code: string | null; locationId: string }[]
-  lots: { id: string; item_id: string; lot_number: string }[]
-  canPost: boolean
+  counts: StockCountSummary[];
+  totalCount: number;
+  page?: number;
+  perPage?: number;
+  locations: { id: string; name: string | null }[];
+  subsidiaries: { id: string; name: string | null }[];
+  items: { id: string; code: string | null; name: string | null }[];
+  stockLocations: { id: string; code: string | null; locationId: string }[];
+  lots: { id: string; item_id: string; lot_number: string }[];
+  canPost: boolean;
   /** Independent-review requirement for posting (Company Settings → Approvals). */
-  canManageStockLocations: boolean
+  canManageStockLocations: boolean;
   /** May manage items: gates the Item Costing setup link in the picker note. */
-  canManageItems: boolean
-  barcodeScanningEnabled?: boolean
+  canManageItems: boolean;
+  barcodeScanningEnabled?: boolean;
   /** Active items excluded from the picker for lacking a costing profile. */
-  itemsExcludedCount: number
-  createRequested?: boolean
-  selectedCountId?: string
-  currentParams?: Record<string, string | string[] | undefined>
+  itemsExcludedCount: number;
+  createRequested?: boolean;
+  selectedCountId?: string;
+  currentParams?: Record<string, string | string[] | undefined>;
 }) {
-  const t = useTranslations('inventory')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const [createOpen, setCreateOpen] = useState(createRequested)
-  const [selectedId, setSelectedId] = useState<string | null>(selectedCountId ?? null)
+  const t = useTranslations("inventory");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const [createOpen, setCreateOpen] = useState(createRequested);
+  const [selectedId, setSelectedId] = useState<string | null>(selectedCountId ?? null);
   const [detailResult, setDetailResult] = useState<{
-    recordId: string
-    requestKey: string
-    detail?: StockCountDetail
-    error?: string
-  } | null>(null)
-  const [detailAttempt, setDetailAttempt] = useState(0)
-  const detailRequestKey = selectedId ? `${selectedId}:${detailAttempt}` : null
-  const selectedDetailResult = detailResult?.recordId === selectedId ? detailResult : null
-  const currentDetailResult = selectedDetailResult?.requestKey === detailRequestKey ? selectedDetailResult : null
-  const detail = selectedDetailResult?.detail ?? null
-  const detailError = detail ? null : (currentDetailResult?.error ?? null)
-  const detailPending = !!selectedId && !detail && !detailError
+    recordId: string;
+    requestKey: string;
+    detail?: StockCountDetail;
+    error?: string;
+  } | null>(null);
+  const [detailAttempt, setDetailAttempt] = useState(0);
+  const detailRequestKey = selectedId ? `${selectedId}:${detailAttempt}` : null;
+  const selectedDetailResult = detailResult?.recordId === selectedId ? detailResult : null;
+  const currentDetailResult =
+    selectedDetailResult?.requestKey === detailRequestKey ? selectedDetailResult : null;
+  const detail = selectedDetailResult?.detail ?? null;
+  const detailError = detail ? null : (currentDetailResult?.error ?? null);
+  const detailPending = !!selectedId && !detail && !detailError;
   // Typed observations that are not yet recorded hold the count drawer open
   // behind a discard confirmation, so Escape or a row switch cannot drop them.
   const detailGuard = useDirtyClose({
     dirty: false,
     onClose: () => {},
-    message: tCommon('feedback.unsavedChanges'),
-    confirmLabel: tCommon('confirm.discardChanges'),
-  })
-  const locationOptions = locations.map((l) => ({ value: l.id, label: l.name ?? l.id }))
-  const subsidiaryOptions = subsidiaries.map((s) => ({ value: s.id, label: s.name ?? s.id }))
+    message: tCommon("feedback.unsavedChanges"),
+    confirmLabel: tCommon("confirm.discardChanges"),
+  });
+  const locationOptions = locations.map((l) => ({ value: l.id, label: l.name ?? l.id }));
+  const subsidiaryOptions = subsidiaries.map((s) => ({ value: s.id, label: s.name ?? s.id }));
   const itemOptions = items.map((i) => ({
     value: i.id,
-    label: `${i.code ? `${i.code} · ` : ''}${i.name ?? ''}`.trim(),
-  }))
-  const stockLocationOptions = stockLocations.map((l) => ({ value: l.id, label: l.code ?? l.id }))
-  const countParams = { inventoryView: 'counts', ...currentParams }
-  const closeHref = mergeHref('/inventory', countParams, { countId: null, count: null })
+    label: `${i.code ? `${i.code} · ` : ""}${i.name ?? ""}`.trim(),
+  }));
+  const stockLocationOptions = stockLocations.map((l) => ({ value: l.id, label: l.code ?? l.id }));
+  const countParams = { inventoryView: "counts", ...currentParams };
+  const closeHref = mergeHref("/inventory", countParams, { countId: null, count: null });
 
   useEffect(() => {
-    const open = () => setCreateOpen(true)
-    window.addEventListener(OPEN_NEW_COUNT, open)
-    return () => window.removeEventListener(OPEN_NEW_COUNT, open)
-  }, [])
+    const open = () => setCreateOpen(true);
+    window.addEventListener(OPEN_NEW_COUNT, open);
+    return () => window.removeEventListener(OPEN_NEW_COUNT, open);
+  }, []);
 
   useEffect(() => {
-    if (!selectedId || !detailRequestKey) return
-    const controller = new AbortController()
-    const id = selectedId
-    const requestKey = detailRequestKey
-    ;(async () => {
-      const res = await fetch(`/api/inventory/counts?id=${encodeURIComponent(id)}`, { signal: controller.signal, cache: 'no-store' })
+    if (!selectedId || !detailRequestKey) return;
+    const controller = new AbortController();
+    const id = selectedId;
+    const requestKey = detailRequestKey;
+    (async () => {
+      const res = await fetch(`/api/inventory/counts?id=${encodeURIComponent(id)}`, {
+        signal: controller.signal,
+        cache: "no-store",
+      });
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, t('counts.failed')))
+        throw new Error(await readApiErrorMessage(res, t("counts.failed")));
       }
-      const data = await res.json()
-      if (controller.signal.aborted) return
-      setDetailResult({ recordId: id, requestKey, detail: data as StockCountDetail })
+      const data = await res.json();
+      if (controller.signal.aborted) return;
+      setDetailResult({ recordId: id, requestKey, detail: data as StockCountDetail });
     })().catch((error: unknown) => {
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted) return;
       setDetailResult({
         recordId: id,
         requestKey,
-        error: error instanceof Error ? error.message : t('counts.failed'),
-      })
-    })
-    return () => controller.abort()
-  }, [selectedId, detailRequestKey, t])
+        error: error instanceof Error ? error.message : t("counts.failed"),
+      });
+    });
+    return () => controller.abort();
+  }, [selectedId, detailRequestKey, t]);
 
   const columns: PagedColumn<StockCountSummary>[] = [
     {
-      key: 'date',
-      header: t('counts.columns.date'),
+      key: "date",
+      header: t("counts.columns.date"),
       cell: (r) => (
         <CountLink id={r.id} params={countParams}>
           {r.countedOn}
@@ -223,18 +249,18 @@ export function CountsList({
       search: (r) => r.countedOn,
     },
     {
-      key: 'location',
-      header: t('counts.columns.location'),
+      key: "location",
+      header: t("counts.columns.location"),
       cell: (r) => (
         <CountLink id={r.id} params={countParams}>
-          {r.locationName ?? '—'}
+          {r.locationName ?? "—"}
         </CountLink>
       ),
-      search: (r) => `${r.locationName ?? ''} ${r.memo ?? ''}`,
+      search: (r) => `${r.locationName ?? ""} ${r.memo ?? ""}`,
     },
     {
-      key: 'status',
-      header: t('counts.columns.status'),
+      key: "status",
+      header: t("counts.columns.status"),
       cell: (r) => (
         <CountLink id={r.id} params={countParams}>
           <StatusBadge status={r.status} label={t(`counts.statusNames.${r.status}`)} />
@@ -243,24 +269,27 @@ export function CountsList({
       search: (r) => r.status,
     },
     {
-      key: 'progress',
-      header: t('counts.columns.progress'),
-      align: 'right',
+      key: "progress",
+      header: t("counts.columns.progress"),
+      align: "right",
       cell: (r) => (
-        <CountLink id={r.id} params={countParams}>{`${r.lineCount - r.uncountedCount}/${r.lineCount}`}</CountLink>
+        <CountLink
+          id={r.id}
+          params={countParams}
+        >{`${r.lineCount - r.uncountedCount}/${r.lineCount}`}</CountLink>
       ),
     },
     {
-      key: 'variance',
-      header: t('counts.columns.variance'),
-      align: 'right',
+      key: "variance",
+      header: t("counts.columns.variance"),
+      align: "right",
       cell: (r) => (
         <CountLink id={r.id} params={countParams}>
           <span className="tabular-nums">{r.discrepantLineCount}</span>
         </CountLink>
       ),
     },
-  ]
+  ];
 
   return (
     <>
@@ -269,13 +298,13 @@ export function CountsList({
         source="inventory_counts"
         rows={counts}
         columns={columns}
-        empty={canPost ? t('counts.empty') : t('counts.emptyViewer')}
+        empty={canPost ? t("counts.empty") : t("counts.emptyViewer")}
         rowKey={(r) => r.id}
         serverWindow={{ total: totalCount, page, perPage }}
         basePath="/inventory"
         currentParams={countParams}
         searchable={false}
-        toolbarAfter={<SearchInput placeholder={tCommon('actions.search')} />}
+        toolbarAfter={<SearchInput placeholder={tCommon("actions.search")} />}
       />
       {createOpen ? (
         <CreateCountDrawer
@@ -289,9 +318,9 @@ export function CountsList({
           itemsExcludedCount={itemsExcludedCount}
           lots={lots}
           onClose={() => {
-            setCreateOpen(false)
-            router.replace(closeHref)
-            router.refresh()
+            setCreateOpen(false);
+            router.replace(closeHref);
+            router.refresh();
           }}
         />
       ) : null}
@@ -304,7 +333,7 @@ export function CountsList({
           onRetry={() => setDetailAttempt((attempt) => attempt + 1)}
           closeHref={closeHref}
           size="xl"
-          title={t('counts.detail.title')}
+          title={t("counts.detail.title")}
           beforeClose={detailGuard.beforeClose}
         >
           {detail ? (
@@ -316,21 +345,21 @@ export function CountsList({
               canPost={canPost}
               registerDirty={detailGuard.registerDirty}
               onDone={() => {
-                setSelectedId(null)
-                router.replace(closeHref)
-                router.refresh()
+                setSelectedId(null);
+                router.replace(closeHref);
+                router.refresh();
               }}
               onChanged={() => {
-                if (!selectedId) return
-                setDetailAttempt((attempt) => attempt + 1)
-                router.refresh()
+                if (!selectedId) return;
+                setDetailAttempt((attempt) => attempt + 1);
+                router.refresh();
               }}
             />
           ) : null}
         </AsyncUrlDrawer>
       ) : null}
     </>
-  )
+  );
 }
 
 function CreateCountDrawer({
@@ -344,71 +373,84 @@ function CreateCountDrawer({
   itemsExcludedCount,
   onClose,
 }: {
-  locationOptions: { value: string; label: string }[]
-  subsidiaryOptions: { value: string; label: string }[]
-  itemOptions: { value: string; label: string }[]
-  barcodeScanningEnabled: boolean
-  stockLocations: { id: string; code: string | null; locationId: string }[]
-  canManageStockLocations: boolean
-  canManageItems: boolean
-  itemsExcludedCount: number
-  lots: { id: string; item_id: string; lot_number: string }[]
-  onClose: () => void
+  locationOptions: { value: string; label: string }[];
+  subsidiaryOptions: { value: string; label: string }[];
+  itemOptions: { value: string; label: string }[];
+  barcodeScanningEnabled: boolean;
+  stockLocations: { id: string; code: string | null; locationId: string }[];
+  canManageStockLocations: boolean;
+  canManageItems: boolean;
+  itemsExcludedCount: number;
+  lots: { id: string; item_id: string; lot_number: string }[];
+  onClose: () => void;
 }) {
-  const t = useTranslations('inventory')
-  const tCommon = useTranslations('common')
-  const [locationId, setLocationId] = useState('')
-  const [subsidiaryId, setSubsidiaryId] = useState(subsidiaryOptions[0]?.value ?? '')
+  const t = useTranslations("inventory");
+  const tCommon = useTranslations("common");
+  const [locationId, setLocationId] = useState("");
+  const [subsidiaryId, setSubsidiaryId] = useState(subsidiaryOptions[0]?.value ?? "");
   // The count date defaults to the org's business day from the server, never
   // the browser's UTC day (tomorrow after 5pm Pacific).
-  const initialDate = useBusinessToday()
-  const initialLines = [{ itemId: '', stockLocationId: '', lotId: '',serialId:'' }]
-  const [date, setDate] = useState(initialDate)
-  const [memo, setMemo] = useState('')
-  const [lines, setLines] = useState<{ itemId: string; stockLocationId: string; lotId: string;serialId:string }[]>([
-    { itemId: '', stockLocationId: '', lotId: '',serialId:'' },
-  ])
-  const [busy, setBusy] = useState(false)
-  const [postError, setPostError] = useState<string | null>(null)
+  const initialDate = useBusinessToday();
+  const initialLines = [{ itemId: "", stockLocationId: "", lotId: "", serialId: "" }];
+  const [date, setDate] = useState(initialDate);
+  const [memo, setMemo] = useState("");
+  const [lines, setLines] = useState<
+    { itemId: string; stockLocationId: string; lotId: string; serialId: string }[]
+  >([{ itemId: "", stockLocationId: "", lotId: "", serialId: "" }]);
+  const [busy, setBusy] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
   // Per-row refusals stay pinned to the row that caused them; fully empty
   // rows are inert filler and are reported by the form-level refusal instead.
-  const [lineErrors, setLineErrors] = useState<Record<number, string>>({})
+  const [lineErrors, setLineErrors] = useState<Record<number, string>>({});
   const closeGuard = useDirtyClose({
-    dirty: locationId !== '' || subsidiaryId !== (subsidiaryOptions[0]?.value ?? '') || date !== initialDate || memo !== '' ||
+    dirty:
+      locationId !== "" ||
+      subsidiaryId !== (subsidiaryOptions[0]?.value ?? "") ||
+      date !== initialDate ||
+      memo !== "" ||
       JSON.stringify(lines) !== JSON.stringify(initialLines),
-    busy, onClose: () => {},
-    message: tCommon('feedback.unsavedChanges'), confirmLabel: tCommon('confirm.discardChanges'),
-  })
+    busy,
+    onClose: () => {},
+    message: tCommon("feedback.unsavedChanges"),
+    confirmLabel: tCommon("confirm.discardChanges"),
+  });
   // ONE retry identity per intended create: a lost create response followed
   // by Open count again must return the ORIGINAL count, not open a second
   // one. Reused on retry; rotates only after success or an input change (a
   // reused key with different input would 409).
-  const createKeyRef = useRef<string | null>(null)
-  const createFingerprintRef = useRef<string | null>(null)
+  const createKeyRef = useRef<string | null>(null);
+  const createFingerprintRef = useRef<string | null>(null);
 
   async function submit() {
-    const errors: Record<number, string> = {}
+    const errors: Record<number, string> = {};
     lines.forEach((l, i) => {
-      if (!l.itemId && !l.stockLocationId && !l.lotId) return
-      if (!l.itemId) errors[i] = t('counts.create.lineMissingItem', { line: i + 1 })
-      else if (!l.stockLocationId) errors[i] = t('counts.create.lineMissingStockLocation', { line: i + 1 })
-    })
-    const filled = lines.filter((l) => l.itemId && l.stockLocationId)
-    setLineErrors(errors)
-    if (!locationId || !subsidiaryId || !date || filled.length === 0 || Object.keys(errors).length > 0) {
+      if (!l.itemId && !l.stockLocationId && !l.lotId) return;
+      if (!l.itemId) errors[i] = t("counts.create.lineMissingItem", { line: i + 1 });
+      else if (!l.stockLocationId)
+        errors[i] = t("counts.create.lineMissingStockLocation", { line: i + 1 });
+    });
+    const filled = lines.filter((l) => l.itemId && l.stockLocationId);
+    setLineErrors(errors);
+    if (
+      !locationId ||
+      !subsidiaryId ||
+      !date ||
+      filled.length === 0 ||
+      Object.keys(errors).length > 0
+    ) {
       const detail =
         Object.keys(errors).length > 0
-          ? Object.values(errors).join(' ')
-          : t('counts.create.missingFields')
-      setPostError(detail)
-      toast.error(detail)
-      return
+          ? Object.values(errors).join(" ")
+          : t("counts.create.missingFields");
+      setPostError(detail);
+      toast.error(detail);
+      return;
     }
-    setBusy(true)
-    setPostError(null)
+    setBusy(true);
+    setPostError(null);
     try {
       const payload = {
-        action: 'create',
+        action: "create",
         locationId,
         subsidiaryId,
         date,
@@ -417,26 +459,26 @@ function CreateCountDrawer({
           itemId: l.itemId,
           stockLocationId: l.stockLocationId,
           lotId: l.lotId || undefined,
-          serialId:l.serialId||undefined,
+          serialId: l.serialId || undefined,
         })),
-      }
-      const fingerprint = JSON.stringify(payload)
+      };
+      const fingerprint = JSON.stringify(payload);
       if (createKeyRef.current === null || createFingerprintRef.current !== fingerprint) {
-        createKeyRef.current = crypto.randomUUID()
-        createFingerprintRef.current = fingerprint
+        createKeyRef.current = crypto.randomUUID();
+        createFingerprintRef.current = fingerprint;
       }
-      await countAction({ ...payload, idempotencyKey: createKeyRef.current }, t('counts.failed'))
-      toast.success(t('counts.created'))
+      await countAction({ ...payload, idempotencyKey: createKeyRef.current }, t("counts.failed"));
+      toast.success(t("counts.created"));
       // Success consumes the retry identity: the next Open count is new.
-      createKeyRef.current = null
-      createFingerprintRef.current = null
-      onClose()
+      createKeyRef.current = null;
+      createFingerprintRef.current = null;
+      onClose();
     } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e)
-      setPostError(detail)
-      toast.error(detail)
+      const detail = e instanceof Error ? e.message : String(e);
+      setPostError(detail);
+      toast.error(detail);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -446,10 +488,10 @@ function CreateCountDrawer({
       closeHref="/inventory?inventoryView=counts"
       beforeClose={closeGuard.beforeClose}
       size="2xl"
-      title={t('counts.create.title')}
+      title={t("counts.create.title")}
       headerActions={
         <Button disabled={busy} onClick={submit}>
-          {busy ? t('counts.creating') : t('counts.create.submit')}
+          {busy ? t("counts.creating") : t("counts.create.submit")}
         </Button>
       }
     >
@@ -459,74 +501,72 @@ function CreateCountDrawer({
             role="alert"
             className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
           >
-            {t('counts.failed')}: {postError}
+            {t("counts.failed")}: {postError}
           </p>
         ) : null}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className={field}>
             <Label>
-              {t('counts.create.location')}{' '}
-              <span className="text-red-500">*</span>
+              {t("counts.create.location")} <span className="text-red-500">*</span>
             </Label>
             <SearchSelect
               disabled={busy}
               value={locationId}
               onChange={(v) => {
-                setLocationId(v)
+                setLocationId(v);
                 // Drop line stock locations that live under another business
                 // location instead of posting against a stale picker value.
                 setLines((prev) =>
                   prev.map((p) =>
                     p.stockLocationId &&
                     !stockLocations.some((s) => s.id === p.stockLocationId && s.locationId === v)
-                      ? { ...p, stockLocationId: '' }
+                      ? { ...p, stockLocationId: "" }
                       : p,
                   ),
-                )
+                );
               }}
               options={locationOptions}
-              placeholder={t('counts.create.selectLocation')}
-              sheetTitle={t('counts.create.location')}
-              ariaLabel={t('counts.create.location')}
+              placeholder={t("counts.create.selectLocation")}
+              sheetTitle={t("counts.create.location")}
+              ariaLabel={t("counts.create.location")}
             />
           </div>
           <div className={field}>
             <Label>
-              {t('counts.create.subsidiary')}{' '}
-              <span className="text-red-500">*</span>
+              {t("counts.create.subsidiary")} <span className="text-red-500">*</span>
             </Label>
             <SearchSelect
               disabled={busy}
               value={subsidiaryId}
               onChange={setSubsidiaryId}
               options={subsidiaryOptions}
-              placeholder={t('counts.create.selectSubsidiary')}
-              sheetTitle={t('counts.create.subsidiary')}
-              ariaLabel={t('counts.create.subsidiary')}
+              placeholder={t("counts.create.selectSubsidiary")}
+              sheetTitle={t("counts.create.subsidiary")}
+              ariaLabel={t("counts.create.subsidiary")}
             />
           </div>
           <div className={field}>
             <Label>
-              {t('counts.columns.date')} <span className="text-red-500">*</span>
+              {t("counts.columns.date")} <span className="text-red-500">*</span>
             </Label>
             <DateField disabled={busy} value={date} onChange={(value) => setDate(value)} />
           </div>
           <div className={field}>
-            <Label>{t('counts.columns.memo')}</Label>
+            <Label>{t("counts.columns.memo")}</Label>
             <Input disabled={busy} value={memo} onChange={(e) => setMemo(e.target.value)} />
           </div>
         </div>
         <div className="space-y-3">
-          <Label>{t('counts.create.lines')}</Label>
+          <Label>{t("counts.create.lines")}</Label>
           {itemsExcludedCount > 0 ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              {t('counts.create.needsCosting', { count: itemsExcludedCount })}{' '}
+              {t("counts.create.needsCosting", { count: itemsExcludedCount })}{" "}
               {canManageItems ? (
                 <Link className="underline" href="/items">
-                  {t('counts.create.openItems')}
+                  {t("counts.create.openItems")}
                 </Link>
               ) : (
-                t('counts.create.needsCostingNoGrant')
+                t("counts.create.needsCostingNoGrant")
               )}
             </p>
           ) : null}
@@ -535,16 +575,19 @@ function CreateCountDrawer({
             // under the chosen count location are offered on each line.
             const visibleStockLocations = locationId
               ? stockLocations.filter((s) => s.locationId === locationId)
-              : stockLocations
-            const lineStockOptions = visibleStockLocations.map((s) => ({ value: s.id, label: s.code ?? s.id }))
-            const rowError = lineErrors[i]
+              : stockLocations;
+            const lineStockOptions = visibleStockLocations.map((s) => ({
+              value: s.id,
+              label: s.code ?? s.id,
+            }));
+            const rowError = lineErrors[i];
             const clearRowError = () =>
               setLineErrors((prev) => {
-                if (!(i in prev)) return prev
-                const next = { ...prev }
-                delete next[i]
-                return next
-              })
+                if (!(i in prev)) return prev;
+                const next = { ...prev };
+                delete next[i];
+                return next;
+              });
             return (
               <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
                 <div className="space-y-1">
@@ -552,41 +595,44 @@ function CreateCountDrawer({
                     disabled={busy}
                     value={line.itemId}
                     onChange={(v) => {
-                      clearRowError()
+                      clearRowError();
                       setLines((prev) =>
                         prev.map((p, j) =>
-                          j === i ? { ...p, itemId: v, lotId: '', serialId: '' } : p,
+                          j === i ? { ...p, itemId: v, lotId: "", serialId: "" } : p,
                         ),
-                      )
+                      );
                     }}
                     options={itemOptions}
-                    placeholder={t('counts.create.selectItem')}
-                    sheetTitle={t('counts.columns.item')}
-                    ariaLabel={t('counts.columns.item')}
-                    scanResolver={optionalScanResolver(barcodeScanningEnabled, (value) => ({ field: 'item', value }))}
+                    placeholder={t("counts.create.selectItem")}
+                    sheetTitle={t("counts.columns.item")}
+                    ariaLabel={t("counts.columns.item")}
+                    scanResolver={optionalScanResolver(barcodeScanningEnabled, (value) => ({
+                      field: "item",
+                      value,
+                    }))}
                   />
                 </div>
                 <div className="space-y-1">
                   <Label>
-                    {t('counts.columns.stockLocation')}{' '}
-                    <span className="text-red-500">*</span>
+                    {t("counts.columns.stockLocation")} <span className="text-red-500">*</span>
                   </Label>
                   <SearchSelect
                     disabled={busy}
                     value={line.stockLocationId}
                     onChange={(v) => {
-                      clearRowError()
+                      clearRowError();
                       setLines((prev) =>
-                        prev.map((p, j) =>
-                          j === i ? { ...p, stockLocationId: v } : p,
-                        ),
-                      )
+                        prev.map((p, j) => (j === i ? { ...p, stockLocationId: v } : p)),
+                      );
                     }}
                     options={lineStockOptions}
-                    placeholder={t('counts.create.selectStockLocation')}
-                    sheetTitle={t('counts.columns.stockLocation')}
-                    ariaLabel={t('counts.columns.stockLocation')}
-                    scanResolver={optionalScanResolver(barcodeScanningEnabled, (value) => ({ field: 'bin', value }))}
+                    placeholder={t("counts.create.selectStockLocation")}
+                    sheetTitle={t("counts.columns.stockLocation")}
+                    ariaLabel={t("counts.columns.stockLocation")}
+                    scanResolver={optionalScanResolver(barcodeScanningEnabled, (value) => ({
+                      field: "bin",
+                      value,
+                    }))}
                   />
                   {rowError ? (
                     <p role="alert" className="text-sm text-red-600 dark:text-red-400">
@@ -595,48 +641,59 @@ function CreateCountDrawer({
                   ) : null}
                   {locationId && visibleStockLocations.length === 0 ? (
                     <p className="text-sm text-slate-500">
-                      {t('counts.create.noStockLocations')}{' '}
+                      {t("counts.create.noStockLocations")}{" "}
                       {canManageStockLocations ? (
-                        <Link
-                        className="underline"
-                        href="/inventory?inventoryView=locations"
-                      >
-                          {t('counts.create.manageStockLocations')}
+                        <Link className="underline" href="/inventory?inventoryView=locations">
+                          {t("counts.create.manageStockLocations")}
                         </Link>
                       ) : null}
                     </p>
                   ) : null}
                 </div>
-                <InventoryTrackingFields key={line.itemId} itemId={line.itemId} lotId={line.lotId} serialId={line.serialId}
-                  onChange={(lot,serial)=>setLines(prev=>prev.map((p,j)=>j===i?{...p,lotId:lot,serialId:serial}:p))} disabled={busy} canCreate={canManageItems}/>
+                <InventoryTrackingFields
+                  key={line.itemId}
+                  itemId={line.itemId}
+                  lotId={line.lotId}
+                  serialId={line.serialId}
+                  onChange={(lot, serial) =>
+                    setLines((prev) =>
+                      prev.map((p, j) => (j === i ? { ...p, lotId: lot, serialId: serial } : p)),
+                    )
+                  }
+                  disabled={busy}
+                  canCreate={canManageItems}
+                />
                 <Button
                   variant="ghost"
                   onClick={() => setLines((prev) => prev.filter((_, j) => j !== i))}
                   disabled={busy || lines.length <= 1}
                 >
-                  {t('counts.create.removeLine')}
+                  {t("counts.create.removeLine")}
                 </Button>
               </div>
-            )
+            );
           })}
           <Button
             variant="secondary"
             disabled={busy}
-            onClick={() => setLines((prev) => [...prev, { itemId: '', stockLocationId: '', lotId: '',serialId:'' }])}
+            onClick={() =>
+              setLines((prev) => [
+                ...prev,
+                { itemId: "", stockLocationId: "", lotId: "", serialId: "" },
+              ])
+            }
           >
-            {t('counts.create.addLine')}
+            {t("counts.create.addLine")}
           </Button>
         </div>
       </div>
     </UrlDrawer>
-  )
+  );
 }
 
 /** A positive count variance (found stock), read from its exact decimal string. */
 function isFound(variance: string | null | undefined): boolean {
-  return (
-    variance != null && !variance.trim().startsWith('-') && /[1-9]/.test(variance)
-  )
+  return variance != null && !variance.trim().startsWith("-") && /[1-9]/.test(variance);
 }
 
 function CountDetailBody({
@@ -648,72 +705,89 @@ function CountDetailBody({
   onChanged,
   registerDirty,
 }: {
-  detail: StockCountDetail
-  itemOptions: { value: string; label: string }[]
-  stockLocationOptions: { value: string; label: string }[]
-  canPost: boolean
-  onDone: () => void
-  onChanged: () => void
+  detail: StockCountDetail;
+  itemOptions: { value: string; label: string }[];
+  stockLocationOptions: { value: string; label: string }[];
+  canPost: boolean;
+  onDone: () => void;
+  onChanged: () => void;
   /** Reports unsaved typed observations to the drawer's close guard. */
-  registerDirty: (sourceId: string, dirty: boolean) => void
+  registerDirty: (sourceId: string, dirty: boolean) => void;
 }) {
-  const t = useTranslations('inventory')
+  const t = useTranslations("inventory");
   // A recorded observation confirms the same way a run step does: the toast
   // names the saved state before the refreshed count replaces the suggestion.
-  const execution = useDirectedExecution('/api/inventory/execution', () => {
-    toast.success(t('counts.updated'))
-    onChanged()
-  })
-  const [busy, setBusy] = useState(false)
-  const [postError, setPostError] = useState<string | null>(null)
-  const [counted, setCounted] = useState<Record<string, string>>({})
-  const [observationContexts, setObservationContexts] = useState<Record<string, string>>({})
+  const execution = useDirectedExecution("/api/inventory/execution", () => {
+    toast.success(t("counts.updated"));
+    onChanged();
+  });
+  const [busy, setBusy] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
+  const [counted, setCounted] = useState<Record<string, string>>({});
+  const [observationContexts, setObservationContexts] = useState<Record<string, string>>({});
   // Unit cost for found (positive-variance) quantities, sent with Post. An
   // item with nothing valued on hand has no average, so the post refuses
   // that line until its cost is entered here.
-  const [foundCosts, setFoundCosts] = useState<Record<string, string>>({})
+  const [foundCosts, setFoundCosts] = useState<Record<string, string>>({});
   // Remount per count/status/date (parent key) resets these; no effect.
-  const [countDate, setCountDate] = useState(detail.header.countedOn)
+  const [countDate, setCountDate] = useState(detail.header.countedOn);
   // ONE retry identity per intended count step (record, submit, post, …): a
   // lost response followed by the same step again must replay it, not apply
   // it twice. Reused on retry; rotates after success or when the step's
   // inputs change (a reused key with different input would 409).
-  const stepKeyRef = useRef<string | null>(null)
-  const stepFingerprintRef = useRef<string | null>(null)
+  const stepKeyRef = useRef<string | null>(null);
+  const stepFingerprintRef = useRef<string | null>(null);
 
-  const { header, lines } = detail
-  const itemLabel = (id: string) => itemOptions.find((o) => o.value === id)?.label ?? id
-  const locLabel = (id: string) => stockLocationOptions.find((o) => o.value === id)?.label ?? id
+  const { header, lines } = detail;
+  const itemLabel = (id: string) => itemOptions.find((o) => o.value === id)?.label ?? id;
+  const locLabel = (id: string) => stockLocationOptions.find((o) => o.value === id)?.label ?? id;
 
   // Typed observations that have not been recorded yet. A second observation
   // is always unsaved until it is recorded; a first one is unsaved until its
   // typed value matches the recorded quantity.
-  const unsavedObservation = header.status === 'counting' && canPost && lines.some(
-    (l) => !l.adjustmentMovementId && hasUnsavedObservation(counted[l.id] ?? '', l.secondCountRequired ? null : l.countedQuantity),
-  )
-  const unsavedContext = header.status === 'counting' && canPost && lines.some(
-    line => line.secondCountRequired && !line.adjustmentMovementId && (observationContexts[line.id] ?? '').trim() !== '',
-  )
-  const hasUnsaved = unsavedObservation || unsavedContext || Object.values(foundCosts).some((cost) => cost.trim() !== '')
+  const unsavedObservation =
+    header.status === "counting" &&
+    canPost &&
+    lines.some(
+      (l) =>
+        !l.adjustmentMovementId &&
+        hasUnsavedObservation(
+          counted[l.id] ?? "",
+          l.secondCountRequired ? null : l.countedQuantity,
+        ),
+    );
+  const unsavedContext =
+    header.status === "counting" &&
+    canPost &&
+    lines.some(
+      (line) =>
+        line.secondCountRequired &&
+        !line.adjustmentMovementId &&
+        (observationContexts[line.id] ?? "").trim() !== "",
+    );
+  const hasUnsaved =
+    unsavedObservation ||
+    unsavedContext ||
+    Object.values(foundCosts).some((cost) => cost.trim() !== "");
   useEffect(() => {
-    registerDirty(COUNT_DETAIL_DIRTY_SOURCE, hasUnsaved)
-    return () => registerDirty(COUNT_DETAIL_DIRTY_SOURCE, false)
-  }, [registerDirty, hasUnsaved])
+    registerDirty(COUNT_DETAIL_DIRTY_SOURCE, hasUnsaved);
+    return () => registerDirty(COUNT_DETAIL_DIRTY_SOURCE, false);
+  }, [registerDirty, hasUnsaved]);
 
   // The reason prompt re-asks when the reason is under the engine's minimum,
   // keeping the typed text so the operator corrects it instead of retyping.
   // Cancelling or dismissing it returns null.
   async function askSecondReason(initialValue: string): Promise<string | null> {
-    let typed = initialValue
+    let typed = initialValue;
     for (;;) {
       const answer = await promptDialog({
-        title: t('counts.secondReason'),
-        message: t('counts.secondReasonHint'),
+        title: t("counts.secondReason"),
+        message: t("counts.secondReasonHint"),
         initialValue: typed,
-      })
-      if (answer === null) return null
-      if (answer.length >= SECOND_COUNT_REASON_MIN_LENGTH) return answer
-      typed = answer
+      });
+      if (answer === null) return null;
+      if (answer.length >= SECOND_COUNT_REASON_MIN_LENGTH) return answer;
+      typed = answer;
     }
   }
 
@@ -722,149 +796,169 @@ function CountDetailBody({
   // the prompt abandons the observation (the engine refuses a differing second
   // count without a reason, so proceeding would only defer that refusal). The
   // abandonment is reported on the count, so it is never a silent no-op.
-  async function observeCount(line: StockCountDetail['lines'][number]) {
-    setPostError(null)
-    const quantity = (counted[line.id] ?? '').trim()
-    let reason: string | null = line.secondCountRequired ? (observationContexts[line.id] ?? '').trim() : null
-    if (line.secondCountRequired && secondObservationNeedsReason(quantity, line.countedQuantity) && (reason?.length ?? 0) < SECOND_COUNT_REASON_MIN_LENGTH) {
-      reason = await askSecondReason(reason ?? '')
+  async function observeCount(line: StockCountDetail["lines"][number]) {
+    setPostError(null);
+    const quantity = (counted[line.id] ?? "").trim();
+    let reason: string | null = line.secondCountRequired
+      ? (observationContexts[line.id] ?? "").trim()
+      : null;
+    if (
+      line.secondCountRequired &&
+      secondObservationNeedsReason(quantity, line.countedQuantity) &&
+      (reason?.length ?? 0) < SECOND_COUNT_REASON_MIN_LENGTH
+    ) {
+      reason = await askSecondReason(reason ?? "");
       if (reason === null) {
-        setPostError(t('counts.secondNotRecorded', { minLength: SECOND_COUNT_REASON_MIN_LENGTH }))
-        return
+        setPostError(t("counts.secondNotRecorded", { minLength: SECOND_COUNT_REASON_MIN_LENGTH }));
+        return;
       }
     }
     await execution.prepare({
-      action: 'count',
+      action: "count",
       lineId: line.id,
       quantity,
-      observation: line.secondCountRequired ? 'second' : 'first',
+      observation: line.secondCountRequired ? "second" : "first",
       ...(reason ? { reason } : {}),
-    })
+    });
   }
 
   async function run(label: string, body: Record<string, unknown>) {
-    setBusy(true)
-    setPostError(null)
+    setBusy(true);
+    setPostError(null);
     try {
-      const payload = { ...body, countId: header.id }
-      const fingerprint = JSON.stringify(payload)
+      const payload = { ...body, countId: header.id };
+      const fingerprint = JSON.stringify(payload);
       if (stepKeyRef.current === null || stepFingerprintRef.current !== fingerprint) {
-        stepKeyRef.current = crypto.randomUUID()
-        stepFingerprintRef.current = fingerprint
+        stepKeyRef.current = crypto.randomUUID();
+        stepFingerprintRef.current = fingerprint;
       }
-      const res = await countAction({ ...payload, idempotencyKey: stepKeyRef.current }, t('counts.failed'))
-      toast.success(t('counts.updated'))
+      const res = await countAction(
+        { ...payload, idempotencyKey: stepKeyRef.current },
+        t("counts.failed"),
+      );
+      toast.success(t("counts.updated"));
       // Success consumes the retry identity: the next step is a new action.
-      stepKeyRef.current = null
-      stepFingerprintRef.current = null
-      onChanged()
-      return res
+      stepKeyRef.current = null;
+      stepFingerprintRef.current = null;
+      onChanged();
+      return res;
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const msg = e instanceof Error ? e.message : String(e);
       // A refused lifecycle step pins its reason on the record until the
       // next submit — a toast alone lets 422s read as silence.
-      setPostError(`${label}: ${msg}`)
-      toast.error(msg)
-      return null
+      setPostError(`${label}: ${msg}`);
+      toast.error(msg);
+      return null;
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   const allLineColumns: PagedColumn<(typeof lines)[number]>[] = [
     {
-      key: 'item',
-      header: t('counts.columns.item'),
+      key: "item",
+      header: t("counts.columns.item"),
       cell: (l) => l.itemCode ?? itemLabel(l.itemId),
-      search: (l) => `${l.itemCode ?? ''} ${l.itemName ?? ''}`,
+      search: (l) => `${l.itemCode ?? ""} ${l.itemName ?? ""}`,
     },
     {
-      key: 'loc',
-      header: t('counts.columns.stockLocation'),
+      key: "loc",
+      header: t("counts.columns.stockLocation"),
       cell: (l) => l.stockLocationCode ?? locLabel(l.stockLocationId),
     },
-    { key: 'lot', header: t('counts.columns.lot'), cell: (l) => [l.lotNumber,l.serialNumber].filter(Boolean).join(' · ') || '—' },
     {
-      key: 'expected',
-      header: t('counts.columns.expected'),
-      align: 'right',
-      cell: (l) => (
-        <span className="tabular-nums">{l.expectedQuantity??'—'}</span>
-      ),
+      key: "lot",
+      header: t("counts.columns.lot"),
+      cell: (l) => [l.lotNumber, l.serialNumber].filter(Boolean).join(" · ") || "—",
     },
     {
-      key: 'counted',
-      header: t('counts.columns.counted'),
-      align: 'right',
+      key: "expected",
+      header: t("counts.columns.expected"),
+      align: "right",
+      cell: (l) => <span className="tabular-nums">{l.expectedQuantity ?? "—"}</span>,
+    },
+    {
+      key: "counted",
+      header: t("counts.columns.counted"),
+      align: "right",
       cell: (l) =>
-        header.status === 'counting' && canPost && !l.adjustmentMovementId ? (
+        header.status === "counting" && canPost && !l.adjustmentMovementId ? (
           <span className="inline-flex flex-wrap items-center gap-1">
             <Input
               disabled={busy}
               inputMode="decimal"
               className="w-24 text-right tabular-nums"
-              placeholder={l.countedQuantity ?? ''}
-              aria-label={t('counts.columns.counted')}
-              value={counted[l.id] ?? ''}
+              placeholder={l.countedQuantity ?? ""}
+              aria-label={t("counts.columns.counted")}
+              value={counted[l.id] ?? ""}
               onChange={(e) => setCounted((prev) => ({ ...prev, [l.id]: e.target.value }))}
             />
             {l.secondCountRequired && (
               <Input
-              disabled={busy || execution.busy}
-              className="w-56 text-left"
-              aria-label={t('counts.observationContext', { item: l.itemCode ?? itemLabel(l.itemId) })}
-              placeholder={t('counts.observationContextHint')}
-              maxLength={500}
-              value={observationContexts[l.id] ?? ''}
-              onChange={event => setObservationContexts(previous => ({ ...previous, [l.id]: event.target.value }))}
-            />
+                disabled={busy || execution.busy}
+                className="w-56 text-left"
+                aria-label={t("counts.observationContext", {
+                  item: l.itemCode ?? itemLabel(l.itemId),
+                })}
+                placeholder={t("counts.observationContextHint")}
+                maxLength={500}
+                value={observationContexts[l.id] ?? ""}
+                onChange={(event) =>
+                  setObservationContexts((previous) => ({
+                    ...previous,
+                    [l.id]: event.target.value,
+                  }))
+                }
+              />
             )}
             {/* A saved count clears the entry field for the next observation;
                 the recorded quantity stays in view so it never reads as lost. */}
-            {l.countedQuantity != null && !(counted[l.id] ?? '').trim() ? (
+            {l.countedQuantity != null && !(counted[l.id] ?? "").trim() ? (
               <span className="text-xs font-medium text-emerald-700 tabular-nums dark:text-emerald-300">
-                {t('counts.recordedQuantity', { quantity: l.countedQuantity })}
+                {t("counts.recordedQuantity", { quantity: l.countedQuantity })}
               </span>
             ) : null}
             <Button
               size="sm"
-              disabled={busy || execution.busy || !(counted[l.id] ?? '').trim()}
+              disabled={busy || execution.busy || !(counted[l.id] ?? "").trim()}
               onClick={() => void observeCount(l)}
             >
-              {l.secondCountRequired?t('counts.secondCount'):t('counts.actions.save')}
+              {l.secondCountRequired ? t("counts.secondCount") : t("counts.actions.save")}
             </Button>
             <Button
               size="sm"
               variant="secondary"
               disabled={busy}
-              title={t('counts.actions.recountHint')}
-              onClick={() => void run(t('counts.actions.recount'), { action: 'recount', lineId: l.id })}
+              title={t("counts.actions.recountHint")}
+              onClick={() =>
+                void run(t("counts.actions.recount"), { action: "recount", lineId: l.id })
+              }
             >
-              {t('counts.actions.recount')}
+              {t("counts.actions.recount")}
             </Button>
           </span>
         ) : (
-          <span className="tabular-nums">{l.countedQuantity ?? '—'}</span>
+          <span className="tabular-nums">{l.countedQuantity ?? "—"}</span>
         ),
     },
     {
-      key: 'variance',
-      header: t('counts.columns.variance'),
-      align: 'right',
-      cell: (l) => <span className="tabular-nums">{l.variance ?? '—'}</span>,
+      key: "variance",
+      header: t("counts.columns.variance"),
+      align: "right",
+      cell: (l) => <span className="tabular-nums">{l.variance ?? "—"}</span>,
     },
     {
-      key: 'foundUnitCost',
-      header: t('counts.columns.foundUnitCost'),
-      align: 'right',
+      key: "foundUnitCost",
+      header: t("counts.columns.foundUnitCost"),
+      align: "right",
       cell: (l) =>
-        header.status === 'review' && canPost && !l.adjustmentMovementId && isFound(l.variance) ? (
+        header.status === "review" && canPost && !l.adjustmentMovementId && isFound(l.variance) ? (
           <Input
             disabled={busy}
             inputMode="decimal"
-            aria-label={t('counts.columns.foundUnitCost')}
+            aria-label={t("counts.columns.foundUnitCost")}
             className="w-24 text-right tabular-nums"
-            value={foundCosts[l.id] ?? ''}
+            value={foundCosts[l.id] ?? ""}
             onChange={(e) => setFoundCosts((prev) => ({ ...prev, [l.id]: e.target.value }))}
           />
         ) : (
@@ -872,19 +966,24 @@ function CountDetailBody({
         ),
     },
     {
-      key: 'movement',
-      header: t('counts.columns.movement'),
+      key: "movement",
+      header: t("counts.columns.movement"),
       cell: (l) =>
         l.adjustmentMovementId ? (
-          <StatusBadge status="posted" label={t('counts.detail.postedBadge')} />
+          <StatusBadge status="posted" label={t("counts.detail.postedBadge")} />
         ) : (
-          <span className="text-xs text-slate-500">
-            {t('counts.detail.unpostedBadge')}
-          </span>
+          <span className="text-xs text-slate-500">{t("counts.detail.unpostedBadge")}</span>
         ),
     },
-  ]
-  const lineColumns = allLineColumns.filter(column=>!(header.blind && !["review","posted"].includes(header.status) && ["expected","variance"].includes(column.key)))
+  ];
+  const lineColumns = allLineColumns.filter(
+    (column) =>
+      !(
+        header.blind &&
+        !["review", "posted"].includes(header.status) &&
+        ["expected", "variance"].includes(column.key)
+      ),
+  );
 
   return (
     <div className="space-y-5 p-1">
@@ -899,52 +998,67 @@ function CountDetailBody({
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
         <StatusBadge status={header.status} label={t(`counts.statusNames.${header.status}`)} />
         <span className="tabular-nums">{header.countedOn}</span>
-        <span>{header.locationName ?? ''}</span>
-        <span className="text-slate-500">{header.subsidiaryName ?? ''}</span>
-        {header.memo ? (
-          <span className="text-slate-500">{header.memo}</span>
-        ) : null}
+        <span>{header.locationName ?? ""}</span>
+        <span className="text-slate-500">{header.subsidiaryName ?? ""}</span>
+        {header.memo ? <span className="text-slate-500">{header.memo}</span> : null}
       </div>
-      {header.status === 'review' ? (
+      {header.status === "review" ? (
         <ApprovalActions subjectKind="stock_count" subjectId={header.id} />
       ) : null}
       {canPost ? (
         <div className="flex flex-wrap items-center gap-2">
-          {header.status === 'draft' ? (
-            <Button size="sm" disabled={busy} onClick={() => void run(t('counts.actions.start'), { action: 'start' })}>
-              {t('counts.actions.start')}
+          {header.status === "draft" ? (
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => void run(t("counts.actions.start"), { action: "start" })}
+            >
+              {t("counts.actions.start")}
             </Button>
           ) : null}
-          {header.status === 'counting' ? (
-            <Button size="sm" disabled={busy} onClick={() => void run(t('counts.actions.submit'), { action: 'submit' })}>
-              {t('counts.actions.submit')}
+          {header.status === "counting" ? (
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => void run(t("counts.actions.submit"), { action: "submit" })}
+            >
+              {t("counts.actions.submit")}
             </Button>
           ) : null}
-          {header.status === 'review' ? (
+          {header.status === "review" ? (
             <>
               <Button
                 size="sm"
                 disabled={busy}
                 onClick={() => {
                   const foundUnitCosts = Object.fromEntries(
-                    Object.entries(foundCosts).map(([lineId, cost]) => [lineId, cost.trim()]).filter(([, cost]) => cost !== ''),
-                  )
-                  void run(t('counts.actions.post'), Object.keys(foundUnitCosts).length ? { action: 'post', foundUnitCosts } : { action: 'post' })
+                    Object.entries(foundCosts)
+                      .map(([lineId, cost]) => [lineId, cost.trim()])
+                      .filter(([, cost]) => cost !== ""),
+                  );
+                  void run(
+                    t("counts.actions.post"),
+                    Object.keys(foundUnitCosts).length
+                      ? { action: "post", foundUnitCosts }
+                      : { action: "post" },
+                  );
                 }}
               >
-                {t('counts.actions.post')}
+                {t("counts.actions.post")}
               </Button>
               <Button
                 size="sm"
                 variant="secondary"
                 disabled={busy}
-                onClick={() => void run(t('counts.actions.return'), { action: 'return' })}
+                onClick={() => void run(t("counts.actions.return"), { action: "return" })}
               >
-                {t('counts.actions.return')}
+                {t("counts.actions.return")}
               </Button>
             </>
           ) : null}
-          {header.status === 'draft' || header.status === 'counting' || header.status === 'review' ? (
+          {header.status === "draft" ||
+          header.status === "counting" ||
+          header.status === "review" ? (
             <>
               <span className="inline-flex items-center gap-1">
                 <DateField
@@ -957,18 +1071,20 @@ function CountDetailBody({
                   size="sm"
                   variant="secondary"
                   disabled={busy || !countDate || countDate === header.countedOn}
-                  onClick={() => void run(t('counts.actions.setDate'), { action: 'setDate', date: countDate })}
+                  onClick={() =>
+                    void run(t("counts.actions.setDate"), { action: "setDate", date: countDate })
+                  }
                 >
-                  {t('counts.actions.setDate')}
+                  {t("counts.actions.setDate")}
                 </Button>
               </span>
               <Button
                 size="sm"
                 variant="secondary"
                 disabled={busy}
-                onClick={() => void run(t('counts.actions.cancel'), { action: 'cancel' })}
+                onClick={() => void run(t("counts.actions.cancel"), { action: "cancel" })}
               >
-                {t('counts.actions.cancel')}
+                {t("counts.actions.cancel")}
               </Button>
             </>
           ) : null}
@@ -980,23 +1096,29 @@ function CountDetailBody({
         </p>
       ) : null}
       {execution.task ? (
-        <DirectedExecutionForm key={execution.task.id} task={execution.task} busy={execution.busy}
-        error={execution.error} onConfirm={execution.confirm} onBack={execution.clear}/>
+        <DirectedExecutionForm
+          key={execution.task.id}
+          task={execution.task}
+          busy={execution.busy}
+          error={execution.error}
+          onConfirm={execution.confirm}
+          onBack={execution.clear}
+        />
       ) : (
         <PagedTable
-        source="inventory_count_lines"
-        rows={lines}
-        columns={lineColumns}
-        searchable
-        empty={t('counts.detail.noLines')}
-        rowKey={(l) => l.id}
-      />
+          source="inventory_count_lines"
+          rows={lines}
+          columns={lineColumns}
+          searchable
+          empty={t("counts.detail.noLines")}
+          rowKey={(l) => l.id}
+        />
       )}
-      {header.status === 'posted' || header.status === 'cancelled' ? (
+      {header.status === "posted" || header.status === "cancelled" ? (
         <Button size="sm" variant="secondary" onClick={onDone}>
-          {t('counts.actions.close')}
+          {t("counts.actions.close")}
         </Button>
       ) : null}
     </div>
-  )
+  );
 }
