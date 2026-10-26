@@ -91,7 +91,14 @@ export function WindowedGroups({
   const root = useRef<HTMLDivElement>(null)
   const heights = useRef(new Map<string, number>())
   const sectionPx = useRef(ESTIMATED_SECTION_PX)
-  const [range, setRange] = useState({ start: 0, end: initialEnd(groups) })
+  // The window and the heights of the sections outside it, held in state so
+  // the spacers render from values computed outside render.
+  const [range, setRange] = useState(() => {
+    const end = initialEnd(groups)
+    let after = 0
+    for (let index = end; index < groups.length; index++) after += ESTIMATED_SECTION_PX + rowCount(groups[index]!) * ESTIMATED_ROW_PX
+    return { start: 0, end, before: 0, after }
+  })
   const [printing, setPrinting] = useState(false)
 
   const estimate = useCallback(
@@ -137,7 +144,16 @@ export function WindowedGroups({
       offset += height
     }
     if (start === groups.length) start = Math.max(0, groups.length - 1)
-    setRange((current) => (current.start === start && current.end === end ? current : { start, end: Math.max(start + 1, end) }))
+    end = Math.max(start + 1, end)
+    let before = 0
+    for (let index = 0; index < start; index++) before += estimate(groups[index]!)
+    let after = 0
+    for (let index = end; index < groups.length; index++) after += estimate(groups[index]!)
+    setRange((current) =>
+      current.start === start && current.end === end && current.before === before && current.after === after
+        ? current
+        : { start, end, before, after },
+    )
   }, [estimate, groups])
 
   useEffect(() => {
@@ -170,20 +186,15 @@ export function WindowedGroups({
 
   const start = printing ? 0 : range.start
   const end = printing ? groups.length : range.end
-  const spacer = (from: number, to: number) => {
-    let height = 0
-    for (let index = from; index < to; index++) height += estimate(groups[index]!)
-    return height
-  }
   return (
     <div ref={root} className={className}>
-      <div aria-hidden="true" style={{ height: spacer(0, start) }} />
+      <div aria-hidden="true" style={{ height: printing ? 0 : range.before }} />
       {groups.slice(start, end).map((group) => (
         <div key={group.key} data-section-key={group.key} className={itemClassName}>
           <Section blocks={blocks} group={group} />
         </div>
       ))}
-      <div aria-hidden="true" style={{ height: spacer(end, groups.length) }} />
+      <div aria-hidden="true" style={{ height: printing ? 0 : range.after }} />
     </div>
   )
 }

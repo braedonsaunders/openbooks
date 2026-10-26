@@ -48,8 +48,9 @@ export function VirtualReportRows({
 }) {
   const topSpacer = useRef<HTMLTableRowElement>(null)
   const bottomSpacer = useRef<HTMLTableRowElement>(null)
-  const rowPx = useRef(ESTIMATED_ROW_PX)
-  const [range, setRange] = useState({ start: 0, end: Math.min(rows.length, FIRST_WINDOW) })
+  // The window and the row height measured with it; the spacers render from
+  // these, so a new measurement re-renders them.
+  const [range, setRange] = useState({ start: 0, end: Math.min(rows.length, FIRST_WINDOW), rowPx: ESTIMATED_ROW_PX })
   const [printing, setPrinting] = useState(false)
 
   const update = useCallback(() => {
@@ -64,12 +65,12 @@ export function VirtualReportRows({
       // measured row height for every row not rendered.
       const rendered = current.end - current.start
       const span = bottom.getBoundingClientRect().top - top.getBoundingClientRect().bottom
-      if (rendered > 0 && span > 0) rowPx.current = span / rendered
+      const rowPx = rendered > 0 && span > 0 ? span / rendered : current.rowPx
       const listTop = top.getBoundingClientRect().top
       const above = viewTop - listTop
-      const start = Math.min(rows.length, Math.max(0, Math.floor(above / rowPx.current) - OVERSCAN))
-      const end = Math.min(rows.length, Math.max(start, Math.ceil((above + viewHeight) / rowPx.current) + OVERSCAN))
-      return start === current.start && end === current.end ? current : { start, end }
+      const start = Math.min(rows.length, Math.max(0, Math.floor(above / rowPx) - OVERSCAN))
+      const end = Math.min(rows.length, Math.max(start, Math.ceil((above + viewHeight) / rowPx) + OVERSCAN))
+      return start === current.start && end === current.end && rowPx === current.rowPx ? current : { start, end, rowPx }
     })
   }, [rows.length])
 
@@ -106,7 +107,7 @@ export function VirtualReportRows({
   const end = printing ? rows.length : range.end
   return (
     <>
-      <tr ref={topSpacer} aria-hidden="true" style={{ height: start * rowPx.current }}>
+      <tr ref={topSpacer} aria-hidden="true" style={{ height: start * range.rowPx }}>
         <td colSpan={columns.length} className="p-0" />
       </tr>
       {rows.slice(start, end).map((row, offset) => (
@@ -118,7 +119,7 @@ export function VirtualReportRows({
           ))}
         </TableRow>
       ))}
-      <tr ref={bottomSpacer} aria-hidden="true" style={{ height: (rows.length - end) * rowPx.current }}>
+      <tr ref={bottomSpacer} aria-hidden="true" style={{ height: (rows.length - end) * range.rowPx }}>
         <td colSpan={columns.length} className="p-0" />
       </tr>
     </>
