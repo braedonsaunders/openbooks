@@ -6,10 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Input, Label, SearchSelect, Select } from "@openbooks/ui";
-import {
-  RegisteredListTable,
-  type RegisteredListColumn,
-} from "@/components/registered-list-table";
+import { PagedTable, type PagedColumn } from "@/components/paged-table";
 import { AsyncUrlDrawer } from "@/components/async-url-drawer";
 import { JournalEntryLink } from "@/components/journal-entry-link";
 import { InventoryTrackingFields } from "@/components/inventory-tracking-fields";
@@ -243,7 +240,7 @@ export function StockControls({
       setBusy(false);
     }
   }
-  const columns: RegisteredListColumn<Row>[] = headings[view].map((key) => ({
+  const columns: PagedColumn<Row>[] = headings[view].map((key) => ({
     key,
     header: t(`columns.${key}`),
     cell: (row) => {
@@ -341,13 +338,14 @@ export function StockControls({
         </p>
       ) : null}
       <div aria-busy={loading}>
-        <RegisteredListTable
+        <PagedTable
+          prepared
           rows={rows}
           columns={columns}
           rowKey={(r) => String(r.id)}
           empty={t("empty")}
           source="inventory_stock_controls"
-          state={{ total, page: page + 1, perPage: 50 }}
+          serverWindow={{ total, page: page + 1, perPage: 50 }}
           basePath={pathname}
           currentParams={{
             ...Object.fromEntries(url.entries()),

@@ -12,7 +12,6 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
-import { RegisteredListTable, type RegisteredListColumn } from '../../../../components/registered-list-table'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { AsyncUrlDrawer } from '../../../../components/async-url-drawer'
 import { SearchInput } from '../../../../components/search-input'
@@ -212,7 +211,7 @@ export function CountsList({
     return () => controller.abort()
   }, [selectedId, detailRequestKey, t])
 
-  const columns: RegisteredListColumn<StockCountSummary>[] = [
+  const columns: PagedColumn<StockCountSummary>[] = [
     {
       key: 'date',
       header: t('counts.columns.date'),
@@ -265,13 +264,14 @@ export function CountsList({
 
   return (
     <>
-      <RegisteredListTable
+      <PagedTable
+        prepared
         source="inventory_counts"
         rows={counts}
         columns={columns}
         empty={canPost ? t('counts.empty') : t('counts.emptyViewer')}
         rowKey={(r) => r.id}
-        state={{ total: totalCount, page, perPage }}
+        serverWindow={{ total: totalCount, page, perPage }}
         basePath="/inventory"
         currentParams={countParams}
         searchable={false}
