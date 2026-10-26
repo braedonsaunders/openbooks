@@ -219,7 +219,7 @@ const mockUrls = new Map<string, string>([
   ['../../../lib/authz', 'mock:authz'],
   ['@/lib/authz', 'mock:authz'],
   ['@/lib/custom-record-report-catalog', 'mock:report-catalog'],
-  ['../../../lib/report-authz', 'mock:report-authz'],
+  ['@/lib/report-authz', 'mock:report-authz'],
 ])
 
 registerHooks({
