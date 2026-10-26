@@ -2027,6 +2027,10 @@ export async function bankBalances(asOf: string, subIds?: string[], explicitOrgI
         join journal_lines l on l.entry_id = se.id and l.org_id = ${orgId}
         left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = ${orgId}
        where l.account_id in (select id from bank_accounts)
+         -- The line's carried date keeps the bank-line side to the same
+         -- month instead of hashing every bank line ever posted.
+         and l.posting_date >= date_trunc('month', ${asOf}::date)::date
+         and l.posting_date <= ${asOf}
          ${subScope(sql`l.subsidiary_id`, subIds)}
     )
     select a.id, a.name, a.number, m.func, coalesce(sum(m.amt), 0) as balance
