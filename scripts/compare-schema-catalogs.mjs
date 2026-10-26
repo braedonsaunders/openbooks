@@ -2,6 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { MIGRATION_LEDGER_TABLES } from "./migration-baseline-catalog.mjs";
 
 const [, , actualPath, referencePath] = process.argv;
 
@@ -12,8 +13,24 @@ if (!actualPath || !referencePath) {
   process.exit(2);
 }
 
-const actual = JSON.parse(readFileSync(actualPath, "utf8"));
-const reference = JSON.parse(readFileSync(referencePath, "utf8"));
+// The migration ledger tables record an installation's own history, not
+// product schema: a release baseline retires history tables that fresh
+// installs never create, while upgraded installs keep them as evidence. Both
+// sides of the comparison drop them, exactly as baseline preparation does.
+const ledgerTables = new Set(MIGRATION_LEDGER_TABLES);
+const ownerOf = (row) =>
+  String(row.relation ?? row.table_name ?? row.tablename ?? "").replace(/^public\./, "");
+function withoutLedgerTables(catalog) {
+  return Object.fromEntries(
+    Object.entries(catalog).map(([section, rows]) => [
+      section,
+      Array.isArray(rows) ? rows.filter((row) => !ledgerTables.has(ownerOf(row))) : rows,
+    ]),
+  );
+}
+
+const actual = withoutLedgerTables(JSON.parse(readFileSync(actualPath, "utf8")));
+const reference = withoutLedgerTables(JSON.parse(readFileSync(referencePath, "utf8")));
 
 function digest(value) {
   return createHash("sha256").update(value).digest("hex");
