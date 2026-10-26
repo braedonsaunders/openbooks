@@ -1,42 +1,43 @@
-import { NextResponse } from 'next/server'
-import { makeConvertPOST } from '../../../_order/handlers'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
-import { isUuid } from '../../../../../lib/list-params'
-import { conversionWouldCopyInventoryKinds } from '../../../../../lib/order-cycle'
+import { makeConvertPOST } from "../../../_order/handlers";
+import { guardPermission, type Authz } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import { conversionWouldCopyInventoryKinds } from "@/lib/order-cycle";
 import { notFound } from "@/lib/api/responses";
-import { PURCHASE_ORDER_PERMISSIONS, purchaseOrderConversionPermission } from '@/lib/permissions'
-import { defineRoute } from '@/lib/api/route'
-import { z } from 'zod'
+import { PURCHASE_ORDER_PERMISSIONS, purchaseOrderConversionPermission } from "@/lib/permissions";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 // Reading the order opens the endpoint; the conversion target decides the
 // rest: receiving goods needs goods_receipts.create, billing needs ap.create.
 const convert = makeConvertPOST({
-  kind: 'purchase_order',
+  kind: "purchase_order",
   readPerm: PURCHASE_ORDER_PERMISSIONS.read,
   createPerm: PURCHASE_ORDER_PERMISSIONS.create,
   convertPerm: purchaseOrderConversionPermission,
-})
+});
 
-async function convertPurchaseOrder(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission(PURCHASE_ORDER_PERMISSIONS.read, 'orders')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await ctx.params
+async function convertPurchaseOrder(
+  gate: Authz,
+  req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const { id } = await ctx.params;
   // A malformed id names no uuid document: refuse it before the
   // inventory-kind probe binds it to a uuid column (raw 500 when
   // Inventory is off), the same 404 the convert handler answers.
-  if (!isUuid(id)) return notFound("record")
+  if (!isUuid(id)) return notFound("record");
   if (await conversionWouldCopyInventoryKinds(gate.user.orgId, id)) {
-    return notFound("record")
+    return notFound("record");
   }
-  return convert(req, ctx)
+  return convert(req, ctx);
 }
 
 export const POST = defineRoute({
-  authorize: () => guardFeaturePermission(PURCHASE_ORDER_PERMISSIONS.read, 'orders'),
-  feature: { none: 'Purchase-order conversion is guarded by purchase_orders.read and the orders feature before dispatch; the target kind decides its own grant.' },
+  authorize: () => guardPermission(PURCHASE_ORDER_PERMISSIONS.read),
+  feature: "orders",
   params: z.object({ id: z.string() }),
-  handler: async ({ request, params }) => convertPurchaseOrder(request, { params: Promise.resolve(params) }),
-})
+  handler: async ({ request, params, authz }) =>
+    convertPurchaseOrder(authz, request, { params: Promise.resolve(params) }),
+});
