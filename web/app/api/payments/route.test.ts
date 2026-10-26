@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { stubModules } from "../../../testing/stub-modules";
 import test from "node:test";
 
@@ -69,23 +70,14 @@ const state: RouteState = {
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
-  if (!Array.isArray(chunks)) return "";
-  return chunks
-    .map((chunk) => {
-      if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
-      if (Array.isArray(value)) return value.map(String).join("");
-      return (chunk as { queryChunks?: unknown[] })?.queryChunks
-        ? sqlText(chunk)
-        : "";
-    })
-    .join("");
+  const compiled = new PgDialect().sqlToQuery(query as never);
+  return compiled.sql.replace(/\$(\d+)/g, (_placeholder, index: string) => {
+    const value = compiled.params[Number(index) - 1];
+    return typeof value === "string" ? `'${value.replaceAll("'", "''")}'` : String(value);
+  });
 }
 
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksPaymentsSqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksPaymentsSqlText = sqlText;
 
 stubModules({
   navigation: false,
@@ -342,7 +334,11 @@ test("serial retries of the same key allocate the number exactly once", async ()
 
 test("unauthenticated callers are refused before any schema is evaluated", async () => {
   reset();
-  const response = await post("00000000-0000-4000-8000-00000000d012", { kind: "bogus" }, { authenticated: false });
+  const response = await post(
+    "00000000-0000-4000-8000-00000000d012",
+    { kind: "bogus" },
+    { authenticated: false },
+  );
   assert.equal(response.status, 401);
   assert.deepEqual(await response.json(), { error: "unauthorized" });
   assert.equal(state.transactionQueries.length, 0, "no database work may precede authentication");
@@ -351,7 +347,10 @@ test("unauthenticated callers are refused before any schema is evaluated", async
 test("a kind without its permission is refused", async () => {
   reset();
   state.permissions = ["ap.pay"];
-  const response = await post("00000000-0000-4000-8000-00000000d013", { ...SIMPLE, kind: "customer_payment" });
+  const response = await post("00000000-0000-4000-8000-00000000d013", {
+    ...SIMPLE,
+    kind: "customer_payment",
+  });
   assert.equal(response.status, 403);
   assert.deepEqual(await response.json(), { error: "missing permission: ar.pay" });
 });
@@ -377,7 +376,9 @@ test("a foreign party and a foreign bank account are refused", async () => {
   state.bankExists = false;
   const foreignBank = await post("00000000-0000-4000-8000-00000000d015", SIMPLE);
   assert.equal(foreignBank.status, 404);
-  assert.deepEqual(await foreignBank.json(), { error: "payment funding account not found in this organization" });
+  assert.deepEqual(await foreignBank.json(), {
+    error: "payment funding account not found in this organization",
+  });
 
   assert.equal(state.sequenceAllocations, 0, "no number may be allocated for refused references");
 });
@@ -445,11 +446,14 @@ test("a key minted in another org cannot claim the row", async () => {
   assert.deepEqual(await claimed.json(), { error: "invalid_idempotency_key" });
 });
 
-
 test("payment creation forwards explicit zero authority evidence and binds it to replay identity", async () => {
   reset();
   const key = "00000000-0000-4000-8000-00000000d040";
-  const request = { ...SIMPLE, withholdingAuthorisation: "ROS-DA-1", withholdingAuthorisedAmount: "0" };
+  const request = {
+    ...SIMPLE,
+    withholdingAuthorisation: "ROS-DA-1",
+    withholdingAuthorisedAmount: "0",
+  };
   assert.equal((await post(key, request)).status, 201);
   assert.equal(state.savedPatch?.withholdingAuthorisation, "ROS-DA-1");
   assert.equal(state.savedPatch?.withholdingAuthorisedAmount, "0.0000");
@@ -466,7 +470,10 @@ test("payment creation refuses inexact authority amounts and overlong references
     { withholdingAuthorisation: "R".repeat(101) },
   ]) {
     reset();
-    assert.equal((await post("00000000-0000-4000-8000-00000000d041", { ...SIMPLE, ...evidence })).status, 422);
+    assert.equal(
+      (await post("00000000-0000-4000-8000-00000000d041", { ...SIMPLE, ...evidence })).status,
+      422,
+    );
     assert.equal(state.sequenceAllocations, 0);
     assert.equal(state.savedPatch, null);
   }
