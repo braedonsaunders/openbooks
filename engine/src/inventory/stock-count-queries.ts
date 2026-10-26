@@ -65,7 +65,18 @@ export interface StockCountListPage {
 
 const LIST_ORDER = sql`c.counted_on desc, c.created_at desc, c.id`;
 
-function subsidiaryScope(subsidiaryIds: readonly string[] | null | undefined): ReturnType<typeof sql> {
+/** Resolve the owning entity used by the stock-count API boundary. */
+export async function stockCountSubsidiary(orgId: string, countId: string): Promise<string | null> {
+  const rows = await db.execute<{ subsidiary_id: string }>(
+    sql`select subsidiary_id from stock_counts where id = ${countId} and org_id = ${orgId}`,
+    "objects",
+  );
+  return rows[0]?.subsidiary_id ?? null;
+}
+
+function subsidiaryScope(
+  subsidiaryIds: readonly string[] | null | undefined,
+): ReturnType<typeof sql> {
   if (subsidiaryIds == null) return sql``;
   return sql`and c.subsidiary_id = any(${uuidArray(subsidiaryIds)}::uuid[])`;
 }
@@ -81,19 +92,31 @@ function parseListCursor(cursor: string): ListCursor {
   try {
     parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
   } catch {
-    throw new InventoryError("stock count page cursor is invalid — reload the list from the first page");
+    throw new InventoryError(
+      "stock count page cursor is invalid — reload the list from the first page",
+    );
   }
   const p = parsed as Partial<ListCursor>;
-  if (typeof p?.countedOn !== "string" || typeof p?.createdAt !== "string" || typeof p?.id !== "string") {
-    throw new InventoryError("stock count page cursor is invalid — reload the list from the first page");
+  if (
+    typeof p?.countedOn !== "string" ||
+    typeof p?.createdAt !== "string" ||
+    typeof p?.id !== "string"
+  ) {
+    throw new InventoryError(
+      "stock count page cursor is invalid — reload the list from the first page",
+    );
   }
   return { countedOn: p.countedOn, createdAt: p.createdAt, id: p.id };
 }
 
-export async function listStockCounts(orgId: string, query: StockCountListQuery = {}): Promise<StockCountListPage> {
+export async function listStockCounts(
+  orgId: string,
+  query: StockCountListQuery = {},
+): Promise<StockCountListPage> {
   const wanted = Math.floor(Number(query.limit ?? 500));
   const limit = Number.isFinite(wanted) ? Math.min(Math.max(wanted, 1), 500) : 500;
-  const page = query.page == null ? null : Math.min(Math.max(Math.floor(Number(query.page)) || 1, 1), 10_000);
+  const page =
+    query.page == null ? null : Math.min(Math.max(Math.floor(Number(query.page)) || 1, 1), 10_000);
   const search = query.search?.trim();
   if (query.subsidiaryIds != null && query.subsidiaryIds.length === 0) {
     return { counts: [], totalCount: 0, nextCursor: null };
@@ -114,9 +137,14 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
       )`
     : sql``;
   const from = sql`from stock_counts c left join locations l on l.org_id = c.org_id and l.id = c.location_id`;
-  const count = (await db.execute<{ n: string }>(sql`
-    select count(*)::text as n ${from} where c.org_id = ${orgId} ${scope} ${searchScope}`, "objects"))[0]!.n;
-  const r = (await db.execute<{
+  const count = (
+    await db.execute<{ n: string }>(
+      sql`
+    select count(*)::text as n ${from} where c.org_id = ${orgId} ${scope} ${searchScope}`,
+      "objects",
+    )
+  )[0]!.n;
+  const r = await db.execute<{
     id: string;
     status: string;
     location_id: string;
@@ -127,7 +155,8 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
     line_count: string;
     uncounted_count: string;
     discrepant_count: string;
-  }>(sql`
+  }>(
+    sql`
     select c.id, c.status, c.location_id, l.name as location_name,
            c.counted_on::text, c.created_at::text, c.memo,
            (select count(*)::text from stock_count_lines l
@@ -142,7 +171,9 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
      where c.org_id = ${orgId} ${scope} ${searchScope} ${cursorScope}
      order by ${LIST_ORDER}
      limit ${page == null ? limit + 1 : limit}
-     ${page == null ? sql`` : sql`offset ${(page - 1) * limit}`}`, "objects"));
+     ${page == null ? sql`` : sql`offset ${(page - 1) * limit}`}`,
+    "objects",
+  );
   const hasMore = page == null && r.length > limit;
   const rows = hasMore ? r.slice(0, limit) : r;
   const last = rows[rows.length - 1];
@@ -161,12 +192,14 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
     totalCount: Number(count),
     nextCursor:
       hasMore && last
-        ? Buffer.from(JSON.stringify({ countedOn: last.counted_on, createdAt: last.created_at, id: last.id })).toString("base64url")
+        ? Buffer.from(
+            JSON.stringify({ countedOn: last.counted_on, createdAt: last.created_at, id: last.id }),
+          ).toString("base64url")
         : null,
   };
 }
 
-export interface StockCountLineDetail extends Omit<CountLine,"expectedQuantity"> {
+export interface StockCountLineDetail extends Omit<CountLine, "expectedQuantity"> {
   expectedQuantity: string | null;
   serialNumber: string | null;
   secondCountRequired: boolean;
@@ -200,10 +233,15 @@ export async function getStockCountDetail(
     if (allowedSubsidiaryIds !== null && !allowedSubsidiaryIds.has(header.subsidiaryId)) {
       throw new InventoryNotFoundError("not_found");
     }
-    const names = (await db.execute<{ location_name: string | null; subsidiary_name: string | null }>(sql`
+    const names = (
+      await db.execute<{ location_name: string | null; subsidiary_name: string | null }>(
+        sql`
       select (select name from locations where org_id = ${orgId} and id = ${header.locationId}) as location_name,
-             (select name from subsidiaries where org_id = ${orgId} and id = ${header.subsidiaryId}) as subsidiary_name`, "objects"))[0];
-    const r = (await db.execute<{
+             (select name from subsidiaries where org_id = ${orgId} and id = ${header.subsidiaryId}) as subsidiary_name`,
+        "objects",
+      )
+    )[0];
+    const r = await db.execute<{
       id: string;
       item_id: string;
       stock_location_id: string;
@@ -220,7 +258,8 @@ export async function getStockCountDetail(
       item_name: string | null;
       stock_location_code: string | null;
       lot_number: string | null;
-    }>(sql`
+    }>(
+      sql`
       select l.id, l.item_id, l.stock_location_id, l.lot_id, l.serial_id, l.first_counted_quantity::text, l.second_counted_quantity::text, l.variance_tolerance::text,
              (select serial_number from serials where org_id=${orgId} and id=l.serial_id) as serial_number,
              l.expected_quantity::text, l.counted_quantity::text, l.adjustment_movement_id,
@@ -230,7 +269,9 @@ export async function getStockCountDetail(
              (select lot_number from lots where org_id = ${orgId} and id = l.lot_id) as lot_number
         from stock_count_lines l
        where l.org_id = ${orgId} and l.stock_count_id = ${header.id}
-       order by item_code nulls last, stock_location_code nulls last, l.id`, "objects"));
+       order by item_code nulls last, stock_location_code nulls last, l.id`,
+      "objects",
+    );
     return {
       header: {
         ...header,
@@ -244,16 +285,28 @@ export async function getStockCountDetail(
         lotId: row.lot_id,
         serialId: row.serial_id,
         serialNumber: row.serial_number,
-        secondCountRequired: requiresSecondCount(row.expected_quantity,row.first_counted_quantity,row.variance_tolerance) && row.second_counted_quantity===null,
+        secondCountRequired:
+          requiresSecondCount(
+            row.expected_quantity,
+            row.first_counted_quantity,
+            row.variance_tolerance,
+          ) && row.second_counted_quantity === null,
         secondCountedQuantity: row.second_counted_quantity,
-        expectedQuantity: header.blind && !["review","posted"].includes(header.status) ? null : row.expected_quantity,
+        expectedQuantity:
+          header.blind && !["review", "posted"].includes(header.status)
+            ? null
+            : row.expected_quantity,
         countedQuantity: row.counted_quantity,
         adjustmentMovementId: row.adjustment_movement_id,
         itemCode: row.item_code,
         itemName: row.item_name,
         stockLocationCode: row.stock_location_code,
         lotNumber: row.lot_number,
-        variance: row.counted_quantity === null || (header.blind && !["review","posted"].includes(header.status)) ? null : add(row.counted_quantity, neg(row.expected_quantity)),
+        variance:
+          row.counted_quantity === null ||
+          (header.blind && !["review", "posted"].includes(header.status))
+            ? null
+            : add(row.counted_quantity, neg(row.expected_quantity)),
       })),
     };
   });
