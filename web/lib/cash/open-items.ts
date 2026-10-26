@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { activePostingPrimaryBookId } from '@openbooks/engine/platform/database'
+import { ambientTenantOrgId, pinnedTransactionExecutor } from '@openbooks/engine/platform/db'
 import { analyticsQuery } from '../analytics/query'
 import { mulDecimal } from '@openbooks/engine/money'
 // Relative (not the bare workspace specifier): worktree node_modules resolves
@@ -104,7 +105,39 @@ export async function openItemSourceQuery(
   `
 }
 
-export async function openItems(
+/**
+ * Identical reads already in flight share one execution. Every tile, cockpit
+ * and forecast that opens at once asks for the same population; running each
+ * copy separately makes them contend for the same pages until all of them
+ * time out. Only in-flight work is shared: a call that starts after the
+ * shared read settles runs fresh, so nothing is served from a stale result.
+ * The key carries every argument that shapes the rows — organization,
+ * side, as-of date, subsidiary scope and party — plus the caller's tenant
+ * context, so a read never answers for a different tenant or authorization
+ * scope. Reads inside a transaction never share: they must see that
+ * transaction's own writes.
+ */
+const inFlight = new Map<string, Promise<OpenItem[]>>()
+
+export function openItems(
+  orgId: string,
+  side: Side,
+  asOf: string,
+  subIds?: string[],
+  partyId?: string,
+): Promise<OpenItem[]> {
+  if (pinnedTransactionExecutor()) return readOpenItems(orgId, side, asOf, subIds, partyId)
+  const key = JSON.stringify([ambientTenantOrgId(), orgId, side, asOf, subIds ? [...subIds].sort() : null, partyId ?? null])
+  let read = inFlight.get(key)
+  if (!read) {
+    read = readOpenItems(orgId, side, asOf, subIds, partyId).finally(() => inFlight.delete(key))
+    inFlight.set(key, read)
+  }
+  // Each caller owns its rows: forecasts annotate and reorder them.
+  return read.then((items) => items.map((item) => ({ ...item })))
+}
+
+async function readOpenItems(
   orgId: string,
   side: Side,
   asOf: string,

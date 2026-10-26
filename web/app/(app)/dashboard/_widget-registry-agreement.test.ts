@@ -79,7 +79,7 @@ const metricFieldIds = literalKeys(metrics, 'const WIDGET_METRIC_FIELDS')
 const domainViews = readdirSync(new URL('.', import.meta.url))
   .filter((name) => /^_widget-views-[a-z]+\.tsx$/.test(name))
   .map((name) => read(`./${name}`))
-const renderCases = [views, ...domainViews].flatMap((source) => [...source.matchAll(/^\s*case '([^']+)'/gm)].map((m) => m[1]!))
+const renderCases = [views, ...domainViews].flatMap((source) => [...source.matchAll(/^\s*case (['"])([^'"]+)\1/gm)].map((m) => m[2]!))
 
 /**
  * Tiles the grid renders itself instead of through `WidgetCard`.
@@ -138,8 +138,8 @@ test('every widget names dashboard-catalog copy that exists in English', () => {
     }
   }
   walk(en, [])
-  const labelKeys = [...registry.matchAll(/labelKey: '([^']+)'/g)].map((m) => m[1]!)
-  const descriptionKeys = [...registry.matchAll(/descriptionKey: '([^']+)'/g)].map((m) => m[1]!)
+  const labelKeys = [...registry.matchAll(/labelKey: (['"])([^'"]+)\1/g)].map((m) => m[2]!)
+  const descriptionKeys = [...registry.matchAll(/descriptionKey: (['"])([^'"]+)\1/g)].map((m) => m[2]!)
   // dashboard.quickActions.title is namespaced outside widgets.* — resolve
   // through the catalog the same way the component does.
   const missing = [...labelKeys, ...descriptionKeys].filter((key) => {

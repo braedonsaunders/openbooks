@@ -161,6 +161,20 @@ export function MetricTile({
   return <div className={shell}>{inner}</div>
 }
 
+/** A tile whose figures are still loading: the card's outline, quietly pulsing. */
+export function WidgetSkeleton() {
+  return (
+    <div aria-hidden className="flex h-full animate-pulse flex-col gap-3 rounded-2xl border border-slate-200/90 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-center gap-2.5">
+        <span className="h-7 w-7 rounded-xl bg-slate-100 dark:bg-slate-800" />
+        <span className="h-3 w-28 rounded bg-slate-100 dark:bg-slate-800" />
+      </div>
+      <div className="min-h-0 flex-1" />
+      <span className="h-6 w-24 rounded bg-slate-100 dark:bg-slate-800" />
+    </div>
+  )
+}
+
 /** An empty card's body: what the card would list, said plainly; a bare dash where no statement fits. */
 export function EmptyRow({ children }: { children?: ReactNode }) {
   return (

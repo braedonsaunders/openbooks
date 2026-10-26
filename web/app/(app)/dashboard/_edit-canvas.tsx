@@ -2,7 +2,7 @@ import 'server-only'
 import { getLocale } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
-import type React from 'react'
+import { Suspense, type ReactNode } from 'react'
 import type { DashboardLayoutData } from '@openbooks/schema'
 import type { Authz } from '@/lib/authz'
 import { insightVisibilitySql } from '@/lib/insight-access'
@@ -10,8 +10,9 @@ import { getAuthz, can } from '@/lib/authz'
 import { isUuid } from '@/lib/list-params'
 import { WIDGETS, isSpotlightWidget } from './_widget-registry'
 import { AnalyticsWidgetPreview, WidgetCard } from './_widget-views'
+import { WidgetSkeleton } from './_widget-tiles'
 import type { AllowedWidgetIds } from './widget-features'
-import { loadDashboardMetrics, pruneDashboardMetrics } from './_metrics'
+import { EMPTY_DASHBOARD_METRICS, loadDashboardMetrics, pruneDashboardMetrics, widgetReadsMetrics } from './_metrics'
 import type { DashboardMetrics } from './_metrics'
 import { CardTile, type CardTileData } from '../insights/CardTile'
 import type { InsightQuery, VizSettings, VizType } from '@openbooks/analytics'
@@ -34,7 +35,7 @@ export async function loadDashboardApps(authz: Authz): Promise<DashboardApp[]> {
     }))
 }
 
-function appWidgetNodes(apps: DashboardApp[], widgetIds?: readonly string[]): Record<string, React.ReactNode> {
+function appWidgetNodes(apps: DashboardApp[], widgetIds?: readonly string[]): Record<string, ReactNode> {
   const requested = widgetIds ? new Set(widgetIds.map(appKeyFromWidgetId).filter((key): key is string => !!key)) : null
   return Object.fromEntries(
     apps
@@ -58,7 +59,7 @@ export async function loadPublishedInsightCards(orgId: string): Promise<LibraryC
 async function loadInsightCardNodes(
   authz: Authz,
   widgetIds: string[],
-): Promise<Record<string, React.ReactNode>> {
+): Promise<Record<string, ReactNode>> {
   const orgId = authz.user.orgId
   const uuidIds = widgetIds.filter((id) => isUuid(id))
   if (uuidIds.length === 0) return {}
@@ -75,7 +76,7 @@ async function loadInsightCardNodes(
      where org_id = ${orgId} and id = any(${`{${uuidIds.join(',')}}`}::uuid[])
        and status = 'published' and ${insightVisibilitySql(authz)}
   `, 'objects')
-  const nodes: Record<string, React.ReactNode> = {}
+  const nodes: Record<string, ReactNode> = {}
   for (const row of res) {
     const data: CardTileData = {
       id: row.id,
@@ -86,6 +87,54 @@ async function loadInsightCardNodes(
       vizSettings: row.viz_settings ?? {},
     }
     nodes[row.id] = <CardTile key={row.id} card={data} />
+  }
+  return nodes
+}
+
+/**
+ * Tiles drawing on one Analytics dashboard share that dashboard's reader
+ * context, so they load together; every other tile loads on its own.
+ */
+function metricGroups(ids: readonly string[]): string[][] {
+  const groups = new Map<string, string[]>()
+  for (const id of ids) {
+    const source = WIDGETS[id]?.analyticsSource
+    const key = source ? `analytics:${source}` : `tile:${id}`
+    groups.set(key, [...(groups.get(key) ?? []), id])
+  }
+  return [...groups.values()]
+}
+
+async function MeteredWidget({ widgetId, metrics }: { widgetId: string; metrics: Promise<DashboardMetrics> }) {
+  // Each widget card is a client component: hand it only the metric fields
+  // it renders, never the whole org-wide metrics object.
+  return <WidgetCard widgetId={widgetId} data={pruneDashboardMetrics(await metrics, [widgetId])} />
+}
+
+/**
+ * Registry tile nodes that stream independently. Every group's read starts
+ * now, and each tile renders as soon as its own group settles, so one slow
+ * reader never holds the whole dashboard. Tiles that read no server metrics
+ * (spotlights fetch their own projection) render at once.
+ */
+function streamedWidgetNodes(authz: Authz, ids: readonly string[], locale: string): Record<string, ReactNode> {
+  const nodes: Record<string, ReactNode> = {}
+  const metered = ids.filter(widgetReadsMetrics)
+  for (const id of ids) {
+    if (!widgetReadsMetrics(id)) nodes[id] = <WidgetCard key={id} widgetId={id} data={EMPTY_DASHBOARD_METRICS} />
+  }
+  for (const group of metricGroups(metered)) {
+    const metrics = loadDashboardMetrics(authz, group, undefined, locale)
+    // The tile awaiting this read reports its failure; this only keeps an
+    // early rejection from surfacing as unhandled before that tile renders.
+    metrics.catch(() => undefined)
+    for (const id of group) {
+      nodes[id] = (
+        <Suspense key={id} fallback={<WidgetSkeleton />}>
+          <MeteredWidget widgetId={id} metrics={metrics} />
+        </Suspense>
+      )
+    }
   }
   return nodes
 }
@@ -101,7 +150,7 @@ export async function loadDashboardView(
    * insight-card UUIDs and app tiles keep resolving through canSeeWidget.
    */
   allowedWidgetIds: AllowedWidgetIds,
-): Promise<{ nodes: Record<string, React.ReactNode> }> {
+): Promise<{ nodes: Record<string, ReactNode> }> {
   // The layout arriving here is already filtered by the slot on this same
   // set, but the allowedWidgetIds check below is the enforcement point —
   // derive the loader's query set from exactly the ids that survive it, so
@@ -110,25 +159,15 @@ export async function loadDashboardView(
   // Week labels on the forecast chart localize to the request locale — the
   // position reader defaults to en-US without one.
   const locale = await getLocale()
-  const [metrics, cardNodes, apps] = await Promise.all([
-    loadDashboardMetrics(authz, visibleIds, undefined, locale),
+  const tiles = streamedWidgetNodes(authz, visibleIds, locale)
+  const [cardNodes, apps] = await Promise.all([
     loadInsightCardNodes(authz, layout.widgets.map((w) => w.id)),
     layout.widgets.some(widget => appKeyFromWidgetId(widget.id)) ? loadDashboardApps(authz) : Promise.resolve([]),
   ])
 
-  const nodes: Record<string, React.ReactNode> = {}
+  const nodes: Record<string, ReactNode> = {}
   for (const w of layout.widgets) {
-    if (w.id in WIDGETS && allowedWidgetIds.has(w.id)) {
-      // Each widget card is a client component: hand it only the metric
-      // fields it renders, never the whole org-wide metrics object.
-      nodes[w.id] = (
-        <WidgetCard
-          key={w.id}
-          widgetId={w.id}
-          data={pruneDashboardMetrics(metrics, [w.id])}
-        />
-      )
-    }
+    if (tiles[w.id] !== undefined) nodes[w.id] = tiles[w.id]
   }
   Object.assign(nodes, cardNodes)
   Object.assign(nodes, appWidgetNodes(apps, layout.widgets.map((widget) => widget.id)))
@@ -149,7 +188,7 @@ export async function loadDashboardEditCanvas(
     allowedWidgetIds: AllowedWidgetIds
   },
 ): Promise<{
-  nodes: Record<string, React.ReactNode>
+  nodes: Record<string, ReactNode>
   libraryCards: LibraryCard[]
   apps: DashboardApp[]
 }> {
@@ -163,8 +202,8 @@ export async function loadDashboardEditCanvas(
   const previewIds = Object.keys(WIDGETS).filter((id) => widgetAllowed(id) && placed.has(id))
   const previewSet = new Set(previewIds)
   const previewLocale = await getLocale()
-  const [data, libraryCards, placedCardNodes, apps] = await Promise.all([
-    loadDashboardMetrics(authz, previewIds, undefined, previewLocale),
+  const placedTiles = streamedWidgetNodes(authz, previewIds, previewLocale)
+  const [libraryCards, placedCardNodes, apps] = await Promise.all([
     canUseInsights ? loadPublishedInsightCards(authz.user.orgId) : Promise.resolve([] as LibraryCard[]),
     loadInsightCardNodes(
       authz,
@@ -173,22 +212,16 @@ export async function loadDashboardEditCanvas(
     loadDashboardApps(authz),
   ])
 
-  const nodes: Record<string, React.ReactNode> = {}
+  const nodes: Record<string, ReactNode> = {}
   for (const id of Object.keys(WIDGETS)) {
     if (!widgetAllowed(id)) continue
     if (!previewSet.has(id)) {
       // Spotlights read their own projection, so an unsaved one previews live.
-      if (isSpotlightWidget(id)) nodes[id] = <WidgetCard key={id} widgetId={id} data={pruneDashboardMetrics(data, [id])} />
+      if (isSpotlightWidget(id)) nodes[id] = <WidgetCard key={id} widgetId={id} data={EMPTY_DASHBOARD_METRICS} />
       else if (WIDGETS[id]!.analyticsSource) nodes[id] = <AnalyticsWidgetPreview key={id} widgetId={id} />
       continue
     }
-    nodes[id] = (
-      <WidgetCard
-        key={id}
-        widgetId={id}
-        data={pruneDashboardMetrics(data, [id])}
-      />
-    )
+    nodes[id] = placedTiles[id]
   }
   Object.assign(nodes, placedCardNodes)
   Object.assign(nodes, appWidgetNodes(apps))

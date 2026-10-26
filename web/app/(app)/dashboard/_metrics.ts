@@ -1174,6 +1174,14 @@ const EMPTY_METRICS: DashboardMetrics = {
   ...EMPTY_ANALYTICS_WIDGET_METRICS,
 }
 
+/** The metrics a tile that reads no server figures receives: every field empty. */
+export const EMPTY_DASHBOARD_METRICS: DashboardMetrics = EMPTY_METRICS
+
+/** Whether a tile renders server-read figures at all; tiles that fetch their own data do not. */
+export function widgetReadsMetrics(widgetId: string): boolean {
+  return (WIDGET_METRIC_FIELDS[widgetId]?.length ?? 0) > 0
+}
+
 /**
  * Server-side payload minimisation: return a DashboardMetrics carrying only
  * the fields the given widgets render, with everything else zeroed/emptied,
