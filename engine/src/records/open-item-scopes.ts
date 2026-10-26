@@ -134,7 +134,7 @@ export function openItemsAsOfSql(scope: OpenItemsAsOfScope): SQL {
     : sql`((${kind} = ${scope.creditKind} and ${amount} > 0) or (${kind} <> ${scope.creditKind} and ${amount} < 0))`;
   const live = (status: SQL, voidedAt: SQL) =>
     sql`(${status} = 'posted' or (${voidedAt} is not null and ${voidedAt}::date > ${asOf}::date))`;
-  const candidates = openItemCandidateLinesSql(scope);
+  const candidates = candidateLinesCte(scope);
   return sql`
     with ${candidates},
     resolved as materialized (
@@ -146,14 +146,25 @@ export function openItemsAsOfSql(scope: OpenItemsAsOfScope): SQL {
         left join documents d on d.posted_entry_id = je.id and d.org_id = ${orgId}
          and (je.source_document_id is null or je.source_document_id = d.id)
     )
-    select r.line_id as id, r.entry_id, r.doc_id, r.kind as doc_kind, r.document_number as doc_number,
-           r.party_id, r.subsidiary_id, r.posting_date as tran_date, r.due_date,
-           (case when r.kind = ${scope.creditKind} then -1 else 1 end) * r.remaining as remaining
-      from resolved r
-     where r.in_effect and r.doc_id is not null and r.book_id = ${bookId}
-       and ${live(sql`r.status`, sql`r.voided_at`)}
-       and r.kind in (${kindList})
-       and ${sideLine(sql`r.kind`, sql`r.amount`)}
+    -- Each branch decides membership in one boolean column behind an
+    -- optimization fence. Read through the materialized steps above, the
+    -- individual conditions would multiply default selectivities down to a
+    -- row or two, and a caller joining these rows would plan nested loops
+    -- over what is really tens of thousands of items.
+    select carried.id, carried.entry_id, carried.doc_id, carried.doc_kind, carried.doc_number,
+           carried.party_id, carried.subsidiary_id, carried.tran_date, carried.due_date, carried.remaining
+      from (
+        select r.line_id as id, r.entry_id, r.doc_id, r.kind as doc_kind, r.document_number as doc_number,
+               r.party_id, r.subsidiary_id, r.posting_date as tran_date, r.due_date,
+               (case when r.kind = ${scope.creditKind} then -1 else 1 end) * r.remaining as remaining,
+               (r.in_effect and r.doc_id is not null and r.book_id = ${bookId}
+                and ${live(sql`r.status`, sql`r.voided_at`)}
+                and r.kind in (${kindList})
+                and ${sideLine(sql`r.kind`, sql`r.amount`)}) is true as carried
+          from resolved r
+        offset 0
+      ) carried
+     where carried.carried
     union all
     select r.line_id, r.entry_id, d.id, d.kind, d.document_number,
            r.party_id, r.subsidiary_id, r.posting_date, r.due_date,
@@ -178,7 +189,7 @@ export function openItemsAsOfSql(scope: OpenItemsAsOfScope): SQL {
  * columns `datedAppliedAmountSql` nets. `lines.remaining` is the line's
  * unsigned remaining on the date, never zero.
  */
-function openItemCandidateLinesSql(
+function candidateLinesCte(
   scope: Pick<OpenItemsAsOfScope, "orgId" | "asOf" | "accounts" | "subsidiaryIds" | "partyId">,
 ): SQL {
   const { orgId, asOf } = scope;
@@ -237,7 +248,7 @@ export function openItemCandidateDocumentsSql(
 ): SQL {
   const { orgId } = scope;
   return sql`
-    with ${openItemCandidateLinesSql(scope)}
+    with ${candidateLinesCte(scope)}
     select je.source_document_id as id
       from lines l
       join journal_entries je on je.id = l.entry_id and je.org_id = ${orgId}
@@ -246,4 +257,18 @@ export function openItemCandidateDocumentsSql(
     select d.id
       from lines l
       join documents d on d.posted_entry_id = l.entry_id and d.org_id = ${orgId}`;
+}
+
+/**
+ * The open-item lines on the scoped accounts that are not settled on a date,
+ * as a select of `line_id`. Every other open-item line on those accounts has
+ * nothing left on the date, so a reader netting control lines against their
+ * applications may skip it.
+ */
+export function openItemCandidateLinesSql(
+  scope: Pick<OpenItemsAsOfScope, "orgId" | "asOf" | "accounts">,
+): SQL {
+  return sql`
+    with ${candidateLinesCte(scope)}
+    select l.line_id from lines l`;
 }
