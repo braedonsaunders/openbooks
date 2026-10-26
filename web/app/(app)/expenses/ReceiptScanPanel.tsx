@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { FileImage, Loader2, ReceiptText, RotateCcw, Trash2, UploadCloud } from 'lucide-react'
@@ -25,6 +25,7 @@ import {
   type ForeignOriginal,
 } from './ExpenseLineCurrency'
 import { DateField } from '../../../components/date-field'
+import { AttachmentPanel } from '../../../components/attachment-panel'
 
 /** A confirmed receipt reading, as the expense line it becomes. */
 export interface ReceiptLineInput {
@@ -113,6 +114,12 @@ export function ReceiptScanPanel({
 }) {
   const t = useTranslations('expenses')
   const [data, setData] = useState<ReceiptsPayload | null>(null)
+  // A scanned receipt is presented by its capture card; every other file on
+  // the report (imported receipts included) is listed below the cards.
+  const captureFileIds = useMemo(
+    () => new Set((data?.captures ?? []).flatMap((capture) => (capture.fileId ? [capture.fileId] : []))),
+    [data],
+  )
   const [loadError, setLoadError] = useState<string | null>(null)
   const [uploads, setUploads] = useState<Upload[]>([])
   const [dragging, setDragging] = useState(false)
@@ -234,7 +241,7 @@ export function ReceiptScanPanel({
   const scanAvailable = data.canScan && data.captureOperational
   return (
     <div className="space-y-4">
-      {!data.captureOperational ? (
+      {data.canScan && !data.captureOperational ? (
         <Alert variant="warning">
           <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
             <span>{t('receipts.notConfigured')} {data.canConfigure ? null : t('receipts.askAdmin')}</span>
@@ -245,8 +252,6 @@ export function ReceiptScanPanel({
             ) : null}
           </AlertDescription>
         </Alert>
-      ) : !data.canScan ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('receipts.notDraft')}</p>
       ) : null}
 
       {scanAvailable ? (
@@ -306,7 +311,7 @@ export function ReceiptScanPanel({
         </ul>
       ) : null}
 
-      {data.captures.length === 0 && uploads.length === 0 ? (
+      {scanAvailable && data.captures.length === 0 && uploads.length === 0 ? (
         <p className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
           <ReceiptText size={14} aria-hidden="true" /> {t('receipts.empty')}
         </p>
@@ -327,6 +332,14 @@ export function ReceiptScanPanel({
           onAction={(action) => void act(capture, action)}
         />
       ))}
+
+      <AttachmentPanel
+        targetTable="documents"
+        targetId={documentId}
+        canEdit={false}
+        title={t('receipts.filesTitle')}
+        excludeFileIds={captureFileIds}
+      />
     </div>
   )
 }

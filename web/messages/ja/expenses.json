@@ -118,6 +118,7 @@
     "loadFailed": "領収書を読み込めませんでした。",
     "retryLoad": "再試行",
     "empty": "スキャンした領収書はまだありません。",
+    "filesTitle": "領収書ファイル",
     "dismiss": "閉じる",
     "progress": {
       "queued": "待機中",

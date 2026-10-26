@@ -82,10 +82,16 @@ const usdQuote = {
   refusal: null,
 }
 
-async function mount(t: TestContext, captures: unknown[], fxRequests: string[] = []) {
+async function mount(
+  t: TestContext,
+  captures: unknown[],
+  fxRequests: string[] = [],
+  report: { attachments?: unknown[]; canScan?: boolean; captureOperational?: boolean } = {},
+) {
   const prior = globalThis.fetch
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url = String(input)
+    if (url.startsWith('/api/file-cabinet/attachments')) return Response.json({ attachments: report.attachments ?? [] })
     if (url.startsWith('/api/expenses/fx-rate')) {
       fxRequests.push(url)
       return Response.json(usdQuote)
@@ -93,8 +99,8 @@ async function mount(t: TestContext, captures: unknown[], fxRequests: string[] =
     return Response.json({
       captures,
       reportCurrency: 'CAD',
-      canScan: true,
-      captureOperational: true,
+      canScan: report.canScan ?? true,
+      captureOperational: report.captureOperational ?? true,
       canConfigure: false,
       configureHref: '/admin/ai',
     })
@@ -259,4 +265,44 @@ test('a failed scan shows its reason with retry and discard', async (t) => {
   assert.match(host.textContent ?? '', /Invalid subscription key/)
   assert.ok(button(host, 'Retry'))
   assert.ok(button(host, 'Discard'))
+})
+
+test('an imported report lists its receipt files and no scanning setup notice', async (t) => {
+  const { host } = await mount(t, [], [], {
+    canScan: false,
+    captureOperational: false,
+    attachments: [{
+      id: '019f0000-0000-4000-8000-0000000000dd',
+      name: 'Sirius_Radio_113.53.png',
+      fileType: 'image',
+      contentType: 'image/png',
+      sizeBytes: 37782,
+      createdAt: '2026-10-21T17:37:22Z',
+      createdBy: null,
+      attachmentId: '019f0000-0000-4000-8000-0000000000ee',
+    }],
+  })
+  const text = host.textContent ?? ''
+  assert.ok(text.includes('Receipt files'), 'receipt files are presented under their own heading')
+  assert.ok(text.includes('Sirius_Radio_113.53.png'), 'the imported receipt is listed')
+  assert.ok(!text.includes('document capture provider'), 'no scanning setup notice where scanning is not offered')
+  assert.ok(!text.includes('No receipts scanned yet'), 'an imported receipt is not reported as missing')
+})
+
+test('a scanned receipt is shown once, by its capture card', async (t) => {
+  const scanned = capture()
+  const { host } = await mount(t, [scanned], [], {
+    attachments: [{
+      id: scanned.fileId,
+      name: 'keg.jpg',
+      fileType: 'image',
+      contentType: 'image/jpeg',
+      sizeBytes: 1000,
+      createdAt: '2026-10-17T12:00:00Z',
+      createdBy: null,
+      attachmentId: '019f0000-0000-4000-8000-0000000000ff',
+    }],
+  })
+  const text = host.textContent ?? ''
+  assert.equal(text.split('keg.jpg').length - 1, 1, 'the capture file is not listed again among receipt files')
 })

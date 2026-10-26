@@ -118,6 +118,7 @@
     "loadFailed": "Les reçus n'ont pas pu être chargés.",
     "retryLoad": "Réessayer",
     "empty": "Aucun reçu numérisé pour l'instant.",
+    "filesTitle": "Fichiers de reçus",
     "dismiss": "Masquer",
     "progress": {
       "queued": "En attente",

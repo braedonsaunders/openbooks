@@ -62,10 +62,16 @@ export function AttachmentPanel({
   targetId,
   canEdit,
   canRemove = canEdit,
+  title,
+  excludeFileIds,
 }: {
   targetTable: string
   targetId: string
   canEdit: boolean
+  /** Heading for a panel that presents the attachments as a specific kind of evidence. */
+  title?: string
+  /** Files another surface on the same record already presents, left out of this list. */
+  excludeFileIds?: ReadonlySet<string>
   /**
    * Detach affordance, independent of uploading: evidence the server retains
    * (posted documents — see detachAttachment) 409s on every remove, so those
@@ -87,6 +93,10 @@ export function AttachmentPanel({
   const [previewExpanded, setPreviewExpanded] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const loadGeneration = useRef(0)
+  // A stable key for the exclusion set, so an equal set from a new render
+  // does not refetch.
+  const excludedKey = excludeFileIds ? [...excludeFileIds].sort().join(',') : ''
+  const excluded = useMemo(() => new Set(excludedKey ? excludedKey.split(',') : []), [excludedKey])
 
   const query = (searchParams.get('attq') ?? '').trim().toLocaleLowerCase()
   const group = searchParams.get('atttype') ?? ''
@@ -131,7 +141,7 @@ export function AttachmentPanel({
         if (!res.ok) throw new Error('load failed')
         return (res.json() as Promise<{ attachments: AttachedFile[] }>).then((data) => {
           if (signal.aborted || generation !== loadGeneration.current) return
-          setItems(data.attachments)
+          setItems(excluded.size > 0 ? data.attachments.filter((item) => !excluded.has(item.id)) : data.attachments)
           setSelectedId((current) => {
             if (current && data.attachments.some((item) => item.id === current)) return current
             return data.attachments.find(previewable)?.id ?? data.attachments[0]?.id ?? null
@@ -151,7 +161,7 @@ export function AttachmentPanel({
       // implementations that resolve despite an abort signal.
       if (loadGeneration.current === generation) loadGeneration.current += 1
     }
-  }, [targetTable, targetId, t])
+  }, [targetTable, targetId, t, excluded])
 
   const counts = useMemo(() => ({
     pdf: items.filter((item) => groupOf(item) === 'pdf').length,
@@ -241,7 +251,7 @@ export function AttachmentPanel({
                 </span>
                 <div className="min-w-0">
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {tCommon('labels.attachments')}
+                    {title ?? tCommon('labels.attachments')}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     {t('fileCount', { count: items.length })}

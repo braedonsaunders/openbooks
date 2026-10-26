@@ -118,6 +118,7 @@
     "loadFailed": "No se pudieron cargar los recibos.",
     "retryLoad": "Reintentar",
     "empty": "Todavía no hay recibos escaneados.",
+    "filesTitle": "Archivos de recibos",
     "dismiss": "Descartar aviso",
     "progress": {
       "queued": "En espera",

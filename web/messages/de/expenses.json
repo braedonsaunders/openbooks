@@ -118,6 +118,7 @@
     "loadFailed": "Die Belege konnten nicht geladen werden.",
     "retryLoad": "Erneut versuchen",
     "empty": "Noch keine Belege gescannt.",
+    "filesTitle": "Belegdateien",
     "dismiss": "Ausblenden",
     "progress": {
       "queued": "Wartet",

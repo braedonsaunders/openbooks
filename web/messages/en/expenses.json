@@ -118,6 +118,7 @@
     "loadFailed": "Receipts could not be loaded.",
     "retryLoad": "Try again",
     "empty": "No receipts scanned yet.",
+    "filesTitle": "Receipt files",
     "dismiss": "Dismiss",
     "progress": {
       "queued": "Waiting",

@@ -118,6 +118,7 @@
     "loadFailed": "无法加载收据。",
     "retryLoad": "重试",
     "empty": "尚未扫描任何收据。",
+    "filesTitle": "收据文件",
     "dismiss": "关闭",
     "progress": {
       "queued": "等待中",
