@@ -20,6 +20,21 @@ import { SALES_FULFILLMENT_DOCUMENT_KIND } from "./documents-customer-credits.ts
 /** Which leg is being returned: goods going back to a vendor, or back from a customer. */
 export type ReturnSide = "purchase" | "sales";
 
+export async function loadReturnablePartyScope(
+  db: SqlExecutor,
+  orgId: string,
+  partyId: string,
+): Promise<{ subsidiaryId: string | null } | null> {
+  const rows = await db.execute<{ subsidiaryId: string | null }>(
+    sql`
+    select subsidiary_id as "subsidiaryId" from parties
+     where id = ${partyId} and org_id = ${orgId}
+  `,
+    "objects",
+  );
+  return rows[0] ?? null;
+}
+
 export interface ReturnableSource {
   movementId: string;
   movedAt: string;
@@ -213,7 +228,8 @@ export async function returnableSources(
   const limit = Number.isFinite(wantedLimit) ? Math.min(Math.max(wantedLimit, 1), 200) : 50;
   const wantedOffset = Math.floor(Number(query.offset ?? 0));
   const offset = Number.isFinite(wantedOffset) ? Math.max(wantedOffset, 0) : 0;
-  const rows = await runner.execute<SourceRow>(sql`
+  const rows = await runner.execute<SourceRow>(
+    sql`
     select ${sourceColumns()}
       ${sourceJoins(rules, orgId)}
      where movement.org_id = ${orgId}
@@ -233,7 +249,9 @@ export async function returnableSources(
        and abs(movement.quantity) - coalesce(returned.quantity, 0) > 0
      order by movement.moved_at desc, movement.id
      limit ${limit + 1} offset ${offset}
-  `, "objects");
+  `,
+    "objects",
+  );
   const hasMore = rows.length > limit;
   return { sources: rows.slice(0, limit).map(toReturnableSource), hasMore };
 }
@@ -272,16 +290,20 @@ export async function assertReturnSourceSelectable(
   lineLabel: string,
 ): Promise<ReturnableSource> {
   const rules = SIDE_RULES[selection.side];
-  const row = (await runner.execute<SourceRow>(sql`
+  const row = (
+    await runner.execute<SourceRow>(
+      sql`
     select ${sourceColumns()}
       ${sourceJoins(rules, orgId)}
      where movement.org_id = ${orgId}
        and movement.id = ${selection.movementId}
        and movement.kind = ${rules.sourceKind}
        and movement.status = 'posted'
-       and ${selection.partyId === null
-         ? sql`source_document.party_id is null and source_document.kind = 'cash_sale'`
-         : sql`source_document.party_id = ${selection.partyId}`}
+       and ${
+         selection.partyId === null
+           ? sql`source_document.party_id is null and source_document.kind = 'cash_sale'`
+           : sql`source_document.party_id = ${selection.partyId}`
+       }
        and source_document.kind in ${rules.documentKinds}
        and movement.item_id = ${selection.itemId}
        and movement.stock_location_id = ${selection.stockLocationId}
@@ -292,7 +314,10 @@ export async function assertReturnSourceSelectable(
             and reversal.reverses_movement_id = movement.id
        )
        and abs(movement.quantity) - coalesce(returned.quantity, 0) > 0
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new InventoryError(
       `${lineLabel}: that ${selection.side === "purchase" ? "receipt" : "shipment"} is not available to return — ` +
