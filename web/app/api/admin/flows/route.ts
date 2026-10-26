@@ -3,7 +3,7 @@ import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
-import { withOrgTransaction } from "@openbooks/engine/platform/db";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   createAdminFlow,
   listAdminFlows,

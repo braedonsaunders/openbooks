@@ -200,7 +200,7 @@ export const POST = defineRoute({
   feature: "payroll",
   body: certificateBodySchema,
   invalidBodyStatus: 422,
-  handler: async ({ authz: gate, body }) => {
+  handler: async ({ request: req, authz: gate, body }) => {
     const orgId = gate.user.orgId;
     const userId = gate.user.id;
 

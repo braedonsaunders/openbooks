@@ -112,7 +112,7 @@ export const POST = defineRoute({
   feature: { none: "Party bank details are governed by party permissions and approval flows." },
   params: z.object({ id: z.string() }),
   body: bankAccountCreateBody,
-  handler: async ({ authz: gate, params, body: input }) => {
+  handler: async ({ request: req, authz: gate, params, body: input }) => {
     const { user } = gate;
     const { id: partyId } = params;
     if (!isUuid(partyId)) return NextResponse.json({ error: "bad party id" }, { status: 400 });
