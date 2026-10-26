@@ -83,6 +83,11 @@ export function accountBaseJoins(today: string, allowedSubsidiaryIds?: ReadonlyS
          and e.posting_date >= date_trunc('month', ${today}::date)::date
          and e.posting_date <= ${today}::date
        where l.org_id = a.org_id
+         -- The line's carried posting date bounds the read to the current
+         -- month on the (account, date) index; without it every line the
+         -- account ever posted was read to find this month's.
+         and l.posting_date >= date_trunc('month', ${today}::date)::date
+         and l.posting_date <= ${today}::date
          ${lineSubsidiaryScope}
     )
     select coalesce(sum(m.amt), 0)
