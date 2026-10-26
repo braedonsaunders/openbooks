@@ -1,33 +1,51 @@
 import { isUuid } from "../platform/uuid.ts";
 import { DocumentDefaultsError, resolveTermsDueDate } from "./document-defaults.ts";
-import { captureDocumentPaymentTerms, PaymentTermsEvidenceError } from "./payment-terms-snapshot.ts";
+import {
+  captureDocumentPaymentTerms,
+  PaymentTermsEvidenceError,
+} from "./payment-terms-snapshot.ts";
 import { assertEntityPostingDate } from "../organization/accounting-preferences.ts";
 import { validateJournalInstructions } from "./journal-instructions.ts";
-import { assertWithholdingRemittanceCurrent, ContractorWithholdingError } from "../contractor-withholding/service.ts";
+import {
+  assertWithholdingRemittanceCurrent,
+  ContractorWithholdingError,
+} from "../contractor-withholding/service.ts";
 import { assertWithholdingDepositCurrent } from "../contractor-withholding/deposits.ts";
-import { PlaceOfSupplyError } from '../tax/place-of-supply.ts';
-import { assertCanadianGoodsTaxEvidence } from '../tax/goods-selection.ts';
-import { assertCrossBorderSupplyEvidence } from '../tax/cross-border-posting.ts';
-import { CrossBorderTaxError } from '../tax/cross-border-place-of-supply.ts';
+import { PlaceOfSupplyError } from "../tax/place-of-supply.ts";
+import { assertCanadianGoodsTaxEvidence } from "../tax/goods-selection.ts";
+import { assertCrossBorderSupplyEvidence } from "../tax/cross-border-posting.ts";
+import { CrossBorderTaxError } from "../tax/cross-border-place-of-supply.ts";
 import { and, eq, sql } from "drizzle-orm";
-import { db, inDbTransaction, schema, withTransactionSavepoint, withOrgContext } from "../platform/db.ts";
+import { inDbTransaction, schema } from "../platform/db.ts";
 
-import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../projects/billing-source-integrity.ts";
+import {
+  assertGeneratedBillingPostable,
+  BillingSourceIntegrityError,
+} from "../projects/billing-source-integrity.ts";
 
 import { type ContributedLineWithSource } from "../allocations/post.ts";
 import { parseMoney } from "../money/brands.ts";
 
-import { assertPeriodModulesOpen, closeModuleForDocument, CloseError, periodClosedDetailsOf } from "../periods/period-policy.ts";
+import {
+  assertPeriodModulesOpen,
+  closeModuleForDocument,
+  CloseError,
+  periodClosedDetailsOf,
+} from "../periods/period-policy.ts";
 import { applyBillInventoryReceipts } from "../inventory/documents-purchasing.ts";
 import { applyVendorCreditInventoryReturns } from "../inventory/documents-vendor-credits.ts";
-import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";
+import {
+  captureTransactionAuditSnapshot,
+  recordTransactionAudit,
+} from "../records/transaction-audit.ts";
 import { consolidationSourceRefusal } from "../records/consolidation-source-policy.ts";
 
-import { allocateEntryNumber, nextFreeEntryNumber } from "../records/entry-number.ts";
 import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
 import { enqueuePostingEffects } from "./posting-effects.ts";
 import { redeemCashSaleTenders, TenderRefusal } from "../sales/document-tenders.ts";
 import { enqueueProviderCommitTx, PROVIDER_COMMIT_KINDS } from "../tax/provider-commit.ts";
+import { insertAuditRecord } from "../journal/kernel-audit.ts";
+import { holdPeriodPostingFence } from "../journal/kernel-fences.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { validateRequiredDimensions } from "./posting-accounts.ts";
@@ -35,655 +53,584 @@ import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolvePostingPeriod, assertPayRunConsolidatedRateCoverage } from "./posting-period.ts";
-import { mapBookContributionAccounts, replicateDocumentEntry, resolveDocumentPostingBook } from "./book-posting.ts";
+import {
+  mapBookContributionAccounts,
+  replicateDocumentEntry,
+  resolveDocumentPostingBook,
+} from "./book-posting.ts";
+import {
+  writePrimaryEntry,
+  writeSecondaryBookEntry,
+  type DocumentEntry,
+  type PostingTx,
+  type PreparedPosting,
+} from "./posting-journal-entry.ts";
 
 import type { PostDocumentOptions } from "../journal/posting-contracts.ts";
-import type { prepareDocumentPosting } from "./posting-prepare.ts";
+
+type PaymentTermsSnapshot = Awaited<ReturnType<typeof captureDocumentPaymentTerms>>;
+type AuditSnapshot = NonNullable<Awaited<ReturnType<typeof captureTransactionAuditSnapshot>>>;
+type LineageRow = typeof schema.allocationLineage.$inferInsert;
+type LineageDraft = NonNullable<ContributedLineWithSource["lineage"]>;
 
 /** Owns the accounting transaction; every journal, stock effect, audit and outbox write uses its executor. */
-export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof prepareDocumentPosting>>, options: PostDocumentOptions): Promise<string> {
-  const { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot, controlAccountStamp, dueDateFromTerms } = prepared;
+export async function commitDocumentPosting(
+  prepared: PreparedPosting,
+  options: PostDocumentOptions,
+): Promise<string> {
+  const { documentId, deps, doc, postingDate } = prepared;
+  const actorId = options.audit?.actorId ?? null;
   return await inDbTransaction(async (tx) => {
     const consolidationRefusal = await consolidationSourceRefusal(tx, doc.orgId, documentId);
     if (consolidationRefusal) throw new PostingError(consolidationRefusal);
-    // Share the ledger-setup fence: setup writers exclude posting, while
-    // independent documents can post concurrently. The primary-book and
-    // period fences below remain narrower and protect their own state.
-    await lockLedgerSetupFence(tx, doc.orgId, doc.journalMode === "currency_adjustment" ? "exclusive" : "shared");
-    if (doc.kind === "journal") await validateJournalInstructions(tx,doc.orgId,doc.id,true);
-    if (!deps.migration) for (const subsidiaryId of new Set(subApplied.lines.map(line => line.subsidiaryId))) await assertEntityPostingDate(tx,doc.orgId,subsidiaryId,postingDate);
-    try {await assertCanadianGoodsTaxEvidence(tx,doc.orgId,documentId)} catch(error) {if(error instanceof PlaceOfSupplyError)throw new PostingError(error.message);throw error}
-    try {await assertCrossBorderSupplyEvidence(tx,doc.orgId,documentId,{persist:true})} catch(error) {if(error instanceof CrossBorderTaxError)throw new PostingError(error.message);throw error}
-    if (doc.kind === "vendor_bill" || doc.kind === "vendor_credit") {
-      await assertPayrollRemittanceBillCurrent(doc.orgId, documentId, tx);
-    }
-      try { await assertWithholdingRemittanceCurrent(tx, doc.orgId, documentId, { document: effectiveDoc, lines: postingLines }); await assertWithholdingDepositCurrent(tx, doc.orgId, documentId, { document: effectiveDoc, lines: postingLines }); }
-      catch (error) { if (error instanceof ContractorWithholdingError) throw new PostingError(error.remedy ? `${error.message} ${error.remedy}` : error.message); throw error; }
-    // Resolve the authority only after the organization fence. Reading it
-    // before the transaction can retain a demoted book while setup commits.
-    // Hold the book row through the first journal insert so its history guard
-    // cannot pass concurrently with this organization's first posting.
-    const books = await tx.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
-      select id, is_active, posts_gl from accounting_books
-       where org_id = ${doc.orgId} and is_primary order by id for share
-    `, "objects");
-    if (books.length !== 1 || !books[0]!.is_active || !books[0]!.posts_gl)
-      throw new PostingError("posting requires exactly one active primary posting book");
-    // A book-specific journal posts to its target book only; every other
-    // document posts to the primary book and replicates into full books.
-    const book = await resolveDocumentPostingBook(tx, doc, books[0]!, options.audit?.actorId ?? null);
-    const period = await resolvePostingPeriod(tx, effectiveDoc, postingDate);
-    // A foreign-subsidiary pay run posts face amounts no statement can
-    // translate without the period's derived rates — refuse with the trial
-    // balance's own message rather than posting anyway. Every other kind
-    // (an AP bill in particular) keeps its own spot-rate precondition.
-    if (effectiveDoc.kind === "pay_run") {
-      await assertPayRunConsolidatedRateCoverage(tx, {
-        orgId: effectiveDoc.orgId,
-        docCurrency: effectiveDoc.currency,
-        docSubsidiaryId: subApplied.docSubId,
-        postingDate,
-      });
-    }
-    // Hold the shared period fence BEFORE the authoritative module check and
-    // keep it through commit: a module-only close takes the exclusive side,
-    // so it either waits for this posting or this check re-reads its commit.
-    // Without this, a close could land between the check below and the
-    // journal insert while the storage guard rechecked GL only (0168
-    // rechecks the source module in storage as the second half of this fix).
-    await tx.execute(sql`select period_posting_fence(${doc.orgId}, ${period.id}, ${book.id})`);
+    // Setup writers exclude posting while independent documents post concurrently; the book and
+    // period fences below stay narrower and protect their own state.
+    await lockLedgerSetupFence(
+      tx,
+      doc.orgId,
+      doc.journalMode === "currency_adjustment" ? "exclusive" : "shared",
+    );
+    await assertSourcesCurrent(tx, prepared);
+    const { book, period } = await lockPostingScope(tx, prepared, actorId);
     try {
-      await assertPeriodModulesOpen(tx, {
-        orgId: doc.orgId,
-        periodId: period.id,
-        bookId: book.id,
-        subsidiaryIds: [...subApplied.lines, ...scriptLines].map(
-          (line) => line.subsidiaryId,
-        ),
-        modules: [closeModuleForDocument(doc.kind)],
-        allowImportedLocks: deps.migration,
-      });
-    } catch (error) {
-      if (error instanceof CloseError)
-        throw new PostingError(error.message, { details: periodClosedDetailsOf(error) });
-      throw error;
-    }
-
-    try {
-      await assertGeneratedBillingPostable(tx, doc.orgId, documentId, { document: effectiveDoc, lines: postingLines }, true);
+      await assertGeneratedBillingPostable(
+        tx,
+        doc.orgId,
+        documentId,
+        { document: prepared.effectiveDoc, lines: prepared.postingLines },
+        true,
+      );
     } catch (error) {
       if (error instanceof BillingSourceIntegrityError) throw new PostingError(error.message);
       throw error;
     }
-    if (deps.migration)
-      await tx.execute(sql`set local openbooks.migration = on`);
-    // A replay cannot manufacture historical terms from current setup. Native
-    // posts retain their source under locks in the same unit as the journal.
-    let paymentTermsSnapshot: Awaited<ReturnType<typeof captureDocumentPaymentTerms>>;
-    try {
-      paymentTermsSnapshot = deps.migration ? null : await captureDocumentPaymentTerms(tx, doc.orgId, effectiveDoc);
-    } catch (error) {
-      if (error instanceof PaymentTermsEvidenceError) throw Object.assign(new PostingError(error.message), { cause: error });
-      throw error;
-    }
-    if (paymentTermsSnapshot?.documentKind === "vendor_bill" && dueDateFromTerms) {
-      // Capture holds the vendor, its role and the terms row through commit, so
-      // the due date those locked terms imply is the one the header must carry.
-      let lockedTerms: Awaited<ReturnType<typeof resolveTermsDueDate>>;
-      try {
-        lockedTerms = await resolveTermsDueDate(tx, doc.orgId, effectiveDoc);
-      } catch (error) {
-        if (error instanceof DocumentDefaultsError) throw Object.assign(new PostingError(error.message), { cause: error });
-        throw error;
-      }
-      if (dueDateFromTerms.dueDate !== (lockedTerms?.dueDate ?? effectiveDoc.documentDate)) {
-        throw new PostingError("The vendor's payment terms changed during posting. Reload the bill and post again so its due date and retained terms agree.");
-      }
-    }
+    if (deps.migration) await tx.execute(sql`set local openbooks.migration = on`);
+    const paymentTermsSnapshot = await retainPaymentTerms(tx, prepared);
     const auditBefore = options.audit
       ? await captureTransactionAuditSnapshot(tx, documentId, doc.orgId)
       : null;
-    if (options.audit && !auditBefore) {
-      throw new PostingError(
-        `document ${documentId} disappeared before posting`,
-      );
-    }
-    // The entry insert is the first write in the transaction, so under a
-    // concurrent post of the SAME approved document the racer blocks here on
-    // journal_entries_org_number (entry_number = the document number) until
-    // the winner commits, then fails with a unique violation. Translate that
-    // into the same PostingError the flip guard below produces: the racing
-    // caller must see "already posted", never a raw driver error.
-    // Source systems number per TRANSACTION TYPE, so a vendor bill and an
-    // expense report can both legitimately be "1000" -- that is the source's
-    // model, not a data error, and an importer cannot ask a human to renumber
-    // it. journal_entries_org_number spans every kind, so the second document
-    // to post could not obtain an entry number at all and simply failed; a
-    // production migration lost documents to exactly this.
-    //
-    // Numbers stay unique. A collision with a DIFFERENT document is instead
-    // resolved automatically by qualifying with the document's kind, in the
-    // same hyphen-suffix style the source-correction path already mints
-    // (-SOURCE-CORR / -SOURCE-REV). Document numbers are unique WITHIN a kind,
-    // so the qualified form cannot collide in turn.
-    //
-    // A concurrent post of the SAME document still resolves to the same
-    // preferred number and still collides on the index, which is what the
-    // 23505 branch below and the flip guard rely on. Entry-number allocation
-    // itself is fenced by candidate number, so unrelated posts remain parallel.
-    const entryNumber = await allocateEntryNumber(
-      tx,
-      doc.orgId,
-      doc.id,
-      `${effectiveDoc.documentNumber}`,
-      doc.kind,
-    );
-    let entry: { id: string };
-    try {
-      // Isolate the insert in a savepoint. postDocument always runs inside a
-      // caller-visible transaction now, so a unique violation would otherwise
-      // abort the whole unit — and the claimant diagnosis in the 23505 branch
-      // below would raise 25P02 (aborted transaction) instead of the
-      // PostingError concurrent posters handle.
-      entry = (await withTransactionSavepoint(tx, () =>
-        tx
-          .insert(schema.journalEntries)
-          .values({
-            orgId: doc.orgId,
-            bookId: book.id,
-            subsidiaryId: subApplied.docSubId,
-            entryNumber,
-            postingDate,
-            periodId: period.id,
-            memo: effectiveDoc.memo,
-            status: "draft",
-            sourceDocumentId: doc.id,
-            origin: effectiveDoc.journalMode === "currency_adjustment" ? "currency_adjustment" :
-              subApplied.multi ||
-              scriptLines.some((l) => l.subsidiaryId !== subApplied.docSubId)
-                ? "intercompany"
-                : "document",
-          })
-          .returning({ id: schema.journalEntries.id }),
-      ))[0]!;
-    } catch (error) {
-      const code = (error as { code?: string }).code ??
-        (error as { cause?: { code?: string } }).cause?.code;
-      if (code === "23505") {
-        // The (org, entry_number) index spans every document kind, so the
-        // collision is either this document's own earlier posting or a
-        // DIFFERENT document that already claimed the number. Diagnose which,
-        // because "already posted" is false for a valid approved document
-        // that has no journal yet. The savepoint restored this transaction,
-        // but its repeatable-read snapshot can still predate the winner.
-        // A separate tenant-scoped read diagnoses the committed claimant.
-        const claimant = await withOrgContext(doc.orgId, () => db.execute<{
-          kind: string;
-          document_number: string;
-          source_document_id: string | null;
-        }>(sql`
-          select d.kind, d.document_number, e.source_document_id
-            from journal_entries e
-            left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
-           where e.org_id = ${doc.orgId}
-             and e.entry_number = ${entryNumber}
-           limit 1`, "objects"));
-        const other = claimant[0];
-        if (other && other.source_document_id !== doc.id) {
-          throw new PostingError(
-            `journal entry number "${entryNumber}" is already used by ${other.kind ?? "another document"} ${other.document_number ?? ""}`,
-          );
-        }
-        throw new PostingError(
-          `document ${doc.documentNumber} was already posted or voided`,
-        );
-      }
-      throw error;
-    }
+    if (options.audit && !auditBefore)
+      throw new PostingError(`document ${documentId} disappeared before posting`);
 
-    const insertedLines = await tx.insert(schema.journalLines).values([
-      ...subApplied.lines.map((l, i) => ({
-        orgId: doc.orgId,
-        entryId: entry.id,
-        lineNumber: i + 1,
-        accountId: l.accountId,
-        subsidiaryId: l.subsidiaryId,
-        amount: l.amount,
-        currency: l.currency,
-        txnAmount: l.txnAmount,
-        fxRate: l.fxRate,
-        partyId: l.partyId ?? null,
-        departmentId: l.departmentId ?? null,
-        projectId: l.projectId ?? null,
-        locationId: l.locationId ?? null,
-        classId: l.classId ?? null,
-        equipmentUnitId: l.equipmentUnitId ?? null,
-        extraDims: l.extraDims ?? {},
-        paymentCardId: l.paymentCardId ?? null,
-        taxCodeId: l.taxCodeId ?? null,
-        memo: l.memo ?? null,
-        quantity: l.quantity ?? null,
-        unit: l.unit ?? null,
-        eliminate: l.eliminate ?? false,
-        isCurrencyAdjustment: l.isCurrencyAdjustment ?? false,
-        custom: unionLines[i]?.amortizationSourceLineId ? { amortizationSourceLineId: unionLines[i]!.amortizationSourceLineId } : {},
-        dueDate: l.dueDate ?? null,
-        isOpenItem: l.isOpenItem ?? false,
-        // Kernel lines carry no contributor (null); rule contributions ride
-        // at unionLines[kernelLines.length + j] by the order contract above.
-        contributorKind: unionLines[i]?.contributorKind ?? null,
-        contributorRef: unionLines[i]?.contributorRef ?? null,
-      })),
-      // Allocation-kernel script contributions: same entry, stamped so
-      // the GL impact view can lock standard lines and show these separately.
-      // No lineage rows — lineage is not required for scripts.
-      ...scriptLines.map((l, i) => ({
-        orgId: doc.orgId,
-        entryId: entry.id,
-        lineNumber: subApplied.lines.length + i + 1,
-        accountId: l.accountId,
-        subsidiaryId: l.subsidiaryId,
-        amount: l.amount,
-        currency: l.currency,
-        txnAmount: l.txnAmount,
-        fxRate: l.fxRate,
-        partyId: null,
-        departmentId: l.departmentId ?? null,
-        projectId: l.projectId ?? null,
-        locationId: l.locationId ?? null,
-        classId: l.classId ?? null,
-        equipmentUnitId: null,
-        extraDims: l.extraDims ?? {},
-        paymentCardId: null,
-        taxCodeId: null,
-        memo: l.memo ?? null,
-        dueDate: null,
-        isOpenItem: false,
-        contributorKind: l.contributorKind,
-        contributorRef: l.contributorRef,
-      })),
-    ])
-      .returning({ id: schema.journalLines.id });
-
-    const postedEntry = await tx.update(schema.journalEntries).set({ status: "posted", postedAt: new Date() })
-      .where(and(eq(schema.journalEntries.id, entry.id), eq(schema.journalEntries.orgId, doc.orgId), eq(schema.journalEntries.status, "draft")))
-      .returning({ id: schema.journalEntries.id });
-    if (postedEntry.length !== 1) throw new PostingError("The journal did not make its required draft-to-posted transition; nothing may be reported posted.");
-
-    // Exactly-once posting: the conditional flip only lands while the document
-    // is still unposted. Postgres row-locks the
-    // document during this UPDATE, so a concurrent post blocks here, then
-    // re-evaluates the predicate against the now-'posted' row and matches 0
-    // rows. Zero rows → throw → THIS transaction rolls back, discarding the
-    // entry + lines just inserted. A document can never produce two entries.
-    //
-    // The flip also stamps documents.fx_rate with the SAME rate the kernel
-    // applied to the origin-subsidiary legs, in the same transaction as the
-    // entry, so the header and the posted lines agree by construction:
-    // documents.fx_rate is the txn→functional rate as of posting, maintained
-    // by the posting kernel. Native creation paths never set it (the column
-    // defaults to '1'; only source sync wrote real values before), so every
-    // downstream reader — dunning's base-currency threshold, payment-run
-    // conversions — now reads the rate the ledger actually posted at. A
-    // document already in its origin's base currency keeps the stored value
-    // (1 by definition). The posted-document financial guard is not in play
-    // here: this UPDATE matches only 'approved' rows and that guard fires
-    // solely for posted/reversed ones.
-    //
-    // The same flip stamps the ship-to destination snapshot (0265): the
-    // jurisdiction the sale was taxed/posted with, resolved in prepare from
-    // quote evidence (else the party's shipping address as of posting). The
-    // nexus ledger attributes the sale to this stamp forever; an uncaptured
-    // destination stays NULL (unattributed), never re-homed to a live
-    // address. Only sales kinds resolve a snapshot, so other documents keep
-    // whatever the columns hold (NULL on native paths).
-    const flipped = await tx
-      .update(schema.documents)
-      .set({
-        status: "posted",
-        postedEntryId: entry.id,
-        postingDate,
-        postingPeriodId: period.id,
-        ...(paymentTermsSnapshot ? { paymentTermsSnapshot } : {}),
-        // The due date the party's terms imply, stamped with the status flip
-        // so the open item and the document header agree from the posting on.
-        ...(dueDateFromTerms ? { dueDate: dueDateFromTerms.dueDate } : {}),
-        ...(subApplied.originBaseCurrency !== effectiveDoc.currency
-          ? { fxRate: subApplied.originFxRate }
-          : {}),
-        ...(shipToSnapshot
-          ? {
-              shipToCountry: shipToSnapshot.country,
-              shipToRegion: shipToSnapshot.region,
-            }
-          : {}),
-        // The receivable/payable control account resolved in prepare: the
-        // document carries the account its open item posted to, so payments,
-        // applications and any regeneration read the same account forever.
-        ...(controlAccountStamp
-          ? {
-              custom: sql`jsonb_set(coalesce(${schema.documents.custom}, '{}'::jsonb), '{controlAccountId}', to_jsonb(${controlAccountStamp}::text), true)`,
-            }
-          : {}),
-      })
-      .where(
-        and(
-          eq(schema.documents.id, doc.id),
-          eq(schema.documents.orgId, doc.orgId),
-          eq(schema.documents.status, "approved"),
-        ),
-      )
-      .returning({ id: schema.documents.id });
-    if (flipped.length === 0) {
-      throw new PostingError(
-        `document ${doc.documentNumber} was already posted or voided`,
-      );
-    }
-    if (paymentTermsSnapshot && !options.audit) {
-      const audit = await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
-        values (${doc.orgId}, 'documents', ${doc.id}, 'update',
-          ${JSON.stringify({
-            source: "document_posting",
-            reason: "Retain payment terms with the original posting",
-            before: { payment_terms_snapshot: null },
-            after: { payment_terms_snapshot: paymentTermsSnapshot },
-          })}::jsonb, null, 'document_posting') returning id
-      `, "objects");
-      if (audit.length !== 1) throw new PostingError("The posted payment terms audit was not retained.");
-    }
-
-    // A cash sale's stored-value tenders redeem inside the posting commit:
-    // the journal above already debited the liability, so this moves the
-    // subledger against that entry. An overdrawn card throws here and the
-    // whole unit — journal included — rolls back, so a sale never posts
-    // money the till never received. Historical replay replays the journal,
-    // never the subledger dance, so it stands down.
-    if (doc.kind === "cash_sale" && !deps.migration) {
-      try {
-        await redeemCashSaleTenders(doc.orgId, doc.id, {
-          journalEntryId: entry.id,
-          actorId: options.audit?.actorId ?? null,
-        });
-      } catch (error) {
-        if (error instanceof TenderRefusal) throw new PostingError(error.message);
-        throw error;
-      }
-    }
-
-    // Provider commit tracking rides in the posting transaction: a post that
-    // enqueued nothing (no provider, manual rates, commits off) leaves no
-    // row, and a migration replay never enqueues — history must not spray
-    // the provider on re-import.
-    if (!deps.migration && PROVIDER_COMMIT_KINDS[doc.kind]) {
-      await enqueueProviderCommitTx(tx, {
-        orgId: doc.orgId,
-        documentId: doc.id,
-        kind: doc.kind,
-        documentNumber: effectiveDoc.documentNumber,
-        actorId: options.audit?.actorId ?? null,
-      });
-    }
-
-    // -- allocation lineage + secondary-book entries (same transaction) ----
-    // Kernel lines keep numbers 1..N with rule contributions following in
-    // rule order; script lines come last and write no lineage.
-    const kernelLineIds = insertedLines
-      .slice(0, kernelLines.length)
-      .map((r) => r.id);
-    const contribLineIds = insertedLines
-      .slice(kernelLines.length, kernelLines.length + primaryContrib.length)
-      .map((r) => r.id);
-    const lineageOf = (
-      line: ContributedLineWithSource,
-      journalEntryId: string,
-      journalLineId: string | null,
-    ): typeof schema.allocationLineage.$inferInsert => {
-      const draft = line.lineage;
-      if (!draft) throw new PostingError("allocation contribution is missing its lineage draft");
-      const sourceId = kernelLineIds[line.sourceKernelIndex];
-      if (!sourceId) throw new PostingError("allocation contribution points at an unknown kernel line");
-      return {
-        orgId: doc.orgId,
-        mode: "post",
-        ruleId: draft.ruleId,
-        versionId: draft.versionId,
-        definitionHash: draft.definitionHash,
-        runId: null,
-        documentId: doc.id,
-        journalEntryId,
-        journalLineId,
-        sourceJournalLineId: sourceId,
-        sourceDocumentLineId: null,
-        targetDocumentLineId: null,
-        driverId: draft.driverId,
-        driverValue: draft.driverValue,
-        driverTotal: draft.driverTotal,
-        share: draft.share,
-        amount: draft.amount,
-        residual: draft.residual ?? "0.0000",
-      };
-    };
-    const lineageRows: (typeof schema.allocationLineage.$inferInsert)[] = [];
-    primaryContrib.forEach((line, j) => {
-      const journalLineId = contribLineIds[j];
-      if (!journalLineId) throw new PostingError("allocation contribution line was not inserted");
-      lineageRows.push(lineageOf(line, entry.id, journalLineId));
-    });
-    for (const draft of postContrib.reportOnly) {
-      const sourceId = kernelLineIds[draft.sourceKernelIndex];
-      if (!sourceId) throw new PostingError("allocation contribution points at an unknown kernel line");
-      lineageRows.push({
-        orgId: doc.orgId,
-        mode: "post",
-        ruleId: draft.ruleId,
-        versionId: draft.versionId,
-        definitionHash: draft.definitionHash,
-        runId: null,
-        documentId: doc.id,
-        journalEntryId: entry.id,
-        journalLineId: null,
-        sourceJournalLineId: sourceId,
-        sourceDocumentLineId: null,
-        targetDocumentLineId: null,
-        driverId: draft.driverId,
-        driverValue: draft.driverValue,
-        driverTotal: draft.driverTotal,
-        share: draft.share,
-        amount: draft.amount,
-        residual: draft.residual ?? "0.0000",
-      });
-    }
-    // Secondary books: one origin='allocation' entry per book with that
-    // book's contributed lines, balanced and period-checked like the main
-    // entry. Lineage sources still point at the primary entry's kernel line.
-    const secondaryByBook = new Map<string, ContributedLineWithSource[]>();
-    for (const line of postContrib.lines) {
-      if (line.bookId === undefined) continue;
-      const list = secondaryByBook.get(line.bookId) ?? [];
-      list.push(line);
-      secondaryByBook.set(line.bookId, list);
-    }
-    if ([...secondaryByBook.keys()].some((bookId) => !isUuid(bookId))) {
-      throw new PostingError("allocation target book must be a UUID, not a code or name");
-    }
-    if (secondaryByBook.size > 0) {
-      // Revalidate under the setup fence: a book deactivated after contribution
-      // planning refuses instead of posting into a dead book.
-      const bookRows = await tx.execute<{ id: string; code: string; is_active: boolean; posts_gl: boolean }>(sql`
-        select id, code, is_active, posts_gl from accounting_books
-         where org_id = ${doc.orgId} and id = any(${`{${[...secondaryByBook.keys()].join(",")}}`}::uuid[])`, "objects");
-      const bookById = new Map(bookRows.map((b) => [b.id, b]));
-      for (const [bookId, bookLines] of secondaryByBook) {
-        const book = bookById.get(bookId);
-        if (!book || !book.is_active || !book.posts_gl) {
-          throw new PostingError("allocation target book is not an active posting book");
-        }
-        // Same cross-module intake as prepare: parse contributor amounts once.
-        const secApplied = await applySubsidiaries(
-          tx,
-          effectiveDoc,
-          await mapBookContributionAccounts(tx, effectiveDoc, { id: bookId, code: book.code }, postingDate,
-            bookLines.map((l) => ({ ...l, amount: parseMoney(l.amount) })), subApplied.docSubId),
-          { bookId, regeneration: false, withholdingCarrying: false },
-        );
-        assertFinalKernelBalance(secApplied.lines);
-        await validateRequiredDimensions(tx, doc.orgId, secApplied.lines);
-        const secSubsidiaryIds = [...new Set([subApplied.docSubId, ...secApplied.lines.map((line) => line.subsidiaryId)])];
-        await tx.execute(sql`select period_posting_fence(${doc.orgId}, ${period.id}, ${bookId})`);
-        if (!deps.migration) {
-          for (const subsidiaryId of secSubsidiaryIds) {
-            await assertEntityPostingDate(tx, doc.orgId, subsidiaryId, postingDate);
-          }
-        }
-        try {
-          await assertPeriodModulesOpen(tx, {
-            orgId: doc.orgId,
-            periodId: period.id,
-            bookId,
-            subsidiaryIds: secSubsidiaryIds,
-            modules: [closeModuleForDocument(doc.kind)],
-            allowImportedLocks: deps.migration,
-          });
-        } catch (error) {
-          if (error instanceof CloseError)
-            throw new PostingError(error.message, { details: periodClosedDetailsOf(error) });
-          throw error;
-        }
-        const secEntry = (await tx
-          .insert(schema.journalEntries)
-          .values({
-            orgId: doc.orgId,
-            bookId,
-            subsidiaryId: subApplied.docSubId,
-            entryNumber: await nextFreeEntryNumber(
-              tx,
-              doc.orgId,
-              `${effectiveDoc.documentNumber}-ALLOC-${book.code}`,
-            ),
-            postingDate,
-            periodId: period.id,
-            memo: `Allocations for ${effectiveDoc.documentNumber} (${book.code})`,
-            status: "draft",
-            sourceDocumentId: doc.id,
-            origin: "allocation",
-          })
-          .returning({ id: schema.journalEntries.id }))[0]!;
-        const secInserted = await tx
-          .insert(schema.journalLines)
-          .values(
-            secApplied.lines.map((l, i) => ({
-              orgId: doc.orgId,
-              entryId: secEntry.id,
-              lineNumber: i + 1,
-              accountId: l.accountId,
-              subsidiaryId: l.subsidiaryId,
-              amount: l.amount,
-              currency: l.currency,
-              txnAmount: l.txnAmount,
-              fxRate: l.fxRate,
-              partyId: l.partyId ?? null,
-              departmentId: l.departmentId ?? null,
-              projectId: l.projectId ?? null,
-              locationId: l.locationId ?? null,
-              classId: l.classId ?? null,
-              equipmentUnitId: l.equipmentUnitId ?? null,
-              extraDims: l.extraDims ?? {},
-              paymentCardId: l.paymentCardId ?? null,
-              taxCodeId: l.taxCodeId ?? null,
-              memo: l.memo ?? null,
-              quantity: l.quantity ?? null, unit: l.unit ?? null,
-              eliminate: l.eliminate ?? false, isCurrencyAdjustment: l.isCurrencyAdjustment ?? false,
-              dueDate: l.dueDate ?? null,
-              isOpenItem: l.isOpenItem ?? false,
-              contributorKind: bookLines[i]?.contributorKind ?? null,
-              contributorRef: bookLines[i]?.contributorRef ?? null,
-            })),
-          )
-          .returning({ id: schema.journalLines.id });
-        const postedSecondary = await tx.update(schema.journalEntries).set({ status: "posted", postedAt: new Date() })
-          .where(and(eq(schema.journalEntries.id, secEntry.id), eq(schema.journalEntries.orgId, doc.orgId), eq(schema.journalEntries.status, "draft")))
-          .returning({ id: schema.journalEntries.id });
-        if (postedSecondary.length !== 1) throw new PostingError("The secondary-book journal did not make its required draft-to-posted transition.");
-        bookLines.forEach((line, j) => {
-          const journalLineId = secInserted[j]?.id;
-          if (!journalLineId) throw new PostingError("allocation contribution line was not inserted");
-          lineageRows.push(lineageOf(line, secEntry.id, journalLineId));
-        });
-      }
-    }
-    if (lineageRows.length > 0) {
-      await tx.insert(schema.allocationLineage).values(lineageRows);
-    }
+    const entry = await writePrimaryEntry(tx, prepared, { bookId: book.id, periodId: period.id });
+    await flipDocumentToPosted(tx, prepared, entry.entryId, period.id, paymentTermsSnapshot);
+    if (paymentTermsSnapshot && !options.audit)
+      await auditRetainedPaymentTerms(tx, prepared, paymentTermsSnapshot);
+    await redeemTenders(prepared, entry.entryId, actorId);
+    await trackProviderCommit(tx, prepared, actorId);
+    await recordAllocations(tx, prepared, entry, period.id);
     // Full books receive the primary posting in this transaction.
-    await replicateDocumentEntry(tx, doc, book, entry.id, options.audit?.actorId ?? null);
-
-    if (options.audit && auditBefore) {
-      const auditAfter = await captureTransactionAuditSnapshot(tx, documentId, doc.orgId);
-      if (!auditAfter)
-        throw new PostingError(
-          `document ${documentId} disappeared during posting`,
-        );
-      await recordTransactionAudit(tx, {
-        orgId: doc.orgId,
-        documentId,
-        action: "post",
-        actorId: options.audit.actorId,
-        source: options.audit.source,
-        before: auditBefore,
-        after: auditAfter,
-      });
-    }
-
-    // AP, the bill GL, and every inventory receipt are one accounting unit.
-    // A later receipt failure rolls back the document and all earlier stock.
-    if (doc.kind === "vendor_bill" && !deps.migration) {
-      try {
-        await applyBillInventoryReceipts(
-          tx,
-          doc.orgId,
-          options.audit?.actorId ?? null,
-          doc.id,
-          entry.id,
-          postingDate,
-          subApplied.docSubId,
-        );
-      } catch (error) {
-        if (error instanceof PostingError) throw error;
-        throw new PostingError(
-          error instanceof Error ? error.message : String(error),
-        );
-      }
-    }
-    if (doc.kind === "vendor_credit" && !deps.migration) {
-      try {
-        await applyVendorCreditInventoryReturns(
-          tx,
-          doc.orgId,
-          options.audit?.actorId ?? null,
-          doc.id,
-          postingDate,
-          subApplied.docSubId,
-        );
-      } catch (error) {
-        if (error instanceof PostingError) throw error;
-        throw new PostingError(
-          error instanceof Error ? error.message : String(error),
-        );
-      }
-    }
-
-    // Product subledgers drain after commit. Write the outbox row in this
-    // transaction so a crash leaves a durable retry for runPostDocumentEffects.
+    await replicateDocumentEntry(tx, doc, book, entry.entryId, actorId);
+    if (options.audit && auditBefore)
+      await recordPostingAudit(tx, prepared, options.audit, auditBefore);
+    await applyInventoryEffects(tx, prepared, entry.entryId, actorId);
+    // Product subledgers drain after commit; this outbox row leaves a durable retry for
+    // runPostDocumentEffects.
     await enqueuePostingEffects(tx, {
       orgId: doc.orgId,
       documentId: doc.id,
       kind: doc.kind,
-      entryId: entry.id,
+      entryId: entry.entryId,
       postingDate,
-      actorId: options.audit?.actorId ?? null,
+      actorId,
     });
-
-    return entry.id;
+    return entry.entryId;
   });
+}
+
+/** The source evidence the posting relies on is still current under the setup fence. */
+async function assertSourcesCurrent(tx: PostingTx, prepared: PreparedPosting): Promise<void> {
+  const { documentId, deps, doc, effectiveDoc, postingLines, subApplied, postingDate } = prepared;
+  if (doc.kind === "journal") await validateJournalInstructions(tx, doc.orgId, doc.id, true);
+  if (!deps.migration) {
+    for (const subsidiaryId of new Set(subApplied.lines.map((line) => line.subsidiaryId))) {
+      await assertEntityPostingDate(tx, doc.orgId, subsidiaryId, postingDate);
+    }
+  }
+  try {
+    await assertCanadianGoodsTaxEvidence(tx, doc.orgId, documentId);
+  } catch (error) {
+    if (error instanceof PlaceOfSupplyError) throw new PostingError(error.message);
+    throw error;
+  }
+  try {
+    await assertCrossBorderSupplyEvidence(tx, doc.orgId, documentId, { persist: true });
+  } catch (error) {
+    if (error instanceof CrossBorderTaxError) throw new PostingError(error.message);
+    throw error;
+  }
+  if (doc.kind === "vendor_bill" || doc.kind === "vendor_credit") {
+    await assertPayrollRemittanceBillCurrent(doc.orgId, documentId, tx);
+  }
+  try {
+    await assertWithholdingRemittanceCurrent(tx, doc.orgId, documentId, {
+      document: effectiveDoc,
+      lines: postingLines,
+    });
+    await assertWithholdingDepositCurrent(tx, doc.orgId, documentId, {
+      document: effectiveDoc,
+      lines: postingLines,
+    });
+  } catch (error) {
+    if (error instanceof ContractorWithholdingError)
+      throw new PostingError(error.remedy ? `${error.message} ${error.remedy}` : error.message);
+    throw error;
+  }
+}
+
+/**
+ * Resolves the posting book and period and proves the period open behind the shared close/posting
+ * fence. The primary book row is read only after the setup fence, so a demoted book is never
+ * retained, and stays share-locked so its history guard cannot race the first posting.
+ */
+async function lockPostingScope(tx: PostingTx, prepared: PreparedPosting, actorId: string | null) {
+  const { doc, effectiveDoc, subApplied, scriptLines, postingDate } = prepared;
+  const books = await tx.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(
+    sql`
+      select id, is_active, posts_gl from accounting_books
+       where org_id = ${doc.orgId} and is_primary order by id for share`,
+    "objects",
+  );
+  const primary = books[0];
+  if (books.length !== 1 || !primary || !primary.is_active || !primary.posts_gl)
+    throw new PostingError("posting requires exactly one active primary posting book");
+  // A book-specific journal posts to its target book only; every other document posts to the
+  // primary book and replicates into full books.
+  const book = await resolveDocumentPostingBook(tx, doc, primary, actorId);
+  const period = await resolvePostingPeriod(tx, effectiveDoc, postingDate);
+  // A foreign-subsidiary pay run needs the period's derived rates to be translatable at all; every
+  // other kind keeps its own spot-rate precondition.
+  if (effectiveDoc.kind === "pay_run") {
+    await assertPayRunConsolidatedRateCoverage(tx, {
+      orgId: effectiveDoc.orgId,
+      docCurrency: effectiveDoc.currency,
+      docSubsidiaryId: subApplied.docSubId,
+      postingDate,
+    });
+  }
+  // A module-only close takes the fence's exclusive side, so it cannot land between this check
+  // and the journal insert.
+  await holdPeriodPostingFence(tx, { orgId: doc.orgId, periodId: period.id, bookId: book.id });
+  await assertDocumentPeriodOpen(tx, prepared, {
+    periodId: period.id,
+    bookId: book.id,
+    subsidiaryIds: [...subApplied.lines, ...scriptLines].map((line) => line.subsidiaryId),
+  });
+  return { book, period };
+}
+
+async function assertDocumentPeriodOpen(
+  tx: PostingTx,
+  { doc, deps }: PreparedPosting,
+  scope: { periodId: string; bookId: string; subsidiaryIds: string[] },
+): Promise<void> {
+  try {
+    await assertPeriodModulesOpen(tx, {
+      orgId: doc.orgId,
+      periodId: scope.periodId,
+      bookId: scope.bookId,
+      subsidiaryIds: scope.subsidiaryIds,
+      modules: [closeModuleForDocument(doc.kind)],
+      allowImportedLocks: deps.migration,
+    });
+  } catch (error) {
+    if (error instanceof CloseError)
+      throw new PostingError(error.message, { details: periodClosedDetailsOf(error) });
+    throw error;
+  }
+}
+
+/**
+ * Native posts retain their payment terms under lock in the same unit as the journal; a replay
+ * cannot manufacture historical terms from current setup, so it retains none.
+ */
+async function retainPaymentTerms(
+  tx: PostingTx,
+  prepared: PreparedPosting,
+): Promise<PaymentTermsSnapshot> {
+  const { doc, deps, effectiveDoc, dueDateFromTerms } = prepared;
+  let snapshot: PaymentTermsSnapshot;
+  try {
+    snapshot = deps.migration
+      ? null
+      : await captureDocumentPaymentTerms(tx, doc.orgId, effectiveDoc);
+  } catch (error) {
+    if (error instanceof PaymentTermsEvidenceError)
+      throw Object.assign(new PostingError(error.message), { cause: error });
+    throw error;
+  }
+  if (snapshot?.documentKind === "vendor_bill" && dueDateFromTerms) {
+    // Capture holds the vendor, its role and the terms row through commit, so the header must
+    // carry the due date those locked terms imply.
+    let lockedTerms: Awaited<ReturnType<typeof resolveTermsDueDate>>;
+    try {
+      lockedTerms = await resolveTermsDueDate(tx, doc.orgId, effectiveDoc);
+    } catch (error) {
+      if (error instanceof DocumentDefaultsError)
+        throw Object.assign(new PostingError(error.message), { cause: error });
+      throw error;
+    }
+    if (dueDateFromTerms.dueDate !== (lockedTerms?.dueDate ?? effectiveDoc.documentDate)) {
+      throw new PostingError(
+        "The vendor's payment terms changed during posting. Reload the bill and post again so its due date and retained terms agree.",
+      );
+    }
+  }
+  return snapshot;
+}
+
+/**
+ * Exactly once: the flip matches only an approved document, so a concurrent post blocks on the
+ * row lock, re-reads it as posted and matches nothing, and this transaction rolls back with its
+ * entry. The header facts the posting resolved are stamped in the same statement.
+ */
+async function flipDocumentToPosted(
+  tx: PostingTx,
+  prepared: PreparedPosting,
+  entryId: string,
+  periodId: string,
+  paymentTermsSnapshot: PaymentTermsSnapshot,
+): Promise<void> {
+  const {
+    doc,
+    effectiveDoc,
+    subApplied,
+    postingDate,
+    dueDateFromTerms,
+    shipToSnapshot,
+    controlAccountStamp,
+  } = prepared;
+  const flipped = await tx
+    .update(schema.documents)
+    .set({
+      status: "posted",
+      postedEntryId: entryId,
+      postingDate,
+      postingPeriodId: periodId,
+      ...(paymentTermsSnapshot ? { paymentTermsSnapshot } : {}),
+      // The due date the party's terms imply, so the open item and the header agree.
+      ...(dueDateFromTerms ? { dueDate: dueDateFromTerms.dueDate } : {}),
+      // The txn→functional rate applied to the origin legs; a document in its origin's base
+      // currency keeps its stored rate.
+      ...(subApplied.originBaseCurrency !== effectiveDoc.currency
+        ? { fxRate: subApplied.originFxRate }
+        : {}),
+      // The destination the sale was taxed with; the nexus ledger attributes the sale to it, and
+      // an uncaptured destination stays unattributed rather than re-homed to a live address.
+      ...(shipToSnapshot
+        ? {
+            shipToCountry: shipToSnapshot.country,
+            shipToRegion: shipToSnapshot.region,
+          }
+        : {}),
+      // The open item's control account, which payments, applications and regeneration read.
+      ...(controlAccountStamp
+        ? {
+            custom: sql`jsonb_set(coalesce(${schema.documents.custom}, '{}'::jsonb), '{controlAccountId}', to_jsonb(${controlAccountStamp}::text), true)`,
+          }
+        : {}),
+    })
+    .where(
+      and(
+        eq(schema.documents.id, doc.id),
+        eq(schema.documents.orgId, doc.orgId),
+        eq(schema.documents.status, "approved"),
+      ),
+    )
+    .returning({ id: schema.documents.id });
+  if (flipped.length !== 1) {
+    throw new PostingError(`document ${doc.documentNumber} was already posted or voided`);
+  }
+}
+
+async function auditRetainedPaymentTerms(
+  tx: PostingTx,
+  { doc }: PreparedPosting,
+  snapshot: NonNullable<PaymentTermsSnapshot>,
+): Promise<void> {
+  await insertAuditRecord(
+    tx,
+    {
+      orgId: doc.orgId,
+      tableName: "documents",
+      rowId: doc.id,
+      action: "update",
+      changes: {
+        source: "document_posting",
+        reason: "Retain payment terms with the original posting",
+        before: { payment_terms_snapshot: null },
+        after: { payment_terms_snapshot: snapshot },
+      },
+      actorId: null,
+      requestId: "document_posting",
+    },
+    () => new PostingError("The posted payment terms audit was not retained."),
+  );
+}
+
+/**
+ * A cash sale's stored-value tenders redeem against the entry just posted; an overdrawn card rolls
+ * the whole unit back. Historical replay replays the journal, never the subledger.
+ */
+async function redeemTenders(
+  prepared: PreparedPosting,
+  entryId: string,
+  actorId: string | null,
+): Promise<void> {
+  const { doc, deps } = prepared;
+  if (doc.kind !== "cash_sale" || deps.migration) return;
+  try {
+    await redeemCashSaleTenders(doc.orgId, doc.id, { journalEntryId: entryId, actorId });
+  } catch (error) {
+    if (error instanceof TenderRefusal) throw new PostingError(error.message);
+    throw error;
+  }
+}
+
+/** Provider commit tracking rides in the posting transaction; a replay never enqueues history. */
+async function trackProviderCommit(
+  tx: PostingTx,
+  prepared: PreparedPosting,
+  actorId: string | null,
+): Promise<void> {
+  const { doc, deps, effectiveDoc } = prepared;
+  if (deps.migration || !PROVIDER_COMMIT_KINDS[doc.kind]) return;
+  await enqueueProviderCommitTx(tx, {
+    orgId: doc.orgId,
+    documentId: doc.id,
+    kind: doc.kind,
+    documentNumber: effectiveDoc.documentNumber,
+    actorId,
+  });
+}
+
+/**
+ * Allocation lineage for the primary entry plus one allocation entry per secondary book. The
+ * primary's kernel lines come first and rule contributions follow in rule order; script lines
+ * write no lineage, and every lineage source is a primary kernel line.
+ */
+async function recordAllocations(
+  tx: PostingTx,
+  prepared: PreparedPosting,
+  entry: DocumentEntry,
+  periodId: string,
+): Promise<void> {
+  const { doc, kernelLines, primaryContrib, postContrib } = prepared;
+  const kernelLineIds = entry.lineIds.slice(0, kernelLines.length);
+  const contribLineIds = entry.lineIds.slice(
+    kernelLines.length,
+    kernelLines.length + primaryContrib.length,
+  );
+  const lineageRow = (
+    draft: LineageDraft,
+    sourceKernelIndex: number,
+    journalEntryId: string,
+    journalLineId: string | null,
+  ): LineageRow => {
+    const sourceId = kernelLineIds[sourceKernelIndex];
+    if (!sourceId)
+      throw new PostingError("allocation contribution points at an unknown kernel line");
+    return {
+      orgId: doc.orgId,
+      mode: "post",
+      ruleId: draft.ruleId,
+      versionId: draft.versionId,
+      definitionHash: draft.definitionHash,
+      runId: null,
+      documentId: doc.id,
+      journalEntryId,
+      journalLineId,
+      sourceJournalLineId: sourceId,
+      sourceDocumentLineId: null,
+      targetDocumentLineId: null,
+      driverId: draft.driverId,
+      driverValue: draft.driverValue,
+      driverTotal: draft.driverTotal,
+      share: draft.share,
+      amount: draft.amount,
+      residual: draft.residual ?? "0.0000",
+    };
+  };
+  const contributionRow = (
+    line: ContributedLineWithSource,
+    journalEntryId: string,
+    journalLineId: string,
+  ): LineageRow => {
+    if (!line.lineage)
+      throw new PostingError("allocation contribution is missing its lineage draft");
+    return lineageRow(line.lineage, line.sourceKernelIndex, journalEntryId, journalLineId);
+  };
+
+  const lineageRows: LineageRow[] = [];
+  primaryContrib.forEach((line, j) => {
+    const journalLineId = contribLineIds[j];
+    if (!journalLineId) throw new PostingError("allocation contribution line was not inserted");
+    lineageRows.push(contributionRow(line, entry.entryId, journalLineId));
+  });
+  for (const draft of postContrib.reportOnly) {
+    lineageRows.push(lineageRow(draft, draft.sourceKernelIndex, entry.entryId, null));
+  }
+  const secondaryByBook = secondaryBookLines(postContrib.lines);
+  if (secondaryByBook.size > 0) {
+    // Revalidate under the setup fence: a book deactivated after contribution planning refuses
+    // instead of receiving the entry.
+    const bookRows = await tx.execute<{
+      id: string;
+      code: string;
+      is_active: boolean;
+      posts_gl: boolean;
+    }>(
+      sql`
+        select id, code, is_active, posts_gl from accounting_books
+         where org_id = ${doc.orgId} and id = any(${`{${[...secondaryByBook.keys()].join(",")}}`}::uuid[])`,
+      "objects",
+    );
+    const bookById = new Map(bookRows.map((b) => [b.id, b]));
+    for (const [bookId, bookLines] of secondaryByBook) {
+      const target = bookById.get(bookId);
+      if (!target || !target.is_active || !target.posts_gl) {
+        throw new PostingError("allocation target book is not an active posting book");
+      }
+      const secondary = await postSecondaryBookEntry(
+        tx,
+        prepared,
+        { id: bookId, code: target.code },
+        periodId,
+        bookLines,
+      );
+      bookLines.forEach((line, j) => {
+        const journalLineId = secondary.lineIds[j];
+        if (!journalLineId) throw new PostingError("allocation contribution line was not inserted");
+        lineageRows.push(contributionRow(line, secondary.entryId, journalLineId));
+      });
+    }
+  }
+  if (lineageRows.length > 0) {
+    await tx.insert(schema.allocationLineage).values(lineageRows);
+  }
+}
+
+/** Contributed lines addressed to a secondary book, grouped by book. */
+function secondaryBookLines(
+  lines: readonly ContributedLineWithSource[],
+): Map<string, ContributedLineWithSource[]> {
+  const byBook = new Map<string, ContributedLineWithSource[]>();
+  for (const line of lines) {
+    if (line.bookId === undefined) continue;
+    const list = byBook.get(line.bookId) ?? [];
+    list.push(line);
+    byBook.set(line.bookId, list);
+  }
+  if ([...byBook.keys()].some((bookId) => !isUuid(bookId))) {
+    throw new PostingError("allocation target book must be a UUID, not a code or name");
+  }
+  return byBook;
+}
+
+/** A secondary book's allocation entry is balanced and period-checked like the primary entry. */
+async function postSecondaryBookEntry(
+  tx: PostingTx,
+  prepared: PreparedPosting,
+  book: { id: string; code: string },
+  periodId: string,
+  bookLines: ContributedLineWithSource[],
+): Promise<DocumentEntry> {
+  const { doc, deps, effectiveDoc, subApplied, postingDate } = prepared;
+  // Same cross-module intake as prepare: parse contributor amounts once.
+  const secApplied = await applySubsidiaries(
+    tx,
+    effectiveDoc,
+    await mapBookContributionAccounts(
+      tx,
+      effectiveDoc,
+      book,
+      postingDate,
+      bookLines.map((l) => ({ ...l, amount: parseMoney(l.amount) })),
+      subApplied.docSubId,
+    ),
+    { bookId: book.id, regeneration: false, withholdingCarrying: false },
+  );
+  assertFinalKernelBalance(secApplied.lines);
+  await validateRequiredDimensions(tx, doc.orgId, secApplied.lines);
+  const subsidiaryIds = [
+    ...new Set([subApplied.docSubId, ...secApplied.lines.map((line) => line.subsidiaryId)]),
+  ];
+  await holdPeriodPostingFence(tx, { orgId: doc.orgId, periodId, bookId: book.id });
+  if (!deps.migration) {
+    for (const subsidiaryId of subsidiaryIds) {
+      await assertEntityPostingDate(tx, doc.orgId, subsidiaryId, postingDate);
+    }
+  }
+  await assertDocumentPeriodOpen(tx, prepared, { periodId, bookId: book.id, subsidiaryIds });
+  return await writeSecondaryBookEntry(
+    tx,
+    prepared,
+    { book, periodId },
+    secApplied.lines,
+    bookLines,
+  );
+}
+
+async function recordPostingAudit(
+  tx: PostingTx,
+  { doc, documentId }: PreparedPosting,
+  audit: NonNullable<PostDocumentOptions["audit"]>,
+  before: AuditSnapshot,
+): Promise<void> {
+  const after = await captureTransactionAuditSnapshot(tx, documentId, doc.orgId);
+  if (!after) throw new PostingError(`document ${documentId} disappeared during posting`);
+  await recordTransactionAudit(tx, {
+    orgId: doc.orgId,
+    documentId,
+    action: "post",
+    actorId: audit.actorId,
+    source: audit.source,
+    before,
+    after,
+  });
+}
+
+/** AP, the bill GL and every inventory receipt commit as one accounting unit or not at all. */
+async function applyInventoryEffects(
+  tx: PostingTx,
+  prepared: PreparedPosting,
+  entryId: string,
+  actorId: string | null,
+): Promise<void> {
+  const { doc, deps, postingDate, subApplied } = prepared;
+  if (deps.migration) return;
+  if (doc.kind === "vendor_bill") {
+    await asPostingRefusal(() =>
+      applyBillInventoryReceipts(
+        tx,
+        doc.orgId,
+        actorId,
+        doc.id,
+        entryId,
+        postingDate,
+        subApplied.docSubId,
+      ),
+    );
+  }
+  if (doc.kind === "vendor_credit") {
+    await asPostingRefusal(() =>
+      applyVendorCreditInventoryReturns(
+        tx,
+        doc.orgId,
+        actorId,
+        doc.id,
+        postingDate,
+        subApplied.docSubId,
+      ),
+    );
+  }
+}
+
+async function asPostingRefusal(effect: () => Promise<unknown>): Promise<void> {
+  try {
+    await effect();
+  } catch (error) {
+    if (error instanceof PostingError) throw error;
+    throw new PostingError(error instanceof Error ? error.message : String(error));
+  }
 }

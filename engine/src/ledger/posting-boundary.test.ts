@@ -5,20 +5,38 @@ import test from "node:test";
 import ts from "typescript";
 
 const files = [
-  "posting-document.ts", "posting-prepare.ts", "posting-commit.ts",
-  "posting-replay.ts", "posting-replay-applications.ts", "posting-projection.ts", "posting-dispatch.ts", "posting-accounts.ts",
-  "posting-provider-tax.ts", "posting-subsidiaries.ts", "posting-period.ts",
-  "posting-rules.ts", "posting-rule-builders.ts", "posting-tax-policy.ts",
+  "posting-document.ts",
+  "posting-prepare.ts",
+  "posting-commit.ts",
+  "posting-journal-entry.ts",
+  "posting-replay.ts",
+  "posting-replay-applications.ts",
+  "posting-projection.ts",
+  "posting-dispatch.ts",
+  "posting-accounts.ts",
+  "posting-provider-tax.ts",
+  "posting-subsidiaries.ts",
+  "posting-period.ts",
+  "posting-rules.ts",
+  "posting-rule-builders.ts",
+  "posting-tax-policy.ts",
 ];
 const source = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8");
-const parse = (name: string) => ts.createSourceFile(name, source(name), ts.ScriptTarget.Latest, true);
+const parse = (name: string) =>
+  ts.createSourceFile(name, source(name), ts.ScriptTarget.Latest, true);
 
 test("posting uses direct operation modules with no legacy entrypoint", () => {
-  assert.equal(existsSync(new URL("posting.ts", import.meta.url)), false, "legacy entrypoint must be deleted");
+  assert.equal(
+    existsSync(new URL("posting.ts", import.meta.url)),
+    false,
+    "legacy entrypoint must be deleted",
+  );
   for (const file of files.filter((file) => file !== "posting.ts")) {
-    assert.ok(source(file).split("\n").length <= 800, `${file} must remain a focused operation or policy`);
+    assert.ok(
+      source(file).split("\n").length <= 800,
+      `${file} must remain a focused operation or policy`,
+    );
   }
-
 });
 
 test("posting implementation dependencies have no facade backimports or static cycles", () => {
@@ -29,7 +47,11 @@ test("posting implementation dependencies have no facade backimports or static c
       if (!(ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement))) continue;
       const specifier = statement.moduleSpecifier;
       if (!specifier || !ts.isStringLiteral(specifier)) continue;
-      assert.notEqual(specifier.text, "./posting.ts", `${file} must depend on the owning implementation, not the public facade`);
+      assert.notEqual(
+        specifier.text,
+        "./posting.ts",
+        `${file} must depend on the owning implementation, not the public facade`,
+      );
       const target = specifier.text.replace(/^\.\//, "");
       if (files.includes(target)) dependencies.push(target);
     }
