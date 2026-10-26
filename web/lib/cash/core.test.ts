@@ -369,3 +369,26 @@ test("declared category refusals map to an unavailable state, anything else reth
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
+
+test("day arithmetic on forecast dates agrees with the platform calendar and refuses outside it", async () => {
+  const { addDays, daysBetween, toISO } = await import("./core");
+  const { addCalendarDays, calendarDaysBetween, parseIsoDate } = await import("@openbooks/engine/platform/business-date/module");
+  const reference = {
+    addDays: (d: Date, n: number) => parseIsoDate(addCalendarDays(toISO(d), n)),
+    daysBetween: (a: Date, b: Date) => calendarDaysBetween(toISO(a), toISO(b)),
+  };
+  const instants = ["0001-01-01T00:00:00Z", "0001-03-01T13:30:00Z", "1899-12-31T23:59:59.999Z", "1969-12-31T12:00:00Z", "1970-01-01T00:00:00Z", "2024-02-28T00:00:00Z", "2024-02-29T18:00:00Z", "2100-02-28T00:00:00Z", "9999-12-31T00:00:00Z"].map((s) => new Date(s));
+  for (const d of instants) {
+    for (const n of [-400, -366, -1, 0, 1, 7, 30, 365, 366, 1461]) {
+      let expected: Date | Error, actual: Date | Error;
+      try { expected = reference.addDays(d, n) } catch (e) { expected = e as Error }
+      try { actual = addDays(d, n) } catch (e) { actual = e as Error }
+      if (expected instanceof Error) assert.ok(actual instanceof RangeError, `${d.toISOString()} ${n} refuses`);
+      else assert.equal((actual as Date).getTime(), expected.getTime(), `${d.toISOString()} + ${n}`);
+    }
+    for (const other of instants) assert.equal(daysBetween(d, other), reference.daysBetween(d, other));
+  }
+  assert.throws(() => addDays(new Date("9999-12-31T00:00:00Z"), 1), RangeError);
+  assert.throws(() => addDays(new Date(Number.NaN), 1), RangeError);
+  assert.throws(() => addDays(new Date("2024-01-01T00:00:00Z"), 0.5), RangeError);
+});

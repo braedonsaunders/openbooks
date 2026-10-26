@@ -92,8 +92,28 @@ export const parseISO = (s: string) => new Date(s + "T00:00:00Z");
 export const toISO = (d: Date) => d.toISOString().slice(0, 10);
 // Date-shaped adapters over the platform civil-date arithmetic: the cash
 // grid carries UTC-midnight Dates, the arithmetic itself lives in one place.
-export const addDays = (d: Date, n: number) => parseIsoDate(addCalendarDays(toISO(d), n));
-export const daysBetween = (a: Date, b: Date) => calendarDaysBetween(toISO(a), toISO(b));
+// A forecast moves every open item through these many times, so a date
+// inside the supported calendar takes its whole-day index directly (UTC has
+// no daylight-saving days); anything else goes through the platform
+// arithmetic, which refuses it by name.
+const FIRST_CALENDAR_DAY = Math.round(parseIsoDate("0001-01-01").getTime() / MS_DAY);
+const LAST_CALENDAR_DAY = Math.round(parseIsoDate("9999-12-31").getTime() / MS_DAY);
+const calendarDay = (d: Date): number | null => {
+  const day = Math.floor(d.getTime() / MS_DAY);
+  return day >= FIRST_CALENDAR_DAY && day <= LAST_CALENDAR_DAY ? day : null;
+};
+export const addDays = (d: Date, n: number) => {
+  const day = calendarDay(d);
+  const moved = day === null || !Number.isSafeInteger(n) ? null : day + n;
+  return moved !== null && moved >= FIRST_CALENDAR_DAY && moved <= LAST_CALENDAR_DAY
+    ? new Date(moved * MS_DAY)
+    : parseIsoDate(addCalendarDays(toISO(d), n));
+};
+export const daysBetween = (a: Date, b: Date) => {
+  const from = calendarDay(a);
+  const to = calendarDay(b);
+  return from !== null && to !== null ? to - from : calendarDaysBetween(toISO(a), toISO(b));
+};
 /** Sunday of the week (date − getDay()). */
 export const weekStart = (d: Date) => addDays(d, -d.getUTCDay());
 /** Weekend → next business day (Sat +2, Sun +1). */
