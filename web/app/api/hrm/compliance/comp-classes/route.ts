@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@openbooks/engine/platform/db";
 import {
   classify,
@@ -27,19 +27,26 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "hrm.construction.manage",
   feature: "hrmConstructionCompliance",
-  handler: async ({ request: req, authz: gate }) => {
+  body: ({ request }) => {
+    const action = new URL(request.url).searchParams.get("action");
+    return action === "rule"
+      ? createCompRuleBody
+      : action === "split" || action === "classify"
+        ? splitBody
+        : createCompClassBody;
+  },
+  handler: async ({ request: req, authz: gate, body }) => {
     const url = new URL(req.url);
     const action = url.searchParams.get("action");
     if (action === "rule") {
-      const parsedBody = await parseJsonBody(req, createCompRuleBody);
-      if (!parsedBody.ok) return parsedBody.response;
+      const parsedBody = body as z.output<typeof createCompRuleBody>;
       try {
         const rule = await createCompRule(db, {
           orgId: gate.user.orgId,
           actorId: gate.user.id,
-          priority: parsedBody.data.priority,
-          match: parsedBody.data.match as never,
-          compClassId: parsedBody.data.compClassId,
+          priority: parsedBody.priority,
+          match: parsedBody.match as never,
+          compClassId: parsedBody.compClassId,
         });
         return NextResponse.json({ rule }, { status: 201 });
       } catch (e) {
@@ -47,36 +54,34 @@ export const POST = defineRoute({
       }
     }
     if (action === "split" || action === "classify") {
-      const parsedBody = await parseJsonBody(req, splitBody);
-      if (!parsedBody.ok) return parsedBody.response;
+      const parsedBody = body as z.output<typeof splitBody>;
       try {
         if (action === "classify") {
           const compClass = await classify(db, {
             orgId: gate.user.orgId,
             actorId: gate.user.id,
-            projectId: parsedBody.data.projectId,
-            workedOn: parsedBody.data.workedOn,
+            projectId: parsedBody.projectId,
+            workedOn: parsedBody.workedOn,
           });
           return NextResponse.json({ compClass });
         }
         const split = await dailySplit(db, {
           orgId: gate.user.orgId,
           actorId: gate.user.id,
-          projectId: parsedBody.data.projectId,
-          workedOn: parsedBody.data.workedOn,
+          projectId: parsedBody.projectId,
+          workedOn: parsedBody.workedOn,
         });
         return NextResponse.json({ split });
       } catch (e) {
         return constructionErrorResponse(e);
       }
     }
-    const parsedBody = await parseJsonBody(req, createCompClassBody);
-    if (!parsedBody.ok) return parsedBody.response;
+    const parsedBody = body as z.output<typeof createCompClassBody>;
     try {
       const compClass = await createCompClass(db, {
         orgId: gate.user.orgId,
         actorId: gate.user.id,
-        ...parsedBody.data,
+        ...parsedBody,
       });
       return NextResponse.json({ compClass }, { status: 201 });
     } catch (e) {

@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@openbooks/engine/platform/db";
 import {
   addScheduleLine,
@@ -60,18 +60,25 @@ export const POST = defineRoute({
 export const PUT = defineRoute({
   permission: "hrm.construction.manage",
   feature: "hrmConstructionCompliance",
-  handler: async ({ request: req, authz: gate }) => {
+  body: ({ request }) => {
+    const params = new URL(request.url).searchParams;
+    return params.get("resolve") === "1"
+      ? resolveWageBody
+      : params.get("scope") === "1"
+        ? updateScheduleScopeBody
+        : addScheduleLineBody;
+  },
+  handler: async ({ request: req, authz: gate, body }) => {
     const url = new URL(req.url);
     if (url.searchParams.get("resolve") === "1") {
-      const parsedBody = await parseJsonBody(req, resolveWageBody);
-      if (!parsedBody.ok) return parsedBody.response;
+      const parsedBody = body as z.output<typeof resolveWageBody>;
       try {
         const wage = await resolveWage(db, {
           orgId: gate.user.orgId,
           actorId: gate.user.id,
-          employmentId: parsedBody.data.employmentId,
-          projectId: parsedBody.data.projectId ?? null,
-          workedOn: parsedBody.data.workedOn,
+          employmentId: parsedBody.employmentId,
+          projectId: parsedBody.projectId ?? null,
+          workedOn: parsedBody.workedOn,
         });
         return NextResponse.json({ wage });
       } catch (e) {
@@ -79,27 +86,25 @@ export const PUT = defineRoute({
       }
     }
     if (url.searchParams.get("scope") === "1") {
-      const scoped = await parseJsonBody(req, updateScheduleScopeBody);
-      if (!scoped.ok) return scoped.response;
+      const scoped = body as z.output<typeof updateScheduleScopeBody>;
       try {
         const schedule = await updateScheduleScope(db, {
           orgId: gate.user.orgId,
           actorId: gate.user.id,
-          scheduleId: scoped.data.scheduleId,
-          appliesTo: scoped.data.appliesTo ?? {},
+          scheduleId: scoped.scheduleId,
+          appliesTo: scoped.appliesTo ?? {},
         });
         return NextResponse.json({ schedule });
       } catch (e) {
         return constructionErrorResponse(e);
       }
     }
-    const parsedBody = await parseJsonBody(req, addScheduleLineBody);
-    if (!parsedBody.ok) return parsedBody.response;
+    const parsedBody = body as z.output<typeof addScheduleLineBody>;
     try {
       const lineId = await addScheduleLine(db, {
         orgId: gate.user.orgId,
         actorId: gate.user.id,
-        ...parsedBody.data,
+        ...parsedBody,
       });
       return NextResponse.json({ lineId }, { status: 201 });
     } catch (e) {

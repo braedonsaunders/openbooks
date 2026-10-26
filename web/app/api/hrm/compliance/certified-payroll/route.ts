@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@openbooks/engine/platform/db";
 import {
   amendRun,
@@ -38,46 +38,43 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "hrm.construction.manage",
   feature: "hrmConstructionCompliance",
-  handler: async ({ request: req, authz: gate }) => {
+  body: ({ request }) =>
+    new URL(request.url).searchParams.get("action") === "1"
+      ? certifiedActionBody
+      : generateCertifiedBody,
+  handler: async ({ request: req, authz: gate, body }) => {
     const url = new URL(req.url);
     if (url.searchParams.get("action") === "1") {
-      const parsedBody = await parseJsonBody(req, certifiedActionBody);
-      if (!parsedBody.ok) return parsedBody.response;
+      const parsedBody = body as z.output<typeof certifiedActionBody>;
       try {
-        if (parsedBody.data.action === "submit") {
+        if (parsedBody.action === "submit") {
           const run = await submitRun(db, {
             orgId: gate.user.orgId,
             actorId: gate.user.id,
-            runId: parsedBody.data.runId,
+            runId: parsedBody.runId,
           });
           return NextResponse.json({ run });
         }
-        if (parsedBody.data.action === "amend") {
+        if (parsedBody.action === "amend") {
           const run = await amendRun(db, {
             orgId: gate.user.orgId,
             actorId: gate.user.id,
-            runId: parsedBody.data.runId,
+            runId: parsedBody.runId,
           });
           return NextResponse.json({ run }, { status: 201 });
         }
-        const file = await downloadRun(
-          db,
-          gate.user.orgId,
-          gate.user.id,
-          parsedBody.data.runId,
-        );
+        const file = await downloadRun(db, gate.user.orgId, gate.user.id, parsedBody.runId);
         return NextResponse.json({ file });
       } catch (e) {
         return constructionErrorResponse(e);
       }
     }
-    const parsedBody = await parseJsonBody(req, generateCertifiedBody);
-    if (!parsedBody.ok) return parsedBody.response;
+    const parsedBody = body as z.output<typeof generateCertifiedBody>;
     try {
       const run = await generate(db, {
         orgId: gate.user.orgId,
         actorId: gate.user.id,
-        ...parsedBody.data,
+        ...parsedBody,
       });
       return NextResponse.json({ run }, { status: 201 });
     } catch (e) {
