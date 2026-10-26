@@ -25,7 +25,7 @@ const requestBodySchema = z
 export const runtime = "nodejs";
 
 /** Load one view (respecting visibility and the report entity gate). */
-async function legacyGET(gate: Authz, id: string) {
+async function getView(gate: Authz, id: string) {
   const { user, permissions } = gate;
   if (!isUuid(id)) return notFound("record");
   const view = await loadView(user.orgId, id, user.id, permissions);
@@ -39,7 +39,7 @@ async function legacyGET(gate: Authz, id: string) {
 /** Autosave: update name/description/query/layout/scope/allowedRoles. */
 
 /** Delete (owner or admin only). */
-async function legacyDELETE(gate: Authz, id: string) {
+async function deleteSavedView(gate: Authz, id: string) {
   const { user, permissions } = gate;
   if (!isUuid(id)) return notFound("record");
   const ok = await deleteView(user.orgId, id, user.id, permissions.has("*"));
@@ -54,7 +54,7 @@ export const GET = defineRoute({
     none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks.",
   },
   params: z.object({ id: z.string() }),
-  handler: async ({ authz, params }) => legacyGET(authz, params.id),
+  handler: async ({ authz, params }) => getView(authz, params.id),
 });
 
 export const PATCH = defineRoute({
@@ -65,9 +65,7 @@ export const PATCH = defineRoute({
   params: z.object({ id: z.string() }),
   body: requestBodySchema,
   invalidBodyStatus: 422,
-  handler: async ({ body, params, authz: routeAuthz }) => {
-    const gate = routeAuthz;
-
+  handler: async ({ body, params, authz: gate }) => {
     const { user, permissions } = gate;
     const { id } = params;
     const isAdmin = permissions.has("*");
@@ -124,5 +122,5 @@ export const DELETE = defineRoute({
     none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks.",
   },
   params: z.object({ id: z.string() }),
-  handler: async ({ authz, params }) => legacyDELETE(authz, params.id),
+  handler: async ({ authz, params }) => deleteSavedView(authz, params.id),
 });

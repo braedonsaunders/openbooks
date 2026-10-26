@@ -9,10 +9,8 @@ export const runtime = "nodejs";
 export const GET = defineRoute({
   permission: "apps.manage",
   feature: "apps",
-  handler: async ({ request: request, authz: routeAuthz, params: routeParams }) => {
-    const params = Promise.resolve(routeParams as { key: string });
-    const gate = routeAuthz;
-    const { key } = await params;
+  handler: async ({ request, authz: gate, params }) => {
+    const { key } = params as { key: string };
     const query = new URL(request.url).searchParams;
     const section = query.get("section") ?? "versions";
     const result = await readAppManagementPage(db, {

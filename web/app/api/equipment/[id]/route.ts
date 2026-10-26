@@ -69,9 +69,8 @@ export const GET = defineRoute({
   permission: "assets.read",
   feature: "equipment",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
-    const params = Promise.resolve(routeParams);
-    const { id } = await params;
+  handler: async ({ authz: gate, params }) => {
+    const { id } = params;
     // The loader checks the scope first, on the locked unit row: an
     // out-of-scope unit answers exactly like a missing one, with no post-hoc
     // check for a concurrent rehome to race.
@@ -501,9 +500,8 @@ export const DELETE = defineRoute({
   permission: "assets.manage",
   feature: "equipment",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
-    const params = Promise.resolve(routeParams);
-    const { id } = await params;
+  handler: async ({ authz: gate, params }) => {
+    const { id } = params;
     if (!isUuid(id)) return notFound("record");
     return db.transaction(async (tx) => {
       // The draft check happens under the row lock inside the same transaction

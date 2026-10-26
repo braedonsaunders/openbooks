@@ -298,7 +298,7 @@ function dateOrUndefined(value: unknown): string | undefined {
   return value == null ? undefined : String(value);
 }
 
-async function legacyGET(authz: Authz) {
+async function getPropertyManagementData(authz: Authz) {
   // The workspace loader scopes every query to the caller inside one
   // repeatable-read snapshot: filtering an org-wide read afterwards would
   // mix a stale header with fresh lines across a concurrent rehome.
@@ -570,13 +570,13 @@ async function refuseDisabledLeaseChargeInventory(
 export const GET = defineRoute({
   permission: "ar.read",
   feature: "propertyManagement",
-  handler: async ({ authz }) => legacyGET(authz),
+  handler: async ({ authz }) => getPropertyManagementData(authz),
 });
 
 export const POST = defineRoute({
   public: "session",
   body: requestBodySchema,
-  handler: async ({ request, body: parsedBody, authz: routeAuthz }) => {
+  handler: async ({ request, body: parsedBody, authz }) => {
     const body = parsedBody as Record<string, unknown>;
 
     const action = String(body.action ?? "");
@@ -587,7 +587,6 @@ export const POST = defineRoute({
       : billingActions.has(action)
         ? "ar.create"
         : "ar.create";
-    const authz = routeAuthz;
     if (!can(authz, permission)) {
       return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 });
     }

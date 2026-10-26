@@ -5,12 +5,12 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { deleteDocument, DeleteError } from "@openbooks/engine/ledger/document-delete";
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
-import { can, guardSubsidiaryScope } from "../../../lib/authz";
-import { isUuid } from "../../../lib/list-params";
-import { assignOrderLineWarehouse, convertOrder, ConversionError } from "../../../lib/order-cycle";
-import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../lib/features";
+import { can, guardSubsidiaryScope } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import { assignOrderLineWarehouse, convertOrder, ConversionError } from "@/lib/order-cycle";
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from "@/lib/features";
 import { assignWarehouseBody, jsonObject, parseJsonBody } from "@/lib/api/json";
-import { unexpectedServerError } from "../../../lib/api/unexpected";
+import { unexpectedServerError } from "@/lib/api/unexpected";
 import { notFound } from "@/lib/api/responses";
 import {
   applyOrderEdit,
@@ -20,15 +20,15 @@ import {
   type OrderEditServices,
   type OrderPatchBody,
   type OrderHandlerConfig,
-} from "../../../lib/order-draft-edit";
+} from "@/lib/order-draft-edit";
 import { computeOrderTotals, exactOrderMoney, loadOrder, orderTaxProfileMap } from "./lib";
-import { persistLineTaxComponents } from "../../../lib/bills.ts";
+import { persistLineTaxComponents } from "@/lib/bills.ts";
 import {
   activeStockLocations,
   profiledItemIds,
   resolveLineStockLocation,
-} from "../../../lib/stock-locations";
-import { segmentRegistry, validateExtraDims } from "../../../lib/segments";
+} from "@/lib/stock-locations";
+import { segmentRegistry, validateExtraDims } from "@/lib/segments";
 import { promoteCrmAccount } from "@openbooks/engine/crm/crm";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
 import { issueSalesOrder, SalesOrderIssueError } from "@openbooks/engine/sales/sales-orders";
@@ -38,7 +38,7 @@ import {
   voidSignatureRequestsForSubject,
 } from "@openbooks/engine/billing/quote-to-cash";
 export { assignWarehouseBody, jsonObject } from "@/lib/api/json";
-export type { OrderHandlerConfig } from "../../../lib/order-draft-edit";
+export type { OrderHandlerConfig } from "@/lib/order-draft-edit";
 
 export const orderEditServices: OrderEditServices = {
   platform: { db, withOrgTransaction, sql, documentRevisionCounterSql },

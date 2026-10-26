@@ -38,13 +38,7 @@ const bodyObjectSchema = z
   .strict();
 
 /** GET /api/pdf-templates?recordType=customer_invoice — list org templates. */
-async function legacyGET(
-  req: Request,
-  ctx: { params: Promise<unknown> },
-  injectedGate?: Authz | null,
-) {
-  const gate = injectedGate as Authz;
-
+async function listPdfTemplatesRoute(req: Request, gate: Authz) {
   const { user } = gate;
   const recordType = new URL(req.url).searchParams.get("recordType") ?? undefined;
   if (recordType && !PDF_RECORD_TYPE_BY_KEY[recordType])
@@ -78,7 +72,7 @@ async function legacyGET(
 
 /** POST — create a template. Body: { recordType, name, description?, sourceHtml?, … }.
  *  Omitted sourceHtml seeds the record type's starter design. */
-async function legacyPOST(gate: Authz, body: z.output<typeof bodyObjectSchema>) {
+async function createPdfTemplate(gate: Authz, body: z.output<typeof bodyObjectSchema>) {
   const { user } = gate;
   const meta = body.recordType ? PDF_RECORD_TYPE_BY_KEY[body.recordType] : undefined;
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
@@ -207,13 +201,12 @@ export const GET = defineRoute({
   permission: "admin.customization.manage",
   feature: { none: "This route is governed by its permission and service authorization." },
 
-  handler: ({ request, params, authz }) =>
-    legacyGET(request, { params: Promise.resolve(params) }, authz),
+  handler: ({ request, authz }) => listPdfTemplatesRoute(request, authz),
 });
 
 export const POST = defineRoute({
   permission: "admin.customization.manage",
   feature: { none: "This route is governed by its permission and service authorization." },
   body: bodyObjectSchema,
-  handler: ({ body, authz }) => legacyPOST(authz, body),
+  handler: ({ body, authz }) => createPdfTemplate(authz, body),
 });

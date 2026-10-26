@@ -7,7 +7,7 @@ import type { Authz } from "@/lib/authz";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function legacyGET(request: Request, authz: Authz) {
+async function getSecurityDepositReconciliation(request: Request, authz: Authz) {
   const asOf = new URL(request.url).searchParams.get("asOf") ?? undefined;
   try {
     // The loader scopes every query to the caller inside one
@@ -27,5 +27,5 @@ async function legacyGET(request: Request, authz: Authz) {
 export const GET = defineRoute({
   permission: "ar.read",
   feature: "propertyManagement",
-  handler: async ({ request, authz }) => legacyGET(request, authz),
+  handler: async ({ request, authz }) => getSecurityDepositReconciliation(request, authz),
 });

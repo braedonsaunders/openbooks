@@ -11,7 +11,7 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = "nodejs";
 
 /** Run a view fresh and return its ReportRunResult (browse live). */
-async function legacyPOST(gate: Authz, id: string) {
+async function runSavedView(gate: Authz, id: string) {
   const { user, permissions } = gate;
   if (!isUuid(id)) return notFound("record");
   const view = await loadView(user.orgId, id, user.id, permissions);
@@ -34,5 +34,5 @@ export const POST = defineRoute({
     none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks.",
   },
   params: z.object({ id: z.string() }),
-  handler: async ({ authz, params }) => legacyPOST(authz, params.id),
+  handler: async ({ authz, params }) => runSavedView(authz, params.id),
 });

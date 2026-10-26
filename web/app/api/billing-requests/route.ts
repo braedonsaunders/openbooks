@@ -6,7 +6,7 @@ import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { normalizeMoney } from "@openbooks/engine/money/money";
 import type { Authz } from "@/lib/authz";
-import { isUuid } from "../../../lib/list-params";
+import { isUuid } from "@/lib/list-params";
 import { createBillingRequest, listBillingRequests } from "@/lib/billing-requests";
 import { canonicalDecimal } from "@/lib/exact-decimal";
 import { moneyRefusal } from "@/lib/payroll-decimal-refusal";
@@ -32,7 +32,7 @@ const requestBodySchema = z.object({
 
 export const runtime = "nodejs";
 
-async function legacyGET(gate: Authz, req: Request) {
+async function getBillingRequests(gate: Authz, req: Request) {
   const projectId = new URL(req.url).searchParams.get("projectId");
   if (!projectId || !isUuid(projectId))
     return NextResponse.json({ error: "projectId required" }, { status: 400 });
@@ -43,16 +43,14 @@ async function legacyGET(gate: Authz, req: Request) {
 export const GET = defineRoute({
   permission: "projects.read",
   feature: "projects",
-  handler: async ({ request, authz }) => legacyGET(authz, request),
+  handler: async ({ request, authz }) => getBillingRequests(authz, request),
 });
 
 export const POST = defineRoute({
   permission: "projects.manage",
   feature: "projects",
   body: requestBodySchema,
-  handler: async ({ body, authz: routeAuthz }) => {
-    const gate = routeAuthz;
-
+  handler: async ({ body, authz: gate }) => {
     const projectId = String(body?.projectId ?? "");
     if (!body?.projectId || !isUuid(projectId)) {
       return NextResponse.json({ error: "projectId required" }, { status: 400 });

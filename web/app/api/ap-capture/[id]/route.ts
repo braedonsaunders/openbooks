@@ -112,9 +112,8 @@ export const GET = defineRoute({
   permission: "ap.read",
   feature: { none: "No optional feature applies to this permission-governed endpoint." },
   params: z.object({ id: z.string() }),
-  handler: async ({ request: _request, authz: gate, params: routeParams }) => {
-    const params = Promise.resolve(routeParams);
-    const { id } = await params;
+  handler: async ({ authz: gate, params }) => {
+    const { id } = params;
     // A malformed id names nothing: same answer as an unknown one, never a
     // PostgreSQL uuid cast error escaping as a 500.
     if (!isUuid(id)) return notFound("record");

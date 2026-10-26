@@ -20,14 +20,14 @@ import {
   collectPriorToolNames,
   type HistoryMessage,
   type HistoryPart,
-} from "../../../../lib/assistant/context-history";
+} from "@/lib/assistant/context-history";
 import {
   foldPartsIntoPins,
   hasAnaphor,
   renderPinsSection,
   type EntityPins,
-} from "../../../../lib/assistant/context-pins";
-import { resolveStepBudget } from "../../../../lib/assistant/context-steps";
+} from "@/lib/assistant/context-pins";
+import { resolveStepBudget } from "@/lib/assistant/context-steps";
 import {
   buildSummaryPrompt,
   buildSummarySection,
@@ -35,14 +35,14 @@ import {
   mergeResolvedEntities,
   parseSummaryModelOutput,
   shouldRefreshSummary,
-} from "../../../../lib/assistant/context-summary";
+} from "@/lib/assistant/context-summary";
 import {
   countConversationAssistantTurns,
   readConversationSummary,
   writeConversationSummary,
-} from "../../../../lib/assistant/conversation-memory";
-import { scheduleAutoTitle } from "../../../../lib/assistant/conversation-title";
-import { moduleOfTool } from "../../../../lib/assistant/tool-router";
+} from "@/lib/assistant/conversation-memory";
+import { scheduleAutoTitle } from "@/lib/assistant/conversation-title";
+import { moduleOfTool } from "@/lib/assistant/tool-router";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { orgFiscalContext } from "@/lib/fiscal";
 import { resolvedFeatureState } from "@/lib/features";

@@ -25,14 +25,13 @@ const POSTBodySchema = z.object({
 export const GET = defineRoute({
   permission: "parties.read",
   feature: "crossBorderTax",
-  handler: async ({ authz: routeAuthz, request }) => {
-    const gate = routeAuthz;
+  handler: async ({ authz, request }) => {
     const partyId = new URL(request.url).searchParams.get("partyId");
     if (!partyId || !isUuid(partyId)) {
       return NextResponse.json({ error: "partyId (uuid) is required" }, { status: 400 });
     }
     try {
-      const rows = await listPartyTaxIds(db, gate.user.orgId, partyId);
+      const rows = await listPartyTaxIds(db, authz.user.orgId, partyId);
       return NextResponse.json({ taxIds: rows });
     } catch (e: unknown) {
       return apiErrorResponse(e, { safeStatus: 422 });
@@ -44,16 +43,11 @@ export const POST = defineRoute({
   permission: "parties.manage",
   feature: "crossBorderTax",
   body: POSTBodySchema,
-  handler: async ({ authz: routeAuthz, body: routeBody }) => {
-    const gate = routeAuthz;
-    const { partyId, scheme, value } = routeBody as {
-      partyId: string;
-      scheme: "vies" | "hmrc" | "abn" | "gst";
-      value: string;
-    };
+  handler: async ({ authz, body }) => {
+    const { partyId, scheme, value } = body;
     try {
-      const saved = await withOrgTransaction(gate.user.orgId, () =>
-        savePartyTaxId(db, gate.user.orgId, { partyId, scheme, value }, gate.user.id),
+      const saved = await withOrgTransaction(authz.user.orgId, () =>
+        savePartyTaxId(db, authz.user.orgId, { partyId, scheme, value }, authz.user.id),
       );
       return NextResponse.json({ ok: true, ...saved });
     } catch (e: unknown) {

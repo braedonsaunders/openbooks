@@ -48,7 +48,7 @@ const bodyObjectSchema = z
  * them. A designer who cannot read any real record still previews against
  * the catalog's synthetic sample values.
  */
-async function legacyPOST(gate: Authz, body: z.output<typeof bodyObjectSchema>) {
+async function previewPdfTemplate(gate: Authz, body: z.output<typeof bodyObjectSchema>) {
   const { user } = gate;
   const meta = body.recordType ? PDF_RECORD_TYPE_BY_KEY[body.recordType] : undefined;
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
@@ -158,5 +158,5 @@ export const POST = defineRoute({
   permission: "admin.customization.manage",
   feature: { none: "This route is governed by its permission and service authorization." },
   body: bodyObjectSchema,
-  handler: ({ body, authz }) => legacyPOST(authz, body),
+  handler: ({ body, authz }) => previewPdfTemplate(authz, body),
 });

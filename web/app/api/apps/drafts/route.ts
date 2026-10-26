@@ -46,8 +46,7 @@ export const POST = defineRoute({
   feature: "apps",
   body: draftActionBody,
   maxBodyBytes: MAX_DRAFT_BODY_BYTES,
-  handler: async ({ authz: routeAuthz, body }) => {
-    const gate = routeAuthz;
+  handler: async ({ authz: gate, body }) => {
     const context = applicationContextFromSession(gate, "api", crypto.randomUUID());
     try {
       if (
@@ -124,8 +123,7 @@ export const POST = defineRoute({
 export const GET = defineRoute({
   permission: "apps.manage",
   feature: "apps",
-  handler: async ({ request: request, authz: routeAuthz }) => {
-    const gate = routeAuthz;
+  handler: async ({ request, authz: gate }) => {
     const id = new URL(request.url).searchParams.get("id");
     if (!id || !isUuid(id))
       return NextResponse.json({ error: "draft id required" }, { status: 400 });
