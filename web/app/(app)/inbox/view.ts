@@ -56,6 +56,10 @@ import { pgTextArrayLiteral } from "../../../lib/pg-array";
 import { subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
 import { formatCivilDate } from "../../../lib/format";
 import { formatDecimal } from "../../../lib/money-format";
+import {
+  FLOW_SUBJECT_LABEL_NAMESPACE,
+  flowSubjectLabelKey,
+} from "../../../lib/flows/subject-labels";
 import type { ApprovalRow } from "./ApprovalsTable";
 import type { DelegateOption } from "./GateActions";
 
@@ -249,7 +253,7 @@ export async function loadApprovals(
   const format = await getFormatter();
   const locale = await getLocale();
   const t = await getTranslations("approvals");
-  const tSubjects = await getTranslations("customization.recordTypes");
+  const tSubjects = await getTranslations(FLOW_SUBJECT_LABEL_NAMESPACE);
   const tc = await getTranslations("common");
   const ti = await getTranslations("inbox");
   const th = await getTranslations("hrm");
@@ -322,13 +326,10 @@ export async function loadApprovals(
   }
 
   // Kind labels: the approvals catalog first, then the Flows subject
-  // profile's record-type label (the vocabulary the Flows builder shows),
-  // then the profile's own name; an unregistered kind keeps its code.
+  // profile's record-type label (the vocabulary the Flows builder shows);
+  // an unregistered kind keeps its code.
   const subjectProfileLabel = new Map(
-    listFlowSubjectProfiles().map((profile) => [
-      profile.subjectKind,
-      profile.labelKey ? profile.labelKey : profile.label,
-    ]),
+    listFlowSubjectProfiles().map((profile) => [profile.subjectKind, flowSubjectLabelKey(profile)]),
   );
   const kindLabel = (kind: string): string => {
     if (t.has(`kinds.${kind}` as never)) return t(`kinds.${kind}` as never);

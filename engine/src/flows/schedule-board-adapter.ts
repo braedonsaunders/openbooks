@@ -9,7 +9,6 @@ import type { FlowSubjectProfile } from "@openbooks/forms-core";
 export const scheduleBoardSubjectProfile: FlowSubjectProfile = {
   subjectKind: "schedule_board",
   label: "Schedule board delivery",
-  labelKey: "subjects.schedule_board",
   triggers: ["scheduled"],
   actions: ["send_board_schedule"],
   statuses: [

@@ -8068,12 +8068,14 @@
       "button": "新規フロー",
       "title": "新規フロー",
       "description": "このフローが対象とするレコードタイプを選択してください。次のステップで手順を設計します。",
+      "approvalHint": "承認が必要な場合は「新規承認」を使用してください。承認フロー全体が自動で作成されます。",
       "name": "名前",
-      "namePlaceholder": "例: 10,000ドル超の仕入請求書承認",
+      "namePlaceholder": "例: 高額の仕入請求書が保存されたら買掛金担当に通知",
       "subject": "レコードタイプ",
       "subjectPlaceholder": "レコードタイプを選択…",
       "create": "フローを作成",
       "failed": "フローを作成できませんでした",
+      "featureOff": "この会社では{feature}が無効です。このレコードタイプのフローを作成するには、会社設定 → 機能で有効にしてください。",
       "scheduleWeekdayPreset": "平日06:00と14:30（任意のプリセット。作成時に有効化 — 時刻を確認）",
       "groups": {
         "documents": "ドキュメント",
@@ -8347,9 +8349,6 @@
       "retryFailed": "再試行に失敗しました",
       "retried": "実行を再駆動しました",
       "retrying": "再試行中…"
-    },
-    "subjects": {
-      "schedule_board": "予定配信"
     }
   },
   "features": {

@@ -305,3 +305,33 @@ test("quick setup preserves an explicit tenant policy allowing the submitter to 
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
+
+test("quick setup refuses a record type whose feature is off and writes nothing", async () => {
+  const { org, actors } = await setupOrg();
+  try {
+    await withBypassContext(() =>
+      db.execute(sql`
+        update orgs set settings = jsonb_set(settings, '{features,equity}', 'false'::jsonb, true)
+         where id = ${org.orgId}`),
+    );
+    const res = await withOrgContext(org.orgId, () =>
+      setup(
+        post({ subjectKind: "equity_action", approver: { type: "user", userId: actors.adminId } }),
+      ),
+    );
+    assert.equal(res.status, 422, await res.clone().text());
+    const body = (await res.json()) as { code?: string; details?: { feature?: string } };
+    assert.equal(body.code, "flow_subject_feature_disabled");
+    assert.equal(body.details?.feature, "equity");
+    const written = await withBypassContext(() =>
+      db.execute<{ n: string }>(
+        sql`select count(*)::text as n from flows where org_id = ${org.orgId} and subject_kind = 'equity_action'`,
+        "objects",
+      ),
+    );
+    assert.equal(written[0]?.n, "0");
+  } finally {
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});

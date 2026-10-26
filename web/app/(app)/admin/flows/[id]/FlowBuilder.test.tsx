@@ -238,3 +238,25 @@ test("fire-readiness banners name the state, never a storage id", () => {
     incomplete.remove();
   }
 });
+
+test("the canvas carries no attribution badge and shows the minimap only once it has nodes", () => {
+  stubFetch(() => ({}));
+  const empty = renderBuilder({
+    enabled: false,
+    graph: { schemaVersion: 1, nodes: [], edges: [] },
+  });
+  try {
+    assert.ok(empty.querySelector(".react-flow"), "the canvas renders");
+    assert.ok(!empty.querySelector(".react-flow__attribution"), "no attribution badge");
+    assert.ok(!empty.querySelector(".react-flow__minimap"), "an empty flow has no minimap");
+  } finally {
+    empty.remove();
+  }
+  const wired = renderBuilder({ enabled: false, graph: wiredGraph() });
+  try {
+    assert.ok(!wired.querySelector(".react-flow__attribution"), "no attribution badge");
+    assert.ok(wired.querySelector(".react-flow__minimap"), "a flow with nodes shows its minimap");
+  } finally {
+    wired.remove();
+  }
+});

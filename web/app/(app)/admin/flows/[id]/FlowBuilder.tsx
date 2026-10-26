@@ -63,6 +63,10 @@ import { NODE_TYPES } from "../_builder/nodes";
 import { Inspector } from "../_builder/Inspector";
 import { RunsPanel, type FlowRunRow } from "../_builder/RunsPanel";
 import { readApiErrorMessage } from "../../../../../lib/api-error";
+import {
+  FLOW_SUBJECT_LABEL_NAMESPACE,
+  flowSubjectLabel,
+} from "../../../../../lib/flows/subject-labels";
 
 /**
  * The flow builder: canvas left (React Flow), inspector right (360px).
@@ -105,6 +109,7 @@ export default function FlowBuilder({
   // legal-entity name and the organization-wide option.
   const tLegalEntity = useTranslations("accounting.provisions");
   const tAllEntities = useTranslations("crm.sales");
+  const tSubjects = useTranslations(FLOW_SUBJECT_LABEL_NAMESPACE);
   const router = useRouter();
 
   const edgeLabels = useMemo(
@@ -406,7 +411,9 @@ export default function FlowBuilder({
           placeholder={t("builder.namePlaceholder")}
           className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-lg font-semibold text-slate-900 outline-none hover:border-slate-200 focus:border-teal-500 dark:text-slate-100 dark:hover:border-slate-700"
         />
-        <span className="text-xs text-slate-400 dark:text-slate-500">{profile.label}</span>
+        <span className="text-xs text-slate-400 dark:text-slate-500">
+          {flowSubjectLabel(tSubjects, profile)}
+        </span>
         {dirty ? (
           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
             {t("builder.unsaved")}
@@ -595,10 +602,13 @@ export default function FlowBuilder({
               fitView
               fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
               minZoom={0.2}
+              proOptions={{ hideAttribution: true }}
             >
               <Background gap={18} />
               <Controls position="bottom-left" />
-              <MiniMap pannable zoomable />
+              {/* An empty canvas has nothing to overview; the minimap appears
+                  with the first node. */}
+              {nodes.length > 0 ? <MiniMap pannable zoomable /> : null}
             </ReactFlow>
 
             {nodes.length === 0 ? (

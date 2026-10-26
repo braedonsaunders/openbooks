@@ -9,6 +9,10 @@ import { lintFlowGraphForSubject, listFlowSubjectProfiles } from "@openbooks/eng
 import { flowReadiness, nodeDisplayName, type AutomationNode } from "@openbooks/forms-core";
 import { nameFlowWarnings } from "./_builder/warnings";
 import {
+  FLOW_SUBJECT_LABEL_NAMESPACE,
+  flowSubjectLabelKey,
+} from "../../../../lib/flows/subject-labels";
+import {
   pagination,
   badge,
   column,
@@ -174,9 +178,9 @@ export async function loadFlows(
     db.execute<{ n: string }>(sql`select count(*) as n from flows f where ${where}`, "objects"),
   ]);
 
-  const tSubjects = await getTranslations("customization.recordTypes");
+  const tSubjects = await getTranslations(FLOW_SUBJECT_LABEL_NAMESPACE);
   const subjectLabel = new Map(
-    listFlowSubjectProfiles().map((p) => [p.subjectKind, p.labelKey ? p.labelKey : p.label]),
+    listFlowSubjectProfiles().map((p) => [p.subjectKind, flowSubjectLabelKey(p)]),
   );
   const subjectName = (kind: string) => {
     const key = subjectLabel.get(kind) ?? kind;

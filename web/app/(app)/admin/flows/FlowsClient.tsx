@@ -8,22 +8,28 @@ import { toast } from "sonner";
 import { Button, Drawer, Input, Label, SearchSelect, cn } from "@openbooks/ui";
 import { ApiResponseError, apiJson } from "../../../../lib/api-error";
 import { confirmDialog } from "../../../../lib/confirm";
+import {
+  FLOW_SUBJECT_LABEL_NAMESPACE,
+  flowSubjectRefusedFeature,
+  flowSubjectPickerOptions,
+} from "../../../../lib/flows/subject-labels";
 
 /**
- * Client bits of the flows list: the New Flow drawer (name + subject kind
- * from the profiles API) and per-row enable/delete controls.
+ * Client bits of the flows list: the New Flow drawer (name + a subject kind
+ * the organization's features allow, from the profiles API) and per-row
+ * enable/delete controls.
  */
 
 type ProfileOption = {
   subjectKind: string;
-  label?: string;
   labelKey?: string;
   group?: string;
 };
 
 export function NewFlowButton() {
   const t = useTranslations("admin.flows");
-  const tSubjects = useTranslations("customization.recordTypes");
+  const tSubjects = useTranslations(FLOW_SUBJECT_LABEL_NAMESPACE);
+  const tFeatures = useTranslations("admin.features");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -37,16 +43,19 @@ export function NewFlowButton() {
     if (profiles === null) {
       fetch("/api/admin/flows/profiles")
         .then((r) => (r.ok ? r.json() : { profiles: [] }))
-        .then((d) =>
-          setProfiles(
-            (d.profiles ?? []).map((p: ProfileOption) => ({
-              subjectKind: p.subjectKind,
-              label: p.label,
-              labelKey: p.labelKey,
-              group: p.group,
-            })),
-          ),
-        )
+        .then((d) => {
+          const offered: ProfileOption[] = (d.profiles ?? []).map((p: ProfileOption) => ({
+            subjectKind: p.subjectKind,
+            labelKey: p.labelKey,
+            group: p.group,
+          }));
+          setProfiles(offered);
+          // A deep-linked record type whose feature is off is not offered;
+          // clear it rather than preselecting a kind the picker cannot show.
+          setSubjectKind((current) =>
+            offered.some((p) => p.subjectKind === current) ? current : "",
+          );
+        })
         .catch(() => setProfiles([]));
     }
   }
@@ -74,7 +83,16 @@ export function NewFlowButton() {
       );
       router.push(`/admin/flows/${data.id}`);
     } catch (error) {
-      toast.error(error instanceof ApiResponseError ? error.message : t("new.failed"));
+      // The owning feature is rechecked when the flow is written; a refusal
+      // names the switch in the operator's language.
+      const feature = flowSubjectRefusedFeature(error, tFeatures);
+      toast.error(
+        feature
+          ? t("new.featureOff", { feature })
+          : error instanceof ApiResponseError
+            ? error.message
+            : t("new.failed"),
+      );
     } finally {
       setBusy(false);
     }
@@ -90,7 +108,12 @@ export function NewFlowButton() {
         onClose={() => setOpen(false)}
         size="sm"
         title={t("new.title")}
-        description={t("new.description")}
+        description={
+          <>
+            {t("new.description")}
+            <span className="mt-1 block">{t("new.approvalHint")}</span>
+          </>
+        }
         footer={
           <div className="flex w-full justify-end gap-2">
             <Button disabled={busy || !name.trim() || !subjectKind} onClick={create}>
@@ -123,21 +146,7 @@ export function NewFlowButton() {
             <Label>{t("new.subject")}</Label>
             <SearchSelect
               value={subjectKind}
-              options={(profiles ?? [])
-                .map((p) => {
-                  const groupKey = `new.groups.${p.group ?? "other"}` as const;
-                  return {
-                    value: p.subjectKind,
-                    label:
-                      p.labelKey && tSubjects.has(p.labelKey as never)
-                        ? tSubjects(p.labelKey as never)
-                        : (p.label ?? p.subjectKind),
-                    // Unknown future groups fall back to Other so the picker
-                    // never renders an ungrouped row.
-                    group: t.has(groupKey as never) ? t(groupKey as never) : t("new.groups.other"),
-                  };
-                })
-                .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label))}
+              options={flowSubjectPickerOptions(profiles ?? [], t, tSubjects)}
               placeholder={t("new.subjectPlaceholder")}
               loading={profiles === null}
               onChange={setSubjectKind}

@@ -22,6 +22,7 @@ import {
 import type { Authz } from "@/lib/authz";
 
 import { filterFlowRunSubjectsToScope } from "../../flows/_lib";
+import { flowSubjectFeatureRefusal } from "@/lib/flows/subject-availability";
 
 const FLOW_SUBJECT_KINDS = listFlowSubjectProfiles().map((profile) => profile.subjectKind) as [
   string,
@@ -103,7 +104,7 @@ export const POST = defineRoute({
   feature: "flows",
   scope: "unrestricted",
   body: requestBodySchema,
-  handler: async ({ request, body, authz: routeAuthz }) =>
+  handler: ({ request, body, authz: routeAuthz }) =>
     withOrgTransaction(routeAuthz.user.orgId, async () => {
       const gate = routeAuthz;
 
@@ -148,5 +149,11 @@ export const POST = defineRoute({
         graph,
       });
       return NextResponse.json({ id });
+    }).catch((error: unknown) => {
+      // The subject's owning feature is rechecked inside the write: a kind
+      // whose feature is off cannot gain new flows (existing ones stay).
+      const refusal = flowSubjectFeatureRefusal(error);
+      if (refusal) return refusal;
+      throw error;
     }),
 });

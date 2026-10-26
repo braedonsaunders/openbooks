@@ -8068,12 +8068,14 @@
       "button": "Neuer Flow",
       "title": "Neuer Flow",
       "description": "Wählen Sie den Datensatztyp, über den dieser Flow läuft. Die Schritte gestalten Sie als Nächstes.",
+      "approvalHint": "Sie benötigen eine Genehmigung? Verwenden Sie stattdessen „Neue Genehmigung“ – dort entsteht der vollständige Genehmigungs-Flow automatisch.",
       "name": "Name",
-      "namePlaceholder": "z. B. Eingangsrechnungsgenehmigung über 10.000 $",
+      "namePlaceholder": "z. B. Kreditorenbuchhaltung bei großer Eingangsrechnung benachrichtigen",
       "subject": "Datensatztyp",
       "subjectPlaceholder": "Datensatztyp auswählen…",
       "create": "Flow erstellen",
       "failed": "Der Flow konnte nicht erstellt werden",
+      "featureOff": "{feature} ist für dieses Unternehmen deaktiviert. Aktivieren Sie die Funktion unter Unternehmenseinstellungen → Funktionen, um Flows für diesen Datensatztyp zu erstellen.",
       "scheduleWeekdayPreset": "Werktags 06:00 und 14:30 (optionale Vorlage; startet aktiviert — Zeiten prüfen)",
       "groups": {
         "documents": "Dokumente",
@@ -8347,9 +8349,6 @@
       "retryFailed": "Wiederholung fehlgeschlagen",
       "retried": "Lauf erneut angestoßen",
       "retrying": "Wird wiederholt …"
-    },
-    "subjects": {
-      "schedule_board": "Planversand"
     }
   },
   "features": {

@@ -75,6 +75,12 @@ export {
   handlerReleasedSubjectKinds,
 } from "./registry.ts";
 export {
+  assertFlowSubjectFeaturesEnabled,
+  flowSubjectAvailable,
+  flowSubjectFeatureKeys,
+  FlowSubjectFeatureDisabledError,
+} from "./subject-features.ts";
+export {
   checkFlowLock,
   getFlowLock,
   lockRecord,

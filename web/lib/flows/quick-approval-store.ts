@@ -2,7 +2,10 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { documentRevisionSql } from "@openbooks/engine/records/revision";
 import { db } from "@openbooks/engine/platform/db";
-import { QUICK_APPROVAL_FLOW_DESCRIPTION } from "@openbooks/engine/flows/module";
+import {
+  QUICK_APPROVAL_FLOW_DESCRIPTION,
+  assertFlowSubjectFeaturesEnabled,
+} from "@openbooks/engine/flows/module";
 
 /** The quick-approval setup state for one subject kind: its flow (if any) and the approver choices. */
 export async function readQuickApprovalSetup(orgId: string, subjectKind: string) {
@@ -66,6 +69,7 @@ export async function insertQuickApprovalFlow(input: {
   requestId: string | null;
 }): Promise<string> {
   return db.transaction(async (tx) => {
+    await assertFlowSubjectFeaturesEnabled(tx, input.orgId, input.subjectKind);
     const r = await tx.execute<{ id: string }>(
       sql`
       insert into flows (org_id, name, description, subject_kind, enabled, graph, created_by, updated_by)

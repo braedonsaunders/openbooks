@@ -10,6 +10,7 @@ import { allReportEntities } from '@openbooks/reports'
 import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/payroll/packs'
 import { COUNTRY_TAX_PACKS } from '@openbooks/engine/country-tax-packs'
 import { getFlowAdapter, listFlowSubjectProfiles } from '@openbooks/engine/flows/registry'
+import { FLOW_SUBJECT_LABEL_NAMESPACE, flowSubjectLabelKey } from '../lib/flows/subject-labels.ts'
 import {
   flattenCatalog,
   generateFallbackManifest,
@@ -4798,4 +4799,16 @@ test('native approval request display fields have labels in every shipped locale
     assert.ok(catalog.leaves.has(`common.approvalFlow.recordReview.fields.${key}`) || catalog.leaves.has(`common.labels.${key}`),
       `${catalog.code}: approval request field ${key} needs a native display label`)
   }
+})
+
+test('every registered flow subject kind has a record-type name in every shipped locale', () => {
+  const profiles = listFlowSubjectProfiles()
+  assert.ok(profiles.length > 0, 'flow subject kinds must be registered')
+  const missing = CATALOGS.flatMap((catalog) =>
+    profiles.flatMap((profile) => {
+      const value = catalog.leaves.get(`${FLOW_SUBJECT_LABEL_NAMESPACE}.${flowSubjectLabelKey(profile)}`)
+      return value && value.trim() ? [] : [`${catalog.code}:${profile.subjectKind}`]
+    }),
+  )
+  assert.deepEqual(missing, [], `flow subject kinds the record-type pickers would show as raw keys:\n  ${sample(missing)}`)
 })

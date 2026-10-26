@@ -8068,12 +8068,14 @@
       "button": "Novo flow",
       "title": "Novo flow",
       "description": "Escolha o tipo de registro sobre o qual este flow será executado. Você desenhará as etapas em seguida.",
+      "approvalHint": "Precisa de uma aprovação? Use “Nova aprovação”: ela cria o flow de aprovação completo para você.",
       "name": "Nome",
-      "namePlaceholder": "ex.: Aprovação de conta a pagar acima de US$ 10.000",
+      "namePlaceholder": "ex.: Avisar contas a pagar quando uma conta alta for salva",
       "subject": "Tipo de registro",
       "subjectPlaceholder": "Escolha um tipo de registro…",
       "create": "Criar flow",
       "failed": "Não foi possível criar o flow",
+      "featureOff": "{feature} está desativado para esta empresa. Ative-o em Configurações da empresa → Recursos para criar flows para este tipo de registro.",
       "scheduleWeekdayPreset": "Dias úteis às 06:00 e 14:30 (modelo opcional; ativado ao criar — revise os horários)",
       "groups": {
         "documents": "Documentos",
@@ -8347,9 +8349,6 @@
       "retrying": "Tentando de novo…",
       "retried": "Execução reiniciada",
       "retryFailed": "Nova tentativa falhou"
-    },
-    "subjects": {
-      "schedule_board": "Envio da escala"
     }
   },
   "features": {

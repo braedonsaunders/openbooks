@@ -17,6 +17,7 @@ import {
   insertQuickApprovalFlow,
   readQuickApprovalSetup,
 } from "../../../../../lib/flows/quick-approval-store";
+import { flowSubjectFeatureRefusal } from "../../../../../lib/flows/subject-availability";
 
 export const runtime = "nodejs";
 
@@ -152,14 +153,21 @@ export const POST = defineRoute({
       return NextResponse.json({ errors: lint.errors }, { status: 400 });
     }
     const name = body.name?.trim() || `Approval: ${profile.label}`;
-    const id = await insertQuickApprovalFlow({
-      orgId: user.orgId,
-      actorId: user.id,
-      name,
-      subjectKind: body.subjectKind,
-      graph: built.graph,
-      requestId: request.headers.get("X-Request-Id"),
-    });
+    let id: string;
+    try {
+      id = await insertQuickApprovalFlow({
+        orgId: user.orgId,
+        actorId: user.id,
+        name,
+        subjectKind: body.subjectKind,
+        graph: built.graph,
+        requestId: request.headers.get("X-Request-Id"),
+      });
+    } catch (error) {
+      const refusal = flowSubjectFeatureRefusal(error);
+      if (refusal) return refusal;
+      throw error;
+    }
     return NextResponse.json({ id });
   },
 });

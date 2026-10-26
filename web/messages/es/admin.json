@@ -8068,12 +8068,14 @@
       "button": "Nuevo flujo",
       "title": "Nuevo flujo",
       "description": "Elija el tipo de registro sobre el que corre este flujo. Diseñará el grafo a continuación.",
+      "approvalHint": "¿Necesita una aprobación? Use «Nueva aprobación»: crea el flujo de aprobación completo por usted.",
       "name": "Nombre",
-      "namePlaceholder": "p. ej. Aprobación de facturas > 10 000 $",
+      "namePlaceholder": "p. ej. Avisar a cuentas por pagar al guardar una factura grande",
       "subject": "Tipo de registro",
       "subjectPlaceholder": "Elegir un tipo de registro…",
       "create": "Crear flujo",
       "failed": "No se pudo crear el flujo",
+      "featureOff": "{feature} está desactivado para esta empresa. Actívelo en Configuración de la empresa → Funciones para crear flujos para este tipo de registro.",
       "scheduleWeekdayPreset": "Días laborables a las 06:00 y 14:30 (ajuste opcional; se activa al crear — revise los horarios)",
       "groups": {
         "documents": "Documentos",
@@ -8347,9 +8349,6 @@
       "retry": "Reintentar",
       "retryFailed": "Reintento fallido",
       "retrying": "Reintentando…"
-    },
-    "subjects": {
-      "schedule_board": "Envío del horario"
     }
   },
   "features": {

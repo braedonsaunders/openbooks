@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { documentRevisionSql } from "../records/revision.ts";
 import { db } from "../platform/db.ts";
+import { assertFlowSubjectFeaturesEnabled } from "./subject-features.ts";
 
 export interface AdminFlowRunSummary {
   flowId: string;
@@ -65,6 +66,7 @@ export async function createAdminFlow(args: {
   graph: unknown;
 }): Promise<string> {
   return db.transaction(async (tx) => {
+    await assertFlowSubjectFeaturesEnabled(tx, args.orgId, args.subjectKind);
     const r = await tx.execute<{ id: string }>(
       sql`
       insert into flows (org_id, name, subject_kind, enabled, graph, created_by, updated_by)

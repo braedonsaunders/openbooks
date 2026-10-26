@@ -8,7 +8,8 @@ import type { SessionUser } from "../../../../lib/auth";
  * A new flow starts enabled exactly when its initial graph validates: the
  * save path refuses to leave an enabled flow warning-bearing, so creation
  * applies the same lint. An empty draft graph stays disabled (it cannot
- * fire); a timer graph that lints clean starts enabled, audited.
+ * fire); a timer graph that lints clean starts enabled, audited. A subject
+ * kind is offered and accepted only while its owning feature is enabled.
  */
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __adminFlowsCreateUser: state });
@@ -33,7 +34,8 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/testing/fixtures");
-const { POST: create } = await import("./route");
+const { GET: listFlows, POST: create } = await import("./route");
+const { GET: listProfiles } = await import("./profiles/route");
 
 function sessionUser(id: string, orgId: string): SessionUser {
   return {
@@ -144,6 +146,90 @@ test("a validating timer-graph flow is created enabled and audited", async () =>
       "a graph that validates starts enabled",
     );
     assert.equal(await auditInserts(org.orgId, id), "1", "creation is audited");
+  } finally {
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+async function setFeatures(orgId: string, features: Record<string, boolean>) {
+  await withBypassContext(() =>
+    db.execute(sql`
+      update orgs set settings = jsonb_set(
+        settings, '{features}',
+        coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(features)}::jsonb, true)
+      where id = ${orgId}`),
+  );
+}
+
+async function offeredKinds(orgId: string): Promise<string[]> {
+  const res = await withOrgContext(orgId, () =>
+    listProfiles(new Request("http://admin.test/api/admin/flows/profiles")),
+  );
+  assert.equal(res.status, 200, `profiles status: ${res.status}`);
+  const body = (await res.json()) as { profiles: { subjectKind: string; labelKey: string }[] };
+  for (const profile of body.profiles) {
+    assert.ok(profile.labelKey, `${profile.subjectKind} carries a catalog label key`);
+  }
+  return body.profiles.map((profile) => profile.subjectKind);
+}
+
+test("a subject whose feature is off is neither offered nor accepted, and existing flows stay listed", async () => {
+  const { org } = await setupOrg(["flows.manage"]);
+  try {
+    const existing = await withOrgContext(org.orgId, () =>
+      create(post({ name: "Leave notice", subjectKind: "hrm_leave_request" })),
+    );
+    assert.equal(existing.status, 200, "HRM is on: leave requests accept new flows");
+    const { id: existingId } = (await existing.json()) as { id: string };
+
+    await setFeatures(org.orgId, { hrm: false, equity: false, rebateManagement: false });
+    const offered = await offeredKinds(org.orgId);
+    assert.ok(offered.includes("vendor_bill"), "core document kinds stay offered");
+    for (const kind of [
+      "hrm_leave_request",
+      "schedule_board",
+      "equity_action",
+      "customer_rebate_claim",
+    ]) {
+      assert.ok(!offered.includes(kind), `${kind} is withheld while its feature is off`);
+    }
+
+    const refused = await withOrgContext(org.orgId, () =>
+      create(post({ name: "Leave escalation", subjectKind: "hrm_leave_request" })),
+    );
+    assert.equal(refused.status, 422, `refusal status: ${refused.status}`);
+    const body = (await refused.json()) as {
+      code?: string;
+      remedy?: string;
+      details?: { feature?: string; subjectKind?: string };
+    };
+    assert.equal(body.code, "flow_subject_feature_disabled");
+    assert.deepEqual(body.details, { subjectKind: "hrm_leave_request", feature: "hrm" });
+    assert.match(body.remedy ?? "", /Company Settings → Features/);
+    const leaveFlows = await withBypassContext(() =>
+      db.execute<{ n: string }>(
+        sql`select count(*)::text as n from flows where org_id = ${org.orgId} and subject_kind = 'hrm_leave_request'`,
+        "objects",
+      ),
+    );
+    assert.equal(leaveFlows[0]?.n, "1", "the refused create writes nothing");
+
+    const listed = await withOrgContext(org.orgId, () =>
+      listFlows(new Request("http://admin.test/api/admin/flows")),
+    );
+    const { flows } = (await listed.json()) as { flows: { id: string }[] };
+    assert.ok(
+      flows.some((flow) => flow.id === existingId),
+      "disabling a feature keeps its existing flows readable",
+    );
+
+    await setFeatures(org.orgId, { hrm: true });
+    assert.ok((await offeredKinds(org.orgId)).includes("hrm_leave_request"));
+    const accepted = await withOrgContext(org.orgId, () =>
+      create(post({ name: "Leave escalation", subjectKind: "hrm_leave_request" })),
+    );
+    assert.equal(accepted.status, 200, "re-enabling the feature restores authoring");
   } finally {
     state.user = null;
     await withBypassContext(() => dropScratchOrg(org.orgId));

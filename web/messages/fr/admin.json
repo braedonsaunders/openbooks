@@ -8068,12 +8068,14 @@
       "button": "Nouveau flux",
       "title": "Nouveau flux",
       "description": "Choisissez le type d'enregistrement concerné. Vous concevrez le graphe ensuite.",
+      "approvalHint": "Besoin d'une approbation ? Utilisez plutôt « Nouvelle approbation » : le flux d'approbation complet est créé pour vous.",
       "name": "Nom",
-      "namePlaceholder": "p. ex. Approbation des factures > 10 000 $",
+      "namePlaceholder": "p. ex. Prévenir la comptabilité fournisseurs à l'enregistrement d'une grosse facture",
       "subject": "Type d'enregistrement",
       "subjectPlaceholder": "Choisir un type d'enregistrement…",
       "create": "Créer le flux",
       "failed": "Impossible de créer le flux",
+      "featureOff": "{feature} est désactivé pour cette entreprise. Activez-le dans Paramètres de l’entreprise → Fonctionnalités pour créer des flux sur ce type d'enregistrement.",
       "scheduleWeekdayPreset": "Jours ouvrés à 06:00 et 14:30 (préréglage facultatif ; activé à la création — vérifiez les horaires)",
       "groups": {
         "documents": "Documents",
@@ -8347,9 +8349,6 @@
       "retry": "Réessayer",
       "retryFailed": "Échec de la relance",
       "retrying": "Relance…"
-    },
-    "subjects": {
-      "schedule_board": "Livraison du planning"
     }
   },
   "features": {

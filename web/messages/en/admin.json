@@ -8068,12 +8068,14 @@
       "button": "New flow",
       "title": "New flow",
       "description": "Pick the record type this flow runs over. You'll design the steps next.",
+      "approvalHint": "Need an approval? Use New approval instead — it builds the complete approval flow for you.",
       "name": "Name",
-      "namePlaceholder": "e.g. Bill approval over $10,000",
+      "namePlaceholder": "e.g. Notify AP when a large bill is saved",
       "subject": "Record type",
       "subjectPlaceholder": "Choose a record type…",
       "create": "Create flow",
       "failed": "Could not create the flow",
+      "featureOff": "{feature} is turned off for this company. Turn it on in Company Settings → Features to build flows for this record type.",
       "scheduleWeekdayPreset": "Weekdays at 06:00 and 14:30 (optional preset; starts enabled — review the times)",
       "groups": {
         "documents": "Documents",
@@ -8347,9 +8349,6 @@
       "retrying": "Retrying…",
       "retried": "Run re-driven",
       "retryFailed": "Retry failed"
-    },
-    "subjects": {
-      "schedule_board": "Schedule board delivery"
     }
   },
   "features": {

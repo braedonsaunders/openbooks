@@ -8068,12 +8068,14 @@
       "button": "新建流程",
       "title": "新建流程",
       "description": "选择此流程运行所针对的记录类型。你将在下一步设计各步骤。",
+      "approvalHint": "需要审批？请改用“新建审批”，它会为你创建完整的审批流程。",
       "name": "名称",
-      "namePlaceholder": "例如 超过 $10,000 的账单审批",
+      "namePlaceholder": "例如 保存大额账单时通知应付团队",
       "subject": "记录类型",
       "subjectPlaceholder": "选择一种记录类型……",
       "create": "创建流程",
       "failed": "无法创建流程",
+      "featureOff": "此公司已关闭{feature}。请在公司设置 → 功能中启用，以便为此记录类型创建流程。",
       "scheduleWeekdayPreset": "工作日06:00和14:30（可选预设，创建即启用 — 请确认时间）",
       "groups": {
         "documents": "单据",
@@ -8347,9 +8349,6 @@
       "retrying": "重试中…",
       "retried": "运行已重新驱动",
       "retryFailed": "重试失败"
-    },
-    "subjects": {
-      "schedule_board": "排班发送"
     }
   },
   "features": {

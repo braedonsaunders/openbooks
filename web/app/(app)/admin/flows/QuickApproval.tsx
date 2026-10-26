@@ -8,6 +8,11 @@ import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Drawer, Input, Label, SearchSelect, Select } from "@openbooks/ui";
 import { ApiResponseError, apiJson } from "../../../../lib/api-error";
+import {
+  FLOW_SUBJECT_LABEL_NAMESPACE,
+  flowSubjectRefusedFeature,
+  flowSubjectPickerOptions,
+} from "../../../../lib/flows/subject-labels";
 
 /**
  * One-step approval setup: "Require approval" wherever a record kind can be
@@ -21,7 +26,7 @@ import { ApiResponseError, apiJson } from "../../../../lib/api-error";
  * deep-link it with ?quickApproval=<subjectKind>.
  */
 
-type ProfileOption = { subjectKind: string; label?: string; labelKey?: string; group?: string };
+type ProfileOption = { subjectKind: string; labelKey?: string; group?: string };
 
 type QuickState = {
   flow: {
@@ -42,7 +47,8 @@ const ERROR_CODES = ["bad-threshold", "no-amount-field", "unknown-role", "unknow
 
 export function QuickApprovalButton() {
   const t = useTranslations("admin.flows");
-  const tSubjects = useTranslations("customization.recordTypes");
+  const tSubjects = useTranslations(FLOW_SUBJECT_LABEL_NAMESPACE);
+  const tFeatures = useTranslations("admin.features");
   // Existing catalog labels, reused so every locale renders them: the
   // legal-entity name and the organization-wide option.
   const tLegalEntity = useTranslations("accounting.provisions");
@@ -74,7 +80,6 @@ export function QuickApprovalButton() {
         setProfiles(
           (d.profiles ?? []).map((p: ProfileOption) => ({
             subjectKind: p.subjectKind,
-            label: p.label,
             labelKey: p.labelKey,
             group: p.group,
           })),
@@ -167,6 +172,8 @@ export function QuickApprovalButton() {
       const key = `quick.errors.${error.code}` as const;
       if (t.has(key as never)) return t(key as never);
     }
+    const feature = flowSubjectRefusedFeature(error, tFeatures);
+    if (feature) return t("new.featureOff", { feature });
     return error instanceof ApiResponseError ? error.message : fallback;
   }
 
@@ -225,16 +232,7 @@ export function QuickApprovalButton() {
     }
   }
 
-  const options = (profiles ?? [])
-    .map((p) => ({
-      value: p.subjectKind,
-      label:
-        p.labelKey && tSubjects.has(p.labelKey as never)
-          ? tSubjects(p.labelKey as never)
-          : (p.label ?? p.subjectKind),
-      group: p.group ?? "",
-    }))
-    .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
+  const options = flowSubjectPickerOptions(profiles ?? [], t, tSubjects);
   const canCreate =
     subjectKind !== "" &&
     state !== null &&
