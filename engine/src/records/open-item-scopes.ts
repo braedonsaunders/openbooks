@@ -182,7 +182,9 @@ function openItemCandidateLinesSql(
   scope: Pick<OpenItemsAsOfScope, "orgId" | "asOf" | "accounts" | "subsidiaryIds" | "partyId">,
 ): SQL {
   const { orgId, asOf } = scope;
-  const lineScope = sql`b.account_id in (select a.id from accounts a where a.org_id = ${orgId} and ${scope.accounts})
+  // The side's control accounts resolve once, as an array: a semi-join to
+  // accounts would let the planner drive every candidate probe per account.
+  const lineScope = sql`b.account_id = any(array(select a.id from accounts a where a.org_id = ${orgId} and ${scope.accounts}))
          and b.posting_date <= ${asOf}
          ${scope.subsidiaryIds !== undefined ? sql`and b.subsidiary_id = any(${`{${scope.subsidiaryIds.join(",")}}`}::uuid[])` : sql``}
          ${scope.partyId !== undefined ? sql`and b.party_id = ${scope.partyId}` : sql``}`;
