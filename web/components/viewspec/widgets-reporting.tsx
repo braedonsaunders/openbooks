@@ -29,7 +29,7 @@ import {
   NlAskPanel,
 } from './native-widgets.client'
 import { JournalEntryHeading } from '../../app/(app)/reports/journal/sections'
-import { AccountHeading, EntryCell } from '../../app/(app)/reports/general-ledger/sections'
+import { AccountHeading } from '../../app/(app)/reports/general-ledger/sections'
 import { PartyHeading } from '../../app/(app)/reports/registers/sections'
 import { AgingStrip } from '../../app/(app)/reports/statements/[partyId]/sections'
 import { StatementRows, ReconciliationNote } from '../../app/(app)/reports/StatementRows'
@@ -80,14 +80,7 @@ export const REPORTING_WIDGETS = {
       name={str(props, 'name') ?? ''}
     />
   ),
-  'entry-cell': (props) => (
-    <EntryCell
-      entryId={str(props, 'entryId') ?? ''}
-      docKind={(props.docKind as string | null) ?? null}
-      docId={(props.docId as string | null) ?? null}
-      entryNumber={(props.entryNumber as string | null) ?? null}
-    />
-  ),
+  'entry-cell': BROWSER_CELL_WIDGETS['entry-cell'],
   'party-heading': (props) => (
     <PartyHeading
       partyId={(props.partyId as string | null) ?? null}
