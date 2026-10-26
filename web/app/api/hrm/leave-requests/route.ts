@@ -1,14 +1,9 @@
 import { defineRoute } from "@/lib/api/route";
-import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { fileLeaveRequest } from "@openbooks/engine/hrm/leave";
-import {
-  listLeaveRequests,
-  myLeaveRequests,
-} from "@openbooks/engine/hrm/leave-read";
-import { guardPermission } from "../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
-import { isUuid } from "../../../../lib/list-params";
+import { listLeaveRequests, myLeaveRequests } from "@openbooks/engine/hrm/leave-read";
+import { guardPermission } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
 import { leaveErrorResponse } from "./_lib";
 import { fileLeaveRequestBody } from "./bodies";
 
@@ -36,27 +31,18 @@ async function guardSelfServiceRead() {
 }
 
 export const GET = defineRoute({
-  public: "session",
-  handler: async ({ request: req }) => {
+  authorize: async ({ request }) => {
+    const employmentId = new URL(request.url).searchParams.get("employmentId");
+    return employmentId === "mine" || employmentId === null
+      ? guardSelfServiceRead()
+      : guardPermission("hrm.leave.read");
+  },
+  feature: "hrm",
+  handler: async ({ request: req, authz: gate }) => {
     const url = new URL(req.url);
     const employmentId = url.searchParams.get("employmentId");
-    const gate =
-      employmentId === "mine" || employmentId === null
-        ? await guardSelfServiceRead()
-        : await guardPermission("hrm.leave.read");
-    if (gate instanceof NextResponse) return gate;
-    if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-      return notFound("record");
-    }
     const status = url.searchParams.get("status");
-    const statuses = [
-      "draft",
-      "submitted",
-      "approved",
-      "rejected",
-      "withdrawn",
-      "cancelled",
-    ];
+    const statuses = ["draft", "submitted", "approved", "rejected", "withdrawn", "cancelled"];
     if (status !== null && !statuses.includes(status)) {
       return NextResponse.json({ error: "unknown status" }, { status: 400 });
     }
@@ -65,8 +51,7 @@ export const GET = defineRoute({
         if (status !== null) {
           return NextResponse.json(
             {
-              error:
-                "status filtering on the self-service inbox is not supported",
+              error: "status filtering on the self-service inbox is not supported",
             },
             { status: 400 },
           );
@@ -78,10 +63,7 @@ export const GET = defineRoute({
         return NextResponse.json({ requests });
       }
       if (!isUuid(employmentId))
-        return NextResponse.json(
-          { error: "employment id must be a uuid" },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: "employment id must be a uuid" }, { status: 400 });
       const requests = await listLeaveRequests({
         orgId: gate.user.orgId,
         actorId: gate.user.id,

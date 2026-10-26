@@ -83,7 +83,8 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmLeaveRouteNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmLeaveRouteNextResponse =
+  NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
@@ -91,25 +92,27 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/hrm/leave", "mock:service"],
   ["@openbooks/engine/hrm/leave-read", "mock:service"],
   ["@/lib/authz", "mock:authz"],
+  ["@/lib/features", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-leave-collection";
-  const collectionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-leave-collection";
+const collectionRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";
 const TYPE_ID = "00000000-0000-4000-8000-000000000022";
@@ -155,9 +158,14 @@ test("GET lists one employment with status pass-through", async () => {
 
 test("GET mine reads the self-service inbox with no caller-supplied worker", async () => {
   reset();
-  const res = await collectionRoute!.GET(new Request("http://x/api/hrm/leave-requests?employmentId=mine"));
+  const res = await collectionRoute!.GET(
+    new Request("http://x/api/hrm/leave-requests?employmentId=mine"),
+  );
   assert.equal(res.status, 200);
-  assert.deepEqual(routeState.calls[0], { fn: "mine", args: { orgId: "org-1", actorId: "user-1" } });
+  assert.deepEqual(routeState.calls[0], {
+    fn: "mine",
+    args: { orgId: "org-1", actorId: "user-1" },
+  });
 });
 
 test("GET refuses unknown status and non-uuid employment before the service", async () => {
@@ -166,7 +174,9 @@ test("GET refuses unknown status and non-uuid employment before the service", as
     new Request(`http://x/api/hrm/leave-requests?employmentId=${EMPLOYMENT_ID}&status=taken`),
   );
   assert.equal(badStatus.status, 400);
-  const badId = await collectionRoute!.GET(new Request("http://x/api/hrm/leave-requests?employmentId=nope"));
+  const badId = await collectionRoute!.GET(
+    new Request("http://x/api/hrm/leave-requests?employmentId=nope"),
+  );
   assert.equal(badId.status, 400);
   assert.equal(routeState.calls.length, 0, "the service never runs on a rejected boundary");
 });
@@ -174,7 +184,9 @@ test("GET refuses unknown status and non-uuid employment before the service", as
 test("GET mine admits the filing grant while a specified employment still needs read", async () => {
   reset();
   routeState.deniedPermissions = ["hrm.leave.read"];
-  const res = await collectionRoute!.GET(new Request("http://x/api/hrm/leave-requests?employmentId=mine"));
+  const res = await collectionRoute!.GET(
+    new Request("http://x/api/hrm/leave-requests?employmentId=mine"),
+  );
   assert.equal(res.status, 200);
   const denied = await collectionRoute!.GET(
     new Request(`http://x/api/hrm/leave-requests?employmentId=${EMPLOYMENT_ID}`),
@@ -186,17 +198,23 @@ test("GET mine admits the filing grant while a specified employment still needs 
 test("GET forwards the gate and the feature switch", async () => {
   reset();
   routeState.gate = { status: 403 };
-  const denied = await collectionRoute!.GET(new Request("http://x/api/hrm/leave-requests?employmentId=mine"));
+  const denied = await collectionRoute!.GET(
+    new Request("http://x/api/hrm/leave-requests?employmentId=mine"),
+  );
   assert.equal(denied.status, 403);
   reset();
   routeState.featureOn = false;
-  const off = await collectionRoute!.GET(new Request("http://x/api/hrm/leave-requests?employmentId=mine"));
+  const off = await collectionRoute!.GET(
+    new Request("http://x/api/hrm/leave-requests?employmentId=mine"),
+  );
   assert.equal(off.status, 404);
 });
 
 test("POST files a draft through the real body parser", async () => {
   reset();
-  const res = await collectionRoute!.POST(jsonRequest("http://x/api/hrm/leave-requests", draftBody));
+  const res = await collectionRoute!.POST(
+    jsonRequest("http://x/api/hrm/leave-requests", draftBody),
+  );
   assert.equal(res.status, 200);
   const body = (await res.json()) as { request: { id: string } };
   assert.equal(body.request.id, "request-1");
@@ -220,7 +238,9 @@ test("POST forwards the manager on-behalf flag to the engine", async () => {
 
 test("POST refuses a malformed body with 400 and never calls the service", async () => {
   reset();
-  const malformed = await collectionRoute!.POST(jsonRequest("http://x/api/hrm/leave-requests", "{oops"));
+  const malformed = await collectionRoute!.POST(
+    jsonRequest("http://x/api/hrm/leave-requests", "{oops"),
+  );
   assert.equal(malformed.status, 400);
   const missing = await collectionRoute!.POST(
     jsonRequest("http://x/api/hrm/leave-requests", { leaveTypeId: TYPE_ID }),
@@ -233,16 +253,26 @@ test("POST refuses a malformed body with 400 and never calls the service", async
 
 test("POST maps computed refusals with message intact — status first, body second", async () => {
   reset();
-  routeState.serviceThrow = new LeaveError("REFUSED", "policy time balance is 4 hours but the request needs 16 — shorten it");
-  const refused = await collectionRoute!.POST(jsonRequest("http://x/api/hrm/leave-requests", draftBody));
+  routeState.serviceThrow = new LeaveError(
+    "REFUSED",
+    "policy time balance is 4 hours but the request needs 16 — shorten it",
+  );
+  const refused = await collectionRoute!.POST(
+    jsonRequest("http://x/api/hrm/leave-requests", draftBody),
+  );
   assert.equal(refused.status, 422);
   assert.ok(!refused.ok);
   const refusedBody = (await refused.json()) as { error: string };
   assert.match(refusedBody.error, /time balance is 4 hours/);
 
   reset();
-  routeState.serviceThrow = new LeaveError("STALE_RUN", "absence day 2026-09-02 is already covered by committed pay run PAY-1 — ask payroll");
-  const stale = await collectionRoute!.POST(jsonRequest("http://x/api/hrm/leave-requests", draftBody));
+  routeState.serviceThrow = new LeaveError(
+    "STALE_RUN",
+    "absence day 2026-09-02 is already covered by committed pay run PAY-1 — ask payroll",
+  );
+  const stale = await collectionRoute!.POST(
+    jsonRequest("http://x/api/hrm/leave-requests", draftBody),
+  );
   assert.equal(stale.status, 409);
   assert.match(((await stale.json()) as { error: string }).error, /retro|committed pay run/);
 });
