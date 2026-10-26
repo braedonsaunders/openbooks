@@ -3,7 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { Badge, EmptyState } from '@openbooks/ui'
 import { businessToday } from '@openbooks/engine/platform/business-date'
 import { listJobLevels, listPayBandVersions, type PayBandDTO } from '@openbooks/engine/hrm/compensation'
-import { RegisteredListTable } from '../../../../components/registered-list-table'
+import { PagedTable } from '../../../../components/paged-table'
 import { FilterChips } from '../../../../components/filter-bar'
 import { formatDecimal } from '../../../../lib/money-format'
 import { mergeHref, pickString } from '../../../../lib/list-params'
@@ -70,7 +70,7 @@ export async function CompensationBandsWorkspace({ orgId, actorId, allowedSubsid
   const amount = (value: string | null) => value === null ? '—' : formatDecimal(locale, value, { maximumFractionDigits: 4 })
   const options = ['active', 'upcoming', 'past'].map((value) => ({ value, label: t(`bandStatus.${value}`) }))
   return <>
-    <RegisteredListTable source="hrm_compensation_bands" contained
+    <PagedTable prepared searchable source="hrm_compensation_bands" contained
       basePath={basePath} currentParams={searchParams}
       sort={pickString(searchParams.bandSort) ?? 'default'} dir={pickString(searchParams.bandDir) === 'desc' ? 'desc' : 'asc'}
       sortParamKey="bandSort" dirParamKey="bandDir"

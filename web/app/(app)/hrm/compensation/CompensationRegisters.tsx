@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Badge, EmptyState } from '@openbooks/ui'
-import { RegisteredListTable } from '../../../../components/registered-list-table'
+import { PagedTable } from '../../../../components/paged-table'
 import { getTranslations } from 'next-intl/server'
 import { FilterChips } from '../../../../components/filter-bar'
 import { pickString } from '../../../../lib/list-params'
@@ -13,7 +13,7 @@ export async function CompensationCycleRegister({ data }: { data: CompHomeData }
   const options = ['draft', 'open', 'in_review', 'approved', 'pushed', 'closed', 'cancelled', 'historical'].map((value) => ({ value, label: t(`cycleStatus.${value}`) }))
   const selected = pickString(data.currentParams.cycleStatus)
   const rows = options.some((option) => option.value === selected) ? data.cycles.filter((row) => row.status === selected) : data.cycles
-  return <RegisteredListTable source="hrm_compensation_cycles" contained
+  return <PagedTable prepared searchable source="hrm_compensation_cycles" contained
     basePath="/hrm/compensation" currentParams={data.currentParams}
     sort={pickString(data.currentParams.cycleSort) ?? 'name'} dir={pickString(data.currentParams.cycleDir) === 'desc' ? 'desc' : 'asc'}
     sortParamKey="cycleSort" dirParamKey="cycleDir" pageParamKey="cyclePage"
@@ -37,7 +37,7 @@ export async function CompensationPlanRegister({ data }: { data: CompHomeData })
   const options = ['draft', 'submitted', 'approved', 'closed'].map((value) => ({ value, label: t(`planStatus.${value}`) }))
   const selected = pickString(data.currentParams.planStatus)
   const rows = options.some((option) => option.value === selected) ? data.plans.filter((row) => row.status === selected) : data.plans
-  return <RegisteredListTable source="hrm_compensation_plans" contained
+  return <PagedTable prepared searchable source="hrm_compensation_plans" contained
     basePath="/hrm/compensation" currentParams={data.currentParams}
     sort={pickString(data.currentParams.planSort) ?? 'name'} dir={pickString(data.currentParams.planDir) === 'desc' ? 'desc' : 'asc'}
     sortParamKey="planSort" dirParamKey="planDir" pageParamKey="planPage"

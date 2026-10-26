@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Badge, Button, EmptyState, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../../components/page-layout'
 import { KpiStrip } from '../../../../../components/kpi-strip'
-import { RegisteredListTable } from '../../../../../components/registered-list-table'
+import { PagedTable } from '../../../../../components/paged-table'
 import { pickString } from '../../../../../lib/list-params'
 import type { EquityData } from '../../../../../lib/hrm/compensation'
 import { Plus } from 'lucide-react'
@@ -34,7 +34,7 @@ export function EquityWorkspace({ data }: { data: EquityData }) {
           </div>
           </> : null}
           <div className="min-h-0 flex-1 overflow-hidden">
-            <RegisteredListTable source="hrm_compensation_equity" contained
+            <PagedTable prepared searchable source="hrm_compensation_equity" contained
               basePath="/hrm/compensation/equity" currentParams={data.currentParams}
               sort={pickString(data.currentParams.equitySort) ?? 'category'} dir={pickString(data.currentParams.equityDir) === 'desc' ? 'desc' : 'asc'}
               sortParamKey="equitySort" dirParamKey="equityDir"

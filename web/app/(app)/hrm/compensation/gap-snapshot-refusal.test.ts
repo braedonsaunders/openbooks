@@ -196,7 +196,7 @@ test("the computed equity refusal reaches the native workspace and suppresses it
   const { equitySpec } = await import("./equity/view.ts");
   const { EquityWorkspace } = await import("./equity/EquityWorkspace");
   const { EmptyState } = await import("@openbooks/ui");
-  const { RegisteredListTable } = await import("../../../../components/registered-list-table");
+  const { PagedTable } = await import("../../../../components/paged-table");
   const { KpiStrip } = await import("../../../../components/kpi-strip");
   fixture.snapshot = { error: new CompensationError("REFUSED", SCOPE_REFUSAL) };
   const equity = await loadEquity(authz);
@@ -208,20 +208,20 @@ test("the computed equity refusal reaches the native workspace and suppresses it
   assert.ok(banner, "the real native workspace renders the refusal");
   assert.equal(banner.props.title, "Pay equity");
   assert.equal(banner.props.description, SCOPE_REFUSAL, "the actual rendered banner receives the full remedy");
-  assert.deepEqual(elementsOfType(body, RegisteredListTable), [], "the refused workspace exposes no aggregate category rows");
+  assert.deepEqual(elementsOfType(body, PagedTable), [], "the refused workspace exposes no aggregate category rows");
   assert.deepEqual(elementsOfType(body, KpiStrip), [], "the refused workspace exposes no aggregate metric tiles");
 });
 
 test("genuine no-snapshot equity keeps its table distinct from a refusal", async () => {
   const { EquityWorkspace } = await import("./equity/EquityWorkspace");
-  const { RegisteredListTable } = await import("../../../../components/registered-list-table");
+  const { PagedTable } = await import("../../../../components/paged-table");
   const { EmptyState } = await import("@openbooks/ui");
   fixture.snapshot = { snapshot: null };
   const equity = await loadEquity(authz);
   assert.ok(equity);
   assert.equal(equity.hasContent, true, "genuine emptiness keeps content");
   const body = EquityWorkspace({ data: equity });
-  const [categories] = elementsOfType(body, RegisteredListTable);
+  const [categories] = elementsOfType(body, PagedTable);
   assert.ok(categories, "the actual workspace retains the shared category register");
   assert.deepEqual(categories.props.rows, []);
   assert.equal(categories.props.source, "hrm_compensation_equity");

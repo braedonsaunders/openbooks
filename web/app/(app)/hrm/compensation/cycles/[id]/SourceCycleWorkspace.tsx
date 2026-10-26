@@ -4,7 +4,7 @@ import { Badge, Button, EmptyState, PageHeader } from '@openbooks/ui'
 import { ArrowLeft } from 'lucide-react'
 import { CompensationError, sourceCompensationCycleEvidence, type CompCycleDTO } from '@openbooks/engine/hrm/compensation'
 import { ListPageLayout } from '../../../../../../components/page-layout'
-import { RegisteredListTable } from '../../../../../../components/registered-list-table'
+import { PagedTable } from '../../../../../../components/paged-table'
 import { FilterChips } from '../../../../../../components/filter-bar'
 import { formatDecimal } from '../../../../../../lib/money-format'
 import { pickString } from '../../../../../../lib/list-params'
@@ -46,7 +46,7 @@ export async function SourceCycleWorkspace({ cycle, authz, searchParams }: {
       {evidence ? <p className="text-xs text-slate-500 break-words">{evidence.sourcePath.split('/').at(-1)} · {evidence.sheet} · SHA-256 {evidence.sha256}</p> : null}
     </div>
     <div className="min-h-0 flex-1 overflow-hidden">
-      <RegisteredListTable source="hrm_compensation_source_lines" contained basePath={basePath} currentParams={searchParams}
+      <PagedTable prepared searchable source="hrm_compensation_source_lines" contained basePath={basePath} currentParams={searchParams}
         sort={pickString(searchParams.sort) ?? 'employee'} dir={pickString(searchParams.dir) === 'desc' ? 'desc' : 'asc'}
         resetPageKey={division ?? ''} rows={rows} rowKey={(row) => row.id}
         empty={<EmptyState title={refusal ?? t('empty')} />}
