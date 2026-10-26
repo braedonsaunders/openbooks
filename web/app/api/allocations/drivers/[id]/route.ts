@@ -1,11 +1,9 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { parseJsonBody } from "../../../../../lib/api/json";
-import { guardUnrestrictedScope } from "../../../../../lib/authz";
-import { isUuid } from "../../../../../lib/list-params";
+import { isUuid } from "@/lib/list-params";
 import {
   DRIVER_SOURCE_KINDS,
   DriverAdminError,
@@ -15,21 +13,25 @@ import {
 } from "@openbooks/engine/allocations/driver-admin";
 import { notFound } from "@/lib/api/responses";
 
-
 export const runtime = "nodejs";
 
-const driverPatchSchema = z.object({
-  name: z.string().optional(),
-  description: z.string().nullable().optional(),
-  unit: z.string().nullable().optional(),
-  dimension: z.string().regex(/^(department|location|class|project|subsidiary|extra:.+)$/).optional(),
-  sourceKind: z.enum(DRIVER_SOURCE_KINDS).optional(),
-  // Source-specific configuration is an opaque JSON value validated by the
-  // selected driver adapter in the allocation engine.
-  config: z.record(z.string(), z.json()).optional(),
-  isActive: z.boolean().optional(),
-  expectedUpdatedAt: z.string().min(1),
-}).strict();
+const driverPatchSchema = z
+  .object({
+    name: z.string().optional(),
+    description: z.string().nullable().optional(),
+    unit: z.string().nullable().optional(),
+    dimension: z
+      .string()
+      .regex(/^(department|location|class|project|subsidiary|extra:.+)$/)
+      .optional(),
+    sourceKind: z.enum(DRIVER_SOURCE_KINDS).optional(),
+    // Source-specific configuration is an opaque JSON value validated by the
+    // selected driver adapter in the allocation engine.
+    config: z.record(z.string(), z.json()).optional(),
+    isActive: z.boolean().optional(),
+    expectedUpdatedAt: z.string().min(1),
+  })
+  .strict();
 
 async function toResponse(error: unknown): Promise<NextResponse> {
   if (error instanceof DriverAdminError) {
@@ -50,17 +52,16 @@ async function legacyGET(_req: Request, { params }: Ctx, injectedGate?: Authz | 
   return NextResponse.json({ driver });
 }
 
-async function legacyPATCH(req: Request, { params }: Ctx, injectedGate?: Authz | null) {
+async function legacyPATCH(
+  { params }: Ctx,
+  body: z.output<typeof driverPatchSchema>,
+  injectedGate?: Authz | null,
+) {
   const gate = injectedGate as Authz;
-
-  const scopeDenied = guardUnrestrictedScope(gate)
-  if (scopeDenied) return scopeDenied
   const { id } = await params;
   if (!isUuid(id)) return notFound("record");
-  const parsedBody = await parseJsonBody(req, driverPatchSchema);
-  if (!parsedBody.ok) return parsedBody.response;
   try {
-    const driver = await updateDriver(gate.user.orgId, gate.user.id, id, parsedBody.data);
+    const driver = await updateDriver(gate.user.orgId, gate.user.id, id, body);
     return NextResponse.json({ driver });
   } catch (error) {
     return toResponse(error);
@@ -69,9 +70,6 @@ async function legacyPATCH(req: Request, { params }: Ctx, injectedGate?: Authz |
 
 async function legacyDELETE(_req: Request, { params }: Ctx, injectedGate?: Authz | null) {
   const gate = injectedGate as Authz;
-
-  const scopeDenied = guardUnrestrictedScope(gate)
-  if (scopeDenied) return scopeDenied
   const { id } = await params;
   if (!isUuid(id)) return notFound("record");
   try {
@@ -83,19 +81,29 @@ async function legacyDELETE(_req: Request, { params }: Ctx, injectedGate?: Authz
 }
 
 export const GET = defineRoute({
-  permission: "allocations.read", feature: "allocations",
-  params: z.object({ "id": z.string() }),
-  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+  permission: "allocations.read",
+  feature: "allocations",
+  params: z.object({ id: z.string() }),
+  handler: ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params) }, authz),
 });
 
 export const PATCH = defineRoute({
-  permission: "allocations.manage", feature: "allocations",
-  params: z.object({ "id": z.string() }),
-  handler: ({ request, params, authz }) => legacyPATCH(request, { params: Promise.resolve(params) }, authz),
+  permission: "allocations.manage",
+  feature: "allocations",
+  scope: "unrestricted",
+  params: z.object({ id: z.string().refine((value) => isUuid(value)) }),
+  invalidParamsNotFound: "record",
+  body: driverPatchSchema,
+  handler: ({ params, authz, body }) =>
+    legacyPATCH({ params: Promise.resolve(params) }, body, authz),
 });
 
 export const DELETE = defineRoute({
-  permission: "allocations.manage", feature: "allocations",
-  params: z.object({ "id": z.string() }),
-  handler: ({ request, params, authz }) => legacyDELETE(request, { params: Promise.resolve(params) }, authz),
+  permission: "allocations.manage",
+  feature: "allocations",
+  scope: "unrestricted",
+  params: z.object({ id: z.string() }),
+  handler: ({ request, params, authz }) =>
+    legacyDELETE(request, { params: Promise.resolve(params) }, authz),
 });

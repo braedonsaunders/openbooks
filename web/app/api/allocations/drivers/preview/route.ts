@@ -1,10 +1,8 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { parseJsonBody } from "../../../../../lib/api/json";
-import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import {
   DriverAdminError,
   getDimensionValueLabels,
@@ -32,21 +30,23 @@ const previewBodySchema = z.object({
  * activity, empty manual table, report refused) answer 422 with the
  * reason — never a guessed vector.
  */
-async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+async function legacyPOST(body: z.output<typeof previewBodySchema>, injectedGate?: Authz | null) {
   const gate = injectedGate as Authz;
 
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
-  const parsedBody = await parseJsonBody(req, previewBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const { driverId, periodId, date } = parsedBody.data;
+  const { driverId, periodId, date } = body;
   if ((periodId === undefined) === (date === undefined)) {
     return NextResponse.json({ error: "provide exactly one of periodId, date" }, { status: 400 });
   }
   try {
     const asOf = periodId !== undefined ? { periodId } : { date: date! };
     const result = await previewDriverVector(
-      { orgId: gate.user.orgId, driverId, asOf, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
+      {
+        orgId: gate.user.orgId,
+        driverId,
+        asOf,
+        actorId: gate.user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      },
       allocationServiceDeps(),
     );
     const labels = await getDimensionValueLabels(
@@ -54,7 +54,9 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
       result.driver.dimension,
       result.vector.map((entry) => entry.key),
     );
-    const shares = vectorShares(new Map(result.vector.map((entry) => [entry.key, entry.value] as [string, string])));
+    const shares = vectorShares(
+      new Map(result.vector.map((entry) => [entry.key, entry.value] as [string, string])),
+    );
     return NextResponse.json({
       driverId,
       // The temporal contract the vector was measured under (mode, window,
@@ -82,7 +84,9 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
 }
 
 export const POST = defineRoute({
-  permission: "allocations.read", feature: "allocations",
-
-  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+  permission: "allocations.read",
+  feature: "allocations",
+  scope: "unrestricted",
+  body: previewBodySchema,
+  handler: ({ authz, body }) => legacyPOST(body, authz),
 });
