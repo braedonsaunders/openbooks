@@ -9133,7 +9133,9 @@
       "actionRunning": "Working…",
       "previewAction": "Form preview only. Backend actions run after activation, using the installed version and your permissions.",
       "previewRecords": "Form preview using the proposed record definition. After activation, this workspace uses the shared record list, filters, and drawers.",
-      "existingRecordsPreview": "This screen references an existing record type. Live records are available after activation to users with access."
+      "existingRecordsPreview": "This screen references an existing record type. Live records are available after activation to users with access.",
+      "screenDataPreview": "Preview shows this screen without its data: draft endpoints never run in preview. Use test_app_endpoint to see the data it returns.",
+      "screenDataFailed": "This screen's data could not be loaded: {error}"
     }
   },
   "automations": {

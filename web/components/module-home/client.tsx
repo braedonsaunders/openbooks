@@ -34,6 +34,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { StatTile, CockpitPanel } from '../cockpit/ui'
+import type { HomeIconKey } from './icon-keys'
 
 /**
  * Client shims for the module-home pages. The home pages are SERVER
@@ -42,7 +43,7 @@ import { StatTile, CockpitPanel } from '../cockpit/ui'
  * component to the cockpit kit (the same trick NavIcon plays for the shell).
  * Extend HOME_ICONS as new module homes need more glyphs.
  */
-const HOME_ICONS: Record<string, LucideIcon> = {
+const HOME_ICONS: Record<HomeIconKey, LucideIcon> = {
   landmark: Landmark,
   'credit-card': CreditCard,
   'list-checks': ListChecks,
@@ -78,12 +79,12 @@ export function HomeStatTile({
   icon,
   ...rest
 }: Omit<ComponentProps<typeof StatTile>, 'icon'> & { icon: string }) {
-  return <StatTile icon={HOME_ICONS[icon] ?? Landmark} {...rest} />
+  return <StatTile icon={HOME_ICONS[icon as HomeIconKey] ?? Landmark} {...rest} />
 }
 
 export function HomePanel({
   icon,
   ...rest
 }: Omit<ComponentProps<typeof CockpitPanel>, 'icon'> & { icon?: string }) {
-  return <CockpitPanel icon={icon ? (HOME_ICONS[icon] ?? Building2) : undefined} {...rest} />
+  return <CockpitPanel icon={icon ? (HOME_ICONS[icon as HomeIconKey] ?? Building2) : undefined} {...rest} />
 }

@@ -9111,6 +9111,8 @@
       "actionFailed": "La acción no se pudo completar. Reintente para comprobar el mismo envío.",
       "actionRunning": "En curso…",
       "existingRecordsPreview": "Esta pantalla hace referencia a un tipo de registro existente. Los registros reales estarán disponibles tras la activación para los usuarios con acceso.",
+      "screenDataPreview": "La vista previa muestra esta pantalla sin sus datos: los endpoints de un borrador no se ejecutan en la vista previa. Use test_app_endpoint para ver los datos que devuelve.",
+      "screenDataFailed": "No se pudieron cargar los datos de esta pantalla: {error}",
       "previewAction": "Solo vista previa del formulario. Las acciones de backend se ejecutan tras la activación, con la versión instalada y sus permisos.",
       "previewRecords": "Vista previa del formulario con la definición de registros propuesta. Tras la activación, este espacio usará la lista de registros compartida, los filtros y los paneles.",
       "sampleNumber": "Ejemplo {number}",

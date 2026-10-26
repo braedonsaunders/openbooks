@@ -1,4 +1,5 @@
-import { validateSpec, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { pageSpecSchema, validateSpec, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { explainSpecIssues } from './page-spec-shapes'
 
 /**
  * Whether a document is a spec this host can render.
@@ -52,7 +53,7 @@ export function validateAgainstRegistries(
   },
 ): SpecAcceptance | SpecRejection {
   const result = validateSpec(candidate)
-  if (!result.ok) return { ok: false, errors: result.errors }
+  if (!result.ok) return { ok: false, errors: explainedErrors(candidate, result.errors) }
 
   const errors: string[] = []
   const seen = { widgets: new Set<string>(), frames: new Set<string>() }
@@ -83,6 +84,19 @@ export function validateAgainstRegistries(
   })
   if (errors.length > 0) return { ok: false, errors }
   return { ok: true, spec: result.spec }
+}
+
+/**
+ * The schema's own refusal, re-read field by field. `validateSpec` has already
+ * bounded nesting depth, so a depth refusal is returned as it is; anything
+ * else is parsed again to name the property inside the block the author meant.
+ */
+function explainedErrors(candidate: unknown, errors: string[]): string[] {
+  if (errors.some((error) => error.startsWith('block nesting exceeds'))) return errors
+  const parsed = pageSpecSchema.safeParse(candidate)
+  if (parsed.success) return errors
+  const explained = explainSpecIssues(parsed.error.issues as never)
+  return explained.length ? explained : errors
 }
 
 /**

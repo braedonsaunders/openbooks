@@ -498,8 +498,31 @@ test("the guest-visible host surface is exactly the sealed set", async () => {
     "platform",
     "records",
     "request",
+    "settings",
     "storage",
   ]);
+});
+
+test("ob.settings reads the declared snapshot and refuses an undeclared key", async () => {
+  const r = await runAppEndpoint({
+    source: `function handler() {
+      var refused = null;
+      try { ob.settings.get("missing_key"); } catch (e) { refused = String(e.message); }
+      var mutated = true;
+      try { ob.settings.all().min_score = 1; mutated = ob.settings.get("min_score") === 1; } catch (e) { mutated = false; }
+      return { min: ob.settings.get("min_score"), label: ob.settings.get("label"), all: ob.settings.all(), refused: refused, mutated: mutated };
+    }`,
+    request: req(),
+    adapters: fakeAdapters(),
+    settings: { min_score: 80, label: null },
+  });
+  assert.equal(r.status, "ok");
+  const body = r.response!.body as Record<string, unknown>;
+  assert.equal(body.min, 80);
+  assert.equal(body.label, null);
+  assert.deepEqual(body.all, { min_score: 80, label: null });
+  assert.match(String(body.refused), /unknown setting: missing_key/);
+  assert.equal(body.mutated, false);
 });
 
 test("a post-outcome straggler cannot append logs or reach adapters", async () => {

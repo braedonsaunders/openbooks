@@ -12,7 +12,8 @@ import { db } from '@openbooks/engine/platform/db'
 import { can, requirePermission } from '@/lib/authz'
 import { requireFeatureEnabled } from '@/lib/feature-gates'
 import { PageHeader, PageHeaderNavigationProvider } from '@openbooks/ui'
-import { getAppByKey } from '@/lib/apps/store'
+import { getAppByKey, invokeAppEndpointHandler } from '@/lib/apps/store'
+import { randomUUID } from 'node:crypto'
 import { parseNativeExtension } from '@/lib/apps/native-ui'
 import { BlockList } from '@/components/viewspec/blocks'
 import { ListPageLayout, DetailPageLayout } from '@/components/page-layout'
@@ -77,10 +78,55 @@ export async function NativeScreens({ ui, appKey, name, description, grants, sea
     const spec = recordModuleSpec(data)
     return <ListPageLayout header={<PageHeaderNavigationProvider navigation={tabs}><BlockList blocks={spec.header} scope={data} searchParams={searchParams} /></PageHeaderNavigationProvider>}><BlockList blocks={spec.body} scope={data} searchParams={searchParams} /></ListPageLayout>
   }
-  const scope = { name, description, key: appKey }
-  const header = <>{notice}<PageHeaderNavigationProvider navigation={tabs}><BlockList blocks={screen.spec.header} scope={scope} searchParams={searchParams} /></PageHeaderNavigationProvider></>
-  const body = <BlockList blocks={screen.spec.body} scope={scope} searchParams={searchParams} />
-  if (screen.spec.layout === 'bare') return <>{header}{body}</>
-  const Layout = screen.spec.layout === 'detail' ? DetailPageLayout : ListPageLayout
-  return <Layout header={header} className={screen.spec.bodyClassName}>{body}</Layout>
+  // A page screen binds the app's identity and, when it declares a data
+  // endpoint, that endpoint's body as `data`. The endpoint runs read-only as
+  // the viewer; a refusal is shown, never rendered as empty figures.
+  const loaded = screen.data && !preview
+    ? await loadScreenData({ appKey, screenKey: screen.key, endpoint: screen.data.endpoint, authz, searchParams })
+    : null
+  const scope = { name, description, key: appKey, app: { name, description, key: appKey }, data: loaded?.ok ? loaded.data : null }
+  const alerts = <>
+    {notice}
+    {screen.data && preview ? <Alert variant="info"><AlertDescription>{t('screenDataPreview')}</AlertDescription></Alert> : null}
+    {loaded && !loaded.ok ? <Alert variant="destructive"><AlertDescription>{t('screenDataFailed', { error: loaded.error })}</AlertDescription></Alert> : null}
+  </>
+  // Every screen wears the house page shell: an authored header when the spec
+  // has one, otherwise the screen's own title, with the app's screen tabs.
+  const header = screen.spec.header.length
+    ? <PageHeaderNavigationProvider navigation={tabs}><BlockList blocks={screen.spec.header} scope={scope} searchParams={searchParams} /></PageHeaderNavigationProvider>
+    : <PageHeader title={screen.title} description={screen.description} actions={tabs} />
+  const body = loaded && !loaded.ok
+    ? null
+    : <div className="space-y-6"><BlockList blocks={screen.spec.body} scope={scope} searchParams={searchParams} /></div>
+  if (screen.spec.layout === 'list') {
+    return <ListPageLayout header={<>{alerts}{header}</>} className={screen.spec.bodyClassName}>{body}</ListPageLayout>
+  }
+  return <DetailPageLayout header={header} alerts={alerts} className={screen.spec.bodyClassName}>{body}</DetailPageLayout>
+}
+
+async function loadScreenData(opts: {
+  appKey: string; screenKey: string; endpoint: string
+  authz: Awaited<ReturnType<typeof requirePermission>>
+  searchParams: Record<string, string | string[] | undefined>
+}): Promise<{ ok: true; data: unknown } | { ok: false; error: string }> {
+  const query = Object.fromEntries(Object.entries(opts.searchParams).flatMap(([name, value]) => typeof value === 'string' && name !== 'screen' ? [[name, value]] : []))
+  const result = await invokeAppEndpointHandler({
+    orgId: opts.authz.user.orgId,
+    user: opts.authz.user,
+    key: opts.appKey,
+    endpoint: opts.endpoint,
+    body: { screen: opts.screenKey, query },
+    userCan: (permission) => can(opts.authz, permission),
+    allowedSubsidiaryIds: opts.authz.allowedSubsidiaryIds,
+    operation: `apps.screen_data.${opts.endpoint}`,
+    auditEndpoint: opts.endpoint,
+    readOnlyTool: true,
+    idempotencyKey: `screen:${randomUUID()}`,
+  })
+  if (!result.ok) return { ok: false, error: result.error }
+  const response = result.result as { status?: number; body?: unknown } | null
+  if (response && typeof response.status === 'number' && response.status >= 400) {
+    return { ok: false, error: typeof response.body === 'string' ? response.body : JSON.stringify(response.body ?? null) }
+  }
+  return { ok: true, data: response && 'body' in response ? response.body : response }
 }

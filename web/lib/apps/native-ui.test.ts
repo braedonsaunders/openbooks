@@ -23,3 +23,19 @@ test('native record package uses the shared validated form vocabulary', () => {
   assert.deepEqual(objects.errors, [])
   assert.equal(objects.recordTypes.length, 1)
 })
+
+test('page screens compose the presentation widgets and bind a declared read endpoint', () => {
+  const dashboard = {
+    ...spec, layout: 'detail',
+    body: [
+      { kind: 'grid', className: 'grid gap-4 sm:grid-cols-2', blocks: [{ kind: 'stat-tile', iconKey: 'gauge', accent: 'teal', label: 'Pass rate', value: { $: 'data.passRate' } }] },
+      { kind: 'panel', title: 'By week', blocks: [{ kind: 'widget', widget: 'trend-chart', props: { labels: { $: 'data.weeks' }, series: { $: 'data.series' }, format: 'count' } }] },
+      { kind: 'widget', widget: 'dashboard-tiles', props: { widgets: [{ id: 'kpi-cash-balance', w: 3 }] } },
+    ],
+  }
+  const screen = { key: 'home', title: 'Home', kind: 'page', data: { endpoint: 'home-data' }, spec: dashboard }
+  const manifest = (method: 'GET' | 'POST' | 'ANY') => parseManifest({ key: 'safety', name: 'Safety', version: '1.0.0', frontend: { entry: 'frontend/ui.json', renderer: 'native' }, endpoints: [{ name: 'home-data', file: 'backend/home.js', method }] }).manifest!
+  assert.equal(parseNativeExtension(JSON.stringify({ screens: [screen] }), manifest('GET')).screens.length, 1)
+  assert.throws(() => parseNativeExtension(JSON.stringify({ screens: [screen] }), manifest('POST')), /data requires a declared GET or ANY backend endpoint/)
+  assert.throws(() => parse([{ ...screen, spec: { ...dashboard, body: [{ kind: 'widget', widget: 'donut-chart', props: { slices: [] } }] } }]), /does not read a prop called/)
+})

@@ -9133,7 +9133,9 @@
       "actionRunning": "Trabalhando…",
       "previewAction": "Só prévia do formulário. Ações de backend rodam após a ativação, usando a versão instalada e suas permissões.",
       "previewRecords": "Prévia do formulário usando a definição de registro proposta. Após a ativação, este workspace usa a lista compartilhada, filtros e painéis laterais.",
-      "existingRecordsPreview": "Esta tela referencia um tipo de registro existente. Registros reais ficam disponíveis após a ativação para usuários com acesso."
+      "existingRecordsPreview": "Esta tela referencia um tipo de registro existente. Registros reais ficam disponíveis após a ativação para usuários com acesso.",
+      "screenDataPreview": "A pré-visualização mostra esta tela sem seus dados: endpoints de rascunho nunca são executados na pré-visualização. Use test_app_endpoint para ver os dados retornados.",
+      "screenDataFailed": "Não foi possível carregar os dados desta tela: {error}"
     }
   },
   "automations": {

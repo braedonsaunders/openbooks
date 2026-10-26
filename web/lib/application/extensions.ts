@@ -7,6 +7,11 @@ import { isFeatureEnabled } from '../features'
 import { parseManifest, validateBundle, APP_PLATFORM_PERMISSIONS } from '../apps/manifest'
 import { parseObjectSpecs } from '../apps/objects'
 import { parseNativeExtension } from '../apps/native-ui'
+import { backendSourceErrors } from '../apps/backend-check'
+import { APP_HOST_API_REFERENCE } from '../apps/host-api-reference'
+import { DASHBOARD_COMPOSITION, PRESENTATION_WIDGETS } from '../presentation-widgets'
+import { RECORD_FIELD_TYPES } from '../record-schema'
+import { NAV_GROUP_BY_KEY } from '@openbooks/engine/navigation/nav-registry'
 import { extensionContributionTargetErrors } from '../apps/contribution-targets'
 import { AppError, getAppByKey, listApps, installApp, type UploadBundle } from '../apps/store'
 import { requestHash } from './idempotency-core'
@@ -39,6 +44,10 @@ export function validateExtensionBundle(input: unknown): UploadBundle {
   if (new Set(bundle.files.map(file => file.path)).size !== bundle.files.length) errors.push('Duplicate file path')
   const objects = parseObjectSpecs(bundle.files)
   errors.push(...objects.errors)
+  for (const endpoint of manifest.endpoints) {
+    const file = bundle.files.find(candidate => candidate.path === endpoint.file)
+    if (file && !file.isBinary) errors.push(...backendSourceErrors(file.path, file.content))
+  }
   if (manifest.frontend.renderer === 'native') {
     const entry = bundle.files.find(file => file.path === manifest.frontend.entry)
     if (!entry || entry.isBinary) errors.push('Native UI entry must be a JSON text file')
@@ -121,33 +130,73 @@ export async function describeExtensionVocabulary(context: ApplicationContext) {
   await requireExtensionAuthor(context)
   return {
     preferredRenderer: 'native',
-    workflow: ['describe_app_vocabulary', 'draft_app', 'get_app_draft', 'activate_app_draft'],
+    workflow: ['describe_app_vocabulary', 'draft_app', 'test_app_endpoint', 'get_app_draft', 'activate_app_draft', 'list_app_runs'],
     rules: [
       'Use list_app_packages to discover installed packages. There is one package store and one version/review lifecycle for every renderer and contribution.',
-      'manifest.contributions supports page (route, spec, scope org), nav (href, label, group), setting (key, label, valueType, defaultValue), and permission (key, label). Page and nav require admin.customization.manage; settings require admin.setup.manage; permission definitions require admin.roles.manage. Contributions and objects activate atomically with backend files. Do not invent unsupported contribution kinds.',
+      'manifest.contributions supports page (route, spec, scope org), nav (href, label, group, iconKey?), setting (key, label, valueType, defaultValue) and permission (key, label). The manifest must also request the contribution authority — page and nav: admin.customization.manage; setting: admin.setup.manage; permission: admin.roles.manage — and the activating administrator must hold it. Contributions and objects activate atomically with backend files. Do not invent unsupported contribution kinds.',
       'To restore an earlier package, read its version with get_app_package and prepare a new reviewed revision. Never mutate an active or historical version in place.',
-      'Build an app package using the governed platform services. It runs without a deployment of OpenBooks.',
-      'Prefer native UI screens composed from the host page vocabulary and records workspaces. Only link-button widgets are supported in native page screens; record screens use the native records loader, permissions, audience, filters and drawers.',
-      'Native frontend entry is a JSON document with screens. Each screen has key, title and kind page (spec: PageSpec) or records (typeKey: a published custom-record key), or action (endpoint: declared POST/ANY endpoint name, fields: shared FormSection[], submitLabel, optional description and confirmation).',
+      'Prefer native UI screens composed from the house page vocabulary and records workspaces. record screens use the native records loader, permissions, audience, filters and drawers.',
+      'Every native screen renders in the house page shell with the app\'s screen tabs. Link between screens of the same app with href "/apps/<app key>?screen=<screen key>".',
+      'Native page screens are dashboards: compose stat-tile, grid, panel, heading, text and table blocks with the presentation widgets in nativeScreens.widgets. Bind live values from a data endpoint as { "$": "data.<path>" }; app identity is available as app.name, app.key and app.description.',
       'objects/*.json files can provision owned record_type or custom_field definitions atomically with the package. Existing foreign-owned objects cannot be overwritten. Existing data is preserved during upgrades and removal.',
-      'Native action forms submit {input, invocationId} to the declared backend. Use ob.platform.create/update for governed records, ob.storage for package state and ob.journal for controlled posting. Return {message} for a user-readable result. Throw to roll back a failed operation; do not return an error status after writes. Transport retries replay the same invocation; another submission gets a new ID.',
+      'Native action forms submit {input, invocationId} to the declared backend as request.body. Return {message} for a user-readable result. Throw new Error("…") to refuse with that message and roll back every write. Transport retries replay the same invocation; another submission gets a new ID.',
+      'Backend endpoints run in a sandbox with only the ob host API in hostApi; there is no network, file system, timer or database access. Calling anything outside hostApi is refused when the draft is saved.',
       'Record types use existing custom-record storage; never create SQL tables, run DDL, or request database credentials. Custom fields extend supported platform records through the same controlled definition system.',
-      'HTML and backend apps can join permitted record types using platform.query({from:{type,as},joins:[{type,as,kind:"left"|"inner",on:{left:{source,field},right:{source,field}}}],select:[{source,field}],filters,sorts,limit}). Use matching scalar field types; every source is permission/tenant scoped. Up to four joins and 1000 rows; hasMore signals truncation. See /docs/app-api-reference. Published custom record types automatically appear in Report Builder.',
-      'list_record_types is the authoritative inventory for list_records/get_record typeKey values. Do not probe guessed table names or infer record API support from page layouts. If a domain is absent, disclose that limitation.',
-      'Record fields use FormSection[] with fields such as {id:"notes",type:"long_text",label:"Notes"}. Select choices belong at validation.options as [{value:"planned",label:"Planned"}], never top-level options. Use type party for the native party reference picker. Read the returned validation errors and correct the complete draft before retrying.',
-      'Backend endpoints run in the existing sandbox and use the governed host API; they never receive direct database credentials. Sandboxed HTML UI remains available with frontend.renderer sandbox.',
-      'draft_app stores an immutable author-owned proposal and returns review/preview URLs. It does not install objects, run backend code, or activate anything.',
-      'Sandbox HTML apps receive openbooks.context.preview: true for draft previews and false for installed apps. In preview, use explicitly fictional in-memory sample state only; all host bridge calls are refused. Never infer preview from API failures or silently substitute samples on a live error.',
-      'Preview uses local form samples for proposed record types and never executes draft backend actions or changes live records. Rehearse stateful backend behavior in a configured organization sandbox.',
+      'list_record_types is the authoritative inventory for platform typeKeys and their fields. Do not probe guessed table names or infer record API support from page layouts. If a domain is absent, disclose that limitation.',
+      'Record fields use FormSection[] (objects.recordFields). Select choices belong at validation.options as [{value:"planned",label:"Planned"}], never top-level options. Use type party for the native party reference picker. Read the returned validation errors and correct the complete draft before retrying.',
+      'Do not name a record-type field "status": every custom record already carries a lifecycle status (active/inactive). Use a domain name such as checkout_state.',
+      'draft_app stores an immutable author-owned proposal and returns review/preview URLs; a new draft of the same app supersedes your earlier open draft. It does not install objects, run backend code, or activate anything.',
+      'Rehearse every endpoint with test_app_endpoint before activation: it installs the draft inside a transaction, runs the endpoint against live data with your permissions, returns the response or refusal with its ob.log lines, and rolls everything back.',
+      'Sandbox HTML apps (frontend.renderer sandbox) receive openbooks.context.preview: true for draft previews and false for installed apps. In preview, use explicitly fictional in-memory sample state only; all host bridge calls are refused.',
       'Request explicit user approval of the returned draft before activate_app_draft. Activation binds its exact hash and base version. Never replace it with a direct install to bypass a stale-draft refusal.',
       'Version labels are unique. Read the existing package before upgrading, preserve its owned objects and fields, and append a version.',
     ],
+    hostApi: APP_HOST_API_REFERENCE,
+    nativeScreens: {
+      entry: 'frontend.entry names a JSON file { screens: Screen[] } (1–20 screens). The first screen opens by default.',
+      kinds: {
+        page: '{ key, title, kind: "page", description?, data?: { endpoint: <GET or ANY endpoint name> }, spec: PageSpec }. The data endpoint runs read-only as the viewer on each view; request.body is { screen, query } (query = the URL search params); its returned body binds as data.*. Writes are refused there.',
+        records: '{ key, title, kind: "records", typeKey: <custom record type key> } — the native list, filters and drawer. Requires records.read; creating requires records.create.',
+        action: '{ key, title, kind: "action", endpoint: <POST or ANY endpoint name>, fields: FormSection[], submitLabel, description?, confirmation? } — a native form drawer that submits to the endpoint.',
+      },
+      pageSpec: '{ specVersion: 1, layout: "detail" | "list", header: Block[] (leave empty to use the screen title), body: Block[] }. describe_page_layout_vocabulary documents every block\'s properties.',
+      widgets: PRESENTATION_WIDGETS,
+      composition: DASHBOARD_COMPOSITION,
+      example: {
+        key: 'overview', title: 'Overview', kind: 'page', data: { endpoint: 'overview-data' },
+        spec: { specVersion: 1, layout: 'detail', header: [], body: [
+          { kind: 'grid', className: 'grid gap-4 sm:grid-cols-2 xl:grid-cols-4', blocks: [
+            { kind: 'stat-tile', iconKey: 'clipboard-check', accent: 'teal', label: 'Checks this month', value: { $: 'data.monthCount' } },
+            { kind: 'stat-tile', iconKey: 'triangle-alert', accent: 'amber', label: 'Open findings', value: { $: 'data.openFindings' }, tone: 'warning' },
+          ] },
+          { kind: 'grid', className: 'grid gap-6 lg:grid-cols-3', blocks: [
+            { kind: 'panel', title: 'Checks by week', iconKey: 'area-chart', className: 'lg:col-span-2', blocks: [
+              { kind: 'widget', widget: 'trend-chart', props: { labels: { $: 'data.weeks' }, series: { $: 'data.series' }, format: 'count', area: true } },
+            ] },
+            { kind: 'panel', title: 'Findings by severity', iconKey: 'pie-chart', blocks: [
+              { kind: 'widget', widget: 'donut-chart', props: { data: { $: 'data.bySeverity' }, format: 'count' } },
+            ] },
+          ] },
+        ] },
+      },
+    },
+    objects: {
+      recordType: '{ type: "record_type", key, name, pluralName, fields: FormSection[] }',
+      customField: '{ type: "custom_field", key, label, targetTable, fieldType }',
+      recordFields: 'FormSection = { id, title?, fields: Field[] }; Field = { id, type, label, required?, description?, validation?: { min?, max?, options?: { value, label }[] } }',
+      fieldTypes: [...RECORD_FIELD_TYPES],
+    },
+    contributions: {
+      navGroups: [...NAV_GROUP_BY_KEY.keys()],
+      settingValueTypes: ['boolean', 'number', 'string', 'json'],
+      settingNote: 'A setting appears under Admin → Setup → app settings; backends read its current value with ob.settings.get(key), falling back to defaultValue until an administrator changes it.',
+    },
     permissions: APP_PLATFORM_PERMISSIONS,
     example: {
       manifest: { key: 'equipment-checks', name: 'Equipment checks', version: '1.0.0', permissions: ['records.read', 'records.create'], frontend: { renderer: 'native', entry: 'frontend/ui.json' }, endpoints: [{ name: 'create-check', file: 'backend/create-check.js', method: 'POST' }] },
       files: [
         { path: 'frontend/ui.json', content: JSON.stringify({ screens: [{ key: 'checks', title: 'Equipment checks', kind: 'records', typeKey: 'equipment-check' }, { key: 'new-check', title: 'New equipment check', kind: 'action', endpoint: 'create-check', submitLabel: 'Create check', fields: [{ id: 'details', fields: [{ id: 'equipment', type: 'text', label: 'Equipment', required: true }, { id: 'notes', type: 'long_text', label: 'Notes' }] }] }] }) },
-        { path: 'backend/create-check.js', content: "function handler(request) { var record = ob.platform.create('equipment-check', {data: request.body.input, status: 'active'}); ob.storage.set('last-check', record.record.id); return {message: 'Equipment check created'}; }" },
+        { path: 'backend/create-check.js', content: "function handler(request) { var input = request.body.input; if (!input.equipment) throw new Error('Equipment is required'); var created = ob.platform.create('equipment-check', { data: input, status: 'active' }); ob.storage.set('last-check', created.record.id); return { message: 'Equipment check ' + created.record.record_number + ' created' }; }" },
         { path: 'objects/checks.json', content: JSON.stringify({ type: 'record_type', key: 'equipment-check', name: 'Equipment check', pluralName: 'Equipment checks', fields: [{ id: 'details', title: 'Details', fields: [{ id: 'equipment', type: 'text', label: 'Equipment', required: true }, { id: 'notes', type: 'long_text', label: 'Notes' }] }] }) },
       ],
     },

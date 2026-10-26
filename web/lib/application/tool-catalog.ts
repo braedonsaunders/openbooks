@@ -1,4 +1,5 @@
 import "server-only";
+import { listExtensionRuns, rehearseExtensionEndpoint } from "./extension-rehearsal";
 import { activateExtensionDraft, listExtensions, discardExtensionDraft, describeExtensionVocabulary, draftExtension, getExtensionDraft, getExtensionPackage } from "./extensions";
 import { z } from "zod";
 import { can, type Authz } from "../authz";
@@ -93,6 +94,10 @@ const IDEMPOTENCY_KEY = z.string().regex(/^[A-Za-z0-9._:-]{8,200}$/)
   .describe("Unique retry key for this exact mutation.");
 const ROUTE = z.string().regex(/^\/[A-Za-z0-9._\-/\[\]()]*$/).max(120)
   .describe("Next.js route PATTERN the layout replaces, e.g. /banking or /apps/[key]. Never a concrete url.");
+const ROUTE_PARAMS = z.record(z.string(), z.string()).optional()
+  .describe("Values for the route's dynamic segments, keyed as the route names them, used to load its data for checking.");
+const ROUTE_SEARCH_PARAMS = z.record(z.string(), z.string()).optional()
+  .describe("Query string to load the page data with when checking bound fields.");
 const LAYOUT_SPEC = z.unknown()
   .describe("A ViewSpec PageSpec document; call validate_page_layout first.");
 const EXTENSION_KEY = z.string().regex(/^[a-z][a-z0-9-]*$/).max(64)
@@ -341,10 +346,13 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "describe_page_layout_vocabulary", title: "Describe Page Layout Vocabulary",
-    description: "Block/cell/widget/frame names a page layout may use, from the live registries, plus the rules layouts obey. Start here; unlisted widgets are refused at save.",
-    inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
+    description: "Everything a page layout may use, from the live registries: block and cell kinds with their required/optional properties, widgets with the props each reads (dashboard and presentation widgets documented), frames, and the rules layouts obey. Start here; unlisted widgets and unknown properties are refused at save.",
+    inputSchema: z.object({
+      widgets: z.array(z.string().max(64)).max(40).optional()
+        .describe("Widget names whose prop contracts to return (presentation widgets are always documented)."),
+    }).strict(), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
-    execute: async (context) => ({ ok: true, ...(await describeLayoutVocabulary(context)),
+    execute: async (context, input) => ({ ok: true, ...(await describeLayoutVocabulary(context, input as never)),
     }),
   }),
   definition({
@@ -371,11 +379,16 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "validate_page_layout", title: "Validate Page Layout",
-    description: "Check a draft layout without storing it. Returns the specific errors — an unknown widget is named, an illegal property is pointed at. Iterate here rather than against set_page_layout.",
-    inputSchema: z.object({ spec: LAYOUT_SPEC }),
+    description: "Check a draft layout without storing it. Returns field-level errors — an unknown widget or property is named, a missing required property is pointed at, and a bound field the page data lacks is reported with the nearest real path. Iterate here rather than against set_page_layout.",
+    inputSchema: z.object({
+      spec: LAYOUT_SPEC,
+      route: ROUTE.optional().describe("Route the layout is for (defaults to spec.route). When known, every bound field is checked against that page's data for you."),
+      params: ROUTE_PARAMS,
+      searchParams: ROUTE_SEARCH_PARAMS,
+    }).strict(),
     readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...(await validateLayout(context, input)),
+    execute: async (context, input) => ({ ok: true, ...(await validateLayout(context, input as never)),
     }),
   }),
   definition({
@@ -387,7 +400,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       params: z.record(z.string(), z.string()).optional()
         .describe("Values for the route's dynamic segments, e.g. { key: \"inventory\" } for /apps/[key]."),
       idempotencyKey: IDEMPOTENCY_KEY,
-    }),
+    }).strict(),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...(await previewLayout(context, input as never)),
@@ -395,10 +408,11 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "set_page_layout", title: "Set Page Layout",
-    description: "Replace what a route renders (org-wide, or just you with scope user). Binds only fields the loader resolved. Rejections return errors, never store.",
+    description: "Replace what a route renders (org-wide, or just you with scope user). The route must be one a page declares and every bound field must exist in that page's data; rejections return errors, never store.",
     inputSchema: z.object({ route: ROUTE, spec: LAYOUT_SPEC, idempotencyKey: IDEMPOTENCY_KEY, note: z.string().max(500).optional()
         .describe("Human-readable reason for this layout change, stored in history"), scope: z.enum(["org", "user"]).optional()
-        .describe("org (default) changes the page for everyone; user stores it for you alone.") }),
+        .describe("org (default) changes the page for everyone; user stores it for you alone."),
+      params: ROUTE_PARAMS, searchParams: ROUTE_SEARCH_PARAMS }).strict(),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...(await setLayout(context, input)),
@@ -415,8 +429,9 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "restore_page_layout", title: "Restore Page Layout",
-    description: "Republish a past layout version by history id. Appends a new active version; history stays a true live-record.",
-    inputSchema: z.object({ route: ROUTE, versionId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
+    description: "Republish a past layout version by its list_page_layout_history id, into the layer (org or user) it was saved in. Appends a new active version; history stays a true live-record.",
+    inputSchema: z.object({ route: ROUTE, versionId: UUID.describe("The version id from list_page_layout_history"), idempotencyKey: IDEMPOTENCY_KEY,
+      scope: z.enum(["org", "user"]).optional().describe("Defaults to the layer the version was saved in.") }).strict(),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...(await restoreLayout(context, input as never)),
@@ -508,6 +523,33 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     assistantConfirmation: "always", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...(await activateExtensionDraft(context, input as never)),
     }),
+  }),
+  definition({
+    name: "test_app_endpoint", title: "Rehearse App Endpoint",
+    featureKey: "apps",
+    description: "Run one backend endpoint of a draft (draftId) or the installed app (key) exactly as production would — sandbox, unit budget, grants ∩ your permissions, the draft's own record types and settings — then roll everything back. Returns the response or refusal, ob.log lines and units. Nothing persists. Use before activate_app_draft.",
+    inputSchema: z.object({
+      draftId: UUID.optional().describe("Rehearse this unpublished draft (installed inside the rolled-back transaction)."),
+      key: EXTENSION_KEY.optional().describe("Or rehearse the installed app's active version."),
+      endpoint: z.string().min(1).max(64).describe("Endpoint name from manifest.endpoints."),
+      body: z.unknown().optional().describe("Request body as the caller sends it. Native action screens send { input: { <field id>: value }, invocationId }."),
+    }).strict(),
+    readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...(await rehearseExtensionEndpoint(context, input as never)) }),
+  }),
+  definition({
+    name: "list_app_runs", title: "List App Runs",
+    featureKey: "apps",
+    description: "Recent backend invocations of an installed app, newest first: endpoint, status, refusal message, ob.log lines, units, duration and who triggered it.",
+    inputSchema: z.object({
+      key: EXTENSION_KEY.describe("Installed app key from list_app_packages."),
+      endpoint: z.string().min(1).max(64).optional().describe("Only runs of this endpoint."),
+      limit: z.number().int().min(1).max(100).optional().describe("Most recent runs to return (default 20)."),
+    }).strict(),
+    readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context, input) => ({ ok: true, ...(await listExtensionRuns(context, input as never)) }),
   }),
   definition({
     name: "list_approvals", title: "List Approvals",

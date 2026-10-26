@@ -201,3 +201,124 @@ export function boundPaths(spec: unknown): string[] {
   visit(spec)
   return [...paths].sort()
 }
+
+export interface UnresolvedPath {
+  /** The dot path exactly as the spec wrote it. */
+  path: string
+  /** `page` for the loader root, `row` inside a table row or repeat item. */
+  scope: 'page' | 'row'
+  /** The closest path that does exist in that scope, when one is near. */
+  suggestion?: string
+}
+
+const ROOT_PREFIX = '$root.'
+
+/**
+ * Field references a spec makes that the loader output provably lacks.
+ *
+ * Scoped the way the renderer resolves them: a table's columns and a repeat's
+ * blocks read each ROW (with `$root.` reaching back to the page), everything
+ * else reads the page. A path is only reported when the catalog could have
+ * seen it — under a truncated subtree, a null value, or an array that produced
+ * no rows this run there is nothing to compare against, so nothing is claimed.
+ */
+export function unresolvedPaths(spec: unknown, catalog: FieldCatalog): UnresolvedPath[] {
+  const out = new Map<string, UnresolvedPath>()
+  const check = (path: string, scope: FieldDescriptor[] | null, kind: 'page' | 'row') => {
+    if (path.startsWith(ROOT_PREFIX)) return check(path.slice(ROOT_PREFIX.length), catalog.fields, 'page')
+    if (scope === null) return
+    if (kind === 'page' && catalog.truncated) return
+    if (resolvable(path, scope)) return
+    const key = `${kind}:${path}`
+    if (out.has(key)) return
+    const suggestion = nearestPath(path, scope)
+    out.set(key, { path, scope: kind, ...(suggestion ? { suggestion } : {}) })
+  }
+  const visit = (node: unknown, scope: FieldDescriptor[] | null, kind: 'page' | 'row') => {
+    if (node === null || typeof node !== 'object') return
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child, scope, kind)
+      return
+    }
+    const record = node as Record<string, unknown>
+    if (typeof record.$ === 'string' && Object.keys(record).length === 1) {
+      check(record.$, scope, kind)
+      return
+    }
+    const rowsRef = record.kind === 'table' ? record.rows : record.kind === 'repeat' ? record.items : undefined
+    if (rowsRef && typeof rowsRef === 'object' && typeof (rowsRef as { $?: unknown }).$ === 'string') {
+      const rowsPath = (rowsRef as { $: string }).$
+      check(rowsPath, scope, kind)
+      const rowScope = itemScope(rowsPath, scope)
+      for (const [key, child] of Object.entries(record)) {
+        if (key === 'rows' || key === 'items') continue
+        if (key === 'rowKey' || key === 'itemKey' || key === 'blocks') {
+          visit(child, rowScope, 'row')
+        } else if (key === 'columns' && Array.isArray(child)) {
+          // A column's header reads the page; its cell reads each row.
+          for (const column of child) {
+            if (column === null || typeof column !== 'object') continue
+            for (const [field, value] of Object.entries(column as Record<string, unknown>)) {
+              visit(value, field === 'cell' ? rowScope : scope, field === 'cell' ? 'row' : kind)
+            }
+          }
+        } else {
+          visit(child, scope, kind)
+        }
+      }
+      return
+    }
+    for (const child of Object.values(record)) visit(child, scope, kind)
+  }
+  visit(spec, catalog.fields, 'page')
+  return [...out.values()]
+}
+
+function itemScope(path: string, scope: FieldDescriptor[] | null): FieldDescriptor[] | null {
+  if (path.startsWith(ROOT_PREFIX) || scope === null) return null
+  const array = scope.find((field) => field.path === path)
+  if (!array || array.type !== 'array' || !array.item || !array.count) return null
+  return array.item
+}
+
+function resolvable(path: string, scope: FieldDescriptor[]): boolean {
+  if (scope.some((field) => field.path === path)) return true
+  // A deeper path under a value the catalog could not open is unknown, not
+  // missing: a null today may be an object on another run.
+  const segments = path.split('.')
+  for (let length = segments.length - 1; length > 0; length--) {
+    const parent = scope.find((field) => field.path === segments.slice(0, length).join('.'))
+    if (!parent) continue
+    return parent.truncated === true || parent.type === 'null' || parent.type === 'unbindable'
+  }
+  return false
+}
+
+function nearestPath(path: string, scope: FieldDescriptor[]): string | undefined {
+  const target = path.toLowerCase()
+  const leaf = target.split('.').pop()!
+  let best: string | undefined
+  let bestScore = Infinity
+  for (const field of scope) {
+    const candidate = field.path.toLowerCase()
+    const candidateLeaf = candidate.split('.').pop()!
+    const score = Math.min(distance(target, candidate), distance(leaf, candidateLeaf) + 1)
+    if (score < bestScore) {
+      bestScore = score
+      best = field.path
+    }
+  }
+  return best !== undefined && bestScore <= Math.max(2, Math.floor(leaf.length / 2)) ? best : undefined
+}
+
+function distance(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i]
+    for (let j = 1; j <= b.length; j++) {
+      current[j] = Math.min(previous[j]! + 1, current[j - 1]! + 1, previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1))
+    }
+    previous = current
+  }
+  return previous[b.length]!
+}

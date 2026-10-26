@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { pageSpecSchema, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { supplementalContributionSchema } from '@openbooks/engine/extensions/contribution-schemas'
+import { navContributionSchema, permissionContributionSchema, settingContributionSchema } from '@openbooks/engine/extensions/contribution-schemas'
 import { validateAgainstRegistries } from '../page-spec-validate'
 import { WIDGET_NAMES, FRAME_NAMES } from '../../components/viewspec/registry-names'
 import { WIDGET_CONTRACTS } from '../../components/viewspec/widget-contracts'
@@ -12,7 +12,9 @@ const pageContribution = z.object({
 
 /** Only implemented projections belong in the extension contract. Record types
  * and fields use objects/*.json; backend endpoints use manifest.endpoints. */
-export const extensionContributionsSchema = z.array(z.union([pageContribution, supplementalContributionSchema])).max(200).superRefine((items, ctx) => {
+// Discriminated on kind so a wrong property is reported on the member the
+// author meant, not as an opaque union failure.
+export const extensionContributionsSchema = z.array(z.discriminatedUnion('kind', [pageContribution, navContributionSchema, settingContributionSchema, permissionContributionSchema])).max(200).superRefine((items, ctx) => {
   const seen = new Set<string>()
   for (const [index, item] of items.entries()) {
     const identity = `${item.kind}:${item.kind === 'page' ? item.route : item.kind === 'nav' ? item.href : item.key}`

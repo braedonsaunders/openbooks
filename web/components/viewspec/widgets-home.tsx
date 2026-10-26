@@ -39,6 +39,8 @@ import { AppLauncherCard, AppsEmptyIcon, AppsLauncherButton } from '../../app/(a
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
 import { str, type WidgetRenderer } from './widget-props'
+import { BarChartWidget, DonutChartWidget, ProgressBarsWidget, ScoreGaugeWidget, type ProgressItem, type ValueFormat } from './presentation-widgets.client'
+import type { DashboardTileRequest } from './dashboard-tiles-slot'
 
 // The shared registry also renders entity and document pages. Resolve the
 // dashboard's server components only when that widget is requested, so their
@@ -46,6 +48,19 @@ import { str, type WidgetRenderer } from './widget-props'
 async function DashboardGridSlot() {
   const { DashboardGridSlot: NativeDashboardGridSlot } = await import('./dashboard-grid-slot')
   return <NativeDashboardGridSlot />
+}
+
+async function DashboardTilesSlot({ widgets }: { widgets: readonly DashboardTileRequest[] }) {
+  const { DashboardTilesSlot: NativeDashboardTilesSlot } = await import('./dashboard-tiles-slot')
+  return <NativeDashboardTilesSlot widgets={widgets} />
+}
+
+function valueFormat(value: unknown): ValueFormat {
+  return value === 'count' || value === 'percent' ? value : 'money'
+}
+
+function arrayProp<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : []
 }
 
 async function DashboardEditSlot() {
@@ -98,6 +113,34 @@ export const HOME_WIDGETS = {
       format={str(props, 'format') === 'count' ? 'count' : 'money'}
     />
   ),
+  /* --- presentation: data-only charts and dashboard tiles ------------------ */
+  'bar-chart': (props) => (
+    <BarChartWidget
+      labels={arrayProp<string>(props.labels)}
+      series={arrayProp<{ name: string; data: number[]; color?: string }>(props.series)}
+      height={typeof props.height === 'number' ? props.height : undefined}
+    />
+  ),
+  'donut-chart': (props) => (
+    <DonutChartWidget
+      data={arrayProp<{ name: string; value: number }>(props.data)}
+      height={typeof props.height === 'number' ? props.height : undefined}
+      format={valueFormat(props.format)}
+    />
+  ),
+  'score-gauge': (props) => (
+    <ScoreGaugeWidget
+      value={typeof props.value === 'number' ? props.value : Number(props.value) || 0}
+      label={str(props, 'label')}
+      bands={(props.bands as { excellent: number; good: number; average: number } | null | undefined) ?? null}
+      goodWhenHigh={props.goodWhenHigh !== false}
+      size={typeof props.size === 'number' ? props.size : undefined}
+    />
+  ),
+  'progress-bars': (props) => (
+    <ProgressBarsWidget items={arrayProp<ProgressItem>(props.items)} format={valueFormat(props.format)} />
+  ),
+  'dashboard-tiles': (props) => <DashboardTilesSlot widgets={arrayProp<DashboardTileRequest>(props.widgets)} />,
   'directory-section': (props) => (
     <DirectorySection
       items={props.items as ComponentProps<typeof DirectorySection>['items']}

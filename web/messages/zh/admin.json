@@ -9133,7 +9133,9 @@
       "actionRunning": "处理中…",
       "previewAction": "仅表单预览。后端操作在激活后运行，使用已安装版本与您的权限。",
       "previewRecords": "使用拟议记录定义的表单预览。激活后，此工作区使用共享记录列表、筛选与抽屉。",
-      "existingRecordsPreview": "此界面引用现有记录类型。激活后，有访问权限的用户可使用正式记录。"
+      "existingRecordsPreview": "此界面引用现有记录类型。激活后，有访问权限的用户可使用正式记录。",
+      "screenDataPreview": "预览显示此屏幕时不包含数据：草稿端点在预览中不会运行。请使用 test_app_endpoint 查看其返回的数据。",
+      "screenDataFailed": "无法加载此屏幕的数据：{error}"
     }
   },
   "automations": {

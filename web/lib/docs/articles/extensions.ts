@@ -3,7 +3,7 @@ import type { DocArticle } from '../types'
 export const extensions: DocArticle = {
   slug: 'app-authoring', title: 'Build and manage apps', category: 'apps', order: 0,
   summary: 'Create or import a package, edit its files and definitions, and activate a reviewed version.',
-  updated: '2026-09-13', related: ['app-api-reference', 'record-customization', 'mcp-control'],
+  updated: '2026-10-26', related: ['app-api-reference', 'record-customization', 'mcp-control'],
   keywords: ['modules', 'apps', 'agent', 'draft', 'native screens'],
   body: `# Build and manage apps
 
@@ -13,7 +13,7 @@ An app is one installed package of screens, record definitions, and optional bac
 
 1. Choose **New app** and describe the work your team needs to do. The assistant can clarify the records, fields, users, and actions involved.
 2. The agent prepares an unpublished draft. Open its review to see the package contents, requested access, and changes from the installed version.
-3. Open **Preview**. Native record screens show the proposed shared form. Preview cannot query live records or run draft backend actions. Test stateful behavior in an organization sandbox before activation.
+3. Open **Preview**. Native record screens show the proposed shared form, and page screens show their layout without data. Preview cannot query live records or run draft backend actions. The agent rehearses each backend endpoint against live data before activation; a rehearsal rolls back everything it did.
 4. Request changes until the proposal is ready. Each revision is a new immutable draft.
 5. Review the requested access and select **Activate app**. Activation creates or updates the package's owned definitions and switches the active version together. If the installed version changed during review, prepare a fresh draft.
 
@@ -34,11 +34,13 @@ The in-app assistant and connected MCP agents use the same tools:
 - **list_app_packages** lists installed packages and their active versions.
 - **describe_app_vocabulary** supplies the supported package contract and a working example.
 - **get_app_package** reads an installed version before upgrading it.
-- **draft_app** validates and stores an unpublished package, returning review and preview links.
+- **draft_app** validates and stores an unpublished package, returning review and preview links. Backend files must parse and may call only the documented host API.
+- **test_app_endpoint** runs one endpoint of a draft or an installed app exactly as production would, returns its response, refusal and log lines, and rolls everything back.
 - **get_app_draft** reads the author's proposal and exact fingerprint.
 - **activate_app_draft** activates that reviewed fingerprint after approval.
+- **list_app_runs** lists an installed app's recent backend invocations with their status, refusals and logs.
 
-A package is a manifest plus files. Native screens use **frontend.renderer: native** with a JSON entry containing **screens**. A **records** screen names a published custom record type; its workspace uses the existing list, filters, forms, permissions, and audience controls. A **page** screen uses the shared page vocabulary with the restricted link-button widget. It cannot load arbitrary host widgets or uploaded JavaScript into the application origin.
+A package is a manifest plus files. Native screens use **frontend.renderer: native** with a JSON entry containing **screens**. A **records** screen names a published custom record type; its workspace uses the existing list, filters, forms, permissions, and audience controls. A **page** screen is a dashboard in the house page shell: stat tiles, grids, panels, tables, charts (trend, bar, donut), gauges, progress bars, KPI strips and live home-dashboard tiles. An optional **data** endpoint runs read-only as the viewer and supplies the values the screen binds. Page screens cannot load other host widgets or uploaded JavaScript into the application origin.
 
 An **action** screen uses the shared record-form fields and submits to a declared sandboxed backend endpoint. The server pins the installed version, validates the inputs, and checks both the user permissions and package grants. Backend record changes, package storage, and audit evidence commit together; a thrown failure rolls back the action. Lost-response retries replay the same submission. Preview never executes backend actions.
 

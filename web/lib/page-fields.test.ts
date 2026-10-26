@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { boundPaths, describeFields } from './page-fields'
+import { boundPaths, describeFields, unresolvedPaths } from './page-fields'
 
 const paths = (data: unknown) => describeFields(data).fields.map((field) => field.path)
 const find = (data: unknown, path: string) =>
@@ -101,4 +101,34 @@ test('boundPaths ignores an object that merely has a $ among other keys', () => 
   // A field ref is `{ $: path }` and nothing else. Treating `{ $: 'x', y: 1 }`
   // as one would report a binding the renderer does not make.
   assert.deepEqual(boundPaths({ a: { $: 'real' }, b: { $: 'fake', extra: 1 } }), ['real'])
+})
+
+test('unresolved paths are reported in the scope the renderer resolves them in', () => {
+  const data = { title: 'Projects', summary: { total: '12.00' }, rows: [{ id: 'a', name: 'Riverside', amount: '1.00' }], empty: [] as unknown[] }
+  const spec = {
+    header: [{ kind: 'page-header', title: { $: 'titel' } }],
+    body: [
+      { kind: 'text', content: { $: 'summary.total' } },
+      {
+        kind: 'table', rows: { $: 'rows' }, rowKey: { $: 'id' },
+        columns: [
+          { header: { $: 'title' }, cell: { kind: 'text', field: { $: 'nme' } } },
+          { header: 'Total', cell: { kind: 'money', field: { $: '$root.summary.total' } } },
+          { header: 'Amount', cell: { kind: 'money', field: { $: 'amount' } } },
+        ],
+      },
+      // No rows this run: nothing can be said about the row shape.
+      { kind: 'repeat', items: { $: 'empty' }, itemKey: { $: 'id' }, blocks: [{ kind: 'text', content: { $: 'anything' } }] },
+    ],
+  }
+  assert.deepEqual(unresolvedPaths(spec, describeFields(data)), [
+    { path: 'titel', scope: 'page', suggestion: 'title' },
+    { path: 'nme', scope: 'row', suggestion: 'name' },
+  ])
+})
+
+test('a path under a value the catalog could not open is not claimed missing', () => {
+  const data = { detail: null, summary: { total: '1.00' } }
+  assert.deepEqual(unresolvedPaths({ body: [{ kind: 'text', content: { $: 'detail.note' } }] }, describeFields(data)), [])
+  assert.equal(unresolvedPaths({ body: [{ kind: 'text', content: { $: 'summary.count' } }] }, describeFields(data)).length, 1)
 })

@@ -9111,6 +9111,8 @@
       "actionFailed": "L’action n’a pas pu être menée à bien. Réessayez pour vérifier le même envoi.",
       "actionRunning": "En cours…",
       "existingRecordsPreview": "Cet écran fait référence à un type d’enregistrements existant. Les enregistrements réels seront disponibles après l’activation pour les utilisateurs autorisés.",
+      "screenDataPreview": "L’aperçu affiche cet écran sans ses données : les points de terminaison d’un brouillon ne s’exécutent jamais en aperçu. Utilisez test_app_endpoint pour voir les données renvoyées.",
+      "screenDataFailed": "Les données de cet écran n’ont pas pu être chargées : {error}",
       "previewAction": "Aperçu du formulaire uniquement. Les actions backend s’exécutent après l’activation, avec la version installée et vos permissions.",
       "previewRecords": "Aperçu du formulaire avec la définition d’enregistrements proposée. Après l’activation, cet espace utilisera la liste d’enregistrements partagée, les filtres et les tiroirs.",
       "sampleNumber": "Exemple {number}",

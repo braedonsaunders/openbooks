@@ -8916,6 +8916,8 @@
       "actionFailed": "Die Aktion konnte nicht abgeschlossen werden. Wiederholen Sie, um dieselbe Übermittlung zu prüfen.",
       "actionRunning": "Arbeitet …",
       "existingRecordsPreview": "Diese Maske verweist auf einen bestehenden Datensatztyp. Live-Datensätze sind nach Aktivierung für Benutzer mit Zugriff verfügbar.",
+      "screenDataPreview": "Die Vorschau zeigt diese Maske ohne Daten: Endpunkte eines Entwurfs werden in der Vorschau nie ausgeführt. Verwenden Sie test_app_endpoint, um die zurückgegebenen Daten zu sehen.",
+      "screenDataFailed": "Die Daten dieser Maske konnten nicht geladen werden: {error}",
       "previewAction": "Nur Formularvorschau. Backend-Aktionen laufen nach Aktivierung, mit der installierten Version und Ihren Berechtigungen.",
       "previewRecords": "Formularvorschau mit der vorgeschlagenen Datensatzdefinition. Nach Aktivierung nutzt dieser Arbeitsbereich die geteilte Datensatzliste, Filter und Schubladen.",
       "sampleNumber": "Beispiel {number}",

@@ -7,7 +7,7 @@ export const appApiReference: DocArticle = {
   order: 3,
   summary:
     'Function-by-function reference for the app frontend bridge, backend host API, endpoint contract, permissions, limits, and governance.',
-  updated: '2026-07-31',
+  updated: '2026-10-26',
   keywords: [
     'app API',
     'frontend SDK',
@@ -42,6 +42,7 @@ The host surface includes:
 - searchable, filterable, sortable, paginated platform records;
 - live per-organization record and field metadata;
 - governed record creation, update, deletion, and document lifecycle actions;
+- read-only access to the App's own settings;
 - app-private namespaced storage;
 - custom-record convenience functions;
 - balanced journal creation and governed posting; and
@@ -598,14 +599,34 @@ the serialized values are joined with spaces. Logs are visible in App Builder
 under **Runs**. Logging costs 1 governance unit per call.
 
 Do not log secrets, personal data, access tokens, or full accounting records.
-Run logging is best-effort: a failure to persist the audit row does not change
-the endpoint response.
+Every invocation writes its run record in the same transaction as its effects;
+if the record cannot be written, the whole invocation rolls back.
 
 Example:
 
 ~~~javascript
 ob.log('processing', request.endpoint, { actor: request.user.id });
 ~~~
+
+# Backend settings API: ob.settings
+
+Settings an App declares as **setting** contributions appear under **Admin → Setup**
+for administrators to change. A backend reads their current values as a frozen
+snapshot taken when the invocation starts.
+
+## ob.settings.get(key)
+
+Returns the setting's stored value, or its declared **defaultValue** when no
+administrator has changed it, or null when neither exists. A key the App does not
+declare throws, so a misspelled key fails loudly instead of reading as empty.
+
+~~~javascript
+var minimum = ob.settings.get('min_passing_score');
+~~~
+
+## ob.settings.all()
+
+Returns an object with every declared setting key and its current value.
 
 # Backend storage API: ob.storage
 

@@ -22,6 +22,7 @@ import { createGuestLogSink, newAsyncContext } from "../platform/quickjs.ts";
  * Host API on the global `ob`:
  *   ob.log(...)                            collect log lines
  *   ob.request                             the frozen request
+ *   ob.settings.get(key) / .all()          the App's effective setting values (read-only)
  *   ob.storage.get(key[, ns])              read the App's KV store
  *   ob.storage.set(key, value[, ns])       write the App's KV store  (governed)
  *   ob.storage.list(prefix[, ns])          list KV entries by prefix
@@ -149,6 +150,12 @@ export async function runAppEndpoint(opts: {
   source: string;
   request: AppRequest;
   adapters: AppHostAdapters;
+  /**
+   * The app's effective setting values (stored value, else the declared
+   * default), keyed by setting key. Read as a frozen snapshot through
+   * `ob.settings`; an endpoint never writes configuration.
+   */
+  settings?: Readonly<Record<string, unknown>>;
   timeoutMs?: number;
   unitBudget?: number;
 }): Promise<AppEndpointResult> {
@@ -500,6 +507,15 @@ export async function runAppEndpoint(opts: {
         const deepFreeze = (o) => { if (o && typeof o === "object") { Object.values(o).forEach(deepFreeze); Object.freeze(o); } return o; };
         deepFreeze(request);
         ob.request = request;
+
+        const settings = deepFreeze(${JSON.stringify(opts.settings ?? {})});
+        ob.settings = {
+          get: function(key) {
+            if (!Object.prototype.hasOwnProperty.call(settings, String(key))) throw new Error("unknown setting: " + key + "; declare it as a setting contribution in the manifest");
+            return settings[String(key)];
+          },
+          all: function() { return settings; }
+        };
 
         ob.storage = {
           get: function(key, ns) { var r = ob.__storage_get(String(key), ns || "default"); return JSON.parse(r); },

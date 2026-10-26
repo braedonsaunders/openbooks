@@ -26,7 +26,7 @@ import { parseManifest, validateBundle, validateAppToolsForInstall, contentTypeF
 import { appliedDraftStillCurrent, PACKAGE_PATH_REFUSAL, validPackagePath } from './package-files'
 import { APP_CAPABILITIES } from './manifest'
 import { projectExtensionPage } from '@openbooks/engine/extensions/pages'
-import { projectSupplementalContributions, withdrawSupplementalContributions } from '@openbooks/engine/extensions/projections'
+import { getExtensionSettings, projectSupplementalContributions, withdrawSupplementalContributions } from '@openbooks/engine/extensions/projections'
 import { EXTENSION_CONTRIBUTION_PERMISSIONS } from './contributions'
 import { actorHasPermission } from '@openbooks/engine/organization/actor-permissions'
 import { parseNativeExtension } from './native-ui'
@@ -1148,7 +1148,7 @@ export async function invokeAppEndpointHandler(opts: {
       idempotencyKey: opts.idempotencyKey,
       requestHash: requestHash({ endpoint: opts.endpoint, payload: opts.body ?? null }),
       authorize: () => lockInstalledAppForInvocation(opts.orgId, app.id, app.activeVersionId),
-      run: () => runAppEndpoint({ source: handlerSource, request, adapters }),
+      run: async () => runAppEndpoint({ source: handlerSource, request, adapters, settings: await appSettingSnapshot(opts.orgId, app.key, app.manifest) }),
       audit: insertAppRun,
     })
     const run = outcome.attempt
@@ -1160,6 +1160,20 @@ export async function invokeAppEndpointHandler(opts: {
   } catch (error) {
     return invocationRefusal(error)
   }
+}
+
+/**
+ * The values an app's own setting contributions currently hold: the stored
+ * value, else the declared default, else null. Only declared keys are present,
+ * so a backend reading an undeclared setting is refused rather than handed
+ * another app's configuration or an implicit zero.
+ */
+export async function appSettingSnapshot(orgId: string, appKey: string, manifest: AppManifest | null, runner: SqlExecutor = db): Promise<Record<string, unknown>> {
+  const declared = (manifest?.contributions ?? []).flatMap((item) => item.kind === 'setting' ? [item] : [])
+  if (!declared.length) return {}
+  const stored = (await getExtensionSettings(orgId, runner))[appKey] ?? {}
+  return Object.fromEntries(declared.map((item) => [item.key,
+    Object.hasOwn(stored, item.key) ? stored[item.key] : (item.defaultValue ?? null)]))
 }
 
 function platformBridgeUnits(method: string): number {

@@ -22,7 +22,7 @@ export const navContributionSchema = z.object({
     .regex(/^(?:\/[A-Za-z0-9\-_[\]().]+)+\/?$|^\/$/, "href must be an in-app absolute path (a single leading slash, no empty segments)")
     .max(120).refine((href) => !NAV_MODULES.some((entry) => entry.href === href), "native navigation route"),
   /** Canonical workspace group the entry is appended to. */
-  group: z.string().min(1).max(100).refine((key) => NAV_GROUP_BY_KEY.has(key as never), "unknown navigation group"),
+  group: z.string().min(1).max(100).refine((key) => NAV_GROUP_BY_KEY.has(key as never), `unknown navigation group; use one of ${[...NAV_GROUP_BY_KEY.keys()].join(", ")}`),
   /** Optional route workspace whose local navigation includes this page. */
   workspaceKey: z.string().refine((key) => Boolean(LOCAL_NAVIGATION_BY_ID.get(key) && !LOCAL_NAVIGATION_BY_ID.get(key)!.inline), "unknown local route workspace").optional(),
   /** Icon key, as NavModule.iconKey; the resolver falls back to 'link'. */

@@ -22,10 +22,28 @@ function configured(name: string): string[] {
     .filter(Boolean);
 }
 
-function boundaryOptions() {
+/**
+ * The operator-declared public URL. Behind a reverse proxy the request URL
+ * names the upstream listener while `Host` names the public site, so the
+ * canonical application URL is always an accepted host and origin; explicit
+ * lists add further names, never replace this one.
+ */
+function publicApplicationUrl(): URL | null {
+  const configuredUrl = process.env.OPENBOOKS_APP_URL?.trim();
+  if (!configuredUrl) return null;
+  try {
+    const url = new URL(configuredUrl);
+    return url.protocol === "http:" || url.protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+export function boundaryOptions() {
+  const publicUrl = publicApplicationUrl();
   return {
-    allowedHosts: configured("OPENBOOKS_MCP_ALLOWED_HOSTS"),
-    allowedOrigins: configured("OPENBOOKS_MCP_ALLOWED_ORIGINS"),
+    allowedHosts: [...configured("OPENBOOKS_MCP_ALLOWED_HOSTS"), ...(publicUrl ? [publicUrl.host] : [])],
+    allowedOrigins: [...configured("OPENBOOKS_MCP_ALLOWED_ORIGINS"), ...(publicUrl ? [publicUrl.origin] : [])],
   };
 }
 

@@ -2,11 +2,16 @@ import 'server-only'
 
 import { BLOCK_KINDS, CELL_KINDS, SPEC_VERSION, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { FRAME_NAMES, WIDGET_NAMES } from '../../components/viewspec/registry-names'
+import { WIDGET_CONTRACTS } from '../../components/viewspec/widget-contracts'
+import { specShapes } from '../page-spec-shapes'
+import { DASHBOARD_COMPOSITION, PRESENTATION_WIDGETS } from '../presentation-widgets'
+import { dashboardTileCatalog } from '../dashboard-tile-catalog'
 import { AUTHORING_REGISTRIES, RENDER_REGISTRIES } from '../../components/viewspec/registries'
 import { can } from '../authz'
+import { withAuthzContext } from '../authz-context'
 import type { ApplicationContext } from './context'
 import { forbidden } from './errors'
-import { boundPaths, describeFields } from '../page-fields'
+import { boundPaths, describeFields, unresolvedPaths } from '../page-fields'
 import { MissingSegmentError, PAGE_REGISTRY, PAGE_ROUTES } from '../page-registry'
 import { validateAgainstRegistries } from '../page-spec-validate'
 import {
@@ -51,13 +56,27 @@ function requireCustomization(context: ApplicationContext): void {
  * save at best. The names are read from the live registries, so this answer
  * cannot drift from what the renderer actually accepts.
  */
-export async function describeLayoutVocabulary(context: ApplicationContext) {
+export async function describeLayoutVocabulary(context: ApplicationContext, input: { widgets?: string[] } = {}) {
   requireCustomization(context)
+  const shapes = specShapes()
+  const requested = [...new Set(input.widgets ?? [])]
   return {
     specVersion: SPEC_VERSION,
+    document: '{ specVersion: 1, route?: "/route/[pattern]", layout: "list" | "detail" | "bare", bodyClassName?: string, header: Block[], body: Block[] }. "list" and "detail" render the house page shell; put a page-header block in header.',
     blockKinds: [...BLOCK_KINDS],
+    /** Required and optional properties of every block kind. A FieldRef is { "$": "dot.path" }. */
+    blockShapes: shapes.blocks,
     cellKinds: [...CELL_KINDS],
+    cellShapes: shapes.cells,
     widgets: [...WIDGET_NAMES].sort(),
+    /** Dashboard and presentation widgets, with every prop documented and an example. */
+    presentationWidgets: PRESENTATION_WIDGETS,
+    /** Home-dashboard tiles the dashboard-tiles widget can embed, by id. */
+    dashboardTiles: dashboardTileCatalog(),
+    composition: DASHBOARD_COMPOSITION,
+    /** Prop names each requested widget reads (pass widgets: [...] to receive them). */
+    widgetProps: Object.fromEntries(requested.map((name) => [name,
+      WIDGET_CONTRACTS[name] ? (WIDGET_CONTRACTS[name]!.open ? 'forwards any props' : WIDGET_CONTRACTS[name]!.props) : 'unknown widget'])),
     frames: [...FRAME_NAMES].sort(),
     rules: [
       'A spec names blocks and binds fields the page loader already resolved. It never computes.',
@@ -68,6 +87,9 @@ export async function describeLayoutVocabulary(context: ApplicationContext) {
       'A widget prop the widget does not read is refused at save: it would reach nothing and fail silently.',
       'The org is taken from the session. A spec that names an org id is refused.',
       'A layout is org-wide by default. scope: "user" stores it for you alone and changes nothing for anyone else.',
+      'Start from describe_page_layout: copy its builtIn spec and edit it. Every bound path is checked against that page\'s data on validate (with route), preview and save.',
+      'Inside a table\'s columns or a repeat\'s blocks, paths resolve against each row; prefix "$root." to reach the page data.',
+      'For dashboards, compose stat-tile, grid and panel blocks with the presentationWidgets; dashboard-tiles embeds the live home-dashboard tiles listed in dashboardTiles.',
     ],
     limits: {
       note: 'A layout replaces the built-in spec for one route pattern. Fields it binds must exist in that page loader\'s output; a missing path renders as absent, not as an error.',
@@ -122,6 +144,128 @@ function controlFlow(error: unknown): { kind: 'redirect' | 'not-found'; detail: 
     return { kind: 'not-found', detail: '' }
   }
   return null
+}
+
+type RouteEntry = (typeof PAGE_REGISTRY)[string]
+type RouteInputs = { params?: Record<string, string | undefined>; searchParams?: Record<string, string | undefined> }
+type RouteRefusal =
+  | { reason: 'missing-segment'; segment: string }
+  | { reason: 'redirect'; redirectTo: string | null; detail: string }
+  | { reason: 'not-found'; detail: string }
+  | { reason: 'renders-nothing'; detail: string }
+
+/**
+ * Run a route's own loader as the caller and return its output, or the reason
+ * it produced none.
+ *
+ * The loader resolves its reader through `getAuthz`. Running it inside the
+ * caller's verified authority makes an API-key or MCP actor read the page
+ * exactly as a signed-in browser would, under the same grants; without it a
+ * token caller has no cookie session and every gated page redirects.
+ */
+async function loadRouteData(
+  context: ApplicationContext,
+  entry: RouteEntry,
+  input: RouteInputs,
+): Promise<{ ok: true; data: object } | { ok: false; refusal: RouteRefusal }> {
+  const page = await entry.module()
+  let data: object | null
+  try {
+    data = await withAuthzContext(context.authz, () =>
+      page.load({ params: input.params, searchParams: input.searchParams }),
+    )
+  } catch (error) {
+    if (error instanceof MissingSegmentError) {
+      return { ok: false, refusal: { reason: 'missing-segment', segment: error.segment } }
+    }
+    const flow = controlFlow(error)
+    if (flow?.kind === 'redirect') {
+      // The destination is the informative part and is reported as fact; the
+      // cause is NOT. Two very different things redirect — `requirePermission`
+      // sends an unauthorized reader to the access explanation, and a disabled
+      // feature sends anyone to the features page — and naming the wrong one
+      // sends the caller looking in the wrong place.
+      return {
+        ok: false,
+        refusal: {
+          reason: 'redirect',
+          redirectTo: flow.detail || null,
+          detail:
+            `this page redirects you to ${flow.detail || 'another route'}. That is usually a ` +
+            'permission you do not hold or a feature that is off for this org.',
+        },
+      }
+    }
+    if (flow?.kind === 'not-found') {
+      return {
+        ok: false,
+        refusal: {
+          reason: 'not-found',
+          detail:
+            'this page answers "not found" for these inputs — the record may not exist, or the ' +
+            'page may be gated off for this org.',
+        },
+      }
+    }
+    throw error
+  }
+  if (data === null) {
+    // The loader chose to render nothing — it has already redirected, or this
+    // reader has no content on this page. There is no spec to describe,
+    // because the page itself would not build one.
+    return { ok: false, refusal: { reason: 'renders-nothing', detail: 'the page renders nothing for you with these inputs' } }
+  }
+  return { ok: true, data }
+}
+
+/**
+ * Check a layout against the page it replaces: the route must be one a page
+ * declares, the spec may not claim another route, and every field it binds
+ * must exist in that page's loader output for this caller.
+ *
+ * A wrong path is otherwise silent — resolution returns `undefined` by design
+ * and the page renders with a hole. When the loader cannot run for these
+ * inputs, the binding check is reported as not performed rather than passed.
+ */
+async function checkAgainstRoute(
+  context: ApplicationContext,
+  route: string,
+  spec: PageSpec,
+  inputs: RouteInputs,
+): Promise<{ errors: string[]; warnings: string[] }> {
+  const entry = PAGE_REGISTRY[route]
+  if (!entry) {
+    const near = nearestRoutes(route)
+    return {
+      errors: [`no page declares the route ${route}` + (near.length ? `; did you mean ${near.join(', ')}?` : '; list_page_layouts returns every customizable route')],
+      warnings: [],
+    }
+  }
+  if (spec.route && spec.route !== route) {
+    return { errors: [`the spec declares route ${spec.route} but is being saved for ${route}`], warnings: [] }
+  }
+  let loaded: Awaited<ReturnType<typeof loadRouteData>>
+  try {
+    loaded = await loadRouteData(context, entry, inputs)
+  } catch (error) {
+    // A loader that cannot run here (outside a request, or failing on its own)
+    // does not decide whether a layout may be stored; the check is reported as
+    // not performed rather than passed.
+    return { errors: [], warnings: [`bound fields were not checked: the page data could not be loaded (${error instanceof Error ? error.message : String(error)})`] }
+  }
+  if (!loaded.ok) {
+    const why = loaded.refusal.reason === 'missing-segment'
+      ? `pass params.${loaded.refusal.segment} to check them`
+      : `the page ${loaded.refusal.reason === 'redirect' ? 'redirects' : loaded.refusal.reason === 'not-found' ? 'answers not found' : 'renders nothing'} for you with these inputs`
+    return { errors: [], warnings: [`bound fields were not checked: ${why}`] }
+  }
+  const unresolved = unresolvedPaths(spec, describeFields(loaded.data))
+  return {
+    errors: unresolved.map((entry) =>
+      `field "${entry.path}" does not exist in the ${entry.scope === 'row' ? 'row data' : 'page data'} for ${route}` +
+      (entry.suggestion ? ` — did you mean "${entry.suggestion}"?` : '; describe_page_layout lists the bindable paths')),
+    warnings: [],
+  }
 }
 
 /**
@@ -184,54 +328,9 @@ export async function describePageLayout(
   }
 
   const page = await entry.module()
-  let data: object | null
-  try {
-    data = await page.load({ params: input.params, searchParams: input.searchParams })
-  } catch (error) {
-    if (error instanceof MissingSegmentError) {
-      return { ...common, described: false as const, reason: 'missing-segment', segment: error.segment }
-    }
-    const flow = controlFlow(error)
-    if (flow?.kind === 'redirect') {
-      // The destination is the informative part and is reported as fact; the
-      // cause is NOT. Two very different things redirect — `requirePermission`
-      // sends an unauthorized reader to `/`, and a disabled feature sends
-      // anyone to the features page — and naming the wrong one sends the
-      // caller looking in the wrong place.
-      return {
-        ...common,
-        described: false as const,
-        reason: 'redirect',
-        redirectTo: flow.detail || null,
-        detail:
-          `this page redirects you to ${flow.detail || 'another route'}. That is usually a ` +
-          'permission you do not hold or a feature that is off for this org.',
-      }
-    }
-    if (flow?.kind === 'not-found') {
-      return {
-        ...common,
-        described: false as const,
-        reason: 'not-found',
-        detail:
-          'this page answers "not found" for these inputs — the record may not exist, or the ' +
-          'page may be gated off for this org.',
-      }
-    }
-    throw error
-  }
-
-  if (data === null) {
-    // The loader chose to render nothing — it has already redirected, or this
-    // reader has no content on this page. There is no spec to describe,
-    // because the page itself would not build one.
-    return {
-      ...common,
-      described: false as const,
-      reason: 'renders-nothing',
-      detail: 'the page renders nothing for you with these inputs',
-    }
-  }
+  const loaded = await loadRouteData(context, entry, input)
+  if (!loaded.ok) return { ...common, described: false as const, ...loaded.refusal }
+  const data = loaded.data
 
   const builtIn = page.spec(data)
   const catalog = describeFields(data)
@@ -242,10 +341,29 @@ export async function describePageLayout(
     builtIn,
     /** Dot paths the built-in layout binds; a subset of `fields`. */
     boundFields: boundPaths(builtIn),
+    /** Prop names read by each widget the built-in layout places. */
+    widgetProps: widgetPropsOf(builtIn),
     fields: catalog.fields,
     fieldsTruncated: catalog.truncated,
     note: 'Field paths are resolved against the loader output. Paths under an array\'s `item` resolve against a ROW — that is what a table\'s columns and a repeat\'s blocks see.',
   }
+}
+
+/** Prop contracts for every widget a spec names, so an edit keeps their props valid. */
+function widgetPropsOf(spec: unknown): Record<string, readonly string[] | 'forwards any props'> {
+  const out: Record<string, readonly string[] | 'forwards any props'> = {}
+  const visit = (node: unknown) => {
+    if (node === null || typeof node !== 'object') return
+    if (Array.isArray(node)) return node.forEach(visit)
+    const record = node as Record<string, unknown>
+    if (typeof record.widget === 'string' && WIDGET_CONTRACTS[record.widget]) {
+      const contract = WIDGET_CONTRACTS[record.widget]!
+      out[record.widget] = contract.open ? 'forwards any props' : contract.props
+    }
+    Object.values(record).forEach(visit)
+  }
+  visit(spec)
+  return out
 }
 
 /**
@@ -257,12 +375,22 @@ export async function describePageLayout(
  */
 export async function validateLayout(
   context: ApplicationContext,
-  input: { spec: unknown },
+  input: { spec: unknown; route?: string } & RouteInputs,
 ) {
   requireCustomization(context)
   const result = validateAgainstRegistries(input.spec, registries)
-  if (result.ok) return { valid: true, route: result.spec.route ?? null, errors: [] as string[] }
-  return { valid: false, route: null, errors: result.errors }
+  if (!result.ok) return { valid: false, route: input.route ?? null, errors: result.errors, warnings: [] as string[] }
+  const route = input.route ?? result.spec.route
+  if (!route) {
+    return {
+      valid: true,
+      route: null,
+      errors: [] as string[],
+      warnings: ['bound fields were not checked: pass route (or set spec.route) to check them against the page data'],
+    }
+  }
+  const checked = await checkAgainstRoute(context, route, result.spec, input)
+  return { valid: checked.errors.length === 0, route, errors: checked.errors, warnings: checked.warnings }
 }
 
 /**
@@ -293,6 +421,11 @@ export async function previewLayout(
     return { staged: false, errors: [`preview needs a value for [${missing}]`] }
   }
 
+  const shape = validateAgainstRegistries(input.spec, registries)
+  if (!shape.ok) return { staged: false, errors: shape.errors }
+  const bound = await checkAgainstRoute(context, input.route, shape.spec, { params: input.params })
+  if (bound.errors.length) return { staged: false, errors: bound.errors }
+
   const saved = await savePageSpecDraft({
     orgId: context.authz.user.orgId,
     userId: context.authz.user.id,
@@ -311,15 +444,20 @@ export async function previewLayout(
     expiresInMinutes: DRAFT_TTL_MINUTES,
     note: 'Only you see this, and only on a request carrying ?layoutPreview=1. Nothing is published until set_page_layout.',
     errors: [] as string[],
+    warnings: bound.warnings,
   }
 }
 
 /** Store a layout for a route, replacing whatever was active. */
 export async function setLayout(
   context: ApplicationContext,
-  input: { route: string; spec: unknown; note?: string | null; scope?: 'org' | 'user' },
+  input: { route: string; spec: unknown; note?: string | null; scope?: 'org' | 'user' } & RouteInputs,
 ) {
   requireCustomization(context)
+  const shape = validateAgainstRegistries(input.spec, registries)
+  if (!shape.ok) return { stored: false, errors: shape.errors }
+  const bound = await checkAgainstRoute(context, input.route, shape.spec, input)
+  if (bound.errors.length) return { stored: false, errors: bound.errors }
   const result = await savePageSpec({
     orgId: context.authz.user.orgId,
     actorId: context.authz.user.id,
@@ -334,7 +472,7 @@ export async function setLayout(
     // should read and correct, not an exception it should retry blindly.
     return { stored: false, errors: result.errors }
   }
-  return { stored: true, id: result.id, errors: [] as string[] }
+  return { stored: true, id: result.id, errors: [] as string[], warnings: bound.warnings }
 }
 
 /**
@@ -358,14 +496,20 @@ export async function listLayoutHistory(context: ApplicationContext, input: { ro
  */
 export async function restoreLayout(
   context: ApplicationContext,
-  input: { route: string; versionId: string },
+  input: { route: string; versionId: string; scope?: 'org' | 'user' },
 ) {
   requireCustomization(context)
+  // A version restores into the layer it was saved in: history lists personal
+  // and org versions together, so the id alone decides which layer republishes
+  // unless the caller names one explicitly.
+  const version = (await listPageSpecHistory(context.authz.user.orgId, input.route, context.authz.user.id))
+    .find((entry) => entry.id === input.versionId)
   const result = await restorePageSpec({
     orgId: context.authz.user.orgId,
     actorId: context.authz.user.id,
     route: input.route,
     versionId: input.versionId,
+    scope: input.scope ?? version?.scope ?? 'org',
     // An undo is not an edit: a version published under older rules still
     // renders, and today's stricter checks must not make the layout someone
     // wants back the one they cannot have.
