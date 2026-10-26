@@ -71,6 +71,9 @@ export async function periodOperatingExpenses(
     left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
     where l.org_id = ${orgId}
       ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
+      -- The line's carried posting date bounds the period on the line index;
+      -- the entry bound keeps the statement basis authoritative.
+      and l.posting_date >= ${from} and l.posting_date <= ${to}
       and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
       and ${excludePeriodEndJournals(sql`e.origin`)}
       and e.posting_date >= ${from} and e.posting_date <= ${to}
