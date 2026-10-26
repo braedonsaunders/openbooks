@@ -30,14 +30,11 @@ export const runtime = "nodejs";
  */
 export const GET = defineRoute({
   public: "session",
+  feature: "hrmPerformance",
   params: z.object({ id: z.string().min(1) }),
-  handler: async ({ request: _req, authz: authz, params: routeParams }) => {
-      if (!(await isFeatureEnabled(authz.user.orgId, "hrmPerformance"))) {
-      return notFound("record");
-    }
+  handler: async ({ authz: authz, params: routeParams }) => {
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid review" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid review" }, { status: 400 });
     try {
       const detail = await getReviewDetail({
         orgId: authz.user.orgId,
@@ -55,17 +52,12 @@ export const PATCH = defineRoute({
   public: "session",
   params: z.object({ id: z.string().min(1) }),
   body: patchReviewBody,
-  handler: async ({
-    authz: authz,
-    params: routeParams,
-    body: body,
-  }) => {
-      if (!(await isFeatureEnabled(authz.user.orgId, "hrmPerformance"))) {
+  handler: async ({ authz: authz, params: routeParams, body: body }) => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmPerformance"))) {
       return notFound("record");
     }
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid review" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid review" }, { status: 400 });
 
     const base = {
       orgId: authz.user.orgId,
@@ -73,8 +65,15 @@ export const PATCH = defineRoute({
       reviewId: id,
     };
     try {
-      if(body.action==="save-draft") {
-        return NextResponse.json({review:await saveReviewDraft({...base,answers:body.answers,overallRating:body.overallRating,revision:body.revision})});
+      if (body.action === "save-draft") {
+        return NextResponse.json({
+          review: await saveReviewDraft({
+            ...base,
+            answers: body.answers,
+            overallRating: body.overallRating,
+            revision: body.revision,
+          }),
+        });
       }
       if (body.action === "submit") {
         const review = await submitReview({

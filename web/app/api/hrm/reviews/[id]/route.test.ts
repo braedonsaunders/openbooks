@@ -79,7 +79,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmReviewItemRouteNextResponse = NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmReviewItemRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -88,6 +90,7 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/hrm/performance/performance-read", "mock:read"],
   ["../../review-cycles/_lib", "mock:lib"],
   ["@/lib/authz", "mock:authz"],
+  ["@/lib/features", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
 ]);
 
@@ -104,7 +107,9 @@ const hooks = registerHooks({
   },
 });
 const routeUrl = "./route.ts?hrm-review-item";
-const itemRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
+const itemRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
 test.after(() => hooks.deregister());
 
 const REVIEW_ID = "00000000-0000-4000-8000-000000000051";
@@ -145,19 +150,25 @@ test("an unknown id never reaches the service", async () => {
   assert.deepEqual(routeState.calls, []);
 });
 
-  test("detail resolves through the privacy scope", async () => {
-    reset();
-    const response = await itemRoute!.GET(new Request("http://openbooks.test/x"), params);
-    assert.equal(response.status, 200);
-    assert.deepEqual(routeState.calls, [
-      { fn: "detail", args: { orgId: "org-1", actorId: "user-1", reviewId: REVIEW_ID } },
-    ]);
-  });
+test("detail resolves through the privacy scope", async () => {
+  reset();
+  const response = await itemRoute!.GET(new Request("http://openbooks.test/x"), params);
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.calls, [
+    { fn: "detail", args: { orgId: "org-1", actorId: "user-1", reviewId: REVIEW_ID } },
+  ]);
+});
 
-  for (const action of ["submit", "save-draft"]) test(`${action} forwards the revision, answers and overall rating`, async () => {
+for (const action of ["submit", "save-draft"])
+  test(`${action} forwards the revision, answers and overall rating`, async () => {
     reset();
     const response = await itemRoute!.PATCH(
-      patchRequest({ action, revision: 1, answers: [{ answerId: ANSWER_ID, rating: "4", text: "strong" }], overallRating: "4" }),
+      patchRequest({
+        action,
+        revision: 1,
+        answers: [{ answerId: ANSWER_ID, rating: "4", text: "strong" }],
+        overallRating: "4",
+      }),
       params,
     );
     assert.equal(response.status, 200);
@@ -176,49 +187,58 @@ test("an unknown id never reaches the service", async () => {
     ]);
   });
 
-  test("review routes refuse direct calibration and require a reopen reason", async () => {
-    reset();
-    assert.equal(
-      (await itemRoute!.PATCH(patchRequest({ action: "calibrate", calibratedRating: "4" }), params)).status,
-      400,
-    );
-    assert.equal(
-      (await itemRoute!.PATCH(patchRequest({ action: "calibrate", calibratedRating: "4", reason: "Reviewed rating" }), params)).status,
-      400,
-    );
-    assert.equal(
-      (await itemRoute!.PATCH(patchRequest({ action: "reopen" }), params)).status,
-      400,
-    );
-    assert.equal((await itemRoute!.PATCH(patchRequest({ action: "share" }), params)).status, 200);
-    assert.equal((await itemRoute!.PATCH(patchRequest({ action: "acknowledge" }), params)).status, 200);
-    assert.deepEqual(routeState.calls.map((c) => c.fn), ["share", "acknowledge"]);
-  });
-
-  test("action routes refuse hostile payloads at the real boundary", async () => {
-    reset();
-    for (const body of ["{not json", "null"]) {
-      const refused: Response = await itemRoute!.PATCH(
-        new Request(`http://openbooks.test/api/hrm/reviews/${REVIEW_ID}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body,
-        }),
+test("review routes refuse direct calibration and require a reopen reason", async () => {
+  reset();
+  assert.equal(
+    (await itemRoute!.PATCH(patchRequest({ action: "calibrate", calibratedRating: "4" }), params))
+      .status,
+    400,
+  );
+  assert.equal(
+    (
+      await itemRoute!.PATCH(
+        patchRequest({ action: "calibrate", calibratedRating: "4", reason: "Reviewed rating" }),
         params,
-      );
-      assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
-    }
-    assert.deepEqual(routeState.calls, []);
-  });
+      )
+    ).status,
+    400,
+  );
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "reopen" }), params)).status, 400);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "share" }), params)).status, 200);
+  assert.equal(
+    (await itemRoute!.PATCH(patchRequest({ action: "acknowledge" }), params)).status,
+    200,
+  );
+  assert.deepEqual(
+    routeState.calls.map((c) => c.fn),
+    ["share", "acknowledge"],
+  );
+});
 
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("outside the template scale 1 to 5");
-    routeState.serviceThrow = refusal;
-    const response = await itemRoute!.PATCH(
-      patchRequest({ action: "submit", answers: [{ answerId: ANSWER_ID, rating: "9" }] }),
+test("action routes refuse hostile payloads at the real boundary", async () => {
+  reset();
+  for (const body of ["{not json", "null"]) {
+    const refused: Response = await itemRoute!.PATCH(
+      new Request(`http://openbooks.test/api/hrm/reviews/${REVIEW_ID}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body,
+      }),
       params,
     );
-    assert.equal(response.status, 409);
-    assert.equal(routeState.mapped[0]!.error, refusal);
-  });
+    assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
+  }
+  assert.deepEqual(routeState.calls, []);
+});
+
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("outside the template scale 1 to 5");
+  routeState.serviceThrow = refusal;
+  const response = await itemRoute!.PATCH(
+    patchRequest({ action: "submit", answers: [{ answerId: ANSWER_ID, rating: "9" }] }),
+    params,
+  );
+  assert.equal(response.status, 409);
+  assert.equal(routeState.mapped[0]!.error, refusal);
+});
