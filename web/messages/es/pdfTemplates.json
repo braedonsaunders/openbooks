@@ -95,7 +95,9 @@
   "pdfButton": {
     "label": "PDF",
     "defaultTemplate": "Diseño estándar",
-    "failed": "No se pudieron cargar las plantillas PDF"
+    "failed": "No se pudieron cargar las plantillas PDF",
+    "printFailed": "No se pudo crear el PDF.",
+    "saveFirst": "Guarde el registro para imprimirlo."
   },
   "send": {
     "label": "Enviar",

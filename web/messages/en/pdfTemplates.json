@@ -95,7 +95,9 @@
   "pdfButton": {
     "label": "PDF",
     "defaultTemplate": "Standard design",
-    "failed": "Could not load PDF templates"
+    "failed": "Could not load PDF templates",
+    "printFailed": "The PDF could not be created.",
+    "saveFirst": "Save the record to print it."
   },
   "send": {
     "label": "Send",

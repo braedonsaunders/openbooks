@@ -3,7 +3,10 @@
 // The record "PDF" button — lives in every transaction flyout's headerActions.
 // Click prints the record with the org's default template (or the built-in
 // starter design). When the org has more than one template for the record
-// type, a picker menu opens instead so the user chooses the design.
+// type, a picker menu opens instead so the user chooses the design. A record
+// that has not been saved yet has nothing to print, so the button waits for
+// the first save. The PDF is fetched before it is shown: a refusal renders as
+// the server's reason in a toast, never as a raw response in a new tab.
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
@@ -32,6 +35,27 @@ export function PdfButton({
     `/api/record-pdf/${encodeURIComponent(recordType)}/${encodeURIComponent(recordId)}` +
     (templateId ? `?template=${encodeURIComponent(templateId)}` : "");
 
+  // The tab opens inside the click so popup blocking never applies, and shows
+  // the PDF only once the server has produced one.
+  async function openPdf(templateId?: string) {
+    const tab = window.open("", "_blank");
+    try {
+      const res = await fetch(pdfHref(templateId));
+      if (!res.ok) {
+        tab?.close();
+        toast.error(await readApiErrorMessage(res, t("pdfButton.printFailed")));
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      if (tab) tab.location.href = url;
+      else window.location.assign(url);
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      tab?.close();
+      toast.error(t("pdfButton.printFailed"));
+    }
+  }
+
   async function onClick(e: React.MouseEvent<HTMLButtonElement>) {
     const anchor = e.currentTarget;
     let entries = items;
@@ -53,7 +77,7 @@ export function PdfButton({
             ? data.rows.map((r) => ({
                 key: r.id,
                 label: r.isDefault ? `${r.name} ★` : r.name,
-                onSelect: () => window.open(pdfHref(r.id), "_blank"),
+                onSelect: () => void openPdf(r.id),
               }))
             : [];
         setItems(entries);
@@ -62,12 +86,17 @@ export function PdfButton({
       }
     }
     if (entries.length > 0) menu.openBelow(anchor);
-    else window.open(pdfHref(), "_blank");
+    else await openPdf();
   }
 
   return (
     <>
-      <Button variant="outline" onClick={onClick} disabled={busy || disabled}>
+      <Button
+        variant="outline"
+        onClick={onClick}
+        disabled={busy || disabled || !recordId}
+        title={recordId ? undefined : t("pdfButton.saveFirst")}
+      >
         <FileText size={15} className="mr-1.5" />
         {label ?? t("pdfButton.label")}
       </Button>

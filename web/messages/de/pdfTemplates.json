@@ -95,7 +95,9 @@
   "pdfButton": {
     "label": "PDF",
     "defaultTemplate": "Standarddesign",
-    "failed": "PDF-Vorlagen konnten nicht geladen werden"
+    "failed": "PDF-Vorlagen konnten nicht geladen werden",
+    "printFailed": "Das PDF konnte nicht erstellt werden.",
+    "saveFirst": "Speichern Sie den Datensatz, um ihn zu drucken."
   },
   "send": {
     "label": "Senden",

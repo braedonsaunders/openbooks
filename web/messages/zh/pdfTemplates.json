@@ -95,7 +95,9 @@
   "pdfButton": {
     "label": "PDF",
     "defaultTemplate": "标准设计",
-    "failed": "无法加载 PDF 模板"
+    "failed": "无法加载 PDF 模板",
+    "printFailed": "无法生成 PDF。",
+    "saveFirst": "请先保存记录再打印。"
   },
   "send": {
     "label": "发送",

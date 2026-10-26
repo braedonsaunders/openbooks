@@ -95,7 +95,9 @@
   "pdfButton": {
     "label": "PDF",
     "defaultTemplate": "標準デザイン",
-    "failed": "PDF テンプレートを読み込めませんでした"
+    "failed": "PDF テンプレートを読み込めませんでした",
+    "printFailed": "PDF を作成できませんでした。",
+    "saveFirst": "印刷するにはレコードを保存してください。"
   },
   "send": {
     "label": "送信",

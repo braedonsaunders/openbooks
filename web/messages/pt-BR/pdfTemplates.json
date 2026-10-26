@@ -95,7 +95,9 @@
   "pdfButton": {
     "label": "PDF",
     "defaultTemplate": "Design padrão",
-    "failed": "Não foi possível carregar os modelos de PDF"
+    "failed": "Não foi possível carregar os modelos de PDF",
+    "printFailed": "Não foi possível criar o PDF.",
+    "saveFirst": "Salve o registro para imprimi-lo."
   },
   "send": {
     "label": "Enviar",
