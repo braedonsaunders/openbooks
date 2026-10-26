@@ -1,0 +1,1 @@
+Adds one partial index to journal_entries, built concurrently; it changes no rows and has no data precondition.

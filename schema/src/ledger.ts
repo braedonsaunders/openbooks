@@ -150,6 +150,10 @@ export const journalEntries = pgTable(
      * (drizzle cannot express INCLUDE).
      */
     index("je_org_status_date_covering").on(t.orgId, t.status, t.postingDate, t.id),
+    /** Latest posted entries in recording order, without sorting the ledger. */
+    index("je_org_recent_posted")
+      .on(t.orgId, t.createdAt.desc(), t.entryNumber.desc())
+      .where(sql`${t.status} IN ('posted', 'reversed')`),
   ],
 );
 
