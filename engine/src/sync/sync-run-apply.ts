@@ -127,6 +127,11 @@ export async function applySyncDocuments(args: {
   let docIndex = 0;
   // Repeated source refs have no deterministic winner; apply the first only.
   const appliedSourceRefs = new Set<string>();
+  // A source may post into a period it has since closed; the controller's append-only policy
+  // authorizes that replay, and the database verifies the run and controller itself.
+  const connectorReplay = postedChangeAuthorization
+    ? { requestId: run.id, actorId: postedChangeAuthorization.actorId }
+    : undefined;
   for (const sourceDoc of changes.documents) {
     docIndex++;
     if (appliedSourceRefs.has(sourceDoc.sourceRef)) {
@@ -237,6 +242,7 @@ export async function applySyncDocuments(args: {
               // No user posts a mirror run: actor null, source system
               // explicit — the same envelope every other post leaves.
               audit: { actorId: null, source: source.name },
+              connectorReplay,
             });
             await refreshDocumentHeaderTotals(row!.id, org.id);
           }
@@ -329,6 +335,7 @@ export async function applySyncDocuments(args: {
             // No user posts a mirror run: actor null, source system
             // explicit — the same envelope every other post leaves.
             audit: { actorId: null, source: source.name },
+            connectorReplay,
           });
           await refreshDocumentHeaderTotals(have.id, org.id);
         });

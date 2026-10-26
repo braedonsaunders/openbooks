@@ -74,6 +74,8 @@ export async function commitDocumentPosting(
       doc.journalMode === "currency_adjustment" ? "exclusive" : "shared",
     );
     await assertSourcesCurrent(tx, prepared);
+    const connectorReplay = deps.migration ? options.connectorReplay : undefined;
+    if (connectorReplay) await setConnectorReplayAuthority(tx, connectorReplay);
     const { book, period } = await lockPostingScope(tx, prepared, actorId);
     await postingPreconditionHooks
       .require("projects")
@@ -114,8 +116,26 @@ export async function commitDocumentPosting(
       postingDate,
       actorId,
     });
+    if (connectorReplay) await setConnectorReplayAuthority(tx, null);
     return entry.entryId;
   });
+}
+
+/**
+ * Presents a connector replay's run and controller to the database period guards, which verify
+ * them against the running sync run and the connection's posted-change authorization. The
+ * authority is cleared before the transaction does any further work.
+ */
+async function setConnectorReplayAuthority(
+  tx: PostingTx,
+  authority: { requestId: string; actorId: string } | null,
+): Promise<void> {
+  await tx.execute(sql`
+    select
+      set_config('openbooks.connector_replay', ${authority ? "on" : "off"}, true),
+      set_config('openbooks.connector_replay_request', ${authority?.requestId ?? ""}, true),
+      set_config('openbooks.connector_replay_actor', ${authority?.actorId ?? ""}, true)
+  `);
 }
 
 /** The source evidence the posting relies on is still current under the setup fence. */

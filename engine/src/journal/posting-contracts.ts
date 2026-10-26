@@ -339,4 +339,11 @@ export type PostDocumentOptions = {
      * subledgers without re-firing tenant-authored UI scripts or flows. */
     suppressAutomation?: boolean;
     audit?: { actorId: string | null; source: string };
+    /**
+     * A connector replay's database authority: the running sync run and the controller who
+     * authorized the connection's append-only posted-change policy. The database re-proves both
+     * before a replayed posting may land in a period whose source-imported lock is closed; user
+     * locks still refuse. Honoured only with `PostingDeps.migration`.
+     */
+    connectorReplay?: { requestId: string; actorId: string };
   };
