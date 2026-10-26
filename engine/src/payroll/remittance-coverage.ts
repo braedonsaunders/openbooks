@@ -46,13 +46,21 @@ export async function remittanceScopeLines(
   orgId: string,
   key: { from: string; to: string; filingAccountId: string | null; entityId: string },
 ): Promise<RemittanceScopeLine[]> {
-  const rows = (await executor.execute<{
-    line_id: string; kind: "deduction" | "employer_contribution" | "credit";
-    amount: string; snapshot_party_id: string | null;
-    component_party_id: string | null; covered_party_id: string | null;
-    system_key: string | null; country: string | null; province: string;
-    component_id: string; component_name: string; liability_account_id: string | null;
-  }>(sql`
+  const rows = await executor.execute<{
+    line_id: string;
+    kind: "deduction" | "employer_contribution" | "credit";
+    amount: string;
+    snapshot_party_id: string | null;
+    component_party_id: string | null;
+    covered_party_id: string | null;
+    system_key: string | null;
+    country: string | null;
+    province: string;
+    component_id: string;
+    component_name: string;
+    liability_account_id: string | null;
+  }>(
+    sql`
     select l.id::text as line_id, l.kind, l.amount::text as amount,
            l.remittance_party_id::text as snapshot_party_id,
            c.remittance_party_id::text as component_party_id,
@@ -77,7 +85,9 @@ export async function remittanceScopeLines(
        and d.subsidiary_id = ${key.entityId}
        and s.filing_account_id is not distinct from ${key.filingAccountId}
      order by l.id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     lineId: row.line_id,
     kind: row.kind,
@@ -106,13 +116,16 @@ export async function coveredRemittanceStubLines(
   executor: RemittanceExecutor,
   orgId: string,
 ): Promise<Set<string>> {
-  const rows = (await executor.execute<{ stub_line_id: string }>(sql`
+  const rows = await executor.execute<{ stub_line_id: string }>(
+    sql`
     select cov.stub_line_id::text as stub_line_id
       from payroll_remittance_coverage cov
       join documents bill
         on bill.id = cov.bill_document_id and bill.org_id = cov.org_id
      where cov.org_id = ${orgId} and bill.status <> 'voided'
-  `, "objects"));
+  `,
+    "objects",
+  );
   return new Set(rows.map((row) => row.stub_line_id));
 }
 
@@ -127,12 +140,15 @@ export async function remittanceBillsWithoutCoverage(
   billIds: readonly string[],
 ): Promise<string[]> {
   if (billIds.length === 0) return [];
-  const rows = (await executor.execute<{ bill_document_id: string }>(sql`
+  const rows = await executor.execute<{ bill_document_id: string }>(
+    sql`
     select distinct cov.bill_document_id::text as bill_document_id
       from payroll_remittance_coverage cov
      where cov.org_id = ${orgId}
        and cov.bill_document_id = any(${`{${billIds.join(",")}}`}::uuid[])
-  `, "objects"));
+  `,
+    "objects",
+  );
   const withCoverage = new Set(rows.map((row) => row.bill_document_id));
   return billIds.filter((id) => !withCoverage.has(id));
 }
@@ -146,14 +162,21 @@ export async function remittanceBillsWithoutCoverage(
 export async function sliceStubCurrencies(
   tx: Pick<typeof db, "execute">,
   orgId: string,
-  key: { from: string; to: string; partyId: string; filingAccountId: string | null; entityId: string },
+  key: {
+    from: string;
+    to: string;
+    partyId: string;
+    filingAccountId: string | null;
+    entityId: string;
+  },
 ): Promise<string[]> {
   // The destination half of the group key is deliberately absent: components
   // resolve destinations through pack declarations the SQL cannot re-derive,
   // and the slice's entity × filing account × period already identifies the
   // accruals the summary folded in. A second destination sharing the slice
   // would only ADD a currency, failing safer.
-  const rows = (await tx.execute<{ currency: string }>(sql`
+  const rows = await tx.execute<{ currency: string }>(
+    sql`
     select distinct s.currency_code as currency
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
@@ -163,6 +186,8 @@ export async function sliceStubCurrencies(
        and l.kind in ('deduction', 'employer_contribution', 'credit')
        and d.subsidiary_id = ${key.entityId}
        and s.filing_account_id is not distinct from ${key.filingAccountId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((r) => r.currency).sort();
 }

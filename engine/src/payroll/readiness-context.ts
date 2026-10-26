@@ -11,6 +11,7 @@ import { payrollTaxYearForDate } from "./packs.ts";
 
 /** Shared readiness context: run and population scope for the pay-run pre-flight checks. */
 
+/** Setup → Company & Accounting → Control accounts, where Labor clearing is mapped. */
 export const CONTROL_ACCOUNTS_HREF = "/admin/setup/company#control-accounts";
 
 /**
@@ -56,7 +57,13 @@ export interface PayRunReadiness {
 /** The columns the statutory-rate scope check reads off a payroll population. */
 export type RateScopeRow = Pick<
   ScopeRow,
-  "employee_party_id" | "name" | "country" | "province" | "residence_region" | "filing_account_id" | "subsidiary_id"
+  | "employee_party_id"
+  | "name"
+  | "country"
+  | "province"
+  | "residence_region"
+  | "filing_account_id"
+  | "subsidiary_id"
 >;
 
 export type ScopeRow = {
@@ -154,7 +161,8 @@ export async function runContext(
   documentId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<RunRow | null> {
-  const runs = (await db.execute<RunRow>(sql`
+  const runs = await db.execute<RunRow>(
+    sql`
     select r.pay_schedule_id, r.period_start::text as period_start, r.period_end::text as period_end,
            r.pay_date::text as pay_date, r.tax_year, r.run_type, r.run_status,
            s.subsidiary_id, d.subsidiary_id as document_subsidiary_id
@@ -163,7 +171,9 @@ export async function runContext(
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return runs[0] ?? null;
 }
 
@@ -183,12 +193,19 @@ export async function scope(
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<ScopeRow[]> {
   const rosterColumns = {
-    org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
-    employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
-    periodStart: sql`${run.period_start}`, periodEnd: sql`${run.period_end}`,
-    runType: sql`${run.run_type}`, document: sql`${documentId}`,
+    org: sql`prof.org_id`,
+    employee: sql`p.id`,
+    employment: sql`prof.employment_id`,
+    employer: sql`p.subsidiary_id`,
+    hiredOn: sql`er.hired_on`,
+    terminatedOn: sql`er.terminated_on`,
+    periodStart: sql`${run.period_start}`,
+    periodEnd: sql`${run.period_end}`,
+    runType: sql`${run.run_type}`,
+    document: sql`${documentId}`,
   };
-  const rows = (await db.execute<Omit<ScopeRow, "approved_hours">>(sql`
+  const rows = await db.execute<Omit<ScopeRow, "approved_hours">>(
+    sql`
     select p.id as employee_party_id, p.display_name as name, prof.pay_basis, prof.country,
            ${run.document_subsidiary_id}::uuid as subsidiary_id,
            prof.province, prof.residence_region, prof.labour_jurisdiction,
@@ -237,17 +254,21 @@ export async function scope(
           where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
             and a.adjustment_type = 'exclude' and a.employee_party_id = p.id)
      order by p.display_name
-  `, "objects"));
+  `,
+    "objects",
+  );
   // Approved hours preview exactly what Calculate prices (wage-hours read),
   // so readiness can never warn about time the run will pay — or stay quiet
   // about time it will not.
-  const wageHours = sumWageHoursByEmployee(await loadWageTimeEntries(db, {
-    orgId,
-    employeePartyIds: rows.map((row) => String(row.employee_party_id)),
-    periodStart: run.period_start,
-    periodEnd: run.period_end,
-    documentId,
-  }));
+  const wageHours = sumWageHoursByEmployee(
+    await loadWageTimeEntries(db, {
+      orgId,
+      employeePartyIds: rows.map((row) => String(row.employee_party_id)),
+      periodStart: run.period_start,
+      periodEnd: run.period_end,
+      documentId,
+    }),
+  );
   return rows.map((row) => ({
     ...row,
     approved_hours: wageHours.get(String(row.employee_party_id)) ?? "0",
@@ -272,12 +293,17 @@ export async function installedPayrollCountries(
   // root is outside its explicit scope; an empty scope therefore denies it.
   if (allowedSubsidiaryIds != null) await payrollSettings(orgId, allowedSubsidiaryIds);
   if (Array.isArray((payrollBlob as { countries?: unknown }).countries)) {
-    return ((payrollBlob as { countries: unknown[] }).countries).map(String);
+    return (payrollBlob as { countries: unknown[] }).countries.map(String);
   }
-  return (await db.execute<{ country: string }>(sql`
+  return (
+    await db.execute<{ country: string }>(
+      sql`
     select distinct country from pay_components
      where org_id = ${orgId} and system_key is not null and country is not null
-  `, "objects")).map((row) => row.country);
+  `,
+      "objects",
+    )
+  ).map((row) => row.country);
 }
 
 /** The tax year the org's business day falls in FOR THE PACK — never UTC `getFullYear()`. */
@@ -301,7 +327,8 @@ export async function activePayrollPopulation(
   orgId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<RateScopeRow[]> {
-  const rows = (await db.execute<RateScopeRow>(sql`
+  const rows = await db.execute<RateScopeRow>(
+    sql`
     select p.id as employee_party_id, p.display_name as name, prof.country, prof.province,
            p.subsidiary_id, prof.residence_region,
            ${effectiveFilingAccountSql("prof")} as filing_account_id
@@ -309,6 +336,8 @@ export async function activePayrollPopulation(
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
      where prof.org_id = ${orgId} and prof.is_active
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows;
 }

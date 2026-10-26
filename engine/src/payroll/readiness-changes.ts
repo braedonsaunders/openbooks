@@ -39,12 +39,18 @@ export async function payRunChanges(
   // empty stub set reads as a clean no-changes diff for a run that is not
   // there at all.
   if (!run) throw new PayrollError("pay run not found");
-  const rows = (await db.execute<{
-      employee_party_id: string; name: string; gross: string; net_pay: string;
-      prev_gross: string | null; prev_net: string | null; prev_pay_date: string | null;
-      current_lines: { d: string; a: string; h: string | null }[] | null;
-      previous_lines: { d: string; a: string; h: string | null }[] | null;
-    }>(sql`
+  const rows = await db.execute<{
+    employee_party_id: string;
+    name: string;
+    gross: string;
+    net_pay: string;
+    prev_gross: string | null;
+    prev_net: string | null;
+    prev_pay_date: string | null;
+    current_lines: { d: string; a: string; h: string | null }[] | null;
+    previous_lines: { d: string; a: string; h: string | null }[] | null;
+  }>(
+    sql`
     with current_stub as (
       select s.id, s.employee_party_id, p.display_name as name, s.gross, s.net_pay
         from pay_stubs s
@@ -69,7 +75,9 @@ export async function payRunChanges(
       from current_stub c
       left join previous_stub pv on pv.employee_party_id = c.employee_party_id
      order by c.name
-  `, "objects"));
+  `,
+    "objects",
+  );
 
   const fold = (lines: { d: string; a: string; h: string | null }[] | null) => {
     const map = new Map<string, { amount: string; hours: string }>();

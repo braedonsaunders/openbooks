@@ -1,8 +1,14 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { addCalendarDays, isoDateOf, utcDateFromParts } from "../platform/business-date.ts";
-import { add } from "../money/money.ts";
-import { jurisdictionKey, payrollJurisdiction, type PayrollHoliday, type PayrollHolidayObservance, type PayrollHolidayRule, type PayrollJurisdiction } from "./packs.ts";
+import {
+  jurisdictionKey,
+  payrollJurisdiction,
+  type PayrollHoliday,
+  type PayrollHolidayObservance,
+  type PayrollHolidayRule,
+  type PayrollJurisdiction,
+} from "./packs.ts";
 import { PayrollPackError } from "./payroll-error.ts";
 
 /** Statutory holiday calendar: rule resolution, observance, overrides, and business-day arithmetic. */
@@ -18,7 +24,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** Parse an ISO date as UTC midnight. Dates here are civil dates, never
  *  instants — a local-time Date would shift a holiday across a boundary for
  *  anyone west of Greenwich. */
-export function at(date: string): Date {
+function at(date: string): Date {
   const parsed = new Date(`${date.slice(0, 10)}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime())) throw new PayrollHolidayError(`not a date: "${date}"`);
   return parsed;
@@ -85,7 +91,7 @@ export function resolveHolidayRule(rule: PayrollHolidayRule, year: number): stri
       // Monday preceding May 25, so when May 25 is itself a Monday the holiday
       // is May 18 — the single most commonly mis-implemented Canadian holiday.
       const anchor = utcDateFromParts(year, rule.month - 1, rule.day);
-      const back = ((anchor.getUTCDay() - rule.weekday + 7) % 7) || 7;
+      const back = (anchor.getUTCDay() - rule.weekday + 7) % 7 || 7;
       return isoDateOf(new Date(anchor.getTime() - back * DAY_MS));
     }
   }
@@ -178,19 +184,32 @@ function overrideRule(override: HolidayOverride, year: number): string | null {
       return override.observedOn ? override.observedOn.slice(0, 10) : null;
     case "fixed":
       return override.ruleMonth != null && override.ruleDay != null
-        ? resolveHolidayRule({ kind: "fixed", month: override.ruleMonth, day: override.ruleDay }, year)
+        ? resolveHolidayRule(
+            { kind: "fixed", month: override.ruleMonth, day: override.ruleDay },
+            year,
+          )
         : null;
     case "nth_weekday":
       return override.ruleMonth != null && override.ruleWeekday != null && override.ruleNth != null
         ? resolveHolidayRule(
-            { kind: "nth_weekday", month: override.ruleMonth, weekday: override.ruleWeekday, nth: override.ruleNth },
+            {
+              kind: "nth_weekday",
+              month: override.ruleMonth,
+              weekday: override.ruleWeekday,
+              nth: override.ruleNth,
+            },
             year,
           )
         : null;
     case "weekday_before":
       return override.ruleMonth != null && override.ruleDay != null && override.ruleWeekday != null
         ? resolveHolidayRule(
-            { kind: "weekday_before", month: override.ruleMonth, day: override.ruleDay, weekday: override.ruleWeekday },
+            {
+              kind: "weekday_before",
+              month: override.ruleMonth,
+              day: override.ruleDay,
+              weekday: override.ruleWeekday,
+            },
             year,
           )
         : null;
@@ -205,8 +224,8 @@ function overrideRule(override: HolidayOverride, year: number): string | null {
 
 /** Does the pack declare this day in the given year? */
 const holidayExistsIn = (holiday: PayrollHoliday, year: number): boolean =>
-  (holiday.from === undefined || year >= holiday.from)
-  && (holiday.until === undefined || year <= holiday.until);
+  (holiday.from === undefined || year >= holiday.from) &&
+  (holiday.until === undefined || year <= holiday.until);
 
 /**
  * The observed holiday calendar for a jurisdiction over [from, to] — PURE, so
@@ -238,15 +257,15 @@ export function resolveObservedHolidays(input: {
     const declared = packByKey.get(override.packKey);
     if (!declared) {
       throw new PayrollHolidayError(
-        `${jurisdiction} declares no statutory holiday "${override.packKey}" — `
-        + `remove the override or add the day to the pack (declared: `
-        + `${[...packByKey.keys()].join(", ")})`,
+        `${jurisdiction} declares no statutory holiday "${override.packKey}" — ` +
+          `remove the override or add the day to the pack (declared: ` +
+          `${[...packByKey.keys()].join(", ")})`,
       );
     }
     if (!declared.optional && !override.isObserved) {
       throw new PayrollHolidayError(
-        `${declared.name} is a mandatory statutory holiday in ${jurisdiction} and cannot be `
-        + "switched off — an employer may add days to the calendar, never remove one the law requires",
+        `${declared.name} is a mandatory statutory holiday in ${jurisdiction} and cannot be ` +
+          "switched off — an employer may add days to the calendar, never remove one the law requires",
       );
     }
   }
@@ -272,16 +291,18 @@ export function resolveObservedHolidays(input: {
       // whether an optional day is ultimately elected, and `taken` still only
       // records days that are actually observed below.
       const date = applyObservance(statutoryDate, holiday.observance, taken);
-      const election = overrides.find(
-        (o) => o.packKey === holiday.key && overrideCovers(o, date),
-      );
+      const election = overrides.find((o) => o.packKey === holiday.key && overrideCovers(o, date));
       // Optional days are OFF until elected; mandatory days are on unless an
       // election explicitly suppresses one (which the guard above forbids).
       const isObserved = election ? election.isObserved : !holiday.optional;
       if (!isObserved) continue;
       taken.add(date);
       observed.push({
-        jurisdiction, key: holiday.key, name: holiday.name, statutoryDate, date,
+        jurisdiction,
+        key: holiday.key,
+        name: holiday.name,
+        statutoryDate,
+        date,
         source: "pack",
         elected: Boolean(election?.isObserved) && Boolean(holiday.optional),
         paid: election ? election.isPaid : true,
@@ -298,8 +319,14 @@ export function resolveObservedHolidays(input: {
       if (!overrideCovers(override, date)) continue;
       taken.add(date);
       observed.push({
-        jurisdiction, key: override.id, name: override.name ?? "Company holiday",
-        statutoryDate, date, source: "company", elected: true, paid: override.isPaid,
+        jurisdiction,
+        key: override.id,
+        name: override.name ?? "Company holiday",
+        statutoryDate,
+        date,
+        source: "company",
+        elected: true,
+        paid: override.isPaid,
       });
     }
   }
@@ -315,30 +342,55 @@ export async function loadHolidayOverrides(
   orgId: string,
   jurisdiction: string,
 ): Promise<HolidayOverride[]> {
-  const rows = (await tx.execute<{
-      id: string; jurisdiction: string; pack_key: string | null; name: string | null;
-      rule_kind: HolidayOverride["ruleKind"]; rule_month: number | null; rule_day: number | null;
-      rule_weekday: number | null; rule_nth: number | null; rule_offset: number | null;
-      observed_on: string | Date | null; observance: PayrollHolidayObservance;
-      is_observed: boolean; is_paid: boolean;
-      effective_from: string | Date; effective_to: string | Date | null;
-    }>(sql`
+  const rows = await tx.execute<{
+    id: string;
+    jurisdiction: string;
+    pack_key: string | null;
+    name: string | null;
+    rule_kind: HolidayOverride["ruleKind"];
+    rule_month: number | null;
+    rule_day: number | null;
+    rule_weekday: number | null;
+    rule_nth: number | null;
+    rule_offset: number | null;
+    observed_on: string | Date | null;
+    observance: PayrollHolidayObservance;
+    is_observed: boolean;
+    is_paid: boolean;
+    effective_from: string | Date;
+    effective_to: string | Date | null;
+  }>(
+    sql`
     select id, jurisdiction, pack_key, name, rule_kind, rule_month, rule_day,
            rule_weekday, rule_nth, rule_offset, observed_on, observance,
            is_observed, is_paid, effective_from, effective_to
       from payroll_holidays
      where org_id = ${orgId} and jurisdiction = ${jurisdiction}
      order by effective_from, pack_key nulls last, name
-  `, "objects"));
+  `,
+    "objects",
+  );
   const day = (value: string | Date | null): string | null =>
-    value === null ? null : String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
+    value === null
+      ? null
+      : String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
   return rows.map((row) => ({
-    id: row.id, jurisdiction: row.jurisdiction, packKey: row.pack_key, name: row.name,
-    ruleKind: row.rule_kind, ruleMonth: row.rule_month, ruleDay: row.rule_day,
-    ruleWeekday: row.rule_weekday, ruleNth: row.rule_nth, ruleOffset: row.rule_offset,
-    observedOn: day(row.observed_on), observance: row.observance,
-    isObserved: row.is_observed === true, isPaid: row.is_paid === true,
-    effectiveFrom: day(row.effective_from)!, effectiveTo: day(row.effective_to),
+    id: row.id,
+    jurisdiction: row.jurisdiction,
+    packKey: row.pack_key,
+    name: row.name,
+    ruleKind: row.rule_kind,
+    ruleMonth: row.rule_month,
+    ruleDay: row.rule_day,
+    ruleWeekday: row.rule_weekday,
+    ruleNth: row.rule_nth,
+    ruleOffset: row.rule_offset,
+    observedOn: day(row.observed_on),
+    observance: row.observance,
+    isObserved: row.is_observed === true,
+    isPaid: row.is_paid === true,
+    effectiveFrom: day(row.effective_from)!,
+    effectiveTo: day(row.effective_to),
   }));
 }
 
@@ -382,8 +434,16 @@ export interface PayrollHolidayProfileScope {
  * jurisdiction when one is declared, otherwise the work region). Sorted and
  * deduplicated; pure over the rows it is given.
  */
-export function payrollHolidayJurisdictionKeys(profiles: readonly PayrollHolidayProfileScope[]): string[] {
-  return [...new Set(profiles.map((profile) => jurisdictionKey(profile.country, profile.province, profile.labourJurisdiction)))].sort();
+export function payrollHolidayJurisdictionKeys(
+  profiles: readonly PayrollHolidayProfileScope[],
+): string[] {
+  return [
+    ...new Set(
+      profiles.map((profile) =>
+        jurisdictionKey(profile.country, profile.province, profile.labourJurisdiction),
+      ),
+    ),
+  ].sort();
 }
 
 export interface StatutoryHolidayCalendar {
@@ -446,8 +506,18 @@ export function statutoryHolidayCalendarsFor(input: {
       continue;
     }
     try {
-      const holidays = resolveObservedHolidays({ jurisdiction, from, to, overrides: input.overrides });
-      calendars.push({ jurisdiction, name: declaration.name, citation: declaration.citation, holidays });
+      const holidays = resolveObservedHolidays({
+        jurisdiction,
+        from,
+        to,
+        overrides: input.overrides,
+      });
+      calendars.push({
+        jurisdiction,
+        name: declaration.name,
+        citation: declaration.citation,
+        holidays,
+      });
     } catch (error) {
       if (!(error instanceof PayrollHolidayError)) throw error;
       refusals.push({ jurisdiction, message: error.message });
@@ -469,21 +539,33 @@ export async function statutoryHolidayCalendarsOf(input: {
   tx?: Pick<typeof db, "execute">;
 }): Promise<StatutoryHolidayCalendarReading> {
   const tx = input.tx ?? db;
-  if (input.subsidiaryIds !== null && input.subsidiaryIds.length === 0) return { calendars: [], refusals: [] };
-  const scope = input.subsidiaryIds === null
-    ? sql``
-    : sql`and e.employer_subsidiary_id in (${sql.join(input.subsidiaryIds.map((id) => sql`${id}`), sql`, `)})`;
+  if (input.subsidiaryIds !== null && input.subsidiaryIds.length === 0)
+    return { calendars: [], refusals: [] };
+  const scope =
+    input.subsidiaryIds === null
+      ? sql``
+      : sql`and e.employer_subsidiary_id in (${sql.join(
+          input.subsidiaryIds.map((id) => sql`${id}`),
+          sql`, `,
+        )})`;
   const profiles = await tx.execute<{
-    country: string; province: string | null; labourJurisdiction: string | null;
-  }>(sql`
+    country: string;
+    province: string | null;
+    labourJurisdiction: string | null;
+  }>(
+    sql`
     select distinct prof.country, prof.province, prof.labour_jurisdiction as "labourJurisdiction"
       from employee_payroll_profiles prof
       left join worker_employments e on e.org_id = prof.org_id and e.id = prof.employment_id
-     where prof.org_id = ${input.orgId} and prof.is_active ${scope}`, "objects");
+     where prof.org_id = ${input.orgId} and prof.is_active ${scope}`,
+    "objects",
+  );
   const jurisdictions = payrollHolidayJurisdictionKeys(profiles);
-  const overrides = (await Promise.all(
-    jurisdictions.map((jurisdiction) => loadHolidayOverrides(tx, input.orgId, jurisdiction)),
-  )).flat();
+  const overrides = (
+    await Promise.all(
+      jurisdictions.map((jurisdiction) => loadHolidayOverrides(tx, input.orgId, jurisdiction)),
+    )
+  ).flat();
   return statutoryHolidayCalendarsFor({ jurisdictions, year: input.year, overrides });
 }
 
@@ -523,18 +605,15 @@ export function nextBusinessDay(date: string, holidays: ReadonlySet<string>): st
  * unchanged rather than snapping to a business day — use `nextBusinessDay`
  * when that is what is meant, so the two intents stay distinguishable.
  */
-export function addBusinessDays(
-  date: string,
-  days: number,
-  holidays: ReadonlySet<string>,
-): string {
+export function addBusinessDays(date: string, days: number, holidays: ReadonlySet<string>): string {
   if (!Number.isInteger(days)) throw new PayrollHolidayError("business days must be an integer");
   if (days === 0) return date;
   const step = days > 0 ? 1 : -1;
   let remaining = Math.abs(days);
   let candidate = date;
   for (let guard = 0; remaining > 0; guard += 1) {
-    if (guard > 400) throw new PayrollHolidayError(`could not add ${days} business days to ${date}`);
+    if (guard > 400)
+      throw new PayrollHolidayError(`could not add ${days} business days to ${date}`);
     candidate = addCalendarDays(candidate, step);
     if (isBusinessDay(candidate, holidays)) remaining -= 1;
   }

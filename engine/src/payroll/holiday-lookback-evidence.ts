@@ -2,12 +2,28 @@ import { readPayrollPriorEarnings } from "./prior-earnings.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { addCalendarDays, calendarDaysBetween } from "../platform/business-date.ts";
-import { add, cmp, mulDecimalFactors, roundMoney, sum } from "../money/money.ts";
-import { employmentJurisdictionsOf, holidayPayLookbackBasis, payrollJurisdictionDeclared, type PayrollHolidayDayCounting, type PayrollHolidayPayRule } from "./packs.ts";
+import { add, cmp, mulDecimalFactors, roundMoney } from "../money/money.ts";
+import {
+  employmentJurisdictionsOf,
+  holidayPayLookbackBasis,
+  payrollJurisdictionDeclared,
+  type PayrollHolidayDayCounting,
+  type PayrollHolidayPayRule,
+} from "./packs.ts";
 import { isScheduledOn, resolveWorkSchedule, type ResolvedWorkSchedule } from "./work-schedules.ts";
-import { PayrollHolidayError, at, weekdayOf, resolveObservedHolidays, loadHolidayOverrides, type ObservedHoliday } from "./holiday-calendar.ts";
-import { statutoryHolidayPayRule, describeDayCounting, type HolidayLookbackEarnings } from "./holiday-pay-computation.ts";
-import type { StatutoryHolidayPayInput } from "./holiday-pay-resolution.ts";
+import {
+  PayrollHolidayError,
+  weekdayOf,
+  resolveObservedHolidays,
+  loadHolidayOverrides,
+  type ObservedHoliday,
+} from "./holiday-calendar.ts";
+import {
+  statutoryHolidayPayRule,
+  describeDayCounting,
+  type HolidayLookbackEarnings,
+} from "./holiday-pay-computation.ts";
+import type { StatutoryHolidayPayInput } from "./holiday-pay-eligibility.ts";
 
 /** Holiday-pay lookback windows, stub-earnings attribution, and qualifying-day evidence. */
 
@@ -80,7 +96,10 @@ const spanBefore = (to: string, days: number) => ({
 
 /** The commission earner's own window, on the same boundary as the rule's. */
 export const commissionWindowOf = (
-  rule: PayrollHolidayPayRule, holidayDate: string, weeks: number, employerWeekStartsOn?: number,
+  rule: PayrollHolidayPayRule,
+  holidayDate: string,
+  weeks: number,
+  employerWeekStartsOn?: number,
 ) => spanBefore(lookbackWindowEnd(rule, holidayDate, employerWeekStartsOn), weeks * 7);
 
 /** Earnings from committed stubs. Categories follow component keys, which
@@ -130,11 +149,15 @@ export async function lookbackEarnings(
   input: Pick<StatutoryHolidayPayInput, "orgId" | "employeePartyId" | "excludeDocumentId">,
   window: { from: string; to: string },
 ): Promise<{ earnings: HolidayLookbackEarnings; proratedPeriods: string[] }> {
-  const rows = (await tx.execute<{
-      system_key: string; amount: string; earned_from: string | Date | null;
-      earned_to: string | Date | null;
-      period_start: string | Date | null; period_end: string | Date | null;
-    }>(sql`
+  const rows = await tx.execute<{
+    system_key: string;
+    amount: string;
+    earned_from: string | Date | null;
+    earned_to: string | Date | null;
+    period_start: string | Date | null;
+    period_end: string | Date | null;
+  }>(
+    sql`
     select coalesce(c.system_key, '') as system_key, l.amount,
            l.earned_from, l.earned_to,
            r.period_start, r.period_end
@@ -150,7 +173,9 @@ export async function lookbackEarnings(
        and l.kind = 'earning'
        and s.pay_run_document_id <> ${input.excludeDocumentId}
        and r.period_start <= ${window.to} and r.period_end >= ${window.from}
-  `, "objects"));
+  `,
+    "objects",
+  );
 
   // A stub whose own pay period is unknown cannot be placed in the window at
   // all: that stays a refusal, because no span exists to attribute across.
@@ -158,9 +183,7 @@ export async function lookbackEarnings(
   // undated spans by calendar-day overlap (see
   // attributeStubEarningsToWindow), so a straddling undated stub estimates
   // instead of refusing.
-  const unknownPeriod = rows.filter(
-    (row) => row.period_start == null || row.period_end == null,
-  );
+  const unknownPeriod = rows.filter((row) => row.period_start == null || row.period_end == null);
   if (unknownPeriod.length > 0) {
     throw new PayrollHolidayError(
       `${input.employeePartyId}: statutory holiday lookback earnings overlap ${window.from} through ${window.to}, but a committed pay stub has no pay period recorded; correct the pay stub before calculating holiday pay`,
@@ -179,9 +202,7 @@ export async function lookbackEarnings(
     const earnedTo = row.earned_to == null ? null : day(row.earned_to);
     let amount: string;
     if (earnedFrom === null || earnedTo === null) {
-      const attributed = attributeStubEarningsToWindow(
-        row.amount, periodStart, periodEnd, window,
-      );
+      const attributed = attributeStubEarningsToWindow(row.amount, periodStart, periodEnd, window);
       if (attributed.overlapDays <= 0) continue;
       if (!(periodStart >= window.from && periodEnd <= window.to)) {
         proratedPeriods.push(`${periodStart} through ${periodEnd}`);
@@ -205,10 +226,13 @@ export async function lookbackEarnings(
     }
 
     const bucket: keyof HolidayLookbackEarnings =
-      row.system_key === "overtime" ? "overtime"
-      : row.system_key === "vacation_payout" ? "vacationPay"
-      : row.system_key === "stat_holiday" || row.system_key === "stat_holiday_premium" ? "holidayPay"
-      : "regular";
+      row.system_key === "overtime"
+        ? "overtime"
+        : row.system_key === "vacation_payout"
+          ? "vacationPay"
+          : row.system_key === "stat_holiday" || row.system_key === "stat_holiday_premium"
+            ? "holidayPay"
+            : "regular";
     totals[bucket] = add(totals[bucket], amount);
   }
   return { earnings: totals, proratedPeriods: [...new Set(proratedPeriods)] };
@@ -310,13 +334,13 @@ export function countHolidayQualifyingDays(input: {
     const schedule = input.schedule ?? null;
     if (!schedule || schedule.pattern === "varies") {
       throw new PayrollHolidayError(
-        `${input.employee}: this jurisdiction counts the days on which the employee `
-        + `${describeDayCounting(counting).toUpperCase()}, and ${from} to ${to} was paid with no `
-        + "hours recorded at all — a salary, or leave paid from a bank. Which of those days were "
-        + "working days is not something this "
-        + (schedule ? "employee's 'hours vary' schedule can answer" : "calculation has been told")
-        + ". Record the hours and days they are normally scheduled to work, or record the leave "
-        + "as time entries. It will not assume a working week it has not been told about",
+        `${input.employee}: this jurisdiction counts the days on which the employee ` +
+          `${describeDayCounting(counting).toUpperCase()}, and ${from} to ${to} was paid with no ` +
+          "hours recorded at all — a salary, or leave paid from a bank. Which of those days were " +
+          "working days is not something this " +
+          (schedule ? "employee's 'hours vary' schedule can answer" : "calculation has been told") +
+          ". Record the hours and days they are normally scheduled to work, or record the leave " +
+          "as time entries. It will not assume a working week it has not been told about",
       );
     }
     for (let cursor = from; cursor <= to; cursor = addCalendarDays(cursor, 1)) {
@@ -350,13 +374,16 @@ export async function loadHolidayDayEvidence(
    *  counts only days worked does not pay for the stub scan. */
   needsPaidDays: boolean,
 ): Promise<HolidayDayEvidence> {
-  const worked = (await tx.execute<{ worked_on: string | Date }>(sql`
+  const worked = await tx.execute<{ worked_on: string | Date }>(
+    sql`
     select distinct worked_on
       from time_entries
      where org_id = ${input.orgId} and employee_party_id = ${input.employeePartyId}
        and status = 'approved' and hours > 0
        and worked_on between ${window.from} and ${window.to}
-  `, "objects"));
+  `,
+    "objects",
+  );
 
   const day = (value: string | Date) =>
     String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
@@ -367,7 +394,8 @@ export async function loadHolidayDayEvidence(
 
   // Sequential reads: the run calculation passes its transaction client,
   // which is one pg connection — fanning out queues concurrent queries on it.
-  const earned = await tx.execute<{ earned_on: string | Date }>(sql`
+  const earned = await tx.execute<{ earned_on: string | Date }>(
+    sql`
       select l.earned_from as earned_on
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
@@ -376,8 +404,11 @@ export async function loadHolidayDayEvidence(
          and r.run_status = 'committed' and s.pay_run_document_id <> ${input.excludeDocumentId}
          and l.kind = 'earning' and l.earned_from = l.earned_to
          and l.earned_from between ${window.from} and ${window.to}
-       group by l.earned_from having sum(l.amount) > 0`, "objects");
-  const owed = await tx.execute<{ on_date: string | Date }>(sql`
+       group by l.earned_from having sum(l.amount) > 0`,
+    "objects",
+  );
+  const owed = await tx.execute<{ on_date: string | Date }>(
+    sql`
       select distinct a.on_date
         from hrm_absences a
         join worker_employments e on e.id = a.employment_id and e.org_id = a.org_id
@@ -388,16 +419,22 @@ export async function loadHolidayDayEvidence(
          and r.status = 'approved' and t.paid and a.hours > 0
          and a.reversal_of is null
          and not exists (select 1 from hrm_absences reversal
-                          where reversal.org_id = a.org_id and reversal.reversal_of = a.id)`, "objects");
+                          where reversal.org_id = a.org_id and reversal.reversal_of = a.id)`,
+    "objects",
+  );
 
   // One row per committed stub overlapping the window, with the hours and the
   // earnings on it. The classification is done here rather than in SQL so the
   // rule ("paid for the period, not for hours") is readable beside the comment
   // that justifies it.
-  const stubs = (await tx.execute<{
-      period_start: string | Date; period_end: string | Date;
-      hours: string; earnings: string; holiday_pay: string;
-    }>(sql`
+  const stubs = await tx.execute<{
+    period_start: string | Date;
+    period_end: string | Date;
+    hours: string;
+    earnings: string;
+    holiday_pay: string;
+  }>(
+    sql`
     select r.period_start, r.period_end,
            coalesce(sum(case when l.kind = 'earning' then l.hours end), 0)::text as hours,
            coalesce(sum(case when l.kind = 'earning' and l.earned_from is null then l.amount end), 0)::text as earnings,
@@ -412,7 +449,9 @@ export async function loadHolidayDayEvidence(
        and s.pay_run_document_id <> ${input.excludeDocumentId}
        and r.period_start <= ${window.to} and r.period_end >= ${window.from}
      group by s.id, r.period_start, r.period_end
-  `, "objects"));
+  `,
+    "objects",
+  );
 
   const paidPeriodsWithoutHours: { from: string; to: string }[] = [];
   const holidayPaidPeriods: { from: string; to: string }[] = [];
@@ -427,14 +466,16 @@ export async function loadHolidayDayEvidence(
   const paidHolidays = observedInWindow
     .filter((holiday) => holiday.paid)
     .filter((holiday) =>
-      holidayPaidPeriods.some((p) => p.from <= holiday.date && p.to >= holiday.date))
+      holidayPaidPeriods.some((p) => p.from <= holiday.date && p.to >= holiday.date),
+    )
     .map((holiday) => holiday.date);
 
   return {
     workedOn,
     earnedOn: earned.map((row) => day(row.earned_on)),
     owedPaidOn: owed.map((row) => day(row.on_date)),
-    paidPeriodsWithoutHours, paidHolidays,
+    paidPeriodsWithoutHours,
+    paidHolidays,
   };
 }
 
@@ -442,24 +483,42 @@ export async function loadHolidayDayEvidence(
 export async function evidencedEntitledPayDays(
   tx: Pick<typeof db, "execute">,
   input: {
-    orgId: string; employeePartyId: string; employeeName: string;
-    excludeDocumentId: string; jurisdiction: string; holidayDate: string;
+    orgId: string;
+    employeePartyId: string;
+    employeeName: string;
+    excludeDocumentId: string;
+    jurisdiction: string;
+    holidayDate: string;
   },
 ): Promise<number> {
   const rule = statutoryHolidayPayRule(input.jurisdiction, input.holidayDate);
   const qualifier = rule?.qualifying.minDaysWorkedInWindow;
   if (qualifier?.counting !== "entitled_to_pay") {
-    throw new PayrollHolidayError(`${input.jurisdiction} does not declare an entitlement-to-pay day assessment on ${input.holidayDate}`);
+    throw new PayrollHolidayError(
+      `${input.jurisdiction} does not declare an entitlement-to-pay day assessment on ${input.holidayDate}`,
+    );
   }
   const window = spanBefore(addCalendarDays(input.holidayDate, -1), qualifier.ofDays);
   const overrides = await loadHolidayOverrides(tx, input.orgId, input.jurisdiction);
   const observed = resolveObservedHolidays({
-    jurisdiction: input.jurisdiction, from: window.from, to: window.to, overrides,
+    jurisdiction: input.jurisdiction,
+    from: window.from,
+    to: window.to,
+    overrides,
   });
-  const schedule = await resolveWorkSchedule(tx, input.orgId, input.employeePartyId, input.holidayDate);
+  const schedule = await resolveWorkSchedule(
+    tx,
+    input.orgId,
+    input.employeePartyId,
+    input.holidayDate,
+  );
   const evidence = await loadHolidayDayEvidence(tx, input, window, observed, true);
   return countHolidayQualifyingDays({
-    employee: input.employeeName, window, counting: "entitled_to_pay", evidence, schedule,
+    employee: input.employeeName,
+    window,
+    counting: "entitled_to_pay",
+    evidence,
+    schedule,
   });
 }
 
@@ -473,12 +532,15 @@ export async function hoursOn(
   input: Pick<StatutoryHolidayPayInput, "orgId" | "employeePartyId">,
   date: string,
 ): Promise<string> {
-  const rows = (await tx.execute<{ hours: string }>(sql`
+  const rows = await tx.execute<{ hours: string }>(
+    sql`
     select coalesce(sum(hours), 0)::text as hours
       from time_entries
      where org_id = ${input.orgId} and employee_party_id = ${input.employeePartyId}
        and status = 'approved' and worked_on = ${date}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return roundMoney(rows[0]?.hours ?? "0", 2);
 }
 
@@ -488,13 +550,16 @@ export async function hoursWorkedInLookback(
   input: StatutoryHolidayPayInput,
   window: { from: string; to: string },
 ): Promise<string> {
-  const rows = (await tx.execute<{ hours: string }>(sql`
+  const rows = await tx.execute<{ hours: string }>(
+    sql`
     select coalesce(sum(hours), 0)::text as hours
       from time_entries
      where org_id = ${input.orgId} and employee_party_id = ${input.employeePartyId}
        and status = 'approved' and hours > 0
        and worked_on between ${window.from} and ${window.to}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows[0]?.hours ?? "0";
 }
 
@@ -575,8 +640,9 @@ export function undeclaredJurisdictionHolidayConflict(input: {
     if (entry.observers < threshold) continue;
     if (!first || date < first.date) {
       // The day's most common name across the calendars that observe it.
-      const name = [...entry.names.entries()]
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]![0];
+      const name = [...entry.names.entries()].sort(
+        (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+      )[0]![0];
       first = { name, date };
     }
   }
@@ -586,9 +652,9 @@ export function undeclaredJurisdictionHolidayConflict(input: {
     holidayName: first.name,
     date: first.date,
     message:
-      `statutory holiday pay is enabled and ${first.name} (${first.date}) falls in this pay `
-      + `period, but no payroll pack declares a statutory holiday calendar or pay formula for `
-      + `${jurisdiction} — this jurisdiction is not yet supported by any payroll pack; contact `
-      + "support, or turn statutory holiday pay off in Payroll setup",
+      `statutory holiday pay is enabled and ${first.name} (${first.date}) falls in this pay ` +
+      `period, but no payroll pack declares a statutory holiday calendar or pay formula for ` +
+      `${jurisdiction} — this jurisdiction is not yet supported by any payroll pack; contact ` +
+      "support, or turn statutory holiday pay off in Payroll setup",
   };
 }
