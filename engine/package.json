@@ -127,6 +127,7 @@
     "./billing/usage/prepaid": "./src/billing/usage/prepaid.ts",
     "./billing/usage/rate-run": "./src/billing/usage/rate-run.ts",
     "./billing/usage/rating-plans": "./src/billing/usage/rating-plans.ts",
+    "./billing/usage/stripe-billing-read": "./src/billing/usage/stripe-billing-read.ts",
     "./billing/usage/records": "./src/billing/usage/records.ts",
     "./budgets/dimensions": "./src/nonprofit/budget-dimensions.ts",
     "./budgets/export-read": "./src/nonprofit/budget-export-read.ts",
