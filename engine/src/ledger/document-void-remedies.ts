@@ -303,7 +303,9 @@ export async function releaseVoidedPayRun(
     );
   }
 
-  await voidRemedyHooks.require("payroll").releaseRunInputs(tx, { orgId, runDocumentId: documentId });
+  await voidRemedyHooks
+    .require("payroll")
+    .releaseRunInputs(tx, { orgId, runDocumentId: documentId });
 
   const run = await tx.execute<{ document_id: string }>(
     sql`

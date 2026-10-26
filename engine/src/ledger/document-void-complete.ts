@@ -308,7 +308,9 @@ export async function completeRequestedDocumentVoid(
       // commit rows here, inside the void transaction, so the void can
       // never commit while the provider still shows the sale as live. The
       // tax_provider_commit scan performs the provider void call.
-      await voidRemedyHooks.require("tax").requestProviderVoid(tx, { orgId, documentId, kind: String(doc.kind) });
+      await voidRemedyHooks
+        .require("tax")
+        .requestProviderVoid(tx, { orgId, documentId, kind: String(doc.kind) });
       return {
         reversalEntryId,
         kind: String(doc.kind),

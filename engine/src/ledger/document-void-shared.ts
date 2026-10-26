@@ -9,7 +9,11 @@ import type { DocumentScriptContext } from "../journal/posting-preconditions.ts"
 import { billedCostSourceRefusal, liveInvoicesBillingDocument } from "./billing-provenance.ts";
 import { isUuid } from "../platform/uuid.ts";
 
-export { DocumentVoidError, voidCloseModule, type DocumentVoidCode } from "../journal/document-void-refusal.ts";
+export {
+  DocumentVoidError,
+  voidCloseModule,
+  type DocumentVoidCode,
+} from "../journal/document-void-refusal.ts";
 
 export interface DocumentVoidResult {
   status: "voided" | "pending_approval";

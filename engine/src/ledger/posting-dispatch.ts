@@ -5,7 +5,14 @@ import type { DocumentScriptContext } from "../journal/posting-preconditions.ts"
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { postingEffectHooks } from "../journal/posting-effect-contributors.ts";
-import { claimPostingEffectsForDocument, markPostingEffectsFailed, markPostingEffectsSucceeded, PostingEffectsLeaseFencedError, PostingEffectsTerminalFailureError, type PostingEffectsRow } from "./posting-effects.ts";
+import {
+  claimPostingEffectsForDocument,
+  markPostingEffectsFailed,
+  markPostingEffectsSucceeded,
+  PostingEffectsLeaseFencedError,
+  PostingEffectsTerminalFailureError,
+  type PostingEffectsRow,
+} from "./posting-effects.ts";
 /**
  * Emit post-commit effects for a caller that used `deferEffects` so a larger
  * accounting unit (for example payment + applications + realized FX) could
@@ -42,14 +49,27 @@ export async function postingEffectSubsidiaryId(
  * every service is idempotent by document line, so the repeat moves nothing.
  */
 export async function applyPostedInventoryEffects(
-  doc: { id: string; orgId: string; kind: string; subsidiaryId: string | null; documentNumber: string | null },
+  doc: {
+    id: string;
+    orgId: string;
+    kind: string;
+    subsidiaryId: string | null;
+    documentNumber: string | null;
+  },
   postingDate: string,
   entryId: string | null,
   actorId: string | null,
 ): Promise<void> {
   if (doc.kind === "customer_invoice" || doc.kind === "cash_sale") {
-    await postingEffectHooks.require("inventory").issueForInvoice(doc.orgId, actorId, doc.id, postingDate,
-      await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId));
+    await postingEffectHooks
+      .require("inventory")
+      .issueForInvoice(
+        doc.orgId,
+        actorId,
+        doc.id,
+        postingDate,
+        await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
+      );
   } else if (doc.kind === "vendor_bill") {
     // A posted vendor_bill carries its entry id by construction — the
     // kernel flips status and stamps posted_entry_id in one statement — so
@@ -60,18 +80,40 @@ export async function applyPostedInventoryEffects(
         `posted vendor bill ${doc.documentNumber} has no posted journal entry; inventory receipts cannot run`,
       );
     }
-    await postingEffectHooks.require("inventory").receiveForBill(doc.orgId, actorId, doc.id, entryId, postingDate,
-      await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId));
+    await postingEffectHooks
+      .require("inventory")
+      .receiveForBill(
+        doc.orgId,
+        actorId,
+        doc.id,
+        entryId,
+        postingDate,
+        await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
+      );
   } else if (doc.kind === "vendor_credit") {
-    await postingEffectHooks.require("inventory").returnForVendorCredit(doc.orgId, actorId, doc.id, postingDate,
-      await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId));
+    await postingEffectHooks
+      .require("inventory")
+      .returnForVendorCredit(
+        doc.orgId,
+        actorId,
+        doc.id,
+        postingDate,
+        await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
+      );
   } else if (doc.kind === "customer_credit" || doc.kind === "cash_refund") {
     // The sell-side mirror of vendor_credit. Without it a sales return was
     // a purely commercial credit: revenue reversed, the goods never came
     // back into stock, and COGS kept the cost of units the customer had
     // returned. Cash refunds restock through the same return engine.
-    await postingEffectHooks.require("inventory").returnForCustomerCredit(doc.orgId, actorId, doc.id, postingDate,
-      await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId));
+    await postingEffectHooks
+      .require("inventory")
+      .returnForCustomerCredit(
+        doc.orgId,
+        actorId,
+        doc.id,
+        postingDate,
+        await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
+      );
   }
 }
 
@@ -94,10 +136,7 @@ export async function runPostDocumentEffects(
     claimed = claim;
   }
 
-  const [doc] = await db
-    .select()
-    .from(schema.documents)
-    .where(eq(schema.documents.id, documentId));
+  const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, documentId));
   if (!doc || doc.status !== "posted") {
     const error = new Error("document is not posted");
     if (claimed && !options.alreadyClaimed) {
@@ -123,8 +162,12 @@ export async function runPostDocumentEffects(
     if (doc.kind === "customer_invoice" || doc.kind === "cash_sale") {
       // A cash sale defers recognition lines like an invoice. Deferred
       // consideration requires the customer contract checked by the service.
-      await postingEffectHooks.require("revenue").createObligationsFromInvoice(doc.id, doc.orgId, effectActorId);
-      await postingEffectHooks.require("stored-value").issueForInvoice(doc.id, doc.orgId, effectActorId);
+      await postingEffectHooks
+        .require("revenue")
+        .createObligationsFromInvoice(doc.id, doc.orgId, effectActorId);
+      await postingEffectHooks
+        .require("stored-value")
+        .issueForInvoice(doc.id, doc.orgId, effectActorId);
     } else if (doc.kind === "customer_credit" || doc.kind === "cash_refund") {
       // A cash refund's stored-value tenders settle per tender (top up the
       // named account, or mint from the memo program); the memo-level credit
@@ -143,22 +186,29 @@ export async function runPostDocumentEffects(
           actorId: effectActorId,
         });
       } else {
-        await postingEffectHooks.require("stored-value").issueStoreCreditForCreditMemo(doc.id, doc.orgId, effectActorId);
+        await postingEffectHooks
+          .require("stored-value")
+          .issueStoreCreditForCreditMemo(doc.id, doc.orgId, effectActorId);
       }
     }
     // Capitalization rules turn posted purchase lines into asset proposals;
     // idempotent per journal line and a no-op unless proposals are switched on.
-    if (entryId) await postingEffectHooks.require("assets").proposeForPostedEntry(doc.orgId, entryId, effectActorId);
+    if (entryId)
+      await postingEffectHooks
+        .require("assets")
+        .proposeForPostedEntry(doc.orgId, entryId, effectActorId);
 
     const lines = await db
       .select()
       .from(schema.documentLines)
-      .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
+      .where(
+        and(
+          eq(schema.documentLines.documentId, documentId),
+          eq(schema.documentLines.orgId, doc.orgId),
+        ),
+      )
       .orderBy(asc(schema.documentLines.lineNumber));
-    const [org] = await db
-      .select()
-      .from(schema.orgs)
-      .where(eq(schema.orgs.id, doc.orgId));
+    const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, doc.orgId));
     if (!org) {
       const error = new Error("organization not found");
       if (claimed && !options.alreadyClaimed) {

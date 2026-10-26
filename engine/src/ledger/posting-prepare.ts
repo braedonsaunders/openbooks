@@ -1,6 +1,6 @@
-import { lockLedgerSetupFence } from '../organization/ledger-setup-fence.ts';
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { normalizeJournalCurrencyLines } from "./journal-currency.ts";
-import { documentTaxDate, staleTaxRateLine } from '../tax/document-tax-date.ts';
+import { documentTaxDate, staleTaxRateLine } from "../tax/document-tax-date.ts";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
@@ -13,13 +13,36 @@ import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
 import { consolidationSourceRefusal } from "../records/consolidation-source-policy.ts";
 import { runRecordFlows } from "../flows/run.ts";
 
-import { postingPreconditionHooks, type DocumentScriptContext } from "../journal/posting-preconditions.ts";
+import {
+  postingPreconditionHooks,
+  type DocumentScriptContext,
+} from "../journal/posting-preconditions.ts";
 
-import { type KernelLine, type PostingDeps, PostingError, effectivePostingDate } from "../journal/posting-contracts.ts";
-import { resolveMarketplaceClearingForDocument, validateTaxControlAccounts } from "./posting-tax-policy.ts";
+import {
+  type KernelLine,
+  type PostingDeps,
+  PostingError,
+  effectivePostingDate,
+} from "../journal/posting-contracts.ts";
+import {
+  resolveMarketplaceClearingForDocument,
+  validateTaxControlAccounts,
+} from "./posting-tax-policy.ts";
 import { RULES } from "./posting-rules.ts";
-import { assertFinalKernelBalance, assertCreditMemoDirection, retainedKernelLines } from "../journal/posting-invariants.ts";
-import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
+import {
+  assertFinalKernelBalance,
+  assertCreditMemoDirection,
+  retainedKernelLines,
+} from "../journal/posting-invariants.ts";
+import {
+  resolveDeferralAccounts,
+  resolveTaxAccounts,
+  resolveExpenseReceivableDeps,
+  resolveOrgTaxAccounts,
+  resolveTaxComponents,
+  validateRequiredDimensions,
+  resolveOpenItemAccounts,
+} from "./posting-accounts.ts";
 import { resolveProviderTaxPlans, resolveShipToSnapshot } from "./posting-provider-tax.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolveInternalBillingPostingContext } from "./internal-billing-posting.ts";
@@ -29,23 +52,27 @@ import { withNoChargeUnitsAccount } from "./posting-no-charge.ts";
 
 import { postingEffectSubsidiaryId } from "./posting-dispatch.ts";
 import { AmortizationError } from "../amortization/errors.ts";
-import { resolveAmortizationRouting, type AmortizationRouting } from "../amortization/source-posting.ts";
+import {
+  resolveAmortizationRouting,
+  type AmortizationRouting,
+} from "../amortization/source-posting.ts";
 import type { PostDocumentOptions } from "../journal/posting-contracts.ts";
 import { carryRefusalIdentity } from "./posting-refusal-identity.ts";
 import { finalizePostingHeader } from "./posting-header.ts";
 
 /** Resolve inputs and automation before opening the accounting transaction. */
-export async function prepareDocumentPosting(documentId: string, deps: PostingDeps, options: PostDocumentOptions) {
-  const [doc] = await db
-    .select()
-    .from(schema.documents)
-    .where(eq(schema.documents.id, documentId));
+export async function prepareDocumentPosting(
+  documentId: string,
+  deps: PostingDeps,
+  options: PostDocumentOptions,
+) {
+  const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, documentId));
   if (!doc) throw new PostingError(`document ${documentId} not found`);
   const payments = postingPreconditionHooks.require("payments-core");
   payments.assertProviderReturnPosting(doc);
   // One configuration snapshot covers account routing, allocation and the
   // obligations/accruals that commit with this document's journal.
-  await lockLedgerSetupFence(db,doc.orgId,'shared');
+  await lockLedgerSetupFence(db, doc.orgId, "shared");
   await db.execute(sql`select id from orgs where id=${doc.orgId} for share`);
   await db.execute(sql`select i.id from items i where i.org_id=${doc.orgId} and i.id in
     (select item_id from document_lines where org_id=${doc.orgId} and document_id=${documentId}) order by i.id for share`);
@@ -55,8 +82,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   if (consolidationRefusal) throw new PostingError(consolidationRefusal);
   if (doc.status === "posted")
     throw new PostingError(`document ${doc.documentNumber} already posted`);
-  if (doc.status === "voided")
-    throw new PostingError(`document ${doc.documentNumber} is voided`);
+  if (doc.status === "voided") throw new PostingError(`document ${doc.documentNumber} is voided`);
   if (doc.status !== "approved") {
     throw new PostingError(
       `document ${doc.documentNumber} is ${doc.status}; it must complete the approval submission lifecycle before posting`,
@@ -103,10 +129,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       taxPaidByCode: tax.paid,
     };
   }
-  if (
-    doc.kind !== "journal" &&
-    (!deps.control.taxCollected || !deps.control.taxPaid)
-  ) {
+  if (doc.kind !== "journal" && (!deps.control.taxCollected || !deps.control.taxPaid)) {
     const fallback = await resolveOrgTaxAccounts(db, doc.orgId);
     deps = {
       ...deps,
@@ -124,8 +147,14 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     };
   }
   deps = await resolveMarketplaceClearingForDocument(db, doc, deps);
-  deps = { ...deps, agencyByLine: await postingLineHooks.require("inventory").agencyByLine(db, doc.orgId, doc.id) };
-  if ((doc.kind === "customer_invoice" || doc.kind === "cash_sale") && !deps.deferralAccountByLine) {
+  deps = {
+    ...deps,
+    agencyByLine: await postingLineHooks.require("inventory").agencyByLine(db, doc.orgId, doc.id),
+  };
+  if (
+    (doc.kind === "customer_invoice" || doc.kind === "cash_sale") &&
+    !deps.deferralAccountByLine
+  ) {
     deps = {
       ...deps,
       deferralAccountByLine: await resolveDeferralAccounts(db, doc.id, doc.orgId),
@@ -134,7 +163,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   if (doc.kind === "customer_invoice" && !deps.storedValueLiabilityByLine) {
     deps = {
       ...deps,
-      storedValueLiabilityByLine: await postingLineHooks.require("stored-value").liabilityByLine(db, doc.id, doc.orgId),
+      storedValueLiabilityByLine: await postingLineHooks
+        .require("stored-value")
+        .liabilityByLine(db, doc.id, doc.orgId),
     };
   }
   if (doc.kind === "customer_credit" && !deps.storeCreditLiabilityAccountId) {
@@ -142,20 +173,28 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     if (typeof custom.storeCreditProgramId === "string" && custom.storeCreditProgramId) {
       deps = {
         ...deps,
-        storeCreditLiabilityAccountId: await postingLineHooks.require("stored-value").storeCreditLiability(db, doc.orgId, custom.storeCreditProgramId),
+        storeCreditLiabilityAccountId: await postingLineHooks
+          .require("stored-value")
+          .storeCreditLiability(db, doc.orgId, custom.storeCreditProgramId),
       };
     }
   }
   if ((doc.kind === "cash_sale" || doc.kind === "cash_refund") && !deps.cashTenders) {
     deps = {
       ...deps,
-      cashTenders: await postingLineHooks.require("sales").cashTenders(db, doc.orgId, doc.id, {
-        kind: doc.kind,
-        documentNumber: doc.documentNumber,
-        kindLabel: doc.kind === "cash_sale" ? "cash sale" : "cash refund",
-        partyId: doc.partyId,
-        custom: doc.custom,
-      }, { validateRefundLoads: true }),
+      cashTenders: await postingLineHooks.require("sales").cashTenders(
+        db,
+        doc.orgId,
+        doc.id,
+        {
+          kind: doc.kind,
+          documentNumber: doc.documentNumber,
+          kindLabel: doc.kind === "cash_sale" ? "cash sale" : "cash refund",
+          partyId: doc.partyId,
+          custom: doc.custom,
+        },
+        { validateRefundLoads: true },
+      ),
     };
   }
   deps = await withNoChargeUnitsAccount(db, doc, deps);
@@ -163,7 +202,10 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   // over/short from documents.custom.closeout, with its control accounts
   // resolved. A close-out on a refund refuses at the write boundary; this
   // backstop catches bags written around it (or before the fence existed).
-  if (doc.kind === "cash_refund" && (doc.custom as Record<string, unknown> | null)?.closeout !== undefined) {
+  if (
+    doc.kind === "cash_refund" &&
+    (doc.custom as Record<string, unknown> | null)?.closeout !== undefined
+  ) {
     throw new PostingError(
       `cash refund ${doc.documentNumber} carries a close-out — record tips, fees and over/short on the cash sale`,
     );
@@ -200,11 +242,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {
     deps = {
       ...deps,
-      inventoryAssetByLine: await postingLineHooks.require("inventory").billInventoryAccounts(
-        db,
-        doc.orgId,
-        doc.id,
-      ),
+      inventoryAssetByLine: await postingLineHooks
+        .require("inventory")
+        .billInventoryAccounts(db, doc.orgId, doc.id),
     };
   }
   if (doc.kind === "vendor_bill" && !deps.migration) {
@@ -225,23 +265,15 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       await inventory.assertInvoiceIssuesPostable(db, doc.orgId, doc.id);
     } catch (error) {
       if (error instanceof PostingError) throw error;
-      throw new PostingError(
-        error instanceof Error ? error.message : String(error),
-      );
+      throw new PostingError(error instanceof Error ? error.message : String(error));
     }
   }
-  if (
-    doc.kind === "vendor_credit" &&
-    !deps.migration &&
-    !deps.inventoryReturnOffsetByLine
-  ) {
+  if (doc.kind === "vendor_credit" && !deps.migration && !deps.inventoryReturnOffsetByLine) {
     deps = {
       ...deps,
-      inventoryReturnOffsetByLine: await postingLineHooks.require("inventory").vendorCreditReturnAccounts(
-        db,
-        doc.orgId,
-        doc.id,
-      ),
+      inventoryReturnOffsetByLine: await postingLineHooks
+        .require("inventory")
+        .vendorCreditReturnAccounts(db, doc.orgId, doc.id),
     };
   }
   if (doc.kind === "vendor_credit" && !deps.migration) {
@@ -256,9 +288,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       );
     } catch (error) {
       if (error instanceof PostingError) throw error;
-      throw new PostingError(
-        error instanceof Error ? error.message : String(error),
-      );
+      throw new PostingError(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -278,26 +308,36 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       );
     } catch (error) {
       if (error instanceof PostingError) throw error;
-      throw new PostingError(
-        error instanceof Error ? error.message : String(error),
-      );
+      throw new PostingError(error instanceof Error ? error.message : String(error));
     }
   }
 
   const lines = await db
     .select()
     .from(schema.documentLines)
-    .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
+    .where(
+      and(
+        eq(schema.documentLines.documentId, documentId),
+        eq(schema.documentLines.orgId, doc.orgId),
+      ),
+    )
     .orderBy(asc(schema.documentLines.lineNumber));
 
   if (!deps.migration) {
-    await payments.assertReceiptFundingPosting(db, doc, options.audit?.actorId ?? null, lines.map(line => line.accountId));
+    await payments.assertReceiptFundingPosting(
+      db,
+      doc,
+      options.audit?.actorId ?? null,
+      lines.map((line) => line.accountId),
+    );
   }
 
   if (doc.kind === "internal_billing" && !deps.internalBilling) {
     deps = {
       ...deps,
-      internalBilling: await resolveInternalBillingPostingContext(db, doc, lines, { enforceFeatures: !deps.migration }),
+      internalBilling: await resolveInternalBillingPostingContext(db, doc, lines, {
+        enforceFeatures: !deps.migration,
+      }),
     };
   }
 
@@ -311,7 +351,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   // like the generated-billing guard above. Non-remittance documents return
   // from the check itself.
   try {
-    await postingPreconditionHooks.require("payroll").assertRemittanceBillCurrent(doc.orgId, documentId, db);
+    await postingPreconditionHooks
+      .require("payroll")
+      .assertRemittanceBillCurrent(doc.orgId, documentId, db);
     await postingPreconditionHooks
       .require("contractor-withholding")
       .assertSourcesCurrent(db, doc.orgId, documentId, { document: doc, lines });
@@ -326,22 +368,22 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   validateTaxControlAccounts(doc, lines, deps);
 
   const rule = RULES[doc.kind];
-  if (!rule)
-    throw new PostingError(`no posting rule for document kind "${doc.kind}"`);
+  if (!rule) throw new PostingError(`no posting rule for document kind "${doc.kind}"`);
 
   if (doc.paymentCardId && !deps.cardLiabilityAccountId) {
     const [card] = await db
       .select()
       .from(schema.paymentCards)
-      .where(and(eq(schema.paymentCards.id, doc.paymentCardId), eq(schema.paymentCards.orgId, doc.orgId)));
-    if (card)
-      deps = { ...deps, cardLiabilityAccountId: card.liabilityAccountId };
+      .where(
+        and(
+          eq(schema.paymentCards.id, doc.paymentCardId),
+          eq(schema.paymentCards.orgId, doc.orgId),
+        ),
+      );
+    if (card) deps = { ...deps, cardLiabilityAccountId: card.liabilityAccountId };
   }
 
-  const [org] = await db
-    .select()
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, doc.orgId));
+  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, doc.orgId));
   if (!org) throw new PostingError("organization not found");
   // Resolve authoritative external tax before scripts, flows, period checks,
   // or the posting transaction can write anything. A provider outage therefore
@@ -384,10 +426,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
         // document and could erase or replace posting controls between
         // approval and the kernel. Merge only non-financial keys and preserve
         // every existing protected value from the approved document.
-        merged.custom = scripts.mergeBeforePostCustomMutation(
-          merged.custom ?? doc.custom,
-          value,
-        );
+        merged.custom = scripts.mergeBeforePostCustomMutation(merged.custom ?? doc.custom, value);
       } else {
         merged[key] = value;
       }
@@ -415,14 +454,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   // document so its projection reflects them.
   const beforePostFlows = options.suppressAutomation
     ? { runs: [], gatesCreated: 0, failed: false, error: null }
-    : await runRecordFlows(
-        { kind: "before_post" },
-        doc.kind,
-        doc.id,
-        {
-          orgId: doc.orgId,
-        },
-      );
+    : await runRecordFlows({ kind: "before_post" }, doc.kind, doc.id, {
+        orgId: doc.orgId,
+      });
   if (beforePostFlows.gatesCreated > 0 || beforePostFlows.failed) {
     const runIds = beforePostFlows.runs.map((run) => run.runId);
     if (runIds.length > 0) {
@@ -461,7 +495,10 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     if (refreshed) effectiveDoc = refreshed;
   }
 
-  const changedPostingControl = scripts.beforePostCustomControlsChanged(doc.custom, effectiveDoc.custom);
+  const changedPostingControl = scripts.beforePostCustomControlsChanged(
+    doc.custom,
+    effectiveDoc.custom,
+  );
   if (changedPostingControl) throw new PostingError(changedPostingControl);
 
   // Revalidate the effective header after scripts/flows, including legacy
@@ -486,7 +523,8 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   // the account the entry actually carries. Historical replay reproduces the
   // source's own account selection and is never re-resolved.
   let controlAccountStamp: string | null = null;
-  const storeCreditMemo = effectiveDoc.kind === "customer_credit" && !!deps.storeCreditLiabilityAccountId;
+  const storeCreditMemo =
+    effectiveDoc.kind === "customer_credit" && !!deps.storeCreditLiabilityAccountId;
   if (!deps.migration && !storeCreditMemo) {
     const resolved = await resolveDocumentControlAccount(db, effectiveDoc, deps.control);
     if (resolved) {
@@ -494,7 +532,10 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       if (documentControlChoice(effectiveDoc.custom) !== resolved.accountId) {
         effectiveDoc = {
           ...effectiveDoc,
-          custom: { ...((effectiveDoc.custom ?? {}) as Record<string, unknown>), controlAccountId: resolved.accountId },
+          custom: {
+            ...((effectiveDoc.custom ?? {}) as Record<string, unknown>),
+            controlAccountId: resolved.accountId,
+          },
         };
       }
     }
@@ -511,7 +552,12 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
         db,
         { orgId: doc.orgId, kind: doc.kind, transactionDate: effectivePostingDate(effectiveDoc) },
         postingLines,
-        { inventoryLineIds: new Set([...(deps.inventoryAssetByLine?.keys() ?? []), ...(deps.agencyByLine?.keys() ?? [])]) },
+        {
+          inventoryLineIds: new Set([
+            ...(deps.inventoryAssetByLine?.keys() ?? []),
+            ...(deps.agencyByLine?.keys() ?? []),
+          ]),
+        },
       );
     } catch (error) {
       if (error instanceof AmortizationError) {
@@ -524,17 +570,20 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
 
   // -- build + validate kernel lines --------------------------------------
   if (!deps.migration) {
-    await payments.assertReceiptFundingPosting(db, effectiveDoc, options.audit?.actorId ?? null, postingLines.map(line => line.accountId));
+    await payments.assertReceiptFundingPosting(
+      db,
+      effectiveDoc,
+      options.audit?.actorId ?? null,
+      postingLines.map((line) => line.accountId),
+    );
   }
   const kernelLines = retainedKernelLines(
-    await normalizeJournalCurrencyLines(db,effectiveDoc,rule(effectiveDoc, postingLines, deps)),
+    await normalizeJournalCurrencyLines(db, effectiveDoc, rule(effectiveDoc, postingLines, deps)),
     effectiveDoc.journalMode === "statistical",
   );
   const total = sumMoney(kernelLines.map((l) => l.balanceTxnAmount ?? l.amount));
   if (!isZero(total)) {
-    throw new PostingError(
-      `posting rule for ${doc.kind} does not balance (sum=${total})`,
-    );
+    throw new PostingError(`posting rule for ${doc.kind} does not balance (sum=${total})`);
   }
 
   // -- direct receivable/payable postings ---------------------------------
@@ -582,10 +631,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   const unionLines: (KernelLine & {
     contributorKind?: string | null;
     contributorRef?: string | null;
-  })[] = [
-    ...kernelLines,
-    ...primaryContrib.map((l) => ({ ...l, amount: parseMoney(l.amount) })),
-  ];
+  })[] = [...kernelLines, ...primaryContrib.map((l) => ({ ...l, amount: parseMoney(l.amount) }))];
 
   // -- allocation kernel: custom_gl_lines user scripts ---------------------
   // Scripts observe the kernel read-only (kernel lines plus the rule
@@ -611,9 +657,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       // completed-run evidence; its message is preserved verbatim — callers
       // match on it.
       if (error instanceof PostingError) throw error;
-      throw new PostingError(
-        error instanceof Error ? error.message : String(error),
-      );
+      throw new PostingError(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -637,8 +681,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   if (
     !deps.migration &&
     effectiveDoc.partyId &&
-    (effectiveDoc.kind === "vendor_bill" ||
-      effectiveDoc.kind === "expense_report")
+    (effectiveDoc.kind === "vendor_bill" || effectiveDoc.kind === "expense_report")
   ) {
     await postingPreconditionHooks.require("compliance").assertBillPostingAllowed({
       orgId: doc.orgId,
@@ -649,18 +692,17 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     });
   }
 
-  if (
-    !deps.migration &&
-    effectiveDoc.partyId &&
-    effectiveDoc.kind === "customer_invoice"
-  ) {
-    const hold = (await db.execute<{ hold_reason: string | null }>(sql`
+  if (!deps.migration && effectiveDoc.partyId && effectiveDoc.kind === "customer_invoice") {
+    const hold = await db.execute<{ hold_reason: string | null }>(
+      sql`
       select hold_reason
         from customer_roles
        where org_id = ${effectiveDoc.orgId} and party_id = ${effectiveDoc.partyId}
          and is_active and is_on_hold
        limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (hold[0]) {
       throw new PostingError(
         `customer is on credit hold${hold[0].hold_reason ? ` — ${hold[0].hold_reason}` : ""}; release the hold on the customer section of the party record before posting`,
@@ -670,8 +712,11 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
 
   // -- subsidiaries: stamp, intercompany-balance, validate restrictions ----
   // A book-specific journal is measured in its target book's basis.
-  const postingBookId = doc.kind === "journal" ? doc.accountingBookId ?? null : null;
-  const subApplied = await applySubsidiaries(db, effectiveDoc, unionLines, { bookId: postingBookId, regeneration: false });
+  const postingBookId = doc.kind === "journal" ? (doc.accountingBookId ?? null) : null;
+  const subApplied = await applySubsidiaries(db, effectiveDoc, unionLines, {
+    bookId: postingBookId,
+    regeneration: false,
+  });
   assertFinalKernelBalance(subApplied.lines);
   // Script contributions translate through the same subsidiary/FX kernel
   // (defaults, spot rates, restriction checks). The host proved they balance
@@ -702,9 +747,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     // the subledger can never tie to.
     const openItemAccountIds =
       deps.openItemAccountIds ?? (await resolveOpenItemAccounts(db, doc.orgId));
-    const openItemLine = translated.lines.find((l) =>
-      openItemAccountIds.has(l.accountId),
-    );
+    const openItemLine = translated.lines.find((l) => openItemAccountIds.has(l.accountId));
     if (openItemLine) {
       throw new PostingError(
         `custom_gl_lines cannot post to open-item account ${openItemLine.accountId} (contributed lines carry no party)`,
@@ -716,10 +759,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       contributorRef: customGlLines[i]!.contributorRef,
     }));
   }
-  await validateRequiredDimensions(db, doc.orgId, [
-    ...subApplied.lines,
-    ...scriptLines,
-  ]);
+  await validateRequiredDimensions(db, doc.orgId, [...subApplied.lines, ...scriptLines]);
   assertFinalKernelBalance([...subApplied.lines, ...scriptLines]);
 
   // -- ship-to destination snapshot (0265) ------------------------------------
@@ -732,5 +772,22 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     : await resolveShipToSnapshot(effectiveDoc, postingLines);
 
   const postingDate = effectivePostingDate(effectiveDoc);
-  return { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot, controlAccountStamp, dueDateFromTerms, amortizationRouting };
+  return {
+    documentId,
+    deps,
+    doc,
+    postingLines,
+    effectiveDoc,
+    kernelLines,
+    postContrib,
+    primaryContrib,
+    unionLines,
+    subApplied,
+    scriptLines,
+    postingDate,
+    shipToSnapshot,
+    controlAccountStamp,
+    dueDateFromTerms,
+    amortizationRouting,
+  };
 }

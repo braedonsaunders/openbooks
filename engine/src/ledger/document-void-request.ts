@@ -190,7 +190,9 @@ export async function requestReceiptVoidWithDependents(
 ): Promise<DocumentVoidResult> {
   return withOrgTransaction(input.orgId, async () => {
     await lockLedgerSetupFence(db, input.orgId, "shared");
-    const relief = await voidRemedyHooks.require("inventory").receiptVoidBlockers(db, input.orgId, input.documentId);
+    const relief = await voidRemedyHooks
+      .require("inventory")
+      .receiptVoidBlockers(db, input.orgId, input.documentId);
     if (relief.blockers.length === 0) return requestDocumentVoid(input);
     if (!relief.allowVoidWithDependents) {
       const steps = relief.blockers.flatMap((blocker) =>

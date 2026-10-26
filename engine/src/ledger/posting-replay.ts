@@ -1,5 +1,9 @@
 import { normalizeJournalCurrencyLines } from "./journal-currency.ts";
-import { assertJournalVoidNotAutomaticallyReversed, cancelScheduledJournalReversal, queueJournalReversal } from "./journal-reversals.ts";
+import {
+  assertJournalVoidNotAutomaticallyReversed,
+  cancelScheduledJournalReversal,
+  queueJournalReversal,
+} from "./journal-reversals.ts";
 import { sumMoney } from "../money/brands.ts";
 import { isZero } from "../money/money.ts";
 import { and, asc, eq, sql } from "drizzle-orm";
@@ -14,16 +18,33 @@ import { withNoChargeUnitsAccount } from "./posting-no-charge.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { authorizeConnectorReplay } from "../journal/replay-authorization.ts";
 import { transferCorrectionApplications } from "./posting-replay-applications.ts";
-import { type PostingDeps, PostingError, effectivePostingDate } from "../journal/posting-contracts.ts";
+import {
+  type PostingDeps,
+  PostingError,
+  effectivePostingDate,
+} from "../journal/posting-contracts.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
-import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
+import {
+  resolveDeferralAccounts,
+  resolveTaxAccounts,
+  resolveExpenseReceivableDeps,
+  resolveOrgTaxAccounts,
+  resolveTaxComponents,
+  validateRequiredDimensions,
+  resolveOpenItemAccounts,
+} from "./posting-accounts.ts";
 import { postingLineHooks } from "../journal/posting-line-contributors.ts";
 import { resolveMarketplaceClearingForDocument } from "./posting-tax-policy.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { scheduledDeferralByLine } from "../amortization/source-posting.ts";
 import { resolveInternalBillingPostingContext } from "./internal-billing-posting.ts";
 import { resolvePostingPeriod } from "./posting-period.ts";
-import { glProjectionScopeUnchanged, buildProjection, glLineKey, glProjectionKey } from "./posting-projection.ts";
+import {
+  glProjectionScopeUnchanged,
+  buildProjection,
+  glLineKey,
+  glProjectionKey,
+} from "./posting-projection.ts";
 export interface SourceCorrectionAuthorization {
   /** Active organization user who explicitly authorized the bounded repair. */
   actorId: string;
@@ -66,26 +87,24 @@ export async function regenerateGlImpactTx(
   correction?: SourceCorrectionAuthorization,
 ): Promise<{ entryId: string | null; changed: boolean }> {
   if (!deps.migration) {
-    throw new PostingError(
-      "posted GL replay is restricted to controlled historical migration",
-    );
+    throw new PostingError("posted GL replay is restricted to controlled historical migration");
   }
-  const [doc] = await tx
-    .select()
-    .from(schema.documents)
-    .where(eq(schema.documents.id, documentId));
+  const [doc] = await tx.select().from(schema.documents).where(eq(schema.documents.id, documentId));
   if (!doc) throw new PostingError(`document ${documentId} not found`);
   // Only posted documents have a materialized projection to regenerate.
-  if (doc.status !== "posted" || !doc.postedEntryId)
-    return { entryId: null, changed: false };
+  if (doc.status !== "posted" || !doc.postedEntryId) return { entryId: null, changed: false };
 
   if (doc.paymentCardId && !deps.cardLiabilityAccountId) {
     const [card] = await tx
       .select()
       .from(schema.paymentCards)
-      .where(and(eq(schema.paymentCards.id, doc.paymentCardId), eq(schema.paymentCards.orgId, doc.orgId)));
-    if (card)
-      deps = { ...deps, cardLiabilityAccountId: card.liabilityAccountId };
+      .where(
+        and(
+          eq(schema.paymentCards.id, doc.paymentCardId),
+          eq(schema.paymentCards.orgId, doc.orgId),
+        ),
+      );
+    if (card) deps = { ...deps, cardLiabilityAccountId: card.liabilityAccountId };
   }
   if (
     (doc.kind === "journal" ||
@@ -114,10 +133,7 @@ export async function regenerateGlImpactTx(
       taxPaidByCode: tax.paid,
     };
   }
-  if (
-    doc.kind !== "journal" &&
-    (!deps.control.taxCollected || !deps.control.taxPaid)
-  ) {
+  if (doc.kind !== "journal" && (!deps.control.taxCollected || !deps.control.taxPaid)) {
     const fallback = await resolveOrgTaxAccounts(tx, doc.orgId);
     deps = {
       ...deps,
@@ -135,8 +151,16 @@ export async function regenerateGlImpactTx(
     };
   }
   deps = await resolveMarketplaceClearingForDocument(tx, doc, deps);
-  deps = { ...deps, agencyByLine: await postingLineHooks.require("inventory").replayAgencyByLine(tx, doc.orgId, doc.id) };
-  if ((doc.kind === "customer_invoice" || doc.kind === "cash_sale") && !deps.deferralAccountByLine) {
+  deps = {
+    ...deps,
+    agencyByLine: await postingLineHooks
+      .require("inventory")
+      .replayAgencyByLine(tx, doc.orgId, doc.id),
+  };
+  if (
+    (doc.kind === "customer_invoice" || doc.kind === "cash_sale") &&
+    !deps.deferralAccountByLine
+  ) {
     deps = {
       ...deps,
       deferralAccountByLine: await resolveDeferralAccounts(tx, doc.id, doc.orgId),
@@ -145,7 +169,9 @@ export async function regenerateGlImpactTx(
   if (doc.kind === "customer_invoice" && !deps.storedValueLiabilityByLine) {
     deps = {
       ...deps,
-      storedValueLiabilityByLine: await postingLineHooks.require("stored-value").liabilityByLine(tx, doc.id, doc.orgId),
+      storedValueLiabilityByLine: await postingLineHooks
+        .require("stored-value")
+        .liabilityByLine(tx, doc.id, doc.orgId),
     };
   }
   if (doc.kind === "customer_credit" && !deps.storeCreditLiabilityAccountId) {
@@ -153,7 +179,9 @@ export async function regenerateGlImpactTx(
     if (typeof custom.storeCreditProgramId === "string" && custom.storeCreditProgramId) {
       deps = {
         ...deps,
-        storeCreditLiabilityAccountId: await postingLineHooks.require("stored-value").storeCreditLiability(tx, doc.orgId, custom.storeCreditProgramId),
+        storeCreditLiabilityAccountId: await postingLineHooks
+          .require("stored-value")
+          .storeCreditLiability(tx, doc.orgId, custom.storeCreditProgramId),
       };
     }
   }
@@ -187,18 +215,21 @@ export async function regenerateGlImpactTx(
   if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {
     deps = {
       ...deps,
-      inventoryAssetByLine: await postingLineHooks.require("inventory").billInventoryAccounts(
-        tx,
-        doc.orgId,
-        doc.id,
-      ),
+      inventoryAssetByLine: await postingLineHooks
+        .require("inventory")
+        .billInventoryAccounts(tx, doc.orgId, doc.id),
     };
   }
 
   const lines = await tx
     .select()
     .from(schema.documentLines)
-    .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
+    .where(
+      and(
+        eq(schema.documentLines.documentId, documentId),
+        eq(schema.documentLines.orgId, doc.orgId),
+      ),
+    )
     .orderBy(asc(schema.documentLines.lineNumber));
   // Deferred lines regenerate onto the deferral account their schedules hold.
   if (!deps.amortizationByLine) {
@@ -209,28 +240,38 @@ export async function regenerateGlImpactTx(
   if (doc.kind === "internal_billing" && !deps.internalBilling) {
     deps = {
       ...deps,
-      internalBilling: await resolveInternalBillingPostingContext(tx, doc, lines, { enforceFeatures: false }),
+      internalBilling: await resolveInternalBillingPostingContext(tx, doc, lines, {
+        enforceFeatures: false,
+      }),
     };
   }
 
   const [entry] = await tx
     .select()
     .from(schema.journalEntries)
-    .where(and(eq(schema.journalEntries.id, doc.postedEntryId), eq(schema.journalEntries.orgId, doc.orgId)));
+    .where(
+      and(
+        eq(schema.journalEntries.id, doc.postedEntryId),
+        eq(schema.journalEntries.orgId, doc.orgId),
+      ),
+    );
   if (!entry || entry.status !== "posted") {
     throw new PostingError(
       "the imported document's current journal entry is missing or not posted",
     );
   }
 
-  const projection=await normalizeJournalCurrencyLines(tx,doc,buildProjection(doc,lines,deps,{deferCurrencyBalance:doc.kind==='journal'}));
-  if(!isZero(sumMoney(projection.map(line=>line.balanceTxnAmount ?? line.amount))))throw new PostingError("The corrected journal does not balance in its header currency.");
-  const subApplied = await applySubsidiaries(
+  const projection = await normalizeJournalCurrencyLines(
     tx,
     doc,
-    projection,
-    { bookId: entry.bookId, regeneration: true },
+    buildProjection(doc, lines, deps, { deferCurrencyBalance: doc.kind === "journal" }),
   );
+  if (!isZero(sumMoney(projection.map((line) => line.balanceTxnAmount ?? line.amount))))
+    throw new PostingError("The corrected journal does not balance in its header currency.");
+  const subApplied = await applySubsidiaries(tx, doc, projection, {
+    bookId: entry.bookId,
+    regeneration: true,
+  });
   const kernelLines = subApplied.lines;
   assertFinalKernelBalance(kernelLines);
   await validateRequiredDimensions(tx, doc.orgId, kernelLines);
@@ -265,28 +306,25 @@ export async function regenerateGlImpactTx(
   await assertJournalVoidNotAutomaticallyReversed(tx, doc.orgId, doc.id);
   const reason = correction.reason.trim();
   if (reason.length < 10 || reason.length > 500) {
-    throw new PostingError(
-      "a source correction reason between 10 and 500 characters is required",
-    );
+    throw new PostingError("a source correction reason between 10 and 500 characters is required");
   }
   if (!isUuid(correction.actorId)) {
-    throw new PostingError(
-      "an attributable organization user is required for a source correction",
-    );
+    throw new PostingError("an attributable organization user is required for a source correction");
   }
   if (!correction.requestId.trim()) {
     throw new PostingError("a source correction request identity is required");
   }
 
-  const control = (await tx.execute<{
-      actor_valid: boolean;
-      already_reversed: boolean;
-      reconciled: boolean;
-      applied: boolean;
-      inventory: boolean;
-      revenue: boolean;
-      downstream: boolean;
-    }>(sql`
+  const control = await tx.execute<{
+    actor_valid: boolean;
+    already_reversed: boolean;
+    reconciled: boolean;
+    applied: boolean;
+    inventory: boolean;
+    revenue: boolean;
+    downstream: boolean;
+  }>(
+    sql`
     select
       exists (
         select 1 from users
@@ -345,12 +383,12 @@ export async function regenerateGlImpactTx(
            and link.link_type <> 'pays'
            and downstream.status in ('approved', 'posted')
       ) as downstream
-  `, "objects"));
+  `,
+    "objects",
+  );
   const gates = control[0];
   if (!gates?.actor_valid) {
-    throw new PostingError(
-      "the source correction actor is not an active organization user",
-    );
+    throw new PostingError("the source correction actor is not an active organization user");
   }
   if (gates.already_reversed) {
     throw new PostingError(
@@ -375,10 +413,7 @@ export async function regenerateGlImpactTx(
   // the replacement endpoint. Bank reconciliation, inventory, revenue, and
   // downstream-document evidence remain hard blockers because their dedicated
   // transfer/cancellation workflows carry additional accounting semantics.
-  let activeApplications = await tx
-    .select()
-    .from(schema.applications)
-    .where(sql`
+  let activeApplications = await tx.select().from(schema.applications).where(sql`
       ${schema.applications.orgId} = ${doc.orgId}
       and ${schema.applications.unappliedAt} is null
       and (
@@ -395,10 +430,11 @@ export async function regenerateGlImpactTx(
   // line lock order before that document write; the application validation
   // trigger otherwise locks endpoint lines while the correction already owns
   // the document row, opposite ordinary payment posting's order.
-  const endpointIds = [...new Set(activeApplications.flatMap((application) => [
-    application.fromLineId,
-    application.toLineId,
-  ]))];
+  const endpointIds = [
+    ...new Set(
+      activeApplications.flatMap((application) => [application.fromLineId, application.toLineId]),
+    ),
+  ];
   const lockedApplicationEvidence = await lockApplicationEvidence(
     tx,
     doc.orgId,
@@ -406,10 +442,7 @@ export async function regenerateGlImpactTx(
     [doc.id],
     [entry.id],
   );
-  activeApplications = await tx
-    .select()
-    .from(schema.applications)
-    .where(sql`
+  activeApplications = await tx.select().from(schema.applications).where(sql`
       ${schema.applications.orgId} = ${doc.orgId}
       and ${schema.applications.unappliedAt} is null
       and (
@@ -422,28 +455,32 @@ export async function regenerateGlImpactTx(
       )
     `);
   const lockedEndpointIds = new Set(lockedApplicationEvidence.lineIds);
-  if (activeApplications.some((application) =>
-    !lockedEndpointIds.has(application.fromLineId) ||
-    !lockedEndpointIds.has(application.toLineId)
-  )) {
+  if (
+    activeApplications.some(
+      (application) =>
+        !lockedEndpointIds.has(application.fromLineId) ||
+        !lockedEndpointIds.has(application.toLineId),
+    )
+  ) {
     throw new PostingError(
       "applications changed while source correction locks were acquired; retry the correction",
     );
   }
 
   let authenticatedHistoricalReplay = false;
-  if (
-    correction.replayMode === "authenticated_connector_historical_replay"
-  ) {
+  if (correction.replayMode === "authenticated_connector_historical_replay") {
     await tx.execute(sql`
       select
         set_config('openbooks.connector_replay', 'on', true),
         set_config('openbooks.connector_replay_request', ${correction.requestId}, true),
         set_config('openbooks.connector_replay_actor', ${correction.actorId}, true)
     `);
-    const authorization = (await tx.execute<{ allowed: boolean }>(sql`
+    const authorization = await tx.execute<{ allowed: boolean }>(
+      sql`
       select connector_historical_replay_authorized(${doc.orgId}) as allowed
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (authorization[0]?.allowed !== true) {
       throw new PostingError(
         "closed-period connector replay is not authorized by the active sync run and connection policy",
@@ -453,11 +490,16 @@ export async function regenerateGlImpactTx(
     // postEntry admits a closed-period replay only against this row, bounded
     // to the replaying connector, the two touched periods, and a short
     // window, under the correction's attributable reason.
-    const replayRun = (await tx.execute<{ connection_id: string }>(sql`
+    const replayRun = (
+      await tx.execute<{ connection_id: string }>(
+        sql`
       select connection_id
         from sync_runs
        where id::text = ${correction.requestId} and org_id = ${doc.orgId}
-       limit 1`, "objects"))[0];
+       limit 1`,
+        "objects",
+      )
+    )[0];
     if (!replayRun)
       throw new PostingError(
         "closed-period connector replay is not authorized by the active sync run and connection policy",
@@ -523,11 +565,7 @@ export async function regenerateGlImpactTx(
     orgId: doc.orgId,
     bookId: entry.bookId,
     subsidiaryId: entry.subsidiaryId,
-    entryNumber: await nextFreeEntryNumber(
-      tx,
-      doc.orgId,
-      `${entry.entryNumber}-SOURCE-REV`,
-    ),
+    entryNumber: await nextFreeEntryNumber(tx, doc.orgId, `${entry.entryNumber}-SOURCE-REV`),
     postingDate: entry.postingDate,
     periodId: entry.periodId,
     // The memo is what people read in ledgers and feeds; the authorization
@@ -578,12 +616,15 @@ export async function regenerateGlImpactTx(
   // Repeated corrections of one document reverse the prior replacement and
   // post a new one; number each generation past its predecessors so the
   // insert cannot collide under journal_entries_org_number.
-  const priorCorrections = (await tx.execute<{ n: number }>(sql`
+  const priorCorrections = await tx.execute<{ n: number }>(
+    sql`
     select count(*)::int as n
       from journal_entries
      where org_id = ${doc.orgId} and source_document_id = ${doc.id}
        and reverses_entry_id is null
-       and custom->>'mode' = 'append_only_source_correction'`, "objects"));
+       and custom->>'mode' = 'append_only_source_correction'`,
+    "objects",
+  );
   const correctionGen = (priorCorrections[0]?.n ?? 0) + 1;
   // The replacement posts through the ONE ledger API.
   const postedReplacement = await postEntry(tx, {
@@ -601,7 +642,12 @@ export async function regenerateGlImpactTx(
     periodId: period.id,
     memo: doc.memo,
     sourceDocumentId: doc.id,
-    origin: doc.journalMode === "currency_adjustment" ? "currency_adjustment" : subApplied.multi ? "intercompany" : "migration",
+    origin:
+      doc.journalMode === "currency_adjustment"
+        ? "currency_adjustment"
+        : subApplied.multi
+          ? "intercompany"
+          : "migration",
     custom: {
       ...evidence,
       reversalEntryId: reversal.id,
@@ -704,10 +750,25 @@ export async function regenerateGlImpactTx(
         set_config('openbooks.connector_replay_actor', '', true)
     `);
   }
-  if(doc.kind==='journal' && doc.journalReverseOn){
-    if(doc.journalReverseOn<=postingDate)throw new PostingError("The corrected journal's automatic reversal must remain after its posting date. Use a separate correcting journal when that approved date has passed.");
-    await cancelScheduledJournalReversal(tx,doc.orgId,doc.id,correction.actorId,"A governed source correction replaced the approved source entry; the replacement retains its automatic reversal date.");
-    await queueJournalReversal(tx,{orgId:doc.orgId,documentId:doc.id,sourceEntryId:replacement.id,reverseOn:doc.journalReverseOn,actorId:correction.actorId});
+  if (doc.kind === "journal" && doc.journalReverseOn) {
+    if (doc.journalReverseOn <= postingDate)
+      throw new PostingError(
+        "The corrected journal's automatic reversal must remain after its posting date. Use a separate correcting journal when that approved date has passed.",
+      );
+    await cancelScheduledJournalReversal(
+      tx,
+      doc.orgId,
+      doc.id,
+      correction.actorId,
+      "A governed source correction replaced the approved source entry; the replacement retains its automatic reversal date.",
+    );
+    await queueJournalReversal(tx, {
+      orgId: doc.orgId,
+      documentId: doc.id,
+      sourceEntryId: replacement.id,
+      reverseOn: doc.journalReverseOn,
+      actorId: correction.actorId,
+    });
   }
   return { entryId: replacement.id, changed: true };
 }

@@ -9,7 +9,6 @@ import { validateJournalInstructions } from "./journal-instructions.ts";
 import { and, eq, sql } from "drizzle-orm";
 import { inDbTransaction, schema } from "../platform/db.ts";
 
-
 import type { ContributedLineWithSource } from "../journal/contributed-lines.ts";
 import { parseMoney } from "../money/brands.ts";
 
@@ -128,13 +127,20 @@ async function assertSourcesCurrent(tx: PostingTx, prepared: PreparedPosting): P
       await assertEntityPostingDate(tx, doc.orgId, subsidiaryId, postingDate);
     }
   }
-  await postingPreconditionHooks.require("tax").assertSupplyEvidence(tx, doc.orgId, documentId, { persist: true });
+  await postingPreconditionHooks
+    .require("tax")
+    .assertSupplyEvidence(tx, doc.orgId, documentId, { persist: true });
   if (doc.kind === "vendor_bill" || doc.kind === "vendor_credit") {
-    await postingPreconditionHooks.require("payroll").assertRemittanceBillCurrent(doc.orgId, documentId, tx);
+    await postingPreconditionHooks
+      .require("payroll")
+      .assertRemittanceBillCurrent(doc.orgId, documentId, tx);
   }
   await postingPreconditionHooks
     .require("contractor-withholding")
-    .assertSourcesCurrent(tx, doc.orgId, documentId, { document: effectiveDoc, lines: postingLines });
+    .assertSourcesCurrent(tx, doc.orgId, documentId, {
+      document: effectiveDoc,
+      lines: postingLines,
+    });
 }
 
 /**
