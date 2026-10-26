@@ -1,31 +1,39 @@
-import { uuidId } from "@/lib/api/json-schema"
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json"
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { listFilingAccounts } from '@openbooks/engine/payroll/filing'
-import { installedPayrollCountries, payrollStatutoryRateGaps } from '@openbooks/engine/payroll/readiness'
-import { PayrollError } from '@openbooks/engine/payroll/error'
-import { PayrollPackError, packRates, payrollPack, statutoryRateSlot } from '@openbooks/engine/payroll/packs'
-import { normalizeDecimal, normalizeMoney } from '@openbooks/engine/money/money'
+import { uuidId } from "@/lib/api/json-schema";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { listFilingAccounts } from "@openbooks/engine/payroll/filing";
+import {
+  installedPayrollCountries,
+  payrollStatutoryRateGaps,
+} from "@openbooks/engine/payroll/readiness";
+import { PayrollError } from "@openbooks/engine/payroll/error";
+import {
+  PayrollPackError,
+  packRates,
+  payrollPack,
+  statutoryRateSlot,
+} from "@openbooks/engine/payroll/packs";
+import { normalizeDecimal, normalizeMoney } from "@openbooks/engine/money/money";
 import {
   deleteStatutoryRate,
   listStatutoryRates,
   statutoryRateProblem,
   upsertStatutoryRate,
-} from '@openbooks/engine/payroll/statutory-rates'
+} from "@openbooks/engine/payroll/statutory-rates";
+import { payrollTaxYearCoverage, payrollTaxYearForDate } from "@openbooks/engine/payroll/packs";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { guardRootSubsidiaryScope } from "../../../../../lib/authz";
+import { isUuid } from "../../../../../lib/list-params";
+import { canonicalDecimal } from "../../../../../lib/exact-decimal";
 import {
-  payrollTaxYearCoverage,
-  payrollTaxYearForDate,
-} from '@openbooks/engine/payroll/packs'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { guardRootSubsidiaryScope } from '../../../../../lib/authz'
-import { isUuid } from '../../../../../lib/list-params'
-import { canonicalDecimal } from '../../../../../lib/exact-decimal'
-import { decimalNullRefusal, moneyRefusal, suppliedValue } from '../../../../../lib/payroll-decimal-refusal'
+  decimalNullRefusal,
+  moneyRefusal,
+  suppliedValue,
+} from "../../../../../lib/payroll-decimal-refusal";
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.strictObject({
@@ -33,19 +41,20 @@ const requestBodySchema = z.strictObject({
   rateKey: z.string().trim().min(1).max(120),
   region: z.string().trim().max(80).nullable().optional(),
   subRegion: z.string().trim().max(120).nullable().optional(),
-  filingAccountId: z.union([uuidId, z.literal(''), z.null()]).optional(),
-  taxYear: z.union([z.number().int(), z.string().regex(/^\d{4}$/, 'taxYear must be a four-digit year')]),
+  filingAccountId: z.union([uuidId, z.literal(""), z.null()]).optional(),
+  taxYear: z.union([
+    z.number().int(),
+    z.string().regex(/^\d{4}$/, "taxYear must be a four-digit year"),
+  ]),
   values: z.record(z.string(), z.union([z.string(), z.boolean()])),
   // Traceability (migration 0663): every new or changed row carries the
   // published source and the reason. The engine re-validates non-blank, so
   // this boundary only carries them through.
   sourceCitation: z.string().trim().min(1).max(2000),
   reason: z.string().trim().min(1).max(2000),
-})
+});
 
-
-
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Tenant-entered statutory RATES — the ones a pack cannot publish because they
@@ -66,63 +75,68 @@ export const dynamic = 'force-dynamic'
  */
 
 interface RatePayload {
-  country: string
-  rateKey: string
-  region: string | null
+  country: string;
+  rateKey: string;
+  region: string | null;
   /** The taxing unit below the region, for a slot declared at sub_region scope. */
-  subRegion: string | null
-  filingAccountId: string | null
-  taxYear: number
-  values: Record<string, unknown>
-  sourceCitation: string
-  reason: string
+  subRegion: string | null;
+  filingAccountId: string | null;
+  taxYear: number;
+  values: Record<string, unknown>;
+  sourceCitation: string;
+  reason: string;
 }
 
 function parseBody(body: unknown): RatePayload | string {
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) return 'invalid body'
-  const raw = body as Record<string, unknown>
-  const country = String(raw.country ?? '')
-  const rateKey = String(raw.rateKey ?? '')
-  if (!country || !rateKey) return 'country and rateKey are required'
-  const region = raw.region == null || raw.region === '' ? null : String(raw.region)
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return "invalid body";
+  const raw = body as Record<string, unknown>;
+  const country = String(raw.country ?? "");
+  const rateKey = String(raw.rateKey ?? "");
+  if (!country || !rateKey) return "country and rateKey are required";
+  const region = raw.region == null || raw.region === "" ? null : String(raw.region);
   // Carried, not dropped. Without it a sub_region-scoped slot (an Ohio
   // municipal rate, a Michigan city's rate pair, a PA Act 32 PSD) had no
   // writable home at all: the engine has resolved, validated and stored them
   // per jurisdiction all along, and this route silently wrote every one of them
   // to the region-wide point — one row for the whole state, last write wins.
-  const subRegion = raw.subRegion == null || raw.subRegion === ''
-    ? null
-    : String(raw.subRegion).trim()
-  const filingAccountId = raw.filingAccountId == null || raw.filingAccountId === ''
-    ? null
-    : String(raw.filingAccountId)
-  if (filingAccountId !== null && !isUuid(filingAccountId)) return 'invalid filingAccountId'
-  const taxYear = Number(raw.taxYear)
-  if (!Number.isInteger(taxYear)) return 'invalid taxYear'
-  const values = raw.values
-  if (typeof values !== 'object' || values === null || Array.isArray(values)) return 'invalid values'
-  const sourceCitation = typeof raw.sourceCitation === 'string' ? raw.sourceCitation.trim() : ''
-  if (!sourceCitation) return 'sourceCitation is required'
-  const reason = typeof raw.reason === 'string' ? raw.reason.trim() : ''
-  if (!reason) return 'reason is required'
+  const subRegion =
+    raw.subRegion == null || raw.subRegion === "" ? null : String(raw.subRegion).trim();
+  const filingAccountId =
+    raw.filingAccountId == null || raw.filingAccountId === "" ? null : String(raw.filingAccountId);
+  if (filingAccountId !== null && !isUuid(filingAccountId)) return "invalid filingAccountId";
+  const taxYear = Number(raw.taxYear);
+  if (!Number.isInteger(taxYear)) return "invalid taxYear";
+  const values = raw.values;
+  if (typeof values !== "object" || values === null || Array.isArray(values))
+    return "invalid values";
+  const sourceCitation = typeof raw.sourceCitation === "string" ? raw.sourceCitation.trim() : "";
+  if (!sourceCitation) return "sourceCitation is required";
+  const reason = typeof raw.reason === "string" ? raw.reason.trim() : "";
+  if (!reason) return "reason is required";
   return {
-    country, rateKey, region, subRegion, filingAccountId, taxYear,
+    country,
+    rateKey,
+    region,
+    subRegion,
+    filingAccountId,
+    taxYear,
     values: values as Record<string, unknown>,
-    sourceCitation, reason,
-  }
+    sourceCitation,
+    reason,
+  };
 }
 
 /** The year the surface opens on: the pack's own current tax year. */
 async function defaultYear(orgId: string, countries: string[]): Promise<number> {
-  const today = await businessToday(orgId)
+  const today = await businessToday(orgId);
   for (const country of countries) {
     try {
-      return payrollTaxYearForDate(country, today).taxYear
+      return payrollTaxYearForDate(country, today).taxYear;
     } catch {
       // A country with no pack declaration cannot name a year; try the next.
     }
   }
-  return Number(today.slice(0, 4))
+  return Number(today.slice(0, 4));
 }
 
 /**
@@ -136,91 +150,100 @@ function persistStatutoryRateValues(
   rateKey: string,
   values: Record<string, unknown>,
 ): Record<string, string> | string {
-  let slot
+  let slot;
   try {
-    slot = statutoryRateSlot(country, rateKey)
+    slot = statutoryRateSlot(country, rateKey);
   } catch (error) {
-    return error instanceof Error ? error.message : String(error)
+    return error instanceof Error ? error.message : String(error);
   }
-  const persisted: Record<string, string> = {}
+  const persisted: Record<string, string> = {};
   for (const [key, raw] of Object.entries(values)) {
-    const field = slot.fields.find((declared) => declared.key === key)
+    const field = slot.fields.find((declared) => declared.key === key);
     if (!field) {
-      return `"${slot.key}" declares no "${key}" value — it declares `
-        + slot.fields.map((declared) => declared.key).join(', ')
+      return (
+        `"${slot.key}" declares no "${key}" value — it declares ` +
+        slot.fields.map((declared) => declared.key).join(", ")
+      );
     }
-    if (raw == null || (typeof raw === 'string' && raw.trim() === '')) continue
+    if (raw == null || (typeof raw === "string" && raw.trim() === "")) continue;
     // Employer-class flags bypass decimal canonicalization: they are
     // booleans, and canonicalDecimal would 422 them. The engine's
     // canonicalStatutoryRateValues re-validates on write, so this boundary
     // only normalizes the shape, never the truth.
-    if (field.kind === 'flag') {
-      const text = typeof raw === 'boolean' ? String(raw) : String(raw).trim()
-      if (text !== 'true' && text !== 'false') {
-        return `${slot.label}: ${field.label} must be true or false`
+    if (field.kind === "flag") {
+      const text = typeof raw === "boolean" ? String(raw) : String(raw).trim();
+      if (text !== "true" && text !== "false") {
+        return `${slot.label}: ${field.label} must be true or false`;
       }
-      persisted[key] = text
-      continue
+      persisted[key] = text;
+      continue;
     }
     // The agency writes a rate, a percent, or money on its notice — the noun
     // follows the field kind so the remedy names what the operator typed.
     // Amounts persist into numeric(19,4) and carry the ledger width bound;
     // rates and percents persist as declared-scale text with no width bound.
-    const noun = field.kind === 'percent' ? 'a percent' : field.kind === 'rate' ? 'a decimal rate' : 'an amount'
-    const exact = canonicalDecimal(raw, field.decimals)
+    const noun =
+      field.kind === "percent"
+        ? "a percent"
+        : field.kind === "rate"
+          ? "a decimal rate"
+          : "an amount";
+    const exact = canonicalDecimal(raw, field.decimals);
     if (exact === null) {
-      const refusal = field.kind === 'amount'
-        ? moneyRefusal(field.label, raw, noun, field.decimals)
-        : decimalNullRefusal(field.label, noun, raw, field.decimals)
-      return `${slot.label}: ${refusal}`
+      const refusal =
+        field.kind === "amount"
+          ? moneyRefusal(field.label, raw, noun, field.decimals)
+          : decimalNullRefusal(field.label, noun, raw, field.decimals);
+      return `${slot.label}: ${refusal}`;
     }
     try {
-      persisted[key] = field.kind === 'amount'
-        ? normalizeMoney(exact)
-        : normalizeDecimal(exact, field.decimals)
+      persisted[key] =
+        field.kind === "amount" ? normalizeMoney(exact) : normalizeDecimal(exact, field.decimals);
     } catch {
-      return `${slot.label}: ${field.label} is out of range for its declared scale — got "${suppliedValue(raw)}"`
+      return `${slot.label}: ${field.label} is out of range for its declared scale — got "${suppliedValue(raw)}"`;
     }
   }
-  return persisted
+  return persisted;
 }
 
 export const GET = defineRoute({
-  permission: 'payroll.manage',
-  feature: 'payroll',
+  permission: "payroll.manage",
+  feature: "payroll",
   handler: async ({ request: req, authz: gate }) => {
-    const scopeDenied = await guardRootSubsidiaryScope(gate)
-    if (scopeDenied) return scopeDenied
-    const orgId = gate.user.orgId
-    const url = new URL(req.url)
+    const scopeDenied = await guardRootSubsidiaryScope(gate);
+    if (scopeDenied) return scopeDenied;
+    const orgId = gate.user.orgId;
+    const url = new URL(req.url);
 
-    const blobRes = (await db.execute<{ p: Record<string, unknown> | null }>(
-      sql`select settings->'payroll' as p from orgs where id = ${orgId}`, 'objects',
-    ))
-    const installed = await installedPayrollCountries(orgId, blobRes[0]?.p ?? {})
-    const requestedYear = Number(url.searchParams.get('year'))
-    const year = Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2100
-      ? requestedYear
-      : await defaultYear(orgId, installed)
+    const blobRes = await db.execute<{ p: Record<string, unknown> | null }>(
+      sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
+      "objects",
+    );
+    const installed = await installedPayrollCountries(orgId, blobRes[0]?.p ?? {});
+    const requestedYear = Number(url.searchParams.get("year"));
+    const year =
+      Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2100
+        ? requestedYear
+        : await defaultYear(orgId, installed);
 
     const [rows, accounts] = await Promise.all([
       listStatutoryRates(orgId, { taxYear: year }),
       listFilingAccounts(orgId),
-    ])
+    ]);
 
     // Only the installed packs' declarations — an org that runs one country is not
     // shown another's levies.
-    const packs = []
-    const gaps = []
+    const packs = [];
+    const gaps = [];
     for (const country of installed) {
-      let declaration
+      let declaration;
       try {
-        declaration = packRates(country)
+        declaration = packRates(country);
       } catch (error) {
-        if (!(error instanceof PayrollPackError)) throw error
-        continue // a pack that declares no tenant-entered rates has no surface
+        if (!(error instanceof PayrollPackError)) throw error;
+        continue; // a pack that declares no tenant-entered rates has no surface
       }
-      const regions = payrollPack(country).regions
+      const regions = payrollPack(country).regions;
       packs.push({
         country,
         regionLabel: regions.label,
@@ -245,8 +268,8 @@ export const GET = defineRoute({
             programType: account.programType,
             stateCode: account.stateCode,
           })),
-      })
-      gaps.push(...await payrollStatutoryRateGaps(orgId, country, year))
+      });
+      gaps.push(...(await payrollStatutoryRateGaps(orgId, country, year)));
     }
 
     return NextResponse.json({
@@ -258,39 +281,38 @@ export const GET = defineRoute({
       // What the packs' statutory tables are loaded for — the same declaration the
       // readiness blocker and the year-end refusal read.
       coverage: payrollTaxYearCoverage().filter((entry) => installed.includes(entry.country)),
-    })
-
+    });
   },
-})
+});
 
 export const PUT = defineRoute({
-  permission: 'payroll.manage',
-  feature: 'payroll',
-  handler: async ({ request: req, authz: gate }) => {
-    const scopeDenied = await guardRootSubsidiaryScope(gate)
-    if (scopeDenied) return scopeDenied
-    const parsedBody = await parseJsonBody(req, requestBodySchema);
-    if (!parsedBody.ok) return parsedBody.response;
-    const parsed = parseBody(parsedBody.data)
-    if (typeof parsed === 'string') return NextResponse.json({ error: parsed }, { status: 422 })
+  permission: "payroll.manage",
+  feature: "payroll",
+  scope: "root",
+  body: requestBodySchema,
+  invalidBodyStatus: 422,
+  handler: async ({ authz: gate, body }) => {
+    const parsed = parseBody(body);
+    if (typeof parsed === "string") return NextResponse.json({ error: parsed }, { status: 422 });
 
     const account = parsed.filingAccountId
-      ? (await listFilingAccounts(gate.user.orgId)).find((a) => a.id === parsed.filingAccountId) ?? null
-      : null
+      ? ((await listFilingAccounts(gate.user.orgId)).find((a) => a.id === parsed.filingAccountId) ??
+        null)
+      : null;
     // The pack declaration is the only validator — scope, region, program type and
     // every field's scale and range come from it, exactly as filing-account
     // program types are validated against the pack's filing declaration.
     // Inside the refusal path: `country` is any non-empty string off the request,
     // so an unknown one throws PayrollJurisdictionError here. Outside a catch that
     // was a 500; the thrown message already names the implemented countries.
-    let pack
+    let pack;
     try {
-      pack = payrollPack(parsed.country)
+      pack = payrollPack(parsed.country);
     } catch (error) {
       if (error instanceof PayrollError) {
-        return apiErrorResponse(error, { safeStatus: 422 })
+        return apiErrorResponse(error, { safeStatus: 422 });
       }
-      throw error
+      throw error;
     }
     const problem = statutoryRateProblem({
       rates: pack.statutoryRates,
@@ -301,13 +323,17 @@ export const PUT = defineRoute({
       filingAccountId: parsed.filingAccountId,
       taxYear: parsed.taxYear,
       account: account
-        ? { country: account.country, programType: account.programType, stateCode: account.stateCode }
+        ? {
+            country: account.country,
+            programType: account.programType,
+            stateCode: account.stateCode,
+          }
         : null,
-    })
-    if (problem) return NextResponse.json({ error: problem }, { status: 422 })
+    });
+    if (problem) return NextResponse.json({ error: problem }, { status: 422 });
 
-    const values = persistStatutoryRateValues(parsed.country, parsed.rateKey, parsed.values)
-    if (typeof values === 'string') return NextResponse.json({ error: values }, { status: 422 })
+    const values = persistStatutoryRateValues(parsed.country, parsed.rateKey, parsed.values);
+    if (typeof values === "string") return NextResponse.json({ error: values }, { status: 422 });
 
     try {
       const saved = await upsertStatutoryRate({
@@ -322,30 +348,29 @@ export const PUT = defineRoute({
         values,
         sourceCitation: parsed.sourceCitation,
         reason: parsed.reason,
-      })
-      return NextResponse.json({ ok: true, ...saved })
+      });
+      return NextResponse.json({ ok: true, ...saved });
     } catch (error) {
       if (error instanceof PayrollPackError) {
-        return apiErrorResponse(error, { safeStatus: 422 })
+        return apiErrorResponse(error, { safeStatus: 422 });
       }
-      throw error
+      throw error;
     }
-
   },
-})
+});
 
 export const DELETE = defineRoute({
-  permission: 'payroll.manage',
-  feature: 'payroll',
+  permission: "payroll.manage",
+  feature: "payroll",
   handler: async ({ request: req, authz: gate }) => {
-    const scopeDenied = await guardRootSubsidiaryScope(gate)
-    if (scopeDenied) return scopeDenied
-    const id = new URL(req.url).searchParams.get('id') ?? ''
-    if (!isUuid(id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
+    const scopeDenied = await guardRootSubsidiaryScope(gate);
+    if (scopeDenied) return scopeDenied;
+    const id = new URL(req.url).searchParams.get("id") ?? "";
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 422 });
     try {
-      const removed = await deleteStatutoryRate(gate.user.orgId, gate.user.id, id)
-      if (!removed) return notFound("record")
-      return NextResponse.json({ ok: true })
+      const removed = await deleteStatutoryRate(gate.user.orgId, gate.user.id, id);
+      if (!removed) return notFound("record");
+      return NextResponse.json({ ok: true });
     } catch (error) {
       // `deleteStatutoryRate` RETIRES the open row (stamps superseded_on, writes
       // no successor) rather than deleting it: statutory rows are
@@ -356,10 +381,9 @@ export const DELETE = defineRoute({
       // then failed on the non-JSON error body, so the toast showed a parse
       // error instead of the message.
       if (error instanceof PayrollError) {
-        return apiErrorResponse(error, { safeStatus: 422 })
+        return apiErrorResponse(error, { safeStatus: 422 });
       }
-      throw error
+      throw error;
     }
-
   },
-})
+});
