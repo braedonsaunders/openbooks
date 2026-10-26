@@ -18,6 +18,7 @@ import { dropScratchOrgEscaped, listOrgIdTables } from "./tenant-teardown.ts";
 import {
   dropScratchOrgAndSnapshot,
   loadOrgTableColumns,
+  type OrgTableColumns,
   resetScratchOrgEscaped,
   snapshotScratchOrg,
 } from "./scratch-org-snapshot.ts";

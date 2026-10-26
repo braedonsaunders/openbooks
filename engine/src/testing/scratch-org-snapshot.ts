@@ -9,6 +9,7 @@ import {
   SQL_IDENT,
   clearDisposableProjectAwardReferences,
   deleteQualifiedCabinetFixtureSources,
+  dropScratchOrgEscaped,
   guardTeardownTransaction,
   qualified,
   setTeardownGucs,
@@ -26,7 +27,7 @@ function snapshotSchemaName(orgId: string): string {
   return `scratch_fixture_snapshot_${orgId.replaceAll(/[^a-zA-Z0-9]/g, "")}`;
 }
 
-type OrgTableColumns = ReadonlyMap<string, readonly string[]>;
+export type OrgTableColumns = ReadonlyMap<string, readonly string[]>;
 
 export async function loadOrgTableColumns(tables: readonly string[]): Promise<OrgTableColumns> {
   const result = await db.execute<{ table_name: string; column_name: string }>(
