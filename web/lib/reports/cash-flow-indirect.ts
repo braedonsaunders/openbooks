@@ -159,8 +159,11 @@ export async function cashFlowIndirect(
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${resolvedOrgId}
-         and l.account_id in (
-               select id from accounts where org_id = ${resolvedOrgId} and type in ${IF_TYPES})
+         -- The account set resolves once as an array, so the read is an
+         -- index range per investing/financing account (none at all when the
+         -- chart has none) instead of a scan of every line in the window.
+         and l.account_id = any(array(
+               select id from accounts where org_id = ${resolvedOrgId} and type in ${IF_TYPES}))
          and e.status in ('posted', 'reversed')
          and l.posting_date >= ${from} and l.posting_date <= ${to}
          and e.posting_date >= ${from} and e.posting_date <= ${to}
@@ -169,8 +172,8 @@ export async function cashFlowIndirect(
          and not exists (
                select 1 from journal_lines bank
                 where bank.org_id = l.org_id and bank.entry_id = l.entry_id
-                  and bank.account_id in (
-                        select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank'))
+                  and bank.account_id = any(array(
+                        select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank')))
     )`;
 
   // Net income for the window (credit-normal positive), posted only.
@@ -259,7 +262,54 @@ export async function cashFlowIndirect(
   //   adjustedDelta = (balance[to] − balance[from−1]) − stripped[window]
   // stripped = re-measurement origins + legs of no-bank entries touching I/F.
   // Asset increases use cash (negative); liability increases provide cash.
-  const wc = (await reportDb.execute<{ account_id: string; number: string | null; name: string; type: string; bal_to: string; bal_from: string; stripped: string }>(sql`
+  type WcRow = { account_id: string; number: string | null; name: string; type: string; bal_to: string; bal_from: string; stripped: string };
+  const wcTypes = [...CF_WC_ASSET_TYPES, ...CF_WC_LIABILITY_TYPES];
+  const wcBuckets = !translated && glSummaryEligibleDims(dims)
+    ? glActivityBuckets(resolvedOrgId, { minDate: null, maxDate: to, boundaries: [{ date: from, kind: 'start' }], bookId })
+    : null;
+  const wc = wcBuckets
+    // Untranslated balances come from the monthly summary (only the months
+    // the window boundaries split are read from lines); the stripped
+    // non-cash legs are window-bounded line reads.
+    ? (await reportDb.execute<WcRow>(sql`
+        with ${flaggedCte},
+        balances as (
+          select b.account_id,
+                 coalesce(sum(b.amount), 0) as bal_to,
+                 coalesce(sum(b.amount) filter (where b.d < ${from}), 0) as bal_from
+            from ${wcBuckets} b
+           where b.account_id = any(array(
+                   select id from accounts where org_id = ${resolvedOrgId} and type in ${wcTypes}))
+             ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}
+           group by b.account_id
+        ),
+        stripped as (
+          select l.account_id, coalesce(round(sum(${flowAmount}), 4), 0) as stripped
+            from journal_lines l
+            join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+           where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
+             and l.posting_date >= ${from} and l.posting_date <= ${to}
+             and e.posting_date >= ${from} and e.posting_date <= ${to}
+             and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
+             and ${excludePeriodEndJournals(sql`e.origin`)}
+             and (e.origin in ${CF_REMEASURE_ORIGINS} or e.id in (select id from flagged))
+             and l.account_id = any(array(
+                   select id from accounts where org_id = ${resolvedOrgId} and type in ${wcTypes}))
+             and ${dim}
+           group by l.account_id
+        )
+        select ${reportDb.censusColumn}, a.id as account_id, a.number, a.name, a.type,
+               round(coalesce(bal.bal_to, 0), 4) as bal_to,
+               round(coalesce(bal.bal_from, 0), 4) as bal_from,
+               coalesce(st.stripped, 0) as stripped
+          from accounts a
+          left join balances bal on bal.account_id = a.id
+          left join stripped st on st.account_id = a.id
+         where a.org_id = ${resolvedOrgId} and a.type in ${wcTypes}
+           and (bal.account_id is not null or st.account_id is not null)
+      `))
+    : (await reportDb.execute<WcRow>(sql`
+
     with ${flaggedCte}
     select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type,
            coalesce(round(sum(${translated ? flowAmount : closingAmount}) filter (where e.posting_date <= ${to} and (${!translated} or e.posting_date>=${from})),4), 0) as bal_to,
