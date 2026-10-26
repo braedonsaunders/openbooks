@@ -1,10 +1,8 @@
 import { defineRoute } from "@/lib/api/route";
-import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { createCycle } from "@openbooks/engine/hrm/performance/review-cycles";
 import { listCycleProgress } from "@openbooks/engine/hrm/performance/performance-read";
 
-import { isFeatureEnabled } from "../../../../lib/features";
 import { performanceErrorResponse } from "./_lib";
 import { createCycleBody } from "./bodies";
 
@@ -19,10 +17,8 @@ export const runtime = "nodejs";
  */
 export const GET = defineRoute({
   public: "session",
+  feature: "hrmPerformance",
   handler: async ({ authz: authz }) => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrmPerformance"))) {
-      return notFound("record");
-    }
     try {
       // One loader for both audiences: HR sees every cycle with org-wide
       // counts, structural viewers see their slice (scoped counts) — the
@@ -54,7 +50,7 @@ export const POST = defineRoute({
         selfDueOn: body.selfDueOn ?? null,
         managerDueOn: body.managerDueOn ?? null,
         appliesTo: body.appliesTo ?? {},
-        requireManagerReviews:body.requireManagerReviews,
+        requireManagerReviews: body.requireManagerReviews,
       });
       return NextResponse.json({ cycle }, { status: 201 });
     } catch (e) {

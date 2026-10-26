@@ -92,7 +92,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmReviewCycleItemRouteNextResponse = NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmReviewCycleItemRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -101,25 +103,27 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/hrm/performance/performance-read", "mock:read"],
   ["../_lib", "mock:lib"],
   ["@/lib/authz", "mock:authz"],
+  ["@/lib/features", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-review-cycle-item";
-  const itemRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-review-cycle-item";
+const itemRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 const CYCLE_ID = "00000000-0000-4000-8000-000000000041";
 const params = { params: Promise.resolve({ id: CYCLE_ID }) };
@@ -179,15 +183,30 @@ test("actions discriminate and validate at the real boundary", async () => {
   reset();
   assert.equal((await itemRoute!.PATCH(patchRequest({}), params)).status, 400);
   assert.equal((await itemRoute!.PATCH(patchRequest({ action: "close-it" }), params)).status, 400);
-  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "to-calibrating", force: true }), params)).status, 200);
   assert.equal(
-    (await itemRoute!.PATCH(patchRequest({ action: "to-calibrating", force: true, forceReason: "  " }), params)).status,
+    (await itemRoute!.PATCH(patchRequest({ action: "to-calibrating", force: true }), params))
+      .status,
+    200,
+  );
+  assert.equal(
+    (
+      await itemRoute!.PATCH(
+        patchRequest({ action: "to-calibrating", force: true, forceReason: "  " }),
+        params,
+      )
+    ).status,
     400,
   );
   assert.deepEqual(routeState.calls, [
     {
       fn: "calibrating",
-      args: { orgId: "org-1", actorId: "user-1", cycleId: CYCLE_ID, force: true, forceReason: undefined },
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        cycleId: CYCLE_ID,
+        force: true,
+        forceReason: undefined,
+      },
     },
   ]);
 });
@@ -196,8 +215,19 @@ test("open, close and management updates reach the service with the record id", 
   reset();
   assert.equal((await itemRoute!.PATCH(patchRequest({ action: "open" }), params)).status, 200);
   assert.equal((await itemRoute!.PATCH(patchRequest({ action: "close" }), params)).status, 200);
-  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "update", revision: 1, name: "Quarterly review" }), params)).status, 200);
-  assert.deepEqual(routeState.calls.map((c) => c.fn), ["open", "close", "update"]);
+  assert.equal(
+    (
+      await itemRoute!.PATCH(
+        patchRequest({ action: "update", revision: 1, name: "Quarterly review" }),
+        params,
+      )
+    ).status,
+    200,
+  );
+  assert.deepEqual(
+    routeState.calls.map((c) => c.fn),
+    ["open", "close", "update"],
+  );
 });
 
 test("action routes refuse hostile payloads at the real boundary", async () => {

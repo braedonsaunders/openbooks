@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import {
   closeCycle,
@@ -10,8 +9,7 @@ import {
 } from "@openbooks/engine/hrm/performance/review-cycles";
 import { getCycleDetail } from "@openbooks/engine/hrm/performance/performance-read";
 
-import { isFeatureEnabled } from "../../../../../lib/features";
-import { isUuid } from "../../../../../lib/list-params";
+import { isUuid } from "@/lib/list-params";
 import { performanceErrorResponse } from "../_lib";
 import { patchCycleBody } from "../bodies";
 
@@ -27,17 +25,11 @@ export const runtime = "nodejs";
  */
 export const GET = defineRoute({
   public: "session",
+  feature: "hrmPerformance",
   params: z.object({ id: z.string().min(1) }),
-  handler: async ({ request: _req, authz: authz, params: routeParams }) => {
-      if (!(await isFeatureEnabled(authz.user.orgId, "hrmPerformance"))) {
-      return notFound("record");
-    }
+  handler: async ({ authz: authz, params: routeParams }) => {
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json(
-        { error: "invalid review cycle" },
-        { status: 400 },
-      );
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid review cycle" }, { status: 400 });
     try {
       const cycle = await getCycleDetail({
         orgId: authz.user.orgId,
@@ -56,22 +48,19 @@ export const PATCH = defineRoute({
   feature: "hrmPerformance",
   params: z.object({ id: z.string().min(1) }),
   body: patchCycleBody,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json(
-        { error: "invalid review cycle" },
-        { status: 400 },
-      );
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid review cycle" }, { status: 400 });
 
     try {
-      if(body.action==="update"||body.action==="assign-reviewer"){
-        const management=await updateCycleManagement({...body,orgId:gate.user.orgId,actorId:gate.user.id,cycleId:id});
-        return NextResponse.json({management});
+      if (body.action === "update" || body.action === "assign-reviewer") {
+        const management = await updateCycleManagement({
+          ...body,
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          cycleId: id,
+        });
+        return NextResponse.json({ management });
       }
       if (body.action === "open") {
         const opened = await openCycle({
