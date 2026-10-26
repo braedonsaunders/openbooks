@@ -39,7 +39,6 @@ export const runtime = "nodejs";
 // The org-wide outbound transport serves every workflow (invoices, dunning,
 // password resets), so redirecting it is setup authority, not user
 // administration — same gate as the rest of org configuration.
-const PERMISSION = "admin.setup.manage";
 
 /** GET — the org's email config view (never the sealed secret, only hasSecret). */
 async function legacyGET(gate: Authz) {

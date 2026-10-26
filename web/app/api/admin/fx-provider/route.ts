@@ -35,7 +35,6 @@ const runBodySchema = z.discriminatedUnion("action", [
 ]);
 
 export const runtime = "nodejs";
-const PERMISSION = "admin.setup.manage";
 
 async function legacyGET(gate: Authz) {
   const config = await readFxProviderConfigView(gate.user.orgId);

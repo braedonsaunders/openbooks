@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
 import { computeNextRunAt, type BackupPolicyShape } from "@openbooks/engine/backup/backup";
-import { saveBackupPolicy, type BackupPolicyValues } from "@openbooks/engine/backup/policy";
+import { saveBackupPolicy } from "@openbooks/engine/backup/policy";
 
 const requestBodySchema = z.discriminatedUnion("frequency", [
   z.object({
