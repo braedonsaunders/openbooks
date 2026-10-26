@@ -1,4 +1,3 @@
-import { parseJsonBody } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
@@ -9,14 +8,14 @@ import { db } from "@openbooks/engine/platform/db";
 import { allocateDocumentNumber } from "@openbooks/engine/records/numbering";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { normalizeMoney, sum, toUnits, wholeDigits } from "@openbooks/engine/money";
-import { can, subsidiaryScopeAllows } from "../../../../lib/authz";
-import { defineRoute } from "../../../../lib/api/route";
-import { applicationContextFromSession } from "../../../../lib/application/context";
-import { executeIdempotent } from "../../../../lib/application/idempotency";
-import { verifyProposal, type JournalPreview } from "../../../../lib/assistant/proposals";
-import { canonicalDecimal } from "../../../../lib/exact-decimal";
+import { can, guardPermission, subsidiaryScopeAllows } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { applicationContextFromSession } from "@/lib/application/context";
+import { executeIdempotent } from "@/lib/application/idempotency";
+import { verifyProposal, type JournalPreview } from "@/lib/assistant/proposals";
+import { canonicalDecimal } from "@/lib/exact-decimal";
 import { notFound } from "@/lib/api/responses";
-import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
+import { moneyRefusal } from "@/lib/payroll-decimal-refusal";
 
 /** Exact numeric(19,4) money string, or 'invalid'. */
 function exactMoney(v: unknown): string | "invalid" {
@@ -44,83 +43,99 @@ function exactMoney(v: unknown): string | "invalid" {
 export const runtime = "nodejs";
 
 class AccountScopeChangedError extends Error {}
-const assistantCommitBody = z.object({
-  kind: z.literal("create_journal_entry"),
-  preview: z.object({
-    documentDate: z.string(),
-    memo: z.string().nullable(),
-    lines: z.array(z.object({
-      accountId: uuidString(),
-      accountLabel: z.string(),
-      description: z.string().nullable(),
-      amount: z.string().min(1),
-    }).strict()).min(2),
-  }).strict(),
-  confirmToken: z.string().min(1),
-}).strict();
+const assistantCommitBody = z
+  .object({
+    kind: z.literal("create_journal_entry"),
+    preview: z
+      .object({
+        documentDate: z.string(),
+        memo: z.string().nullable(),
+        lines: z
+          .array(
+            z
+              .object({
+                accountId: uuidString(),
+                accountLabel: z.string(),
+                description: z.string().nullable(),
+                amount: z.string().min(1),
+              })
+              .strict(),
+          )
+          .min(2),
+      })
+      .strict(),
+    confirmToken: z.string().min(1),
+  })
+  .strict();
 
 export const POST = defineRoute({
-  permission: "assistant.write",
-  feature: { none: "Assistant commands are controlled by assistant permissions and provider configuration." },
-  handler: async ({ request: req, authz: gate }) => {
-  const authz = gate;
-  if (!can(authz, "gl.post")) {
-    return NextResponse.json({ error: "missing permission: gl.post" }, { status: 403 });
-  }
-
-  let body: z.output<typeof assistantCommitBody>;
-  try {
-    const parsedBody = await parseJsonBody(req, assistantCommitBody);
-    if (!parsedBody.ok) return parsedBody.response;
-    body = parsedBody.data;
-  } catch {
-    return NextResponse.json({ error: "bad request" }, { status: 400 });
-  }
-  const preview: JournalPreview = body.preview;
-  if (!verifyProposal("create_journal_entry", preview, body.confirmToken, authz)) {
-    return NextResponse.json(
-      { error: "This draft expired or was modified. Ask the assistant to draft it again." },
-      { status: 422 },
-    );
-  }
-
-  const p = preview;
-  // Defense in depth: the HMAC already covers a balanced preview, but a
-  // balanced check here keeps a signing bug from ever writing a lopsided draft.
-  const lines: { accountId: string; description: string | null; amount: string }[] = [];
-  for (const line of p.lines) {
-    const amount = exactMoney(line.amount);
-    if (amount === "invalid") {
-      return NextResponse.json({ error: moneyRefusal("Draft line amount", line.amount, "an amount", 4, 15) }, { status: 422 });
+  authorize: async () => {
+    const authz = await guardPermission("assistant.write");
+    if (authz instanceof NextResponse) return authz;
+    if (!can(authz, "gl.post")) {
+      return NextResponse.json({ error: "missing permission: gl.post" }, { status: 403 });
     }
-    lines.push({ accountId: line.accountId, description: line.description, amount });
-  }
-  const balance = lines.reduce((acc, line) => acc + toUnits(line.amount), 0n);
-  if (balance !== 0n || lines.length < 2) {
-    return NextResponse.json({ error: "draft lines do not balance" }, { status: 422 });
-  }
-  // The HMAC covers preview integrity, not calendar semantics: the draft tool
-  // only shape-checks the date, so a model-emitted impossible day would reach
-  // the DATE column and surface as a 500. Fail closed at the write boundary.
-  if (!isIsoCalendarDate(p.documentDate)) {
-    return NextResponse.json({ error: "invalid documentDate — expected YYYY-MM-DD" }, { status: 422 });
-  }
+    return authz;
+  },
+  feature: {
+    none: "Assistant commands are controlled by assistant permissions and provider configuration.",
+  },
+  body: assistantCommitBody,
+  handler: async ({ request: req, authz, body }) => {
+    const preview: JournalPreview = body.preview;
+    if (!verifyProposal("create_journal_entry", preview, body.confirmToken, authz)) {
+      return NextResponse.json(
+        { error: "This draft expired or was modified. Ask the assistant to draft it again." },
+        { status: 422 },
+      );
+    }
 
-  const user = authz.user;
-  const totalDebits = sum(lines.map((line) => (toUnits(line.amount) > 0n ? line.amount : "0")));
+    const p = preview;
+    // Defense in depth: the HMAC already covers a balanced preview, but a
+    // balanced check here keeps a signing bug from ever writing a lopsided draft.
+    const lines: { accountId: string; description: string | null; amount: string }[] = [];
+    for (const line of p.lines) {
+      const amount = exactMoney(line.amount);
+      if (amount === "invalid") {
+        return NextResponse.json(
+          { error: moneyRefusal("Draft line amount", line.amount, "an amount", 4, 15) },
+          { status: 422 },
+        );
+      }
+      lines.push({ accountId: line.accountId, description: line.description, amount });
+    }
+    const balance = lines.reduce((acc, line) => acc + toUnits(line.amount), 0n);
+    if (balance !== 0n || lines.length < 2) {
+      return NextResponse.json({ error: "draft lines do not balance" }, { status: 422 });
+    }
+    // The HMAC covers preview integrity, not calendar semantics: the draft tool
+    // only shape-checks the date, so a model-emitted impossible day would reach
+    // the DATE column and surface as a 500. Fail closed at the write boundary.
+    if (!isIsoCalendarDate(p.documentDate)) {
+      return NextResponse.json(
+        { error: "invalid documentDate — expected YYYY-MM-DD" },
+        { status: 422 },
+      );
+    }
 
-  // The draft books into the caller's legal-entity scope — the same decision
-  // table POST /api/journals/draft enforces: an unrestricted caller keeps the
-  // root entity; a restricted caller resolves to their single active,
-  // non-elimination entity, and an empty or ambiguous scope is refused before
-  // anything is written. Without this a restricted caller would mint drafts in
-  // the root entity they cannot see, consuming its JE sequence.
-  const scope = authz.allowedSubsidiaryIds === null
-    ? null
-    : new Set([...authz.allowedSubsidiaryIds].map((id) => id.toLowerCase()));
-  let subsidiary: { id: string; base_currency: string };
-  if (scope === null) {
-    const found = (await db.execute<{ id: string; base_currency: string }>(sql`
+    const user = authz.user;
+    const totalDebits = sum(lines.map((line) => (toUnits(line.amount) > 0n ? line.amount : "0")));
+
+    // The draft books into the caller's legal-entity scope — the same decision
+    // table POST /api/journals/draft enforces: an unrestricted caller keeps the
+    // root entity; a restricted caller resolves to their single active,
+    // non-elimination entity, and an empty or ambiguous scope is refused before
+    // anything is written. Without this a restricted caller would mint drafts in
+    // the root entity they cannot see, consuming its JE sequence.
+    const scope =
+      authz.allowedSubsidiaryIds === null
+        ? null
+        : new Set([...authz.allowedSubsidiaryIds].map((id) => id.toLowerCase()));
+    let subsidiary: { id: string; base_currency: string };
+    if (scope === null) {
+      const found = (
+        await db.execute<{ id: string; base_currency: string }>(
+          sql`
       select id, base_currency
         from subsidiaries
        where org_id = ${user.orgId}
@@ -129,51 +144,65 @@ export const POST = defineRoute({
          and not is_elimination
        order by created_at
        limit 1
-    `, "objects"))[0];
-    if (!found) throw new Error("org has no active root subsidiary");
-    subsidiary = found;
-  } else {
-    const ids = [...scope].filter((id) => typeof id === "string" && isUuid(id));
-    const allowed = ids.length === 0 ? [] : (await db.execute<{ id: string; base_currency: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0];
+      if (!found) throw new Error("org has no active root subsidiary");
+      subsidiary = found;
+    } else {
+      const ids = [...scope].filter((id) => typeof id === "string" && isUuid(id));
+      const allowed =
+        ids.length === 0
+          ? []
+          : await db.execute<{ id: string; base_currency: string }>(
+              sql`
       select id, base_currency
         from subsidiaries
        where org_id = ${user.orgId}
          and is_active
          and not is_elimination
-         and id = any(${`{${ids.join(',')}}`}::uuid[])
-    `, "objects"));
-    if (allowed.length === 0) {
-      return NextResponse.json({ error: "no_available_subsidiary" }, { status: 409 });
+         and id = any(${`{${ids.join(",")}}`}::uuid[])
+    `,
+              "objects",
+            );
+      if (allowed.length === 0) {
+        return NextResponse.json({ error: "no_available_subsidiary" }, { status: 409 });
+      }
+      if (allowed.length !== 1) {
+        return NextResponse.json({ error: "subsidiary_selection_required" }, { status: 409 });
+      }
+      subsidiary = allowed[0]!;
     }
-    if (allowed.length !== 1) {
-      return NextResponse.json({ error: "subsidiary_selection_required" }, { status: 409 });
-    }
-    subsidiary = allowed[0]!;
-  }
 
-  // The confirmation token is the durable identity of this proposed write.
-  // Claiming it through the application idempotency boundary makes a retry or
-  // double-click replay the original response instead of creating another
-  // numbered journal. The claim and every journal write share one transaction,
-  // so a failed attempt leaves neither an orphan draft nor a consumed token.
-  const context = applicationContextFromSession(
-    authz,
-    "assistant",
-    req.headers.get("x-request-id") || randomUUID(),
-  );
-  let result: {
-    replayed: boolean;
-    value: { ok: true; id: string; documentNumber: string; href: string };
-  };
-  try {
-    result = await executeIdempotent({
-      context,
-      operation: "assistant.commit.create_journal_entry",
-      idempotencyKey: body.confirmToken,
-      request: { kind: body.kind, preview: p },
-      execute: () => db.transaction(async (tx) => {
-        const accountIds = [...new Set(lines.map((line) => line.accountId))];
-        const lockedAccounts = accountIds.length === 0 ? [] : (await tx.execute<{ id: string; subsidiary_id: string | null }>(sql`
+    // The confirmation token is the durable identity of this proposed write.
+    // Claiming it through the application idempotency boundary makes a retry or
+    // double-click replay the original response instead of creating another
+    // numbered journal. The claim and every journal write share one transaction,
+    // so a failed attempt leaves neither an orphan draft nor a consumed token.
+    const context = applicationContextFromSession(
+      authz,
+      "assistant",
+      req.headers.get("x-request-id") || randomUUID(),
+    );
+    let result: {
+      replayed: boolean;
+      value: { ok: true; id: string; documentNumber: string; href: string };
+    };
+    try {
+      result = await executeIdempotent({
+        context,
+        operation: "assistant.commit.create_journal_entry",
+        idempotencyKey: body.confirmToken,
+        request: { kind: body.kind, preview: p },
+        execute: () =>
+          db.transaction(async (tx) => {
+            const accountIds = [...new Set(lines.map((line) => line.accountId))];
+            const lockedAccounts =
+              accountIds.length === 0
+                ? []
+                : await tx.execute<{ id: string; subsidiary_id: string | null }>(
+                    sql`
           select id, subsidiary_id
             from accounts
            where org_id = ${user.orgId}
@@ -182,19 +211,27 @@ export const POST = defineRoute({
              and id = any(${`{${accountIds.join(",")}}`}::uuid[])
            order by id
            for share
-        `, "objects"));
-        if (
-          lockedAccounts.length !== accountIds.length
-          || lockedAccounts.some((account) => !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, account.subsidiary_id, { orgWideNull: true }))
-        ) {
-          throw new AccountScopeChangedError("not found");
-        }
+        `,
+                    "objects",
+                  );
+            if (
+              lockedAccounts.length !== accountIds.length ||
+              lockedAccounts.some(
+                (account) =>
+                  !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, account.subsidiary_id, {
+                    orgWideNull: true,
+                  }),
+              )
+            ) {
+              throw new AccountScopeChangedError("not found");
+            }
 
-        // Allocate the organization-wide JE number on the same transaction
-        // connection as the document. A line or header failure therefore rolls
-        // the sequence watermark back along with the draft.
-        const documentNumber = await allocateDocumentNumber(tx, user.orgId, "journal", "JE-");
-        const inserted = (await tx.execute<{ id: string; document_number: string }>(sql`
+            // Allocate the organization-wide JE number on the same transaction
+            // connection as the document. A line or header failure therefore rolls
+            // the sequence watermark back along with the draft.
+            const documentNumber = await allocateDocumentNumber(tx, user.orgId, "journal", "JE-");
+            const inserted = await tx.execute<{ id: string; document_number: string }>(
+              sql`
           insert into documents (
             org_id, kind, document_number, subsidiary_id, document_date, currency,
             memo, subtotal, tax_total, total, created_by
@@ -204,34 +241,36 @@ export const POST = defineRoute({
             ${subsidiary.base_currency}, ${p.memo}, ${totalDebits}, '0', ${totalDebits}, ${user.id}
           )
           returning id, document_number
-        `, "objects"));
-        const doc = inserted[0];
-        if (!doc) throw new Error("journal draft could not be created");
+        `,
+              "objects",
+            );
+            const doc = inserted[0];
+            if (!doc) throw new Error("journal draft could not be created");
 
-        for (let i = 0; i < lines.length; i++) {
-          const l = lines[i]!;
-          await tx.execute(sql`
+            for (let i = 0; i < lines.length; i++) {
+              const l = lines[i]!;
+              await tx.execute(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, description,
                                         quantity, unit_price, amount)
             values (${user.orgId}, ${doc.id}, ${i + 1}, ${l.accountId}, ${l.description},
                     '1', ${l.amount}, ${l.amount})
           `);
-        }
-        return {
-          ok: true as const,
-          id: doc.id,
-          documentNumber: doc.document_number,
-          href: `/journal?entry=${doc.id}`,
-        };
-      }),
-    });
-  } catch (error) {
-    if (error instanceof AccountScopeChangedError) {
-      return notFound("record");
+            }
+            return {
+              ok: true as const,
+              id: doc.id,
+              documentNumber: doc.document_number,
+              href: `/journal?entry=${doc.id}`,
+            };
+          }),
+      });
+    } catch (error) {
+      if (error instanceof AccountScopeChangedError) {
+        return notFound("record");
+      }
+      throw error;
     }
-    throw error;
-  }
 
-  return NextResponse.json(result.value);
+    return NextResponse.json(result.value);
   },
 });

@@ -1,21 +1,20 @@
-import { parseJsonBody } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { convertToModelMessages, generateText, type UIMessage } from "ai";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { can } from "../../../../lib/authz";
-import { AIDisabledError, getModel } from "../../../../lib/assistant/client";
-import { getOrgAiConfig } from "../../../../lib/assistant/ai-config";
-import { NO_ANSWER_MESSAGE, runAgentTurn, type AgentTurnResult } from "../../../../lib/assistant/agent";
-import { assembleStoreBranch, streamOwnedChatTurn } from "../../../../lib/assistant/owned-chat-turn";
-import { createDbOwnedRunStore } from "../../../../lib/assistant/owned-runs-db";
-import type { OwnedRunOutcome } from "../../../../lib/assistant/owned-runs";
-import { buildChatTurn } from "../../../../lib/assistant/registry";
-import { ASSISTANT_TOOLS } from "../../../../lib/assistant/registry";
-import { APPLICATION_TOOLS } from "../../../../lib/application/tool-catalog";
-import { withModelCompaction } from "../../../../lib/assistant/result-compaction";
-import { assistantSystemPrompt } from "../../../../lib/assistant/system-prompt";
+import { can } from "@/lib/authz";
+import { AIDisabledError, getModel } from "@/lib/assistant/client";
+import { getOrgAiConfig } from "@/lib/assistant/ai-config";
+import { NO_ANSWER_MESSAGE, runAgentTurn, type AgentTurnResult } from "@/lib/assistant/agent";
+import { assembleStoreBranch, streamOwnedChatTurn } from "@/lib/assistant/owned-chat-turn";
+import { createDbOwnedRunStore } from "@/lib/assistant/owned-runs-db";
+import type { OwnedRunOutcome } from "@/lib/assistant/owned-runs";
+import { buildChatTurn } from "@/lib/assistant/registry";
+import { ASSISTANT_TOOLS } from "@/lib/assistant/registry";
+import { APPLICATION_TOOLS } from "@/lib/application/tool-catalog";
+import { withModelCompaction } from "@/lib/assistant/result-compaction";
+import { assistantSystemPrompt } from "@/lib/assistant/system-prompt";
 import {
   applyHistoryBudget,
   collectPriorToolNames,
@@ -45,19 +44,19 @@ import {
 import { scheduleAutoTitle } from "../../../../lib/assistant/conversation-title";
 import { moduleOfTool } from "../../../../lib/assistant/tool-router";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
-import { orgFiscalContext } from "../../../../lib/fiscal";
-import { resolvedFeatureState } from "../../../../lib/features";
+import { orgFiscalContext } from "@/lib/fiscal";
+import { resolvedFeatureState } from "@/lib/features";
 import {
   appendMessage,
   createConversation,
   ownsConversation,
   recentMessages,
-} from "../../../../lib/ai-conversations";
-import { loadFindingContext } from "../../../../lib/agents/finding-context";
+} from "@/lib/ai-conversations";
+import { loadFindingContext } from "@/lib/agents/finding-context";
 import { isUuid, uuidString } from "@openbooks/engine/platform/identifiers";
-import { CONVERSATION_SCOPES, conversationScope } from "../../../../lib/assistant/conversation-scopes";
-import { migrationModeSection } from "../../../../lib/assistant/migration-prompt";
-import { loadMigrationJourney } from "../../../../lib/migration/journey";
+import { CONVERSATION_SCOPES, conversationScope } from "@/lib/assistant/conversation-scopes";
+import { migrationModeSection } from "@/lib/assistant/migration-prompt";
+import { loadMigrationJourney } from "@/lib/migration/journey";
 
 /**
  * The agentic turn endpoint.
@@ -76,12 +75,14 @@ const MIGRATION_STEP_BUDGET = 16;
 /** Tool modules the migration workspace always sends beside the core set. */
 const MIGRATION_WORKSPACE_MODULES = ["migration", "setup", "ledger", "close"];
 const TURN_FAILURE_MESSAGE = "The assistant could not complete this response. Please try again.";
-const chatRequestBody = z.object({
-  conversationId: uuidString().nullable().optional(),
-  prompt: z.string().max(MAX_PROMPT_CHARS),
-  findingId: uuidString().nullable().optional(),
-  mode: z.enum(CONVERSATION_SCOPES).optional(),
-}).strict();
+const chatRequestBody = z
+  .object({
+    conversationId: uuidString().nullable().optional(),
+    prompt: z.string().max(MAX_PROMPT_CHARS),
+    findingId: uuidString().nullable().optional(),
+    mode: z.enum(CONVERSATION_SCOPES).optional(),
+  })
+  .strict();
 
 function conversationResponse(
   body: BodyInit | null,
@@ -95,321 +96,329 @@ function conversationResponse(
 
 export const POST = defineRoute({
   permission: "assistant.use",
-  feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
-  handler: async ({ request: req, authz: gate }) => {
-  const authz = gate;
-
-  let input: z.output<typeof chatRequestBody>;
-  try {
-    const parsedBody = await parseJsonBody(req, chatRequestBody);
-    if (!parsedBody.ok) return parsedBody.response;
-    input = parsedBody.data;
-  } catch {
-    return new Response("Bad request", { status: 400 });
-  }
-  // "Ask about this" handoff (b06): an optional workbench finding whose
-  // evidence rides the memorySections seam as untrusted data. Absent or
-  // unreadable findings change nothing about the turn.
-  let findingId: string | null = null;
-  if (input.findingId !== undefined && input.findingId !== null) {
-    if (!isUuid(input.findingId)) {
-      return new Response("Bad request", { status: 400 });
+  feature: {
+    none: "Assistant access is controlled by assistant permissions and provider configuration.",
+  },
+  body: chatRequestBody,
+  handler: async ({ request: req, authz: gate, body: input }) => {
+    const authz = gate;
+    // "Ask about this" handoff (b06): an optional workbench finding whose
+    // evidence rides the memorySections seam as untrusted data. Absent or
+    // unreadable findings change nothing about the turn.
+    let findingId: string | null = null;
+    if (input.findingId !== undefined && input.findingId !== null) {
+      if (!isUuid(input.findingId)) {
+        return new Response("Bad request", { status: 400 });
+      }
+      findingId = input.findingId;
     }
-    findingId = input.findingId;
-  }
-  const prompt = input.prompt.trim();
-  if (!prompt) return new Response("Empty prompt", { status: 400 });
-  // The migration workspace is organization-wide setup work: its playbook
-  // and plan snapshot are only assembled for unrestricted setup administrators.
-  const SCOPE = conversationScope(input.mode);
-  const migrationMode = SCOPE === "migration";
-  if (migrationMode && (!can(authz, "admin.setup.manage") || authz.allowedSubsidiaryIds !== null)) {
-    return new Response("Forbidden", { status: 403 });
-  }
-
-  // Resolve / create the conversation. Only the OWNER may send a turn.
-  let conversationId = input.conversationId ?? null;
-  if (conversationId) {
-    if (!isUuid(conversationId)) return new Response("Bad request", { status: 400 });
-    if (!(await ownsConversation(authz, conversationId, SCOPE))) {
+    const prompt = input.prompt.trim();
+    if (!prompt) return new Response("Empty prompt", { status: 400 });
+    // The migration workspace is organization-wide setup work: its playbook
+    // and plan snapshot are only assembled for unrestricted setup administrators.
+    const SCOPE = conversationScope(input.mode);
+    const migrationMode = SCOPE === "migration";
+    if (
+      migrationMode &&
+      (!can(authz, "admin.setup.manage") || authz.allowedSubsidiaryIds !== null)
+    ) {
       return new Response("Forbidden", { status: 403 });
     }
-  }
 
-  // Resolve provider/model readiness before creating a thread. A disabled or
-  // incomplete configuration must not leave an unreachable user-only chat.
-  const aiConfig = await getOrgAiConfig(authz.user.orgId);
-  if (!getModel(aiConfig, "smart")) {
-    return conversationResponse("AI is not configured.", 503, conversationId);
-  }
-
-  const org = (await db.execute<{ base_currency: string }>(
-    sql`select base_currency from orgs where id = ${authz.user.orgId}`, "objects",
-  ));
-
-  const today = await businessToday(authz.user.orgId);
-  const features = await resolvedFeatureState(authz.user.orgId);
-  // Static catalog snapshot for the pure b01 module router (payload routing
-  // only — gates stay in the registry above).
-  const moduleByTool = new Map<string, string>([
-    ...ASSISTANT_TOOLS.map((t) => [t.name, moduleOfTool(t.name, t.feature)] as const),
-    ...APPLICATION_TOOLS.map((t) => [t.name, moduleOfTool(t.name, t.featureKey)] as const),
-  ]);
-  const resolveModule = (toolName: string): string => moduleByTool.get(toolName) ?? "core";
-
-  if (!conversationId) {
-    conversationId = await createConversation(authz, SCOPE, prompt.slice(0, 60));
-  }
-  // Rolling memory is per-conversation and owner-scoped; a fresh thread
-  // simply has none yet.
-  const storedSummary = await readConversationSummary(authz, conversationId);
-  let userPersisted = false;
-  // Set when the owned run row exists: the catch below must not duplicate a
-  // failure the row already carries. Declared outside try: catch cannot see
-  // block-scoped try bindings.
-  let runRowId: string | null = null;
-  try {
-    // Persist first so a dropped connection cannot lose a turn that actually started.
-    await appendMessage(authz, { conversationId, role: "user", content: prompt });
-    userPersisted = true;
-
-    // Fetch exactly the recent model window; never materialize the full transcript.
-    const history = await recentMessages(authz, conversationId);
-    const uiMessages = history.map((message) => ({
-      role: message.role,
-      parts:
-        message.data &&
-        Array.isArray((message.data as { parts?: unknown }).parts) &&
-        (message.data as { parts: unknown[] }).parts.length > 0
-          ? ((message.data as { parts: unknown }).parts as UIMessage["parts"])
-          : ([{ type: "text", text: message.content }] as UIMessage["parts"]),
-    }));
-    // The persisted parts are plain JSON; view them through the history
-    // helpers (single cast at the boundary — the SDK revalidates on send).
-    const historyView = uiMessages as unknown as HistoryMessage[];
-
-    // Entity pins fold over the FULL window (budgeting below only shrinks
-    // the model copy); the step budget sees the prompt plus prior tools.
-    let windowPins: EntityPins = {};
-    for (const message of historyView) {
-      windowPins = foldPartsIntoPins(windowPins, message.parts);
-    }
-    const priorNames = collectPriorToolNames(historyView);
-    // A migration turn reads the plan before acting, so it keeps the larger budget.
-    const maxSteps = migrationMode
-      ? Math.max(MIGRATION_STEP_BUDGET, resolveStepBudget(prompt, priorNames, resolveModule))
-      : resolveStepBudget(prompt, priorNames, resolveModule);
-
-    const findingContext = findingId ? await loadFindingContext(authz, findingId) : null;
-    const migrationSection = migrationMode
-      ? migrationModeSection(await loadMigrationJourney(authz.user.orgId).catch((error: unknown) => {
-        console.warn("[assistant/chat] migration snapshot unavailable", error);
-        return null;
-      }))
-      : null;
-    const baseSystem = assistantSystemPrompt({
-      orgName: aiConfig?.org?.name ?? null,
-      baseCurrency: org[0]?.base_currency ?? null,
-      userName: authz.user.name,
-      today,
-      fiscal: await orgFiscalContext(today, authz.user.orgId),
-      canWrite: can(authz, "assistant.write"),
-      features,
-      maxSteps,
-      memorySections: [
-        buildSummarySection(storedSummary),
-        renderPinsSection(windowPins, hasAnaphor(prompt)),
-        findingContext?.section ?? "",
-      ],
-    });
-    const system = migrationSection ? `${baseSystem}\n\n${migrationSection}` : baseSystem;
-
-    // Older turns' tool parts ride as compact summaries; the UI keeps full parts.
-    const budgeted = applyHistoryBudget(historyView);
-
-    // Two-stage catalog: the full gated catalog stays registered (instant,
-    // typed activation) while each step only SENDS core ∪ pre-routed ∪
-    // activated tools. Model-facing outputs are compacted; the streamed and
-    // persisted parts keep the full results.
-    const turn = await buildChatTurn(authz, features, prompt, priorNames, migrationMode ? MIGRATION_WORKSPACE_MODULES : []);
-    const tools = withModelCompaction(turn.tools);
-
-    let modelMessages;
-    try {
-      modelMessages = await convertToModelMessages(budgeted as unknown as UIMessage[], {
-        tools,
-        ignoreIncompleteToolCalls: true,
-      });
-    } catch {
-      // Fall back to plain text if an older persisted tool part is no longer convertible.
-      modelMessages = await convertToModelMessages(
-        history.map((message) => ({
-          role: message.role,
-          parts: [{ type: "text", text: message.content }],
-        })),
-        { ignoreIncompleteToolCalls: true },
-      );
-    }
-
-    // Server-owned run: the turn executes under a run-owned signal and its
-    // parts persist to the run row as they stream. A dropped client
-    // connection only ends the client's branch below — never the run.
-    const store = createDbOwnedRunStore(authz);
-    let resolveCompletion!: (result: AgentTurnResult & { content: string }) => void;
-    const completion = new Promise<AgentTurnResult & { content: string }>((resolve) => {
-      resolveCompletion = resolve;
-    });
-    const ownedTurn = await streamOwnedChatTurn({
-      store,
-      conversationId: conversationId!,
-      userText: prompt,
-      onRunStarted: (runId) => {
-        runRowId = runId;
-      },
-      startTurn: async ({ signal, onChunk, onStreamReady }): Promise<OwnedRunOutcome> => {
-        const res = runAgentTurn(aiConfig, {
-          messages: modelMessages,
-          system,
-          tools,
-          activeTools: turn.activeTools,
-          maxSteps,
-          abortSignal: signal,
-          onComplete: async ({ parts, aborted, finishReason, usage }) => {
-            const text = parts
-              .filter((p): p is { type: "text"; text: string } => p.type === "text")
-              .map((p) => p.text)
-              .join("\n")
-              .trim();
-            const fallback = aborted
-              ? "Response stopped."
-              : finishReason === "error"
-                ? TURN_FAILURE_MESSAGE
-                : NO_ANSWER_MESSAGE;
-            resolveCompletion({ parts, aborted, finishReason, usage, content: text || fallback });
-          },
-        });
-        if (!res.body) throw new Error("assistant turn produced no stream");
-        const [toClient, toStore] = res.body.tee();
-        // Surface the (possibly new) conversation id to the client, plus the
-        // run id the Stop button targets explicitly.
-        const headers = new Headers(res.headers);
-        headers.set("x-conversation-id", conversationId);
-        if (runRowId) headers.set("x-run-id", runRowId);
-        onStreamReady(toClient, { status: res.status, headers });
-        const assembly = assembleStoreBranch(toStore, onChunk);
-        const completed = await completion;
-        await assembly;
-        const persistedParts = completed.parts.length
-          ? completed.parts
-          : completed.content
-            ? ([{ type: "text", text: completed.content }] as UIMessage["parts"])
-            : [];
-        // Fire-and-forget AFTER the stream closes: the answer finishes for
-        // the user the instant the last text chunk flushes — the composer
-        // never waits for the title round-trip (bounded tokens + hard
-        // timeout inside scheduleAutoTitle). The client's end-of-turn
-        // refresh, plus one delayed refresh, picks the title up. Scheduled
-        // BEFORE the summary block below, whose early return must not skip it.
-        if (!completed.aborted && completed.finishReason !== "error") {
-          scheduleAutoTitle({
-            authz,
-            conversationId: conversationId!,
-            prompt,
-            assistantContent: completed.content,
-            model: getModel(aiConfig, "fast"),
-          });
-        }
-        // Best-effort rolling summary: refresh every K turns, but never fail
-        // a completed turn for memory.
-        try {
-          const turns = await countConversationAssistantTurns(authz, conversationId!);
-          if (shouldRefreshSummary(turns, storedSummary)) {
-            try {
-              const model = getModel(aiConfig, "fast");
-              if (model) {
-                const transcript = [
-                  ...history.map((message) => `${message.role}: ${message.content}`),
-                  `user: ${prompt}`,
-                  `assistant: ${completed.content}`,
-                ]
-                  .join("\n")
-                  .slice(-12_000);
-                const generated = await generateText({
-                  model,
-                  system: "You summarise accounting-assistant conversations for continuity.",
-                  prompt: buildSummaryPrompt(transcript, storedSummary),
-                  temperature: 0.2,
-                });
-                const parsed = parseSummaryModelOutput(generated.text);
-                const turnPins = foldPartsIntoPins(
-                  windowPins,
-                  persistedParts as unknown as HistoryPart[],
-                );
-                await writeConversationSummary(authz, conversationId!, {
-                  text: parsed.text || completed.content.slice(0, 1_000),
-                  entities: mergeResolvedEntities(storedSummary?.entities ?? [], [
-                    ...parsed.entities,
-                    ...collectPinnedEntities(turnPins),
-                  ]),
-                  turnsCovered: turns,
-                });
-              }
-            } catch (summaryError) {
-              console.warn("[assistant/chat] summary refresh failed", summaryError);
-            }
-          }
-        } catch (countError) {
-          console.warn("[assistant/chat] summary turn count failed", countError);
-        }
-        return {
-          status: completed.aborted
-            ? "stopped"
-            : completed.finishReason === "error"
-              ? "failed"
-              : "complete",
-          parts: persistedParts,
-          content: completed.content,
-          usage: completed.usage,
-          finishReason: completed.finishReason,
-        };
-      },
-    });
-    // The client branch is the only thing tied to this request: when the
-    // client goes away, free the tee buffer. The run continues via its row.
-    req.signal.addEventListener("abort", () => {
-      ownedTurn.response.body?.cancel().catch(() => {});
-    });
-    // Completion persistence (finishRun) floats past the response: it is
-    // already fail-safe inside the run tracker; log here, never throw.
-    ownedTurn.done.catch((doneError: unknown) => console.error("[assistant/chat] owned run failed", doneError));
-    return ownedTurn.response;
-  } catch (err) {
-    // A created run row already carries its own terminal state — only persist
-    // a failure message when the turn never started one.
-    if (userPersisted && !runRowId) {
-      try {
-        await appendMessage(authz, {
-          conversationId,
-          role: "assistant",
-          content: TURN_FAILURE_MESSAGE,
-          data: {
-            v: 1,
-            kind: "agent-turn",
-            status: "failed",
-            finishReason: "error",
-            aborted: false,
-            parts: [{ type: "text", text: TURN_FAILURE_MESSAGE }],
-          },
-        });
-      } catch (persistError) {
-        console.error("[assistant/chat] failed to persist terminal error state", persistError);
+    // Resolve / create the conversation. Only the OWNER may send a turn.
+    let conversationId = input.conversationId ?? null;
+    if (conversationId) {
+      if (!isUuid(conversationId)) return new Response("Bad request", { status: 400 });
+      if (!(await ownsConversation(authz, conversationId, SCOPE))) {
+        return new Response("Forbidden", { status: 403 });
       }
     }
-    if (err instanceof AIDisabledError) {
+
+    // Resolve provider/model readiness before creating a thread. A disabled or
+    // incomplete configuration must not leave an unreachable user-only chat.
+    const aiConfig = await getOrgAiConfig(authz.user.orgId);
+    if (!getModel(aiConfig, "smart")) {
       return conversationResponse("AI is not configured.", 503, conversationId);
     }
-    console.error("[assistant/chat] failed", err);
-    return conversationResponse("Assistant request failed.", 500, conversationId);
-  }
+
+    const org = await db.execute<{ base_currency: string }>(
+      sql`select base_currency from orgs where id = ${authz.user.orgId}`,
+      "objects",
+    );
+
+    const today = await businessToday(authz.user.orgId);
+    const features = await resolvedFeatureState(authz.user.orgId);
+    // Static catalog snapshot for the pure b01 module router (payload routing
+    // only — gates stay in the registry above).
+    const moduleByTool = new Map<string, string>([
+      ...ASSISTANT_TOOLS.map((t) => [t.name, moduleOfTool(t.name, t.feature)] as const),
+      ...APPLICATION_TOOLS.map((t) => [t.name, moduleOfTool(t.name, t.featureKey)] as const),
+    ]);
+    const resolveModule = (toolName: string): string => moduleByTool.get(toolName) ?? "core";
+
+    if (!conversationId) {
+      conversationId = await createConversation(authz, SCOPE, prompt.slice(0, 60));
+    }
+    // Rolling memory is per-conversation and owner-scoped; a fresh thread
+    // simply has none yet.
+    const storedSummary = await readConversationSummary(authz, conversationId);
+    let userPersisted = false;
+    // Set when the owned run row exists: the catch below must not duplicate a
+    // failure the row already carries. Declared outside try: catch cannot see
+    // block-scoped try bindings.
+    let runRowId: string | null = null;
+    try {
+      // Persist first so a dropped connection cannot lose a turn that actually started.
+      await appendMessage(authz, { conversationId, role: "user", content: prompt });
+      userPersisted = true;
+
+      // Fetch exactly the recent model window; never materialize the full transcript.
+      const history = await recentMessages(authz, conversationId);
+      const uiMessages = history.map((message) => ({
+        role: message.role,
+        parts:
+          message.data &&
+          Array.isArray((message.data as { parts?: unknown }).parts) &&
+          (message.data as { parts: unknown[] }).parts.length > 0
+            ? ((message.data as { parts: unknown }).parts as UIMessage["parts"])
+            : ([{ type: "text", text: message.content }] as UIMessage["parts"]),
+      }));
+      // The persisted parts are plain JSON; view them through the history
+      // helpers (single cast at the boundary — the SDK revalidates on send).
+      const historyView = uiMessages as unknown as HistoryMessage[];
+
+      // Entity pins fold over the FULL window (budgeting below only shrinks
+      // the model copy); the step budget sees the prompt plus prior tools.
+      let windowPins: EntityPins = {};
+      for (const message of historyView) {
+        windowPins = foldPartsIntoPins(windowPins, message.parts);
+      }
+      const priorNames = collectPriorToolNames(historyView);
+      // A migration turn reads the plan before acting, so it keeps the larger budget.
+      const maxSteps = migrationMode
+        ? Math.max(MIGRATION_STEP_BUDGET, resolveStepBudget(prompt, priorNames, resolveModule))
+        : resolveStepBudget(prompt, priorNames, resolveModule);
+
+      const findingContext = findingId ? await loadFindingContext(authz, findingId) : null;
+      const migrationSection = migrationMode
+        ? migrationModeSection(
+            await loadMigrationJourney(authz.user.orgId).catch((error: unknown) => {
+              console.warn("[assistant/chat] migration snapshot unavailable", error);
+              return null;
+            }),
+          )
+        : null;
+      const baseSystem = assistantSystemPrompt({
+        orgName: aiConfig?.org?.name ?? null,
+        baseCurrency: org[0]?.base_currency ?? null,
+        userName: authz.user.name,
+        today,
+        fiscal: await orgFiscalContext(today, authz.user.orgId),
+        canWrite: can(authz, "assistant.write"),
+        features,
+        maxSteps,
+        memorySections: [
+          buildSummarySection(storedSummary),
+          renderPinsSection(windowPins, hasAnaphor(prompt)),
+          findingContext?.section ?? "",
+        ],
+      });
+      const system = migrationSection ? `${baseSystem}\n\n${migrationSection}` : baseSystem;
+
+      // Older turns' tool parts ride as compact summaries; the UI keeps full parts.
+      const budgeted = applyHistoryBudget(historyView);
+
+      // Two-stage catalog: the full gated catalog stays registered (instant,
+      // typed activation) while each step only SENDS core ∪ pre-routed ∪
+      // activated tools. Model-facing outputs are compacted; the streamed and
+      // persisted parts keep the full results.
+      const turn = await buildChatTurn(
+        authz,
+        features,
+        prompt,
+        priorNames,
+        migrationMode ? MIGRATION_WORKSPACE_MODULES : [],
+      );
+      const tools = withModelCompaction(turn.tools);
+
+      let modelMessages;
+      try {
+        modelMessages = await convertToModelMessages(budgeted as unknown as UIMessage[], {
+          tools,
+          ignoreIncompleteToolCalls: true,
+        });
+      } catch {
+        // Fall back to plain text if an older persisted tool part is no longer convertible.
+        modelMessages = await convertToModelMessages(
+          history.map((message) => ({
+            role: message.role,
+            parts: [{ type: "text", text: message.content }],
+          })),
+          { ignoreIncompleteToolCalls: true },
+        );
+      }
+
+      // Server-owned run: the turn executes under a run-owned signal and its
+      // parts persist to the run row as they stream. A dropped client
+      // connection only ends the client's branch below — never the run.
+      const store = createDbOwnedRunStore(authz);
+      let resolveCompletion!: (result: AgentTurnResult & { content: string }) => void;
+      const completion = new Promise<AgentTurnResult & { content: string }>((resolve) => {
+        resolveCompletion = resolve;
+      });
+      const ownedTurn = await streamOwnedChatTurn({
+        store,
+        conversationId: conversationId!,
+        userText: prompt,
+        onRunStarted: (runId) => {
+          runRowId = runId;
+        },
+        startTurn: async ({ signal, onChunk, onStreamReady }): Promise<OwnedRunOutcome> => {
+          const res = runAgentTurn(aiConfig, {
+            messages: modelMessages,
+            system,
+            tools,
+            activeTools: turn.activeTools,
+            maxSteps,
+            abortSignal: signal,
+            onComplete: async ({ parts, aborted, finishReason, usage }) => {
+              const text = parts
+                .filter((p): p is { type: "text"; text: string } => p.type === "text")
+                .map((p) => p.text)
+                .join("\n")
+                .trim();
+              const fallback = aborted
+                ? "Response stopped."
+                : finishReason === "error"
+                  ? TURN_FAILURE_MESSAGE
+                  : NO_ANSWER_MESSAGE;
+              resolveCompletion({ parts, aborted, finishReason, usage, content: text || fallback });
+            },
+          });
+          if (!res.body) throw new Error("assistant turn produced no stream");
+          const [toClient, toStore] = res.body.tee();
+          // Surface the (possibly new) conversation id to the client, plus the
+          // run id the Stop button targets explicitly.
+          const headers = new Headers(res.headers);
+          headers.set("x-conversation-id", conversationId);
+          if (runRowId) headers.set("x-run-id", runRowId);
+          onStreamReady(toClient, { status: res.status, headers });
+          const assembly = assembleStoreBranch(toStore, onChunk);
+          const completed = await completion;
+          await assembly;
+          const persistedParts = completed.parts.length
+            ? completed.parts
+            : completed.content
+              ? ([{ type: "text", text: completed.content }] as UIMessage["parts"])
+              : [];
+          // Fire-and-forget AFTER the stream closes: the answer finishes for
+          // the user the instant the last text chunk flushes — the composer
+          // never waits for the title round-trip (bounded tokens + hard
+          // timeout inside scheduleAutoTitle). The client's end-of-turn
+          // refresh, plus one delayed refresh, picks the title up. Scheduled
+          // BEFORE the summary block below, whose early return must not skip it.
+          if (!completed.aborted && completed.finishReason !== "error") {
+            scheduleAutoTitle({
+              authz,
+              conversationId: conversationId!,
+              prompt,
+              assistantContent: completed.content,
+              model: getModel(aiConfig, "fast"),
+            });
+          }
+          // Best-effort rolling summary: refresh every K turns, but never fail
+          // a completed turn for memory.
+          try {
+            const turns = await countConversationAssistantTurns(authz, conversationId!);
+            if (shouldRefreshSummary(turns, storedSummary)) {
+              try {
+                const model = getModel(aiConfig, "fast");
+                if (model) {
+                  const transcript = [
+                    ...history.map((message) => `${message.role}: ${message.content}`),
+                    `user: ${prompt}`,
+                    `assistant: ${completed.content}`,
+                  ]
+                    .join("\n")
+                    .slice(-12_000);
+                  const generated = await generateText({
+                    model,
+                    system: "You summarise accounting-assistant conversations for continuity.",
+                    prompt: buildSummaryPrompt(transcript, storedSummary),
+                    temperature: 0.2,
+                  });
+                  const parsed = parseSummaryModelOutput(generated.text);
+                  const turnPins = foldPartsIntoPins(
+                    windowPins,
+                    persistedParts as unknown as HistoryPart[],
+                  );
+                  await writeConversationSummary(authz, conversationId!, {
+                    text: parsed.text || completed.content.slice(0, 1_000),
+                    entities: mergeResolvedEntities(storedSummary?.entities ?? [], [
+                      ...parsed.entities,
+                      ...collectPinnedEntities(turnPins),
+                    ]),
+                    turnsCovered: turns,
+                  });
+                }
+              } catch (summaryError) {
+                console.warn("[assistant/chat] summary refresh failed", summaryError);
+              }
+            }
+          } catch (countError) {
+            console.warn("[assistant/chat] summary turn count failed", countError);
+          }
+          return {
+            status: completed.aborted
+              ? "stopped"
+              : completed.finishReason === "error"
+                ? "failed"
+                : "complete",
+            parts: persistedParts,
+            content: completed.content,
+            usage: completed.usage,
+            finishReason: completed.finishReason,
+          };
+        },
+      });
+      // The client branch is the only thing tied to this request: when the
+      // client goes away, free the tee buffer. The run continues via its row.
+      req.signal.addEventListener("abort", () => {
+        ownedTurn.response.body?.cancel().catch(() => {});
+      });
+      // Completion persistence (finishRun) floats past the response: it is
+      // already fail-safe inside the run tracker; log here, never throw.
+      ownedTurn.done.catch((doneError: unknown) =>
+        console.error("[assistant/chat] owned run failed", doneError),
+      );
+      return ownedTurn.response;
+    } catch (err) {
+      // A created run row already carries its own terminal state — only persist
+      // a failure message when the turn never started one.
+      if (userPersisted && !runRowId) {
+        try {
+          await appendMessage(authz, {
+            conversationId,
+            role: "assistant",
+            content: TURN_FAILURE_MESSAGE,
+            data: {
+              v: 1,
+              kind: "agent-turn",
+              status: "failed",
+              finishReason: "error",
+              aborted: false,
+              parts: [{ type: "text", text: TURN_FAILURE_MESSAGE }],
+            },
+          });
+        } catch (persistError) {
+          console.error("[assistant/chat] failed to persist terminal error state", persistError);
+        }
+      }
+      if (err instanceof AIDisabledError) {
+        return conversationResponse("AI is not configured.", 503, conversationId);
+      }
+      console.error("[assistant/chat] failed", err);
+      return conversationResponse("Assistant request failed.", 500, conversationId);
+    }
   },
 });

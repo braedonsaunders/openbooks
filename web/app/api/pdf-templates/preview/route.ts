@@ -1,34 +1,39 @@
 import type { Authz } from "@/lib/authz";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { rendererUnavailableResponse } from "@/lib/api/pdf-renderer";
-import { PdfTemplateValidationError, assertPrintablePage, compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
-import { can } from "../../../../lib/authz";
-import { unexpectedServerError } from "../../../../lib/api/unexpected";
-import { isDocKindEnabled } from "../../../../lib/documents.ts";
-import { pdfResponse } from "../../../../lib/export";
-import { PDF_RECORD_TYPE_BY_KEY, sampleValues } from "../../../../lib/pdf-templates/catalog";
-import { mergeAndPrintPdf } from "../../../../lib/pdf-templates/render";
-import { findSamplePdfRecordId, loadPdfRecordValues } from "../../../../lib/pdf-templates/values";
-import { starterTemplate } from "../../../../lib/pdf-templates/starters";
+import {
+  PdfTemplateValidationError,
+  assertPrintablePage,
+  compileTemplateHtml,
+  sanitizeTokenizedFragment,
+} from "@openbooks/pdf";
+import { can } from "@/lib/authz";
+import { unexpectedServerError } from "@/lib/api/unexpected";
+import { isDocKindEnabled } from "@/lib/documents.ts";
+import { pdfResponse } from "@/lib/export";
+import { PDF_RECORD_TYPE_BY_KEY, sampleValues } from "@/lib/pdf-templates/catalog";
+import { mergeAndPrintPdf } from "@/lib/pdf-templates/render";
+import { findSamplePdfRecordId, loadPdfRecordValues } from "@/lib/pdf-templates/values";
+import { starterTemplate } from "@/lib/pdf-templates/starters";
 import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
-const bodyObjectSchema = z.object({
-  recordType: z.string().min(1),
-  sourceHtml: z.string().optional(),
-  headerHtml: z.string().nullable().optional(),
-  footerHtml: z.string().nullable().optional(),
-  paperSize: z.enum(['letter', 'a4', 'legal']).optional(),
-  orientation: z.enum(["landscape", "portrait"]).optional(),
-  marginMm: z.number().optional(),
-  calibration: z.boolean().optional(),
-}).strict();
+const bodyObjectSchema = z
+  .object({
+    recordType: z.string().min(1),
+    sourceHtml: z.string().optional(),
+    headerHtml: z.string().nullable().optional(),
+    footerHtml: z.string().nullable().optional(),
+    paperSize: z.enum(["letter", "a4", "legal"]).optional(),
+    orientation: z.enum(["landscape", "portrait"]).optional(),
+    marginMm: z.number().optional(),
+    calibration: z.boolean().optional(),
+  })
+  .strict();
 
 /**
  * POST /api/pdf-templates/preview — render draft (unsaved) template HTML as an
@@ -43,17 +48,15 @@ const bodyObjectSchema = z.object({
  * them. A designer who cannot read any real record still previews against
  * the catalog's synthetic sample values.
  */
-async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
-  const gate = injectedGate as Authz;
-
+async function legacyPOST(gate: Authz, body: z.output<typeof bodyObjectSchema>) {
   const { user } = gate;
-  const parsedBody = await parseJsonBody(req, bodyObjectSchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
   const meta = body.recordType ? PDF_RECORD_TYPE_BY_KEY[body.recordType] : undefined;
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
   if (!can(gate, meta.readPermission)) {
-    return NextResponse.json({ error: `missing permission: ${meta.readPermission}` }, { status: 403 });
+    return NextResponse.json(
+      { error: `missing permission: ${meta.readPermission}` },
+      { status: 403 },
+    );
   }
   if (!(await isDocKindEnabled(user.orgId, meta.docKind ?? meta.key))) {
     return notFound("record");
@@ -70,7 +73,7 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
     return apiErrorResponse(e, { safeStatus: 400 });
   }
 
-  const scope = gate.allowedSubsidiaryIds ?? null
+  const scope = gate.allowedSubsidiaryIds ?? null;
   const sampleId = await findSamplePdfRecordId(meta.key, user.orgId, scope);
   // The scope is enforced again INSIDE the load: the sample was chosen in
   // scope, but a record moved to a hidden subsidiary between the two awaits
@@ -78,21 +81,47 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
   // never render a legal entity hidden from the designer.
   const real = sampleId ? await loadPdfRecordValues(meta.key, user.orgId, sampleId, scope) : null;
   const sourceValues = real?.values ?? sampleValues(meta);
-  const values = meta.key === 'payroll_cheque' ? { ...sourceValues, cheque_number: '000000', cheque_bank_profile:'', bank_name:'Sample bank',bank_branch_address:'Sample branch',bank_account:'0000000',micr_serial:'⑈000000⑈',micr_transit:'⑆00000⑉000⑆',micr_account:'⑈0000000' } : sourceValues;
-  if (body.calibration && meta.key !== 'payroll_cheque') return NextResponse.json({ error: 'Calibration is available for cheque stock.' }, { status: 400 });
+  const values =
+    meta.key === "payroll_cheque"
+      ? {
+          ...sourceValues,
+          cheque_number: "000000",
+          cheque_bank_profile: "",
+          bank_name: "Sample bank",
+          bank_branch_address: "Sample branch",
+          bank_account: "0000000",
+          micr_serial: "⑈000000⑈",
+          micr_transit: "⑆00000⑉000⑆",
+          micr_account: "⑈0000000",
+        }
+      : sourceValues;
+  if (body.calibration && meta.key !== "payroll_cheque")
+    return NextResponse.json(
+      { error: "Calibration is available for cheque stock." },
+      { status: 400 },
+    );
 
   // Preview geometry is refused like saved geometry: a misspelled size must
   // not preview as Letter while the saved template would print the same lie.
-  const starter = starterTemplate(meta)
+  const starter = starterTemplate(meta);
   const paperSizeInput = body.paperSize ?? starter.paperSize ?? "letter";
   const marginMmInput = body.marginMm ?? starter.marginMm ?? 14;
   try {
-    assertPrintablePage(paperSizeInput, marginMmInput, { allowZeroMargin: meta.key === 'payroll_cheque' });
+    assertPrintablePage(paperSizeInput, marginMmInput, {
+      allowZeroMargin: meta.key === "payroll_cheque",
+    });
   } catch (e) {
     return apiErrorResponse(e, { safeStatus: 400 });
   }
-  if (body.orientation !== undefined && body.orientation !== "landscape" && body.orientation !== "portrait") {
-    return NextResponse.json({ error: `Unknown orientation "${body.orientation}" — use portrait or landscape.` }, { status: 400 });
+  if (
+    body.orientation !== undefined &&
+    body.orientation !== "landscape" &&
+    body.orientation !== "portrait"
+  ) {
+    return NextResponse.json(
+      { error: `Unknown orientation "${body.orientation}" — use portrait or landscape.` },
+      { status: 400 },
+    );
   }
 
   try {
@@ -101,31 +130,33 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
         compiledHtml,
         // assertPrintablePage narrows paperSizeInput to the supported set.
         paperSize: paperSizeInput,
-        orientation: body.orientation === "landscape"
-          ? "landscape"
-          : body.orientation === "portrait"
-            ? "portrait"
-            : starter.orientation ?? "portrait",
+        orientation:
+          body.orientation === "landscape"
+            ? "landscape"
+            : body.orientation === "portrait"
+              ? "portrait"
+              : (starter.orientation ?? "portrait"),
         marginMm: marginMmInput,
         headerHtml: header || null,
         footerHtml: footer || null,
       },
       values,
-      { specimen: meta.key === 'payroll_cheque', calibration: body.calibration },
+      { specimen: meta.key === "payroll_cheque", calibration: body.calibration },
     );
     // Download filename uses the stable record key, never a localized label:
     // Content-Disposition filenames must stay ASCII and stable across locales.
     return pdfResponse(pdf, `${meta.key} preview`);
   } catch (e) {
-    if (e instanceof PdfTemplateValidationError) return apiErrorResponse(e, {safeStatus:400});
+    if (e instanceof PdfTemplateValidationError) return apiErrorResponse(e, { safeStatus: 400 });
     const rendererRefusal = rendererUnavailableResponse(e);
     if (rendererRefusal) return rendererRefusal;
-    return unexpectedServerError('pdf-templates/preview', e);
+    return unexpectedServerError("pdf-templates/preview", e);
   }
 }
 
 export const POST = defineRoute({
-  permission: "admin.customization.manage", feature: { none: "This route is governed by its permission and service authorization." },
-
-  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+  permission: "admin.customization.manage",
+  feature: { none: "This route is governed by its permission and service authorization." },
+  body: bodyObjectSchema,
+  handler: ({ body, authz }) => legacyPOST(authz, body),
 });

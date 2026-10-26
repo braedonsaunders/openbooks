@@ -1,45 +1,58 @@
 import type { Authz } from "@/lib/authz";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { assertPrintablePage, compileTemplateHtml, PDF_MARGIN_MM_MAX, PDF_MARGIN_MM_MIN, sanitizeTokenizedFragment } from "@openbooks/pdf";
-import { describeDbError, pgErrorCode } from "../../../lib/setup/coerce";
-import { isDocKindEnabled } from "../../../lib/documents.ts";
-import { PDF_RECORD_TYPE_BY_KEY } from "../../../lib/pdf-templates/catalog";
-import { prettifyTemplateHtml } from "../../../lib/pdf-templates/prettify";
-import { starterTemplate } from "../../../lib/pdf-templates/starters";
-import { listVisiblePdfTemplates, type PdfTemplateRow } from "../../../lib/pdf-templates/store";
+import {
+  assertPrintablePage,
+  compileTemplateHtml,
+  PDF_MARGIN_MM_MAX,
+  PDF_MARGIN_MM_MIN,
+  sanitizeTokenizedFragment,
+} from "@openbooks/pdf";
+import { describeDbError, pgErrorCode } from "@/lib/setup/coerce";
+import { isDocKindEnabled } from "@/lib/documents.ts";
+import { PDF_RECORD_TYPE_BY_KEY } from "@/lib/pdf-templates/catalog";
+import { prettifyTemplateHtml } from "@/lib/pdf-templates/prettify";
+import { starterTemplate } from "@/lib/pdf-templates/starters";
+import { listVisiblePdfTemplates, type PdfTemplateRow } from "@/lib/pdf-templates/store";
 import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
-const bodyObjectSchema = z.object({
-  recordType: z.string().min(1),
-  name: z.string().trim().min(1),
-  description: z.string().nullable().optional(),
-  sourceHtml: z.string().optional(),
-  headerHtml: z.string().nullable().optional(),
-  footerHtml: z.string().nullable().optional(),
-  paperSize: z.enum(['letter', 'a4', 'legal']).optional(),
-  orientation: z.enum(["landscape", "portrait"]).optional(),
-  marginMm: z.number().optional(),
-  isDefault: z.boolean().optional(),
-}).strict();
+const bodyObjectSchema = z
+  .object({
+    recordType: z.string().min(1),
+    name: z.string().trim().min(1),
+    description: z.string().nullable().optional(),
+    sourceHtml: z.string().optional(),
+    headerHtml: z.string().nullable().optional(),
+    footerHtml: z.string().nullable().optional(),
+    paperSize: z.enum(["letter", "a4", "legal"]).optional(),
+    orientation: z.enum(["landscape", "portrait"]).optional(),
+    marginMm: z.number().optional(),
+    isDefault: z.boolean().optional(),
+  })
+  .strict();
 
 /** GET /api/pdf-templates?recordType=customer_invoice — list org templates. */
-async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+async function legacyGET(
+  req: Request,
+  ctx: { params: Promise<unknown> },
+  injectedGate?: Authz | null,
+) {
   const gate = injectedGate as Authz;
 
   const { user } = gate;
   const recordType = new URL(req.url).searchParams.get("recordType") ?? undefined;
   if (recordType && !PDF_RECORD_TYPE_BY_KEY[recordType])
     return NextResponse.json({ error: "unknown record type" }, { status: 400 });
-  if (recordType && !(await isDocKindEnabled(user.orgId, PDF_RECORD_TYPE_BY_KEY[recordType]!.docKind ?? recordType))) {
+  if (
+    recordType &&
+    !(await isDocKindEnabled(user.orgId, PDF_RECORD_TYPE_BY_KEY[recordType]!.docKind ?? recordType))
+  ) {
     return notFound("record");
   }
   const rows = await listVisiblePdfTemplates(user.orgId, recordType);
@@ -65,22 +78,20 @@ async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, inject
 
 /** POST — create a template. Body: { recordType, name, description?, sourceHtml?, … }.
  *  Omitted sourceHtml seeds the record type's starter design. */
-async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
-  const gate = injectedGate as Authz;
-
+async function legacyPOST(gate: Authz, body: z.output<typeof bodyObjectSchema>) {
   const { user } = gate;
-  const parsedBody = await parseJsonBody(req, bodyObjectSchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
   const meta = body.recordType ? PDF_RECORD_TYPE_BY_KEY[body.recordType] : undefined;
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
   if (!(await isDocKindEnabled(user.orgId, meta.docKind ?? meta.key))) {
     return notFound("record");
   }
 
-  const org = (await db.execute<{ brand_primary: string | null }>(sql`
+  const org = await db.execute<{ brand_primary: string | null }>(
+    sql`
     select settings ->> 'brandPrimary' as brand_primary from orgs where id = ${user.orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const starter = starterTemplate(meta, org[0]?.brand_primary);
 
   const source = body.sourceHtml?.trim() ? body.sourceHtml : starter.sourceHtml;
@@ -104,24 +115,39 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
   const paperSizeInput = body.paperSize ?? starter.paperSize ?? "letter";
   const marginMmInput = body.marginMm ?? starter.marginMm ?? 14;
   try {
-    assertPrintablePage(paperSizeInput, marginMmInput, { allowZeroMargin: meta.key === 'payroll_cheque' });
+    assertPrintablePage(paperSizeInput, marginMmInput, {
+      allowZeroMargin: meta.key === "payroll_cheque",
+    });
   } catch (e) {
     return apiErrorResponse(e, { safeStatus: 400 });
   }
   if (!Number.isInteger(marginMmInput)) {
-    return NextResponse.json({ error: `Margin must be a whole number of millimetres from ${PDF_MARGIN_MM_MIN} to ${PDF_MARGIN_MM_MAX} — got ${marginMmInput}.` }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: `Margin must be a whole number of millimetres from ${PDF_MARGIN_MM_MIN} to ${PDF_MARGIN_MM_MAX} — got ${marginMmInput}.`,
+      },
+      { status: 400 },
+    );
   }
   // assertPrintablePage narrows paperSizeInput to the supported set.
   const paperSize = paperSizeInput;
   const marginMm = marginMmInput;
-  if (body.orientation !== undefined && body.orientation !== "landscape" && body.orientation !== "portrait") {
-    return NextResponse.json({ error: `Unknown orientation "${body.orientation}" — use portrait or landscape.` }, { status: 400 });
+  if (
+    body.orientation !== undefined &&
+    body.orientation !== "landscape" &&
+    body.orientation !== "portrait"
+  ) {
+    return NextResponse.json(
+      { error: `Unknown orientation "${body.orientation}" — use portrait or landscape.` },
+      { status: 400 },
+    );
   }
-  const orientation = body.orientation === "landscape"
-    ? "landscape"
-    : body.orientation === "portrait"
-      ? "portrait"
-      : starter.orientation ?? "portrait";
+  const orientation =
+    body.orientation === "landscape"
+      ? "landscape"
+      : body.orientation === "portrait"
+        ? "portrait"
+        : (starter.orientation ?? "portrait");
 
   try {
     const row = await db.transaction(async (tx) => {
@@ -132,12 +158,17 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
         // 500. The lock orders them; the index stays as the backstop, so a
         // 23505 here still means the name index (handled below).
         await tx.execute(sql`
-          select pg_advisory_xact_lock(hashtextextended(${'pdf-template-default:' + user.orgId + ':' + body.recordType}, 0))`);
+          select pg_advisory_xact_lock(hashtextextended(${"pdf-template-default:" + user.orgId + ":" + body.recordType}, 0))`);
         await tx.execute(sql`
           update pdf_templates set is_default = false, updated_at = now()
            where org_id = ${user.orgId} and record_type = ${body.recordType} and is_default`);
       }
-      const result = (await tx.execute<{ id: string; name: string; snapshot: Record<string, unknown> }>(sql`
+      const result = await tx.execute<{
+        id: string;
+        name: string;
+        snapshot: Record<string, unknown>;
+      }>(
+        sql`
         insert into pdf_templates (org_id, record_type, name, description, paper_size, orientation,
                                    margin_mm, header_html, footer_html, source_html, compiled_html,
                                    is_default, created_by, updated_by)
@@ -146,7 +177,9 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
                 ${prettySource}, ${compiled.compiledHtml}, ${body.isDefault === true},
                 ${user.id}, ${user.id})
         returning id, name, to_jsonb(pdf_templates) as snapshot
-      `, "objects"));
+      `,
+        "objects",
+      );
       const inserted = result[0]!;
       // Insert evidence follows the {after} convention: the created design's
       // full row, so the audit shows what was designed — not just its name.
@@ -162,19 +195,25 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
     // error in `cause`), so match the SQLSTATE — the wrapper message never
     // contains "unique", and must never reach the client.
     if (pgErrorCode(e) === "23505")
-      return NextResponse.json({ error: "A template with that name already exists" }, { status: 409 });
+      return NextResponse.json(
+        { error: "A template with that name already exists" },
+        { status: 409 },
+      );
     return NextResponse.json({ error: describeDbError(e) }, { status: 500 });
   }
 }
 
 export const GET = defineRoute({
-  permission: "admin.customization.manage", feature: { none: "This route is governed by its permission and service authorization." },
+  permission: "admin.customization.manage",
+  feature: { none: "This route is governed by its permission and service authorization." },
 
-  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+  handler: ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params) }, authz),
 });
 
 export const POST = defineRoute({
-  permission: "admin.customization.manage", feature: { none: "This route is governed by its permission and service authorization." },
-
-  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+  permission: "admin.customization.manage",
+  feature: { none: "This route is governed by its permission and service authorization." },
+  body: bodyObjectSchema,
+  handler: ({ body, authz }) => legacyPOST(authz, body),
 });
