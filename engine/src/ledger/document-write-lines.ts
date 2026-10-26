@@ -30,7 +30,7 @@ import type {
   DocumentEditInput,
   DocumentEditCurrent,
 } from "./document-input.ts";
-import type { EntryPlan } from "../allocations/entry.ts";
+import type { EntryPlan } from "../journal/entry-allocation-plan.ts";
 import {
   documentTaxProviderAddresses,
   orgBaseCurrency,

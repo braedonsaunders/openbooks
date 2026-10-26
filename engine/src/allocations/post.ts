@@ -20,6 +20,13 @@ import type {
   RuleInEffect,
   WeightedTarget,
 } from "./types.ts";
+import type {
+  ContributedLineWithSource,
+  PostContributionResult,
+  ReportOnlyDraft,
+} from "../journal/contributed-lines.ts";
+
+export type { ContributedLineWithSource, PostContributionResult, ReportOnlyDraft };
 
 export class PostAllocationError extends Error {
   constructor(message: string) {
@@ -81,25 +88,6 @@ export interface PostContributionDeps {
 
 export interface PostContributionOpts {
   postingDate: string;
-}
-
-/**
- * A contributed line that still remembers the kernel line it was built from.
- * posting.ts stamps journal ids after insert (lineage needs both the new line
- * id and the source kernel line's inserted id).
- */
-export interface ContributedLineWithSource extends ContributedLine {
-  sourceKernelIndex: number;
-}
-
-/** Lineage-only draft from a report_only rule (writes no journal line). */
-export interface ReportOnlyDraft extends LineageDraft {
-  sourceKernelIndex: number;
-}
-
-export interface PostContributionResult {
-  lines: ContributedLineWithSource[];
-  reportOnly: ReportOnlyDraft[];
 }
 
 // ---------------------------------------------------------------------------

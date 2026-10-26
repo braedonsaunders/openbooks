@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { persistGoodsTaxSnapshot } from "@openbooks/engine/tax";
-import type { EntryPlan } from "../allocations/entry.ts";
+import type { EntryPlan } from "../journal/entry-allocation-plan.ts";
 import { persistLineTaxComponents } from "./document-totals.ts";
 import { persistTaxQuote } from "../tax/rate-providers.ts";
 import { DocumentEditError } from "../records/document-edit-policy.ts";

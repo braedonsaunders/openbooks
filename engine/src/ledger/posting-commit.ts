@@ -23,7 +23,7 @@ import {
   BillingSourceIntegrityError,
 } from "../projects/billing-source-integrity.ts";
 
-import { type ContributedLineWithSource } from "../allocations/post.ts";
+import type { ContributedLineWithSource } from "../journal/contributed-lines.ts";
 import { parseMoney } from "../money/brands.ts";
 
 import {

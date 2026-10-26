@@ -4,7 +4,9 @@
  * posting-contributors.ts.
  */
 import type { SqlExecutor } from "../platform/db.ts";
-import type { ContributedLine } from "./contributed-lines.ts";
+import type { ContributedLine, PostContributionResult } from "./contributed-lines.ts";
+import type { EntryLineInput, EntryPlan } from "./entry-allocation-plan.ts";
+import type { KernelLine } from "./posting-contracts.ts";
 import { postingContributorRegistry } from "./posting-contributors.ts";
 
 export interface CustomGlLineRequest {
@@ -21,6 +23,37 @@ export interface CustomGlLineRequest {
 export interface AgencyLinePosting {
   accountId: string;
   vendorAmount: string;
+}
+
+/** A document save's lines, as entry-mode allocation plans their split. */
+export interface EntryAllocationRequest {
+  orgId: string;
+  documentId: string;
+  kind: string;
+  documentDate: string;
+  /** Header dimensions the save supplies; unset ones fall back to the stored header. */
+  header: {
+    departmentId?: string | null;
+    projectId?: string | null;
+    locationId?: string | null;
+    classId?: string | null;
+    subsidiaryId?: string | null;
+  };
+  lines: EntryLineInput[];
+  /** The stored line each submitted line re-saves, aligned with lines; null for a new line. */
+  lineIds: (string | null)[];
+  unsplitDistributionGroups?: string[];
+}
+
+/** The posting document as post-mode allocation rules read it. */
+export interface PostContributionDocument {
+  id: string;
+  orgId: string;
+  kind: string;
+  postingDate: string | null;
+  documentDate: string;
+  currency: string;
+  subsidiaryId: string | null;
 }
 
 export interface PostingLineContributors {
@@ -66,6 +99,24 @@ export interface PostingLineContributors {
       orgId: string,
       documentId: string,
     ): Promise<Map<string, string>>;
+  };
+  allocations: {
+    /** Entry-mode split of a document save's lines; a refused plan throws a DocumentEditError. */
+    planEntryAllocations(request: EntryAllocationRequest): Promise<EntryPlan>;
+    /**
+     * Post-mode rule contributions to the document's own entry; a refused
+     * rule set throws a PostingError. Migration replay and automation-suppressed
+     * postings contribute nothing.
+     */
+    collectPostContributions(
+      runner: SqlExecutor,
+      document: PostContributionDocument,
+      kernelLines: KernelLine[],
+      options: { migration?: boolean; suppressAutomation?: boolean; actorId: string | null },
+      postingDate: string,
+    ): Promise<PostContributionResult>;
+    /** Refuses a contributor whose lines do not balance per subsidiary and book. */
+    assertContributorBalance(lines: PostContributionResult["lines"]): void;
   };
 }
 

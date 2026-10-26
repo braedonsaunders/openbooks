@@ -18,9 +18,7 @@ import { PayrollError as PayrollRemittanceError } from "../money/payroll-error.t
 import { isZero, toUnits } from "../money/money.ts";
 import { parseMoney, sumMoney } from "../money/brands.ts";
 import { postingLineHooks } from "../journal/posting-line-contributors.ts";
-import type { ContributedLine } from "../allocations/types.ts";
-import { assertContributorBalance, collectPostContributions, PostAllocationError, type PostContributionResult } from "../allocations/post.ts";
-import { postDriverResolver } from "../allocations/report-runner.ts";
+import type { ContributedLine, PostContributionResult } from "../journal/contributed-lines.ts";
 import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
 import { consolidationSourceRefusal } from "../records/consolidation-source-policy.ts";
 import { runRecordFlows } from "../flows/run.ts";
@@ -582,33 +580,27 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   // applySubsidiaries / assertFinalKernelBalance / validateRequiredDimensions
   // unchanged. Migration replay and automation-suppressed runs never
   // contribute; a closed gate contributes nothing.
-  let postContrib: PostContributionResult = { lines: [], reportOnly: [] };
-  try {
-    postContrib = await collectPostContributions(
-      db,
-      {
-        id: effectiveDoc.id,
-        orgId: effectiveDoc.orgId,
-        kind: effectiveDoc.kind,
-        postingDate: effectiveDoc.postingDate,
-        documentDate: effectiveDoc.documentDate,
-        currency: effectiveDoc.currency,
-        subsidiaryId: effectiveDoc.subsidiaryId,
-      },
-      kernelLines,
-      {
-        migration: deps.migration,
-        suppressAutomation: options.suppressAutomation,
-        driverResolver: postDriverResolver,
-        actorId: options.audit?.actorId ?? null,
-      },
-      { postingDate: effectivePostingDate(effectiveDoc) },
-    );
-  } catch (error) {
-    if (error instanceof PostAllocationError) throw new PostingError(error.message);
-    throw error;
-  }
-  assertContributorBalance(postContrib.lines);
+  const allocations = postingLineHooks.require("allocations");
+  const postContrib: PostContributionResult = await allocations.collectPostContributions(
+    db,
+    {
+      id: effectiveDoc.id,
+      orgId: effectiveDoc.orgId,
+      kind: effectiveDoc.kind,
+      postingDate: effectiveDoc.postingDate,
+      documentDate: effectiveDoc.documentDate,
+      currency: effectiveDoc.currency,
+      subsidiaryId: effectiveDoc.subsidiaryId,
+    },
+    kernelLines,
+    {
+      migration: deps.migration,
+      suppressAutomation: options.suppressAutomation,
+      actorId: options.audit?.actorId ?? null,
+    },
+    effectivePostingDate(effectiveDoc),
+  );
+  allocations.assertContributorBalance(postContrib.lines);
   const primaryContrib = postContrib.lines.filter((l) => l.bookId === undefined);
   // applySubsidiaries stamps in order and appends intercompany legs after,
   // so stamped[i] corresponds to unionLines[i] below for the contributor

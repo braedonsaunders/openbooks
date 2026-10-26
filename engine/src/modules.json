@@ -445,7 +445,6 @@
     "ledger": {
       "description": "The posting kernel and its orchestration: postDocument, posting effects, script journal writes, document void, delete and correction, billing provenance release.",
       "dependsOn": [
-        "allocations",
         "amortization",
         "contractor-withholding",
         "flows",

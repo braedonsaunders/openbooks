@@ -1,3 +1,4 @@
+import { registerAllocationsPostingContributors } from "../allocations/posting-contributors.ts";
 import { registerAssetsPostingContributors } from "../assets/posting-contributors.ts";
 import { registerCompliancePostingContributors } from "../compliance/posting-contributors.ts";
 import { registerCrmPostingContributors } from "../crm/posting-contributors.ts";
@@ -17,6 +18,7 @@ import { registerWebhooksPostingContributors } from "../webhooks/posting-contrib
  * at every process start; the scratch-organization fixture calls it for tests.
  */
 export function installPostingContributors(): void {
+  registerAllocationsPostingContributors();
   registerAssetsPostingContributors();
   registerCompliancePostingContributors();
   registerCrmPostingContributors();
