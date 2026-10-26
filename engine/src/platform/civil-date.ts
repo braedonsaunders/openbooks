@@ -92,7 +92,15 @@ export function civilDayIndex(iso: string): number {
   const year = Number(iso.slice(0, 4));
   const month = Number(iso.slice(5, 7));
   const day = Number(iso.slice(8, 10));
-  return Math.round(utcDateFromParts(year, month - 1, day).getTime() / 86_400_000);
+  // Proleptic Gregorian days from civil date, counted in 400-year eras from
+  // March so the leap day ends each year; 719468 shifts 0000-03-01 to the
+  // Unix epoch. Integer arithmetic only, with no Date per call.
+  const y = month <= 2 ? year - 1 : year;
+  const era = Math.floor(y / 400);
+  const yearOfEra = y - era * 400;
+  const dayOfYear = Math.floor((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5) + day - 1;
+  const dayOfEra = yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
+  return era * 146097 + dayOfEra - 719468;
 }
 
 /**

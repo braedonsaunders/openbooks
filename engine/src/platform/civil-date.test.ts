@@ -6,6 +6,7 @@ import {
   addMonthsStart,
   calendarDaysBetween,
   civilDateFromParts,
+  addCalendarDays,
   civilDayIndex,
   daysInCivilMonth,
   endOfMonth,
@@ -147,4 +148,19 @@ test("month steps clamp to the target month's end and walk back across years", (
   assert.equal(isIsoCalendarDate("2024-02-29"), true);
   assert.equal(isIsoCalendarDate("2025-02-29"), false);
   assert.equal(isIsoCalendarDate("0000-01-01"), false);
+});
+
+test("civilDayIndex counts every calendar day consecutively and matches the platform calendar", () => {
+  const MS_DAY = 86_400_000;
+  // Walk every day of several leap cycles and the calendar's ends.
+  for (const [from, to] of [["0001-01-01", "0005-12-31"], ["1896-01-01", "1904-12-31"], ["1968-06-01", "2032-12-31"], ["2096-01-01", "2104-12-31"], ["9996-01-01", "9999-12-31"]] as [string, string][]) {
+    let expected = Math.round(utcDateFromParts(Number(from.slice(0, 4)), Number(from.slice(5, 7)) - 1, Number(from.slice(8, 10))).getTime() / MS_DAY);
+    for (let iso: string = from; ; iso = addCalendarDays(iso, 1)) {
+      assert.equal(civilDayIndex(iso), expected, iso);
+      if (iso === to) break;
+      expected += 1;
+    }
+  }
+  assert.equal(civilDayIndex("1970-01-01"), 0);
+  assert.throws(() => civilDayIndex("2023-02-29"), RangeError);
 });
