@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { closeSurvey, getSurvey, openSurvey } from "@openbooks/engine/hrm/surveys/surveys";
 import { deliverSurveyInvitations } from "@/lib/hrm/document-delivery";
@@ -34,7 +33,11 @@ export const POST = defineRoute({
   permission: "hrm.surveys.manage",
   feature: "hrmSurveys",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz: gate, params }) => {
+  body: ({ request }) => {
+    const action = new URL(request.url).searchParams.get("action") ?? "open";
+    return action === "open" ? openSurveyBody : undefined;
+  },
+  handler: async ({ request: req, authz: gate, params, body }) => {
     const searchParams = new URL(req.url).searchParams;
     const action = searchParams.get("action") ?? "open";
     try {
@@ -50,15 +53,11 @@ export const POST = defineRoute({
       if (action !== "open") {
         return NextResponse.json({ error: "action must be open or close" }, { status: 400 });
       }
-      // Close sends no party list. Only open reads this schema, so it cannot
-      // sit on the factory or a close with an empty body would be refused.
-      const parsedBody = await parseJsonBody(req, openSurveyBody);
-      if (!parsedBody.ok) return parsedBody.response;
       const { survey, deliveries } = await openSurvey({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         surveyId: id,
-        partyIds: parsedBody.data.partyIds,
+        partyIds: body.partyIds,
       });
       const results = await deliverSurveyInvitations({
         orgId: gate.user.orgId,
