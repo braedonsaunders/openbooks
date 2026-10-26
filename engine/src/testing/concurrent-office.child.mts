@@ -17,12 +17,15 @@ import { runDueRecurringSchedules } from "../billing/recurring.ts";
 import { runDunningForOrg } from "../receivables/dunning.ts";
 import { processScheduledReportRun } from "../delivery/report-delivery.ts";
 import { refreshSandbox } from "../sandbox/lifecycle.ts";
+import { installEngineSeams } from "../composition/install.ts";
 
 const [mode, orgId, arg] = process.argv.slice(2);
 if (!mode || !orgId || !arg) {
   console.error("usage: concurrent-office.child.mts <recurring|dunning|report|sandbox-refresh> <orgId> <asOf|runId|sandboxId>");
   process.exit(2);
 }
+// Each replica boots like a worker process: posting resolves the installed domain hooks.
+installEngineSeams();
 
 try {
   if (mode === "recurring") {
