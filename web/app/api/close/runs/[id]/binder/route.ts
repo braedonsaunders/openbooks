@@ -1,37 +1,21 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
+import type { Authz } from "@/lib/authz";
 import { guardCloseScope } from "@/lib/close-scope";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
-import { guardFeaturePermission } from "../../../../../../lib/feature-gates";
+import { readPublishedCloseBinder } from "@openbooks/engine/close/run-read";
 import { isUuid } from "../../../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
 /** Download the immutable, hash-addressed audit binder frozen at publication. */
-async function legacyGET(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params;
-  if (!isUuid(id))
-    return NextResponse.json({ error: "invalid run id" }, { status: 400 });
-  const gate = await guardFeaturePermission("close.read", "continuousClose");
-  if (gate instanceof NextResponse) return gate;
+async function getPublishedBinder(id: string, gate: Authz) {
+  if (!isUuid(id)) return NextResponse.json({ error: "invalid run id" }, { status: 400 });
   const scopeDenied = guardCloseScope(gate);
   if (scopeDenied) return scopeDenied;
-  const result = (await db.execute<{ binder_snapshot: unknown; binder_hash: string | null }>(sql`
-    select binder_snapshot, binder_hash
-      from close_runs
-     where id = ${id} and org_id = ${gate.user.orgId} and status = 'published'
-  `, "objects"));
-  const binder = result[0];
+  const binder = await readPublishedCloseBinder(gate.user.orgId, id);
   if (!binder?.binder_snapshot || !binder.binder_hash) {
-    return NextResponse.json(
-      { error: "published audit binder not found" },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: "published audit binder not found" }, { status: 404 });
   }
   return new Response(
     JSON.stringify(
@@ -59,6 +43,6 @@ async function legacyGET(
 export const GET = defineRoute({
   permission: "close.read",
   feature: "continuousClose",
-  params: z.object({ "id": z.string() }),
-  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+  params: z.object({ id: z.string() }),
+  handler: async ({ params, authz }) => getPublishedBinder(params.id, authz),
 });
