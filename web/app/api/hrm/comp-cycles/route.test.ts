@@ -131,7 +131,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmCompCyclesRouteNextResponse = NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmCompCyclesRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../../../lib/authz", "mock:authz"],
@@ -139,6 +141,7 @@ const mockUrls = new Map<string, string>([
   ["../../../../../lib/features", "mock:authz"],
   ["../../../../../../../lib/features", "mock:authz"],
   ["@/lib/authz", "mock:authz"],
+  ["@/lib/features", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
   ["@openbooks/engine/hrm/compensation/cycles", "mock:cycles"],
 ]);
@@ -195,169 +198,219 @@ function patchRequest(url: string, body: unknown): Request {
   });
 }
 
-  test("cycles 404 while Compensation is off and refuse by name while Payroll is off", async () => {
-    reset("hrm.compensation.read");
-    routeState.features = { hrmCompensation: false, payroll: true };
-    const request = () => new Request("http://openbooks.test/api/hrm/comp-cycles");
-    assert.equal((await collectionRoute!.GET(request())).status, 404);
-    routeState.features = { hrmCompensation: true, payroll: false };
-    const refused: Response = await collectionRoute!.GET(request());
-    assert.equal(refused.status, 422);
-    assert.match(((await refused.json()) as { error: string }).error, /Payroll is off/);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("cycles 404 while Compensation is off and refuse by name while Payroll is off", async () => {
+  reset("hrm.compensation.read");
+  routeState.features = { hrmCompensation: false, payroll: true };
+  const request = () => new Request("http://openbooks.test/api/hrm/comp-cycles");
+  assert.equal((await collectionRoute!.GET(request())).status, 404);
+  routeState.features = { hrmCompensation: true, payroll: false };
+  const refused: Response = await collectionRoute!.GET(request());
+  assert.equal(refused.status, 422);
+  assert.match(((await refused.json()) as { error: string }).error, /Payroll is off/);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("cycle creation validates the body before the service runs", async () => {
-    reset("hrm.compensation.manage");
-    assert.equal(
-      (await collectionRoute!.POST(postRequest("http://openbooks.test/api/hrm/comp-cycles", { name: "x" }))).status,
-      400,
-    );
-    assert.deepEqual(routeState.calls, []);
-    const created = await collectionRoute!.POST(
-      postRequest("http://openbooks.test/api/hrm/comp-cycles", {
-        name: "Merit 2025",
-        kind: "merit",
-        effectiveOn: "2025-04-01",
-        currency: "CAD",
-        guidelineKind: "matrix",
-        guideline: { rows: [] },
-      }),
-    );
-    assert.equal(created.status, 201);
-  });
+test("cycle creation validates the body before the service runs", async () => {
+  reset("hrm.compensation.manage");
+  assert.equal(
+    (
+      await collectionRoute!.POST(
+        postRequest("http://openbooks.test/api/hrm/comp-cycles", { name: "x" }),
+      )
+    ).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+  const created = await collectionRoute!.POST(
+    postRequest("http://openbooks.test/api/hrm/comp-cycles", {
+      name: "Merit 2025",
+      kind: "merit",
+      effectiveOn: "2025-04-01",
+      currency: "CAD",
+      guidelineKind: "matrix",
+      guideline: { rows: [] },
+    }),
+  );
+  assert.equal(created.status, 201);
+});
 
-  test("cycle moves map engine refusals by code", async () => {
-    reset("hrm.compensation.manage");
-    const params = { params: Promise.resolve({ id: CYCLE_ID }) };
-    routeState.serviceThrow = new CompensationError("BAD_STATE", "a draft cycle cannot push");
-    const mapped = await itemRoute!.POST(postRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}`, { action: "push" }), params as never);
-    assert.equal(mapped.status, 409);
-    routeState.serviceThrow = new CompensationError("REFUSED", "3 lines still await decision");
-    const refused: Response = await itemRoute!.POST(postRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}`, { action: "push" }), params as never);
-    assert.equal(refused.status, 422);
-    routeState.serviceThrow = null;
-  });
+test("cycle moves map engine refusals by code", async () => {
+  reset("hrm.compensation.manage");
+  const params = { params: Promise.resolve({ id: CYCLE_ID }) };
+  routeState.serviceThrow = new CompensationError("BAD_STATE", "a draft cycle cannot push");
+  const mapped = await itemRoute!.POST(
+    postRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}`, { action: "push" }),
+    params as never,
+  );
+  assert.equal(mapped.status, 409);
+  routeState.serviceThrow = new CompensationError("REFUSED", "3 lines still await decision");
+  const refused: Response = await itemRoute!.POST(
+    postRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}`, { action: "push" }),
+    params as never,
+  );
+  assert.equal(refused.status, 422);
+  routeState.serviceThrow = null;
+});
 
-  test("line proposals use the read grant and submission uses the manage grant", async () => {
-    reset("hrm.compensation.read");
-    const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
-    const proposed = await lineRoute!.PATCH(
-      patchRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`, {
+test("line proposals use the read grant and submission uses the manage grant", async () => {
+  reset("hrm.compensation.read");
+  const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
+  const proposed = await lineRoute!.PATCH(
+    patchRequest(
+      `http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`,
+      {
         proposedPct: "3",
-      }),
-      params as never,
-    );
-    assert.equal(proposed.status, 200);
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "proposeLine",
-        args: { orgId: "org-1", actorId: "user-1", lineId: LINE_ID, proposedPct: "3", proposedRate: null, reason: null },
       },
-    ]);
-    reset("hrm.compensation.manage");
-    const approved = await lineRoute!.PATCH(
-      patchRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=approve`, {}),
-      params as never,
-    );
-    assert.equal(approved.status, 200);
-    reset("hrm.compensation.approve");
-    const rejected = await lineRoute!.PATCH(
-      patchRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=reject`, {}),
-      params as never,
-    );
-    assert.equal(rejected.status, 400);
-  });
-
-  test("line propose refuses a malformed percent by name before the service runs", async () => {
-    // F3-33: the boundary names the field (PCT_MESSAGE) for a string, a
-    // negative, or an over-precise percent; the service never sees them.
-    reset("hrm.compensation.read");
-    const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
-    const url = `http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`;
-    for (const proposedPct of ["abc", -2, "3.1234567"]) {
-      const refused: Response = await lineRoute!.PATCH(patchRequest(url, { proposedPct }), params as never);
-      assert.equal(refused.status, 400, `${JSON.stringify(proposedPct)} refuses`);
-      assert.match(
-        ((await refused.json()) as { error: string }).error,
-        /proposedPct must be a non-negative percent/,
-        `${JSON.stringify(proposedPct)} names the percent refusal`,
-      );
-    }
-    assert.deepEqual(
-      routeState.calls,
-      [],
-      "no malformed proposal reaches the service",
-    );
-    // The canonical string reaches the engine as exact decimal text.
-    const canonical = await lineRoute!.PATCH(patchRequest(url, { proposedPct: "3.50" }), params as never);
-    assert.equal(canonical.status, 200);
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "proposeLine",
-        args: { orgId: "org-1", actorId: "user-1", lineId: LINE_ID, proposedPct: "3.5", proposedRate: null, reason: null },
+    ),
+    params as never,
+  );
+  assert.equal(proposed.status, 200);
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "proposeLine",
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        lineId: LINE_ID,
+        proposedPct: "3",
+        proposedRate: null,
+        reason: null,
       },
-    ]);
-  });
+    },
+  ]);
+  reset("hrm.compensation.manage");
+  const approved = await lineRoute!.PATCH(
+    patchRequest(
+      `http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=approve`,
+      {},
+    ),
+    params as never,
+  );
+  assert.equal(approved.status, 200);
+  reset("hrm.compensation.approve");
+  const rejected = await lineRoute!.PATCH(
+    patchRequest(
+      `http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=reject`,
+      {},
+    ),
+    params as never,
+  );
+  assert.equal(rejected.status, 400);
+});
 
-  test("JSON numbers are refused instead of crossing the proposal precision boundary", async () => {
-    reset("hrm.compensation.read");
-    const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
-    const url = `http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`;
-    for (const proposedPct of [3.5, 0.12345600000000001]) {
-      const refused: Response = await lineRoute!.PATCH(patchRequest(url, { proposedPct }), params as never);
-      assert.equal(refused.status, 400, `${proposedPct} must be a decimal string`);
-      assert.match(((await refused.json()) as { error: string }).error, /proposedPct.*decimal string/);
-    }
-    assert.deepEqual(routeState.calls, [], "no JSON number reaches compensation pricing");
-  });
+test("line propose refuses a malformed percent by name before the service runs", async () => {
+  // F3-33: the boundary names the field (PCT_MESSAGE) for a string, a
+  // negative, or an over-precise percent; the service never sees them.
+  reset("hrm.compensation.read");
+  const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
+  const url = `http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`;
+  for (const proposedPct of ["abc", -2, "3.1234567"]) {
+    const refused: Response = await lineRoute!.PATCH(
+      patchRequest(url, { proposedPct }),
+      params as never,
+    );
+    assert.equal(refused.status, 400, `${JSON.stringify(proposedPct)} refuses`);
+    assert.match(
+      ((await refused.json()) as { error: string }).error,
+      /proposedPct must be a non-negative percent/,
+      `${JSON.stringify(proposedPct)} names the percent refusal`,
+    );
+  }
+  assert.deepEqual(routeState.calls, [], "no malformed proposal reaches the service");
+  // The canonical string reaches the engine as exact decimal text.
+  const canonical = await lineRoute!.PATCH(
+    patchRequest(url, { proposedPct: "3.50" }),
+    params as never,
+  );
+  assert.equal(canonical.status, 200);
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "proposeLine",
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        lineId: LINE_ID,
+        proposedPct: "3.5",
+        proposedRate: null,
+        reason: null,
+      },
+    },
+  ]);
+});
 
-  test("line propose preserves high-magnitude percent text through the service boundary", async () => {
-    reset("hrm.compensation.read");
-    const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
-    const proposedPct = "9007199254.000001";
-    const response = await lineRoute!.PATCH(
-      patchRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`, {
+test("JSON numbers are refused instead of crossing the proposal precision boundary", async () => {
+  reset("hrm.compensation.read");
+  const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
+  const url = `http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`;
+  for (const proposedPct of [3.5, 0.12345600000000001]) {
+    const refused: Response = await lineRoute!.PATCH(
+      patchRequest(url, { proposedPct }),
+      params as never,
+    );
+    assert.equal(refused.status, 400, `${proposedPct} must be a decimal string`);
+    assert.match(
+      ((await refused.json()) as { error: string }).error,
+      /proposedPct.*decimal string/,
+    );
+  }
+  assert.deepEqual(routeState.calls, [], "no JSON number reaches compensation pricing");
+});
+
+test("line propose preserves high-magnitude percent text through the service boundary", async () => {
+  reset("hrm.compensation.read");
+  const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
+  const proposedPct = "9007199254.000001";
+  const response = await lineRoute!.PATCH(
+    patchRequest(
+      `http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`,
+      {
         proposedPct,
         reason: "precision regression",
-      }),
-      params as never,
-    );
-    assert.equal(response.status, 200);
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "proposeLine",
-        args: {
-          orgId: "org-1",
-          actorId: "user-1",
-          lineId: LINE_ID,
-          proposedPct,
-          proposedRate: null,
-          reason: "precision regression",
-        },
       },
-    ]);
-  });
+    ),
+    params as never,
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "proposeLine",
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        lineId: LINE_ID,
+        proposedPct,
+        proposedRate: null,
+        reason: "precision regression",
+      },
+    },
+  ]);
+});
 
-  test("an empty proposal surfaces the engine refusal by name", async () => {
-    // F3-33: a null percent beside a null rate (the old Number('abc')
-    // outcome) is refused downstream in the engine's own words
-    // (engine/src/hrm/compensation/cycles.ts proposeLine); the route maps
-    // the code, never a generic failure.
-    reset("hrm.compensation.read");
-    const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
-    routeState.serviceThrow = new CompensationError(
-      "INVALID_INPUT",
-      "propose exactly one of proposedPct or proposedRate — the other derives, never both typed",
-    );
-    const refused: Response = await lineRoute!.PATCH(
-      patchRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`, {
+test("an empty proposal surfaces the engine refusal by name", async () => {
+  // F3-33: a null percent beside a null rate (the old Number('abc')
+  // outcome) is refused downstream in the engine's own words
+  // (engine/src/hrm/compensation/cycles.ts proposeLine); the route maps
+  // the code, never a generic failure.
+  reset("hrm.compensation.read");
+  const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
+  routeState.serviceThrow = new CompensationError(
+    "INVALID_INPUT",
+    "propose exactly one of proposedPct or proposedRate — the other derives, never both typed",
+  );
+  const refused: Response = await lineRoute!.PATCH(
+    patchRequest(
+      `http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`,
+      {
         proposedPct: null,
         proposedRate: null,
-      }),
-      params as never,
-    );
-    assert.equal(refused.status, 400);
-    assert.match(((await refused.json()) as { error: string }).error, /exactly one of proposedPct or proposedRate/);
-    routeState.serviceThrow = null;
-  });
+      },
+    ),
+    params as never,
+  );
+  assert.equal(refused.status, 400);
+  assert.match(
+    ((await refused.json()) as { error: string }).error,
+    /exactly one of proposedPct or proposedRate/,
+  );
+  routeState.serviceThrow = null;
+});
