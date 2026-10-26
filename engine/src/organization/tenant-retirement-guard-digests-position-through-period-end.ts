@@ -59,7 +59,7 @@ export const POSITION_THROUGH_PERIOD_END_GUARD_DIGESTS = [
   },
   {
     name: "protect_temporary_difference_history",
-    sha256: "677df694d5525b671ce6eeb3f8bdd11fca79730a3e7de988693bec3c6f77662f",
+    sha256: "28a1f1c5115130103d23be71d51e7039138d2d2205e09b37bb2d46b367bb531d",
   },
   {
     name: "provision_identity_guard",

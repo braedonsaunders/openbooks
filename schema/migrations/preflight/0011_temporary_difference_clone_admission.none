@@ -1,0 +1,1 @@
+Replaces one trigger function with the same checks plus an insert admission for the clone transaction; it changes no rows and has no data precondition.
