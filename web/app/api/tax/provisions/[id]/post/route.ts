@@ -1,21 +1,26 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { IncomeTaxProvisionError, postProvisionRun } from "@openbooks/engine/tax-returns/income-tax-provision";
-import { db } from "@openbooks/engine/platform/db";
-import { guardUnrestrictedScope } from "../../../../../../lib/authz";
-import { isUuid } from "../../../../../../lib/list-params";
+import {
+  IncomeTaxProvisionError,
+  postProvisionRun,
+} from "@openbooks/engine/tax-returns/income-tax-provision";
+import { incomeTaxProvisionRunExists } from "@openbooks/engine/tax-returns/income-tax-provision-queries";
+import { guardUnrestrictedScope } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
 import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
 /** A provision posts and reverses the complete organization-wide entity set.
  * Root-entity access alone cannot authorize journals in its siblings/children. */
-async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: string }> }, injectedGate?: Authz | null) {
+async function legacyPOST(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+  injectedGate?: Authz | null,
+) {
   const gate = injectedGate as Authz;
 
   const { id } = await params;
@@ -27,20 +32,19 @@ async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: str
   // lookup — an existing run and a missing id answer identically.
   const scope = guardUnrestrictedScope(gate);
   if (scope) return scope;
-  const owned = (await db.execute<{ id: string }>(sql`
-      select id from tax_provision_runs where org_id = ${gate.user.orgId} and id = ${id}
-    `, "objects"))[0];
-  if (!owned) return notFound("record");
+  if (!(await incomeTaxProvisionRunExists(gate.user.orgId, id))) return notFound("record");
   try {
     const result = await postProvisionRun(gate.user.orgId, id, gate.user.id);
     return NextResponse.json(result);
   } catch (e) {
-    return apiErrorResponse(e, e instanceof IncomeTaxProvisionError ? { safeStatus: 422 } : {})
+    return apiErrorResponse(e, e instanceof IncomeTaxProvisionError ? { safeStatus: 422 } : {});
   }
 }
 
 export const POST = defineRoute({
-  permission: "gl.post", feature: { none: "This route is governed by its permission and service authorization." },
-  params: z.object({ "id": z.string() }),
-  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+  permission: "gl.post",
+  feature: { none: "This route is governed by its permission and service authorization." },
+  params: z.object({ id: z.string() }),
+  handler: ({ request, params, authz }) =>
+    legacyPOST(request, { params: Promise.resolve(params) }, authz),
 });
