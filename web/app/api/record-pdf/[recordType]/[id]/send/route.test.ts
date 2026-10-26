@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { PDF_RECORD_TYPES } from '../../../../../../lib/pdf-templates/catalog'
-import { PERMISSION_CATALOGUE, permissionSetCovers } from '../../../../../../lib/permissions'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { PDF_RECORD_TYPES } from "../../../../../../lib/pdf-templates/catalog";
+import { PERMISSION_CATALOGUE, permissionSetCovers } from "../../../../../../lib/permissions";
 
 // Route boundary suite for outbound PDF email (the same harness as
 // /api/payments/[id]): the REAL route handler runs against scripted gates and
@@ -11,24 +11,34 @@ import { PERMISSION_CATALOGUE, permissionSetCovers } from '../../../../../../lib
 // never authorize — and proves a denial leaves no delivery or email_log
 // trace because the sender is unreachable behind the gate.
 
-const stateKey = Symbol.for('openbooks.record-pdf-send-route-test')
+const stateKey = Symbol.for("openbooks.record-pdf-send-route-test");
 interface SendRouteState {
-  granted: Set<string>
-  recipientCalls: { recordType: string; orgId: string; id: string }[]
-  sendCalls: Record<string, unknown>[]
-  recipient: { to: string | null; docTitle: string; reference: string; partyName: string | null } | null
+  granted: Set<string>;
+  recipientCalls: { recordType: string; orgId: string; id: string }[];
+  sendCalls: Record<string, unknown>[];
+  recipient: {
+    to: string | null;
+    docTitle: string;
+    reference: string;
+    partyName: string | null;
+  } | null;
 }
 const state: SendRouteState = {
   granted: new Set(),
   recipientCalls: [],
   sendCalls: [],
-  recipient: { to: 'party@acme.test', docTitle: 'Invoice', reference: 'INV-000001', partyName: 'Acme Construction Inc.' },
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+  recipient: {
+    to: "party@acme.test",
+    docTitle: "Invoice",
+    reference: "INV-000001",
+    partyName: "Acme Construction Inc.",
+  },
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
   [
-    'authz',
+    "authz",
     `
       const state = globalThis[Symbol.for('openbooks.record-pdf-send-route-test')]
       import { NextResponse } from 'next/server'
@@ -45,13 +55,13 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'documents',
+    "documents",
     `
       export async function isDocKindEnabled() { return true }
     `,
   ],
   [
-    'send',
+    "send",
     `
       const state = globalThis[Symbol.for('openbooks.record-pdf-send-route-test')]
       export async function resolveRecordRecipient(recordType, orgId, id) {
@@ -65,218 +75,266 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'record-scope',
+    "record-scope",
     `
       export async function loadRecordSubsidiaryScope() { return { subsidiaryId: null } }
     `,
   ],
-])
+]);
 
 // Mock modules live behind query-string variants of THIS file's own URL: a
 // real file: base under web/ so bare imports inside the mocks (next/server)
 // still resolve through the workspace, while the load hook swaps the source.
-const SELF_URL = new URL(import.meta.url).href
-const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
+const SELF_URL = new URL(import.meta.url).href;
+const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`;
 
 const mockUrls = new Map<string, string>([
-  ['../../../../../../lib/authz', mockUrl('authz')],
-  ['../../../../../../lib/documents.ts', mockUrl('documents')],
-  ['../../../../../../lib/pdf-templates/send', mockUrl('send')],
-  ['../../../lib', mockUrl('record-scope')],
-])
+  ["@/lib/authz", mockUrl("authz")],
+  ["@/lib/documents.ts", mockUrl("documents")],
+  ["@/lib/pdf-templates/send", mockUrl("send")],
+  ["../../../lib", mockUrl("record-scope")],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const parsed = new URL(url)
-    if (parsed.search.startsWith('?mock=')) {
-      const source = mockSources.get(parsed.searchParams.get('mock') ?? '')
+    const parsed = new URL(url);
+    if (parsed.search.startsWith("?mock=")) {
+      const source = mockSources.get(parsed.searchParams.get("mock") ?? "");
       if (source !== undefined) {
-        return { format: 'module', source, shortCircuit: true }
+        return { format: "module", source, shortCircuit: true };
       }
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?record-pdf-send-test'
-const { GET, POST } = (await import(routeUrl)) as typeof import('./route.ts')
-test.after(() => hooks.deregister())
+const routeUrl = "./route.ts?record-pdf-send-test";
+const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 function reset(): void {
-  state.granted = new Set()
-  state.recipientCalls = []
-  state.sendCalls = []
+  state.granted = new Set();
+  state.recipientCalls = [];
+  state.sendCalls = [];
 }
 
 function post(recordType: string, body?: Record<string, unknown>): Promise<Response> {
   return POST(
-    new Request(`http://openbooks.test/api/record-pdf/${recordType}/00000000-0000-4000-8000-00000000a001/send`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body ?? {}),
-    }),
-    { params: Promise.resolve({ recordType, id: '00000000-0000-4000-8000-00000000a001' }) },
-  )
+    new Request(
+      `http://openbooks.test/api/record-pdf/${recordType}/00000000-0000-4000-8000-00000000a001/send`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body ?? {}),
+      },
+    ),
+    { params: Promise.resolve({ recordType, id: "00000000-0000-4000-8000-00000000a001" }) },
+  );
 }
 
-test('read-only access cannot authorize an outbound send for any record type', async () => {
+test("read-only access cannot authorize an outbound send for any record type", async () => {
   for (const meta of PDF_RECORD_TYPES) {
-    reset()
-    state.granted = new Set([meta.readPermission])
+    reset();
+    state.granted = new Set([meta.readPermission]);
 
-    const response = await post(meta.key, { to: 'someone@elsewhere.test' })
+    const response = await post(meta.key, { to: "someone@elsewhere.test" });
 
-    assert.equal(response.status, 403, `${meta.key}: ${meta.readPermission} alone must not send`)
-    const payload = (await response.json()) as { error: string }
-    assert.match(payload.error, /^missing permission: /, `${meta.key}: denial names the missing authority`)
-    assert.deepEqual(state.sendCalls, [], `${meta.key}: a denied send never reaches delivery or email_log`)
-    assert.deepEqual(state.recipientCalls, [], `${meta.key}: denial settles before any disclosure work`)
+    assert.equal(response.status, 403, `${meta.key}: ${meta.readPermission} alone must not send`);
+    const payload = (await response.json()) as { error: string };
+    assert.match(
+      payload.error,
+      /^missing permission: /,
+      `${meta.key}: denial names the missing authority`,
+    );
+    assert.deepEqual(
+      state.sendCalls,
+      [],
+      `${meta.key}: a denied send never reaches delivery or email_log`,
+    );
+    assert.deepEqual(
+      state.recipientCalls,
+      [],
+      `${meta.key}: denial settles before any disclosure work`,
+    );
   }
-})
+});
 
-test('every record type demands a catalogue-listed authority its read permission does not cover', async () => {
+test("every record type demands a catalogue-listed authority its read permission does not cover", async () => {
   // Harvest each type's demanded authority from the route itself (no mirrored
   // map in this test), then pin its canonicality.
   for (const meta of PDF_RECORD_TYPES) {
-    reset()
-    state.granted = new Set([meta.readPermission])
-    const response = await post(meta.key)
-    const payload = (await response.json()) as { error: string }
-    const permission = payload.error.replace('missing permission: ', '')
+    reset();
+    state.granted = new Set([meta.readPermission]);
+    const response = await post(meta.key);
+    const payload = (await response.json()) as { error: string };
+    const permission = payload.error.replace("missing permission: ", "");
     assert.ok(
       (PERMISSION_CATALOGUE as readonly string[]).includes(permission),
       `${meta.key}: send authority "${permission}" must be a seeded, role-assignable catalogue key`,
-    )
+    );
     assert.equal(
       permissionSetCovers(new Set([meta.readPermission]), permission),
       false,
       `${meta.key}: read access (${meta.readPermission}) alone must never cover the send authority`,
-    )
+    );
   }
-})
+});
 
-test('an authorized sender reaches delivery exactly once with the validated recipient', async () => {
-  reset()
-  state.granted = new Set(['ar.read', 'ar.create'])
+test("an authorized sender reaches delivery exactly once with the validated recipient", async () => {
+  reset();
+  state.granted = new Set(["ar.read", "ar.create"]);
 
-  const response = await post('customer_invoice', { to: '  cfo@buyer.test  ', message: 'Attached invoice' })
+  const response = await post("customer_invoice", {
+    to: "  cfo@buyer.test  ",
+    message: "Attached invoice",
+  });
 
-  assert.equal(response.status, 200)
-  const payload = (await response.json()) as { ok: boolean; to: string }
-  assert.equal(payload.ok, true)
-  assert.equal(payload.to, 'cfo@buyer.test', 'the recipient is trimmed at the boundary')
-  assert.equal(state.sendCalls.length, 1)
+  assert.equal(response.status, 200);
+  const payload = (await response.json()) as { ok: boolean; to: string };
+  assert.equal(payload.ok, true);
+  assert.equal(payload.to, "cfo@buyer.test", "the recipient is trimmed at the boundary");
+  assert.equal(state.sendCalls.length, 1);
   assert.deepEqual(state.sendCalls[0], {
-    recordType: 'customer_invoice',
-    orgId: 'org-1',
-    id: '00000000-0000-4000-8000-00000000a001',
-    to: 'cfo@buyer.test',
-    message: 'Attached invoice',
+    recordType: "customer_invoice",
+    orgId: "org-1",
+    id: "00000000-0000-4000-8000-00000000a001",
+    to: "cfo@buyer.test",
+    message: "Attached invoice",
     templateId: null,
     scope: null,
-  })
-})
+  });
+});
 
-test('a blank recipient falls through to the party email on file inside the sender', async () => {
-  reset()
-  state.granted = new Set(['ar.read', 'ar.create'])
+test("a blank recipient falls through to the party email on file inside the sender", async () => {
+  reset();
+  state.granted = new Set(["ar.read", "ar.create"]);
 
-  const response = await post('customer_invoice')
+  const response = await post("customer_invoice");
 
-  assert.equal(response.status, 200)
-  assert.equal(state.sendCalls.length, 1)
-  assert.equal((state.sendCalls[0] as Record<string, unknown>).to, undefined, 'no explicit recipient is forwarded')
-})
+  assert.equal(response.status, 200);
+  assert.equal(state.sendCalls.length, 1);
+  assert.equal(
+    (state.sendCalls[0] as Record<string, unknown>).to,
+    undefined,
+    "no explicit recipient is forwarded",
+  );
+});
 
-test('a malformed explicit recipient is refused before any delivery work', async () => {
-  reset()
-  state.granted = new Set(['ar.read', 'ar.create'])
+test("a malformed explicit recipient is refused before any delivery work", async () => {
+  reset();
+  state.granted = new Set(["ar.read", "ar.create"]);
 
-  for (const bad of ['not-an-email', 'two@ats@example.test@again', 'spaces in@example.test']) {
-    const response = await post('customer_invoice', { to: bad })
-    assert.equal(response.status, 400, `"${bad}" must be refused at the boundary`)
-    assert.deepEqual(state.sendCalls, [], `"${bad}" must never reach the sender`)
+  for (const bad of ["not-an-email", "two@ats@example.test@again", "spaces in@example.test"]) {
+    const response = await post("customer_invoice", { to: bad });
+    assert.equal(response.status, 400, `"${bad}" must be refused at the boundary`);
+    assert.deepEqual(state.sendCalls, [], `"${bad}" must never reach the sender`);
   }
-})
+});
 
-test('GET keeps rendering/recipient prefill on read authority alone', async () => {
-  reset()
-  state.granted = new Set(['ar.read'])
+test("GET keeps rendering/recipient prefill on read authority alone", async () => {
+  reset();
+  state.granted = new Set(["ar.read"]);
 
   const response = await GET(
-    new Request('http://openbooks.test/api/record-pdf/customer_invoice/00000000-0000-4000-8000-00000000a001/send'),
-    { params: Promise.resolve({ recordType: 'customer_invoice', id: '00000000-0000-4000-8000-00000000a001' }) },
-  )
+    new Request(
+      "http://openbooks.test/api/record-pdf/customer_invoice/00000000-0000-4000-8000-00000000a001/send",
+    ),
+    {
+      params: Promise.resolve({
+        recordType: "customer_invoice",
+        id: "00000000-0000-4000-8000-00000000a001",
+      }),
+    },
+  );
 
-  assert.equal(response.status, 200, 'read access still prefills the send dialog')
-  assert.equal(state.recipientCalls.length, 1)
-  assert.deepEqual(state.sendCalls, [], 'GET never delivers mail')
-})
+  assert.equal(response.status, 200, "read access still prefills the send dialog");
+  assert.equal(state.recipientCalls.length, 1);
+  assert.deepEqual(state.sendCalls, [], "GET never delivers mail");
+});
 
-test('a malformed record id is refused as not found before any scope or disclosure work', async () => {
-  for (const bad of ['not-a-uuid', '1 or 1=1', '00000000-0000-4000-8000-00000000a00', '../etc']) {
-    reset()
-    state.granted = new Set(['ar.read', 'ar.create'])
+test("a malformed record id is refused as not found before any scope or disclosure work", async () => {
+  for (const bad of ["not-a-uuid", "1 or 1=1", "00000000-0000-4000-8000-00000000a00", "../etc"]) {
+    reset();
+    state.granted = new Set(["ar.read", "ar.create"]);
 
     const getResponse = await GET(
-      new Request(`http://openbooks.test/api/record-pdf/customer_invoice/${encodeURIComponent(bad)}/send`),
-      { params: Promise.resolve({ recordType: 'customer_invoice', id: bad }) },
-    )
-    assert.equal(getResponse.status, 404, `GET "${bad}" must be a plain not-found`)
-    assert.deepEqual(await getResponse.json(), { error: 'record not found' })
+      new Request(
+        `http://openbooks.test/api/record-pdf/customer_invoice/${encodeURIComponent(bad)}/send`,
+      ),
+      { params: Promise.resolve({ recordType: "customer_invoice", id: bad }) },
+    );
+    assert.equal(getResponse.status, 404, `GET "${bad}" must be a plain not-found`);
+    assert.deepEqual(await getResponse.json(), { error: "record not found" });
 
     const postResponse = await POST(
-      new Request(`http://openbooks.test/api/record-pdf/customer_invoice/${encodeURIComponent(bad)}/send`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ to: 'someone@elsewhere.test' }),
-      }),
-      { params: Promise.resolve({ recordType: 'customer_invoice', id: bad }) },
-    )
-    assert.equal(postResponse.status, 404, `POST "${bad}" must be a plain not-found`)
-    assert.deepEqual(await postResponse.json(), { error: 'record not found' })
-    assert.deepEqual(state.recipientCalls, [], `"${bad}" never reaches recipient resolution`)
-    assert.deepEqual(state.sendCalls, [], `"${bad}" never reaches delivery`)
+      new Request(
+        `http://openbooks.test/api/record-pdf/customer_invoice/${encodeURIComponent(bad)}/send`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ to: "someone@elsewhere.test" }),
+        },
+      ),
+      { params: Promise.resolve({ recordType: "customer_invoice", id: bad }) },
+    );
+    assert.equal(postResponse.status, 404, `POST "${bad}" must be a plain not-found`);
+    assert.deepEqual(await postResponse.json(), { error: "record not found" });
+    assert.deepEqual(state.recipientCalls, [], `"${bad}" never reaches recipient resolution`);
+    assert.deepEqual(state.sendCalls, [], `"${bad}" never reaches delivery`);
   }
-})
+});
 
-test('a well-formed template id is forwarded to delivery', async () => {
-  reset()
-  state.granted = new Set(['ar.read', 'ar.create'])
-  const templateId = '00000000-0000-4000-8000-00000000b001'
+test("a well-formed template id is forwarded to delivery", async () => {
+  reset();
+  state.granted = new Set(["ar.read", "ar.create"]);
+  const templateId = "00000000-0000-4000-8000-00000000b001";
 
-  const response = await post('customer_invoice', { to: 'cfo@buyer.test', template: templateId })
+  const response = await post("customer_invoice", { to: "cfo@buyer.test", template: templateId });
 
-  assert.equal(response.status, 200)
-  assert.equal(state.sendCalls.length, 1)
-  assert.equal((state.sendCalls[0] as Record<string, unknown>).templateId, templateId)
-})
+  assert.equal(response.status, 200);
+  assert.equal(state.sendCalls.length, 1);
+  assert.equal((state.sendCalls[0] as Record<string, unknown>).templateId, templateId);
+});
 
-test('a malformed template id is refused exactly like a missing template, before delivery', async () => {
+test("a malformed template id is refused exactly like a missing template, before delivery", async () => {
   // An explicitly supplied empty field ({"template":""}) is a non-UUID id,
   // not "use the default" — only an omitted field may fall through.
-  for (const bad of ['', 'not-a-uuid', '1 or 1=1', '00000000-0000-4000-8000-00000000b00', 'starter']) {
-    reset()
-    state.granted = new Set(['ar.read', 'ar.create'])
+  for (const bad of [
+    "",
+    "not-a-uuid",
+    "1 or 1=1",
+    "00000000-0000-4000-8000-00000000b00",
+    "starter",
+  ]) {
+    reset();
+    state.granted = new Set(["ar.read", "ar.create"]);
 
-    const response = await post('customer_invoice', { to: 'cfo@buyer.test', template: bad })
-    assert.equal(response.status, 404, `"${bad}" must be a plain not-found`)
-    assert.deepEqual(await response.json(), { error: 'template not found' })
-    assert.deepEqual(state.sendCalls, [], `"${bad}" must never reach resolvePdfTemplate or delivery`)
+    const response = await post("customer_invoice", { to: "cfo@buyer.test", template: bad });
+    assert.equal(response.status, 404, `"${bad}" must be a plain not-found`);
+    assert.deepEqual(await response.json(), { error: "template not found" });
+    assert.deepEqual(
+      state.sendCalls,
+      [],
+      `"${bad}" must never reach resolvePdfTemplate or delivery`,
+    );
   }
-})
+});
 
-test('an explicitly empty template field is 404 template not found, not the default', async () => {
-  reset()
-  state.granted = new Set(['ar.read', 'ar.create'])
+test("an explicitly empty template field is 404 template not found, not the default", async () => {
+  reset();
+  state.granted = new Set(["ar.read", "ar.create"]);
 
-  const response = await post('customer_invoice', { to: 'cfo@buyer.test', template: '' })
-  assert.equal(response.status, 404, 'empty template must not 200 with the default template')
-  assert.deepEqual(await response.json(), { error: 'template not found' })
-  assert.deepEqual(state.sendCalls, [], 'empty template must never reach getPdfTemplate or delivery')
-})
+  const response = await post("customer_invoice", { to: "cfo@buyer.test", template: "" });
+  assert.equal(response.status, 404, "empty template must not 200 with the default template");
+  assert.deepEqual(await response.json(), { error: "template not found" });
+  assert.deepEqual(
+    state.sendCalls,
+    [],
+    "empty template must never reach getPdfTemplate or delivery",
+  );
+});

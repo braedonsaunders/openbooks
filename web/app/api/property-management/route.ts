@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { normalizeMoney } from "@openbooks/engine/money/money";
-import { canonicalDecimal } from "../../../lib/exact-decimal";
-import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
+import { canonicalDecimal } from "@/lib/exact-decimal";
+import { moneyRefusal } from "@/lib/payroll-decimal-refusal";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import {
   PropertyManagementError,
@@ -40,56 +40,244 @@ import {
   updateCamPool,
 } from "@openbooks/engine/property/management";
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
-import { can, guardPermission } from "../../../lib/authz";
-import type { Authz } from "../../../lib/authz";
+import { can } from "@/lib/authz";
+import type { Authz } from "@/lib/authz";
 import {
   findUnownedCustomReferences,
   loadFieldDefs,
   validateCustomValues,
-} from "../../../lib/custom-fields";
-import { isFeatureEnabled } from "../../../lib/features";
-import { guardPropertyManagementFeature } from "../../../lib/property-management-gate";
+} from "@/lib/custom-fields";
+import { isFeatureEnabled } from "@/lib/features";
+import { guardPropertyManagementFeature } from "@/lib/property-management-gate";
 import { notFound } from "@/lib/api/responses";
 import { isUuid, uuidString } from "@openbooks/engine/platform/identifiers";
 
-const moneyText = (field: string) => z.string().superRefine((value, ctx) => {
-  if (canonicalDecimal(value, 4) === null) {
-    ctx.addIssue({ code: "custom", message: moneyRefusal(field, value) });
-  }
-});
+const moneyText = (field: string) =>
+  z.string().superRefine((value, ctx) => {
+    if (canonicalDecimal(value, 4) === null) {
+      ctx.addIssue({ code: "custom", message: moneyRefusal(field, value) });
+    }
+  });
 const optionalUuid = uuidString().nullable().optional();
-const optionalDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional();
+const optionalDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .nullable()
+  .optional();
 const customValues = z.record(z.string(), z.json()).optional();
 const requestBodySchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("createProperty"), subsidiaryId: uuidString(), code: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(200), propertyType: z.string().trim().min(1).max(80), locationId: optionalUuid, fixedAssetId: optionalUuid, currency: z.string().regex(/^[A-Z]{3}$/).nullable().optional(), address: z.record(z.string(), z.string()).optional(), rentIncomeAccountId: optionalUuid, camIncomeAccountId: optionalUuid, depositLiabilityAccountId: optionalUuid, defaultBankAccountId: optionalUuid, custom: customValues }),
-  z.object({ action: z.literal("updateProperty"), propertyId: uuidString(), subsidiaryId: uuidString(), code: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(200), propertyType: z.string().trim().min(1).max(80), status: z.enum(["active", "inactive"]), locationId: optionalUuid, fixedAssetId: optionalUuid, currency: z.string().regex(/^[A-Z]{3}$/).nullable().optional(), address: z.record(z.string(), z.string()).optional(), rentIncomeAccountId: optionalUuid, camIncomeAccountId: optionalUuid, depositLiabilityAccountId: optionalUuid, defaultBankAccountId: optionalUuid, custom: customValues, reason: z.string().trim().min(1).max(500).nullable().optional() }),
+  z.object({
+    action: z.literal("createProperty"),
+    subsidiaryId: uuidString(),
+    code: z.string().trim().min(1).max(80),
+    name: z.string().trim().min(1).max(200),
+    propertyType: z.string().trim().min(1).max(80),
+    locationId: optionalUuid,
+    fixedAssetId: optionalUuid,
+    currency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .nullable()
+      .optional(),
+    address: z.record(z.string(), z.string()).optional(),
+    rentIncomeAccountId: optionalUuid,
+    camIncomeAccountId: optionalUuid,
+    depositLiabilityAccountId: optionalUuid,
+    defaultBankAccountId: optionalUuid,
+    custom: customValues,
+  }),
+  z.object({
+    action: z.literal("updateProperty"),
+    propertyId: uuidString(),
+    subsidiaryId: uuidString(),
+    code: z.string().trim().min(1).max(80),
+    name: z.string().trim().min(1).max(200),
+    propertyType: z.string().trim().min(1).max(80),
+    status: z.enum(["active", "inactive"]),
+    locationId: optionalUuid,
+    fixedAssetId: optionalUuid,
+    currency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .nullable()
+      .optional(),
+    address: z.record(z.string(), z.string()).optional(),
+    rentIncomeAccountId: optionalUuid,
+    camIncomeAccountId: optionalUuid,
+    depositLiabilityAccountId: optionalUuid,
+    defaultBankAccountId: optionalUuid,
+    custom: customValues,
+    reason: z.string().trim().min(1).max(500).nullable().optional(),
+  }),
   z.object({ action: z.literal("deleteProperty"), propertyId: uuidString() }),
-  z.object({ action: z.literal("createUnit"), propertyId: uuidString(), code: z.string().trim().min(1).max(80), name: z.string().trim().max(200).nullable().optional(), unitType: z.string().trim().max(80).nullable().optional(), rentableArea: moneyText("Rentable area").nullable().optional(), bedrooms: z.number().int().min(0).max(100).nullable().optional() }),
-  z.object({ action: z.literal("updateUnit"), unitId: uuidString(), code: z.string().trim().min(1).max(80), name: z.string().trim().max(200).nullable().optional(), unitType: z.string().trim().max(80).nullable().optional(), rentableArea: moneyText("Rentable area").nullable().optional(), bedrooms: z.number().int().min(0).max(100).nullable().optional(), status: z.enum(["vacant", "occupied", "notice", "offline"]).optional(), reason: z.string().trim().min(1).max(500).nullable().optional() }),
+  z.object({
+    action: z.literal("createUnit"),
+    propertyId: uuidString(),
+    code: z.string().trim().min(1).max(80),
+    name: z.string().trim().max(200).nullable().optional(),
+    unitType: z.string().trim().max(80).nullable().optional(),
+    rentableArea: moneyText("Rentable area").nullable().optional(),
+    bedrooms: z.number().int().min(0).max(100).nullable().optional(),
+  }),
+  z.object({
+    action: z.literal("updateUnit"),
+    unitId: uuidString(),
+    code: z.string().trim().min(1).max(80),
+    name: z.string().trim().max(200).nullable().optional(),
+    unitType: z.string().trim().max(80).nullable().optional(),
+    rentableArea: moneyText("Rentable area").nullable().optional(),
+    bedrooms: z.number().int().min(0).max(100).nullable().optional(),
+    status: z.enum(["vacant", "occupied", "notice", "offline"]).optional(),
+    reason: z.string().trim().min(1).max(500).nullable().optional(),
+  }),
   z.object({ action: z.literal("deleteUnit"), unitId: uuidString() }),
-  z.object({ action: z.literal("createLease"), propertyId: uuidString(), unitId: optionalUuid, tenantId: uuidString(), leaseNumber: z.string().trim().min(1).max(80), startsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), endsOn: optionalDate, baseRent: moneyText("Base rent"), billingDay: z.number().int().min(1).max(31).optional(), paymentTermsDays: z.number().int().min(0).max(365).optional(), securityDepositRequired: moneyText("Security deposit").nullable().optional(), camMethod: z.enum(["none", "fixed", "pro_rata"]).optional(), camSharePercent: moneyText("CAM share percent").nullable().optional(), lateFeeType: z.enum(["none", "fixed", "percent"]).optional(), lateFeeValue: moneyText("Late fee").nullable().optional(), graceDays: z.number().int().min(0).max(365).optional(), autoInvoice: z.boolean().optional(), autoPost: z.boolean().optional() }),
-  z.object({ action: z.literal("updateLease"), leaseId: uuidString(), propertyId: uuidString(), unitId: optionalUuid, tenantId: uuidString(), leaseNumber: z.string().trim().min(1).max(80), startsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), endsOn: optionalDate, baseRent: moneyText("Base rent"), billingDay: z.number().int().min(1).max(31), paymentTermsDays: z.number().int().min(0).max(365), securityDepositRequired: moneyText("Security deposit"), camMethod: z.enum(["none", "fixed", "pro_rata"]), camSharePercent: moneyText("CAM share percent").nullable().optional(), lateFeeType: z.enum(["none", "fixed", "percent"]), lateFeeValue: moneyText("Late fee"), graceDays: z.number().int().min(0).max(365), autoInvoice: z.boolean(), autoPost: z.boolean() }),
+  z.object({
+    action: z.literal("createLease"),
+    propertyId: uuidString(),
+    unitId: optionalUuid,
+    tenantId: uuidString(),
+    leaseNumber: z.string().trim().min(1).max(80),
+    startsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    endsOn: optionalDate,
+    baseRent: moneyText("Base rent"),
+    billingDay: z.number().int().min(1).max(31).optional(),
+    paymentTermsDays: z.number().int().min(0).max(365).optional(),
+    securityDepositRequired: moneyText("Security deposit").nullable().optional(),
+    camMethod: z.enum(["none", "fixed", "pro_rata"]).optional(),
+    camSharePercent: moneyText("CAM share percent").nullable().optional(),
+    lateFeeType: z.enum(["none", "fixed", "percent"]).optional(),
+    lateFeeValue: moneyText("Late fee").nullable().optional(),
+    graceDays: z.number().int().min(0).max(365).optional(),
+    autoInvoice: z.boolean().optional(),
+    autoPost: z.boolean().optional(),
+  }),
+  z.object({
+    action: z.literal("updateLease"),
+    leaseId: uuidString(),
+    propertyId: uuidString(),
+    unitId: optionalUuid,
+    tenantId: uuidString(),
+    leaseNumber: z.string().trim().min(1).max(80),
+    startsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    endsOn: optionalDate,
+    baseRent: moneyText("Base rent"),
+    billingDay: z.number().int().min(1).max(31),
+    paymentTermsDays: z.number().int().min(0).max(365),
+    securityDepositRequired: moneyText("Security deposit"),
+    camMethod: z.enum(["none", "fixed", "pro_rata"]),
+    camSharePercent: moneyText("CAM share percent").nullable().optional(),
+    lateFeeType: z.enum(["none", "fixed", "percent"]),
+    lateFeeValue: moneyText("Late fee"),
+    graceDays: z.number().int().min(0).max(365),
+    autoInvoice: z.boolean(),
+    autoPost: z.boolean(),
+  }),
   z.object({ action: z.literal("cancelLease"), leaseId: uuidString() }),
   z.object({ action: z.literal("activateLease"), leaseId: uuidString() }),
-  z.object({ action: z.literal("terminateLease"), leaseId: uuidString(), terminatedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().min(1).max(500) }),
-  z.object({ action: z.literal("addCharge"), leaseId: uuidString(), chargeType: z.string().trim().min(1).max(80), description: z.string().trim().min(1).max(500), amount: moneyText("Charge amount"), frequency: z.string().trim().min(1).max(40), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), effectiveTo: optionalDate, incomeAccountId: optionalUuid, itemId: optionalUuid, taxCodeId: optionalUuid }),
-  z.object({ action: z.literal("addEscalation"), leaseId: uuidString(), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), method: z.enum(["percent", "fixed", "new_amount"]), value: moneyText("Escalation value") }),
+  z.object({
+    action: z.literal("terminateLease"),
+    leaseId: uuidString(),
+    terminatedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    reason: z.string().trim().min(1).max(500),
+  }),
+  z.object({
+    action: z.literal("addCharge"),
+    leaseId: uuidString(),
+    chargeType: z.string().trim().min(1).max(80),
+    description: z.string().trim().min(1).max(500),
+    amount: moneyText("Charge amount"),
+    frequency: z.string().trim().min(1).max(40),
+    effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    effectiveTo: optionalDate,
+    incomeAccountId: optionalUuid,
+    itemId: optionalUuid,
+    taxCodeId: optionalUuid,
+  }),
+  z.object({
+    action: z.literal("addEscalation"),
+    leaseId: uuidString(),
+    effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    method: z.enum(["percent", "fixed", "new_amount"]),
+    value: moneyText("Escalation value"),
+  }),
   z.object({ action: z.literal("applyEscalation"), escalationId: uuidString() }),
   z.object({ action: z.literal("scheduleLease"), leaseId: uuidString(), throughOn: optionalDate }),
-  z.object({ action: z.literal("billRent"), asOf: optionalDate, leaseId: optionalUuid, propertyId: optionalUuid }),
-  z.object({ action: z.literal("assessLateFees"), asOf: optionalDate, leaseId: optionalUuid, propertyId: optionalUuid }),
-  z.object({ action: z.literal("levelRent"), asOf: optionalDate, leaseId: optionalUuid, propertyId: optionalUuid }),
-  z.object({ action: z.literal("recordDeposit"), leaseId: uuidString(), kind: z.enum(["received", "interest", "applied", "refunded", "adjustment_increase", "adjustment_decrease"]), occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), amount: moneyText("Deposit amount"), bankAccountId: optionalUuid, offsetAccountId: optionalUuid, appliedDocumentId: optionalUuid, memo: z.string().max(500).nullable().optional(), importKey: z.string().max(200).nullable().optional() }),
-  z.object({ action: z.literal("reverseDeposit"), transactionId: uuidString(), occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().min(1).max(500) }),
-  z.object({ action: z.literal("createCamPool"), propertyId: uuidString(), name: z.string().trim().min(1).max(200), fiscalYear: z.number().int().min(1900).max(2200), periodStartsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), allocationBasis: z.enum(["rentable_area", "equal", "custom"]), vacancyTreatment: z.enum(["occupied_area", "total_rentable_area"]).optional(), budgetAmount: moneyText("CAM budget"), expenseAccountIds: z.array(uuidString()).min(1).max(500) }),
-  z.object({ action: z.literal("updateCamPool"), poolId: uuidString(), name: z.string().trim().min(1).max(200), fiscalYear: z.number().int().min(1900).max(2200), periodStartsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), allocationBasis: z.enum(["rentable_area", "equal", "custom"]), vacancyTreatment: z.enum(["occupied_area", "total_rentable_area"]).optional(), budgetAmount: moneyText("CAM budget"), expenseAccountIds: z.array(uuidString()).min(1).max(500) }),
+  z.object({
+    action: z.literal("billRent"),
+    asOf: optionalDate,
+    leaseId: optionalUuid,
+    propertyId: optionalUuid,
+  }),
+  z.object({
+    action: z.literal("assessLateFees"),
+    asOf: optionalDate,
+    leaseId: optionalUuid,
+    propertyId: optionalUuid,
+  }),
+  z.object({
+    action: z.literal("levelRent"),
+    asOf: optionalDate,
+    leaseId: optionalUuid,
+    propertyId: optionalUuid,
+  }),
+  z.object({
+    action: z.literal("recordDeposit"),
+    leaseId: uuidString(),
+    kind: z.enum([
+      "received",
+      "interest",
+      "applied",
+      "refunded",
+      "adjustment_increase",
+      "adjustment_decrease",
+    ]),
+    occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    amount: moneyText("Deposit amount"),
+    bankAccountId: optionalUuid,
+    offsetAccountId: optionalUuid,
+    appliedDocumentId: optionalUuid,
+    memo: z.string().max(500).nullable().optional(),
+    importKey: z.string().max(200).nullable().optional(),
+  }),
+  z.object({
+    action: z.literal("reverseDeposit"),
+    transactionId: uuidString(),
+    occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    reason: z.string().trim().min(1).max(500),
+  }),
+  z.object({
+    action: z.literal("createCamPool"),
+    propertyId: uuidString(),
+    name: z.string().trim().min(1).max(200),
+    fiscalYear: z.number().int().min(1900).max(2200),
+    periodStartsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    periodEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    allocationBasis: z.enum(["rentable_area", "equal", "custom"]),
+    vacancyTreatment: z.enum(["occupied_area", "total_rentable_area"]).optional(),
+    budgetAmount: moneyText("CAM budget"),
+    expenseAccountIds: z.array(uuidString()).min(1).max(500),
+  }),
+  z.object({
+    action: z.literal("updateCamPool"),
+    poolId: uuidString(),
+    name: z.string().trim().min(1).max(200),
+    fiscalYear: z.number().int().min(1900).max(2200),
+    periodStartsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    periodEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    allocationBasis: z.enum(["rentable_area", "equal", "custom"]),
+    vacancyTreatment: z.enum(["occupied_area", "total_rentable_area"]).optional(),
+    budgetAmount: moneyText("CAM budget"),
+    expenseAccountIds: z.array(uuidString()).min(1).max(500),
+  }),
   z.object({ action: z.literal("cancelCamPool"), poolId: uuidString() }),
-  z.object({ action: z.literal("reopenCamPool"), poolId: uuidString(), reason: z.string().trim().min(1).max(500) }),
+  z.object({
+    action: z.literal("reopenCamPool"),
+    poolId: uuidString(),
+    reason: z.string().trim().min(1).max(500),
+  }),
   z.object({ action: z.literal("finalizeCam"), poolId: uuidString() }),
   z.object({ action: z.literal("billCam"), poolId: uuidString(), invoiceDate: optionalDate }),
 ]);
-
-
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -99,9 +287,7 @@ export const dynamic = "force-dynamic";
  * "explicit null" keep their distinct meanings); a non-object carries no
  * values, matching how the validator reads the bag.
  */
-function customBag(
-  value: unknown,
-): Record<string, unknown> | null | undefined {
+function customBag(value: unknown): Record<string, unknown> | null | undefined {
   if (value == null) return value;
   if (typeof value === "object") return value as Record<string, unknown>;
   return {};
@@ -112,22 +298,21 @@ function dateOrUndefined(value: unknown): string | undefined {
   return value == null ? undefined : String(value);
 }
 
-async function legacyGET() {
-  const authz = await guardPermission("ar.read");
-  if (authz instanceof NextResponse) return authz;
-  const feature = await guardPropertyManagementFeature(authz.user.orgId);
-  if (feature) return feature;
+async function legacyGET(authz: Authz) {
   // The workspace loader scopes every query to the caller inside one
   // repeatable-read snapshot: filtering an org-wide read afterwards would
   // mix a stale header with fresh lines across a concurrent rehome.
-  const workspace = await propertyManagementWorkspace(
-    authz.user.orgId,
-    authz.allowedSubsidiaryIds,
-  );
+  const workspace = await propertyManagementWorkspace(authz.user.orgId, authz.allowedSubsidiaryIds);
   return NextResponse.json(workspace);
 }
 
-const glActions = new Set(["recordDeposit", "reverseDeposit", "finalizeCam", "reopenCamPool", "levelRent"]);
+const glActions = new Set([
+  "recordDeposit",
+  "reverseDeposit",
+  "finalizeCam",
+  "reopenCamPool",
+  "levelRent",
+]);
 const billingActions = new Set(["billRent", "billCam", "assessLateFees"]);
 const knownActions = new Set([
   "createProperty",
@@ -186,9 +371,9 @@ async function guardSubsidiaryAccess(
   const allowed = authz.allowedSubsidiaryIds;
   if (!allowed) return null;
   if (
-    ((action === "billRent" || action === "assessLateFees" || action === "levelRent") &&
-      !body.leaseId &&
-      !body.propertyId)
+    (action === "billRent" || action === "assessLateFees" || action === "levelRent") &&
+    !body.leaseId &&
+    !body.propertyId
   ) {
     return NextResponse.json(
       {
@@ -207,25 +392,23 @@ async function guardSubsidiaryAccess(
       "",
   );
   if (action !== "createProperty" && !isUuid(recordId)) {
-    return NextResponse.json(
-      { error: "Property-management record not found" },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: "Property-management record not found" }, { status: 404 });
   }
 
   let subsidiaryId: string | null = null;
   if (action === "createProperty") {
-    subsidiaryId =
-      typeof body.subsidiaryId === "string" ? body.subsidiaryId : null;
+    subsidiaryId = typeof body.subsidiaryId === "string" ? body.subsidiaryId : null;
   } else if (["updateUnit", "deleteUnit"].includes(action)) {
-    const result = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select p.subsidiary_id as "subsidiaryId" from property_units u join managed_properties p on p.id=u.property_id and p.org_id=u.org_id where u.org_id=${authz.user.orgId} and u.id=${String(body.unitId ?? "")}`, "objects",
-    ));
+    const result = await db.execute<{ subsidiaryId: string | null }>(
+      sql`select p.subsidiary_id as "subsidiaryId" from property_units u join managed_properties p on p.id=u.property_id and p.org_id=u.org_id where u.org_id=${authz.user.orgId} and u.id=${String(body.unitId ?? "")}`,
+      "objects",
+    );
     subsidiaryId = result[0]?.subsidiaryId ?? null;
   } else if (action === "reverseDeposit") {
-    const result = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select p.subsidiary_id as "subsidiaryId" from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where d.org_id=${authz.user.orgId} and d.id=${String(body.transactionId ?? "")}`, "objects",
-    ));
+    const result = await db.execute<{ subsidiaryId: string | null }>(
+      sql`select p.subsidiary_id as "subsidiaryId" from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where d.org_id=${authz.user.orgId} and d.id=${String(body.transactionId ?? "")}`,
+      "objects",
+    );
     subsidiaryId = result[0]?.subsidiaryId ?? null;
   } else if (
     [
@@ -237,11 +420,13 @@ async function guardSubsidiaryAccess(
       "billRent",
       "assessLateFees",
       "levelRent",
-    ].includes(action) && body.propertyId
+    ].includes(action) &&
+    body.propertyId
   ) {
-    const result = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select subsidiary_id as "subsidiaryId" from managed_properties where org_id=${authz.user.orgId} and id=${String(body.propertyId ?? "")}`, "objects",
-    ));
+    const result = await db.execute<{ subsidiaryId: string | null }>(
+      sql`select subsidiary_id as "subsidiaryId" from managed_properties where org_id=${authz.user.orgId} and id=${String(body.propertyId ?? "")}`,
+      "objects",
+    );
     subsidiaryId = result[0]?.subsidiaryId ?? null;
     if (
       action === "updateProperty" &&
@@ -268,18 +453,22 @@ async function guardSubsidiaryAccess(
       "recordDeposit",
     ].includes(action)
   ) {
-    const result = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select p.subsidiary_id as "subsidiaryId" from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where l.org_id=${authz.user.orgId} and l.id=${String(body.leaseId ?? "")}`, "objects",
-    ));
+    const result = await db.execute<{ subsidiaryId: string | null }>(
+      sql`select p.subsidiary_id as "subsidiaryId" from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where l.org_id=${authz.user.orgId} and l.id=${String(body.leaseId ?? "")}`,
+      "objects",
+    );
     subsidiaryId = result[0]?.subsidiaryId ?? null;
     if (action === "updateLease" && body.propertyId !== undefined) {
       // A draft lease may move to another property: the target must be
       // visible to the caller too, and a hidden target reads as missing.
       const targetId = String(body.propertyId ?? "");
       const target = isUuid(targetId)
-        ? (await db.execute<{ subsidiaryId: string | null }>(
-            sql`select subsidiary_id as "subsidiaryId" from managed_properties where org_id=${authz.user.orgId} and id=${targetId}`, "objects",
-          ))[0]?.subsidiaryId ?? null
+        ? ((
+            await db.execute<{ subsidiaryId: string | null }>(
+              sql`select subsidiary_id as "subsidiaryId" from managed_properties where org_id=${authz.user.orgId} and id=${targetId}`,
+              "objects",
+            )
+          )[0]?.subsidiaryId ?? null)
         : null;
       if (!target || !allowed.has(String(target)))
         return NextResponse.json(
@@ -288,23 +477,22 @@ async function guardSubsidiaryAccess(
         );
     }
   } else if (action === "applyEscalation") {
-    const result = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select p.subsidiary_id as "subsidiaryId" from lease_escalations e join property_leases l on l.id=e.lease_id and l.org_id=e.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where e.org_id=${authz.user.orgId} and e.id=${String(body.escalationId ?? "")}`, "objects",
-    ));
+    const result = await db.execute<{ subsidiaryId: string | null }>(
+      sql`select p.subsidiary_id as "subsidiaryId" from lease_escalations e join property_leases l on l.id=e.lease_id and l.org_id=e.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where e.org_id=${authz.user.orgId} and e.id=${String(body.escalationId ?? "")}`,
+      "objects",
+    );
     subsidiaryId = result[0]?.subsidiaryId ?? null;
   } else if (
     ["updateCamPool", "cancelCamPool", "reopenCamPool", "finalizeCam", "billCam"].includes(action)
   ) {
-    const result = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select p.subsidiary_id as "subsidiaryId" from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.id=${String(body.poolId ?? "")}`, "objects",
-    ));
+    const result = await db.execute<{ subsidiaryId: string | null }>(
+      sql`select p.subsidiary_id as "subsidiaryId" from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.id=${String(body.poolId ?? "")}`,
+      "objects",
+    );
     subsidiaryId = result[0]?.subsidiaryId ?? null;
   }
   if (!subsidiaryId)
-    return NextResponse.json(
-      { error: "Property-management record not found" },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: "Property-management record not found" }, { status: 404 });
   if (!allowed.has(String(subsidiaryId)))
     return NextResponse.json(
       { error: "Property-management record is outside your subsidiary access" },
@@ -331,13 +519,14 @@ async function refuseDisabledPropertyFixedAsset(
   } else if (submitted === undefined) {
     return null;
   } else {
-    const current = (await db.execute<{ fixed_asset_id: string | null }>(sql`
+    const current = await db.execute<{ fixed_asset_id: string | null }>(
+      sql`
       select fixed_asset_id from managed_properties
        where org_id=${orgId} and id=${String(body.propertyId ?? "")}
-    `, "objects"));
-    const currentId = current[0]?.fixed_asset_id
-      ? String(current[0].fixed_asset_id)
-      : null;
+    `,
+      "objects",
+    );
+    const currentId = current[0]?.fixed_asset_id ? String(current[0].fixed_asset_id) : null;
     if (currentId === submitted) return null;
   }
   if (await isFeatureEnabled(orgId, "fixedAssets")) return null;
@@ -350,10 +539,7 @@ async function refuseDisabledPropertyCurrency(
   body: Record<string, unknown>,
 ): Promise<NextResponse | null> {
   if (action !== "createProperty" && action !== "updateProperty") return null;
-  if (
-    body.currency !== undefined &&
-    !(await isFeatureEnabled(orgId, "multiCurrency"))
-  ) {
+  if (body.currency !== undefined && !(await isFeatureEnabled(orgId, "multiCurrency"))) {
     return notFound("record");
   }
   return null;
@@ -370,20 +556,21 @@ async function refuseDisabledLeaseChargeInventory(
   const itemId = body.itemId;
   if (itemId === undefined || itemId === null || itemId === "") return null;
   if (await isFeatureEnabled(orgId, "inventory")) return null;
-  const item = (await db.execute<{ kind: string }>(sql`
-    select kind from items where id = ${String(itemId)} and org_id = ${orgId}`, "objects"));
+  const item = await db.execute<{ kind: string }>(
+    sql`
+    select kind from items where id = ${String(itemId)} and org_id = ${orgId}`,
+    "objects",
+  );
   if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
     return notFound("record");
   }
   return null;
 }
 
-
-
 export const GET = defineRoute({
   permission: "ar.read",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  handler: async () => legacyGET(),
+  feature: "propertyManagement",
+  handler: async ({ authz }) => legacyGET(authz),
 });
 
 export const POST = defineRoute({
@@ -391,9 +578,6 @@ export const POST = defineRoute({
   body: requestBodySchema,
   handler: async ({ request, body: parsedBody, authz: routeAuthz }) => {
     const body = parsedBody as Record<string, unknown>;
-
-
-
 
     const action = String(body.action ?? "");
     if (!knownActions.has(action))
@@ -412,28 +596,20 @@ export const POST = defineRoute({
     if (feature) return feature;
     const subsidiary = await guardSubsidiaryAccess(authz, action, body);
     if (subsidiary) return subsidiary;
-    const assetGate = await refuseDisabledPropertyFixedAsset(
-      authz.user.orgId,
-      action,
-      body,
-    );
+    const assetGate = await refuseDisabledPropertyFixedAsset(authz.user.orgId, action, body);
     if (assetGate) return assetGate;
-    const currencyGate = await refuseDisabledPropertyCurrency(
-      authz.user.orgId,
-      action,
-      body,
-    );
+    const currencyGate = await refuseDisabledPropertyCurrency(authz.user.orgId, action, body);
     if (currencyGate) return currencyGate;
-    const inventoryGate = await refuseDisabledLeaseChargeInventory(
-      authz.user.orgId,
-      action,
-      body,
-    );
+    const inventoryGate = await refuseDisabledLeaseChargeInventory(authz.user.orgId, action, body);
     if (inventoryGate) return inventoryGate;
     // The caller's subsidiary fence rides every engine call: each service
     // locks the parent row and rechecks scope inside its own transaction, so
     // the unlocked precheck above cannot be raced by a concurrent rehome.
-    const common = { orgId: authz.user.orgId, actorId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds };
+    const common = {
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    };
     // Audit correlation for financial-term writes (createLease, updateLease,
     // addCharge, addEscalation): a caller-supplied correlation id lands in
     // audit_log.request_id next to its actor.
@@ -451,34 +627,54 @@ export const POST = defineRoute({
           if (!createValidation.ok) {
             return NextResponse.json(
               {
-                error:
-                  Object.values(createValidation.errors)[0] ?? "Invalid custom fields",
+                error: Object.values(createValidation.errors)[0] ?? "Invalid custom fields",
                 errors: createValidation.errors,
               },
               { status: 400 },
             );
           }
-          const unownedCreateRefs = await findUnownedCustomReferences(common.orgId, createDefs, createValidation.cleaned);
+          const unownedCreateRefs = await findUnownedCustomReferences(
+            common.orgId,
+            createDefs,
+            createValidation.cleaned,
+          );
           if (unownedCreateRefs.length > 0) {
             return NextResponse.json(
               { error: `${unownedCreateRefs[0]!.label} not found in this organization` },
               { status: 404 },
             );
           }
-          result = await createManagedProperty({ ...body, custom: createValidation.cleaned, ...common } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; currency?: string | null; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; custom?: Record<string, unknown>; });
+          result = await createManagedProperty({
+            ...body,
+            custom: createValidation.cleaned,
+            ...common,
+          } as unknown as {
+            orgId: string;
+            actorId: string;
+            allowedSubsidiaryIds: ReadonlySet<string> | null;
+            subsidiaryId: string;
+            locationId?: string | null;
+            fixedAssetId?: string | null;
+            code: string;
+            name: string;
+            propertyType: string;
+            currency?: string | null;
+            address?: Record<string, string>;
+            rentIncomeAccountId?: string | null;
+            camIncomeAccountId?: string | null;
+            depositLiabilityAccountId?: string | null;
+            defaultBankAccountId?: string | null;
+            custom?: Record<string, unknown>;
+          });
           break;
         }
         case "updateProperty": {
           const updateDefs = await loadFieldDefs("managed_properties");
-          const validation = validateCustomValues(
-            updateDefs,
-            customBag(body.custom),
-          );
+          const validation = validateCustomValues(updateDefs, customBag(body.custom));
           if (!validation.ok) {
             return NextResponse.json(
               {
-                error:
-                  Object.values(validation.errors)[0] ?? "Invalid custom fields",
+                error: Object.values(validation.errors)[0] ?? "Invalid custom fields",
                 errors: validation.errors,
               },
               { status: 400 },
@@ -487,7 +683,11 @@ export const POST = defineRoute({
           // The engine replaces the bag whole, so the full cleaned bag is
           // newly stored: refuse foreign or dangling reference ids with a
           // tenant-opaque 404 instead of persisting a cross-tenant pointer.
-          const unownedUpdateRefs = await findUnownedCustomReferences(common.orgId, updateDefs, validation.cleaned);
+          const unownedUpdateRefs = await findUnownedCustomReferences(
+            common.orgId,
+            updateDefs,
+            validation.cleaned,
+          );
           if (unownedUpdateRefs.length > 0) {
             return NextResponse.json(
               { error: `${unownedUpdateRefs[0]!.label} not found in this organization` },
@@ -498,7 +698,27 @@ export const POST = defineRoute({
             ...body,
             custom: validation.cleaned,
             ...common,
-          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; status: string; currency?: string; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; custom?: Record<string, unknown>; reason?: string | null; });
+          } as unknown as {
+            orgId: string;
+            actorId: string;
+            allowedSubsidiaryIds: ReadonlySet<string> | null;
+            propertyId: string;
+            subsidiaryId: string;
+            locationId?: string | null;
+            fixedAssetId?: string | null;
+            code: string;
+            name: string;
+            propertyType: string;
+            status: string;
+            currency?: string;
+            address?: Record<string, string>;
+            rentIncomeAccountId?: string | null;
+            camIncomeAccountId?: string | null;
+            depositLiabilityAccountId?: string | null;
+            defaultBankAccountId?: string | null;
+            custom?: Record<string, unknown>;
+            reason?: string | null;
+          });
           break;
         }
         case "deleteProperty":
@@ -514,14 +734,36 @@ export const POST = defineRoute({
             ...body,
             ...common,
             rentableArea: persistMoney(body.rentableArea),
-          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; });
+          } as unknown as {
+            orgId: string;
+            actorId: string;
+            allowedSubsidiaryIds: ReadonlySet<string> | null;
+            propertyId: string;
+            code: string;
+            name?: string | null;
+            unitType?: string | null;
+            rentableArea?: string | null;
+            bedrooms?: number | null;
+          });
           break;
         case "updateUnit":
           result = await updatePropertyUnit({
             ...body,
             ...common,
             rentableArea: persistMoney(body.rentableArea),
-          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; unitId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; status?: string; reason?: string | null; });
+          } as unknown as {
+            orgId: string;
+            actorId: string;
+            allowedSubsidiaryIds: ReadonlySet<string> | null;
+            unitId: string;
+            code: string;
+            name?: string | null;
+            unitType?: string | null;
+            rentableArea?: string | null;
+            bedrooms?: number | null;
+            status?: string;
+            reason?: string | null;
+          });
           break;
         case "deleteUnit":
           result = await deletePropertyUnit(
@@ -540,7 +782,28 @@ export const POST = defineRoute({
             securityDepositRequired: persistMoney(body.securityDepositRequired) ?? "0",
             camSharePercent: persistMoney(body.camSharePercent),
             lateFeeValue: persistMoney(body.lateFeeValue) ?? "0",
-          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string; startsOn: string; endsOn?: string | null; baseRent: string; billingDay?: number; paymentTermsDays?: number; securityDepositRequired?: string; camMethod?: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null; lateFeeType?: "none" | "fixed" | "percent"; lateFeeValue?: string; graceDays?: number; autoInvoice?: boolean; autoPost?: boolean; });
+          } as unknown as {
+            orgId: string;
+            actorId: string;
+            allowedSubsidiaryIds: ReadonlySet<string> | null;
+            propertyId: string;
+            unitId?: string | null;
+            tenantId: string;
+            leaseNumber: string;
+            startsOn: string;
+            endsOn?: string | null;
+            baseRent: string;
+            billingDay?: number;
+            paymentTermsDays?: number;
+            securityDepositRequired?: string;
+            camMethod?: "none" | "fixed" | "pro_rata";
+            camSharePercent?: string | null;
+            lateFeeType?: "none" | "fixed" | "percent";
+            lateFeeValue?: string;
+            graceDays?: number;
+            autoInvoice?: boolean;
+            autoPost?: boolean;
+          });
           break;
         case "updateLease":
           result = await updatePropertyLease({
@@ -551,7 +814,29 @@ export const POST = defineRoute({
             securityDepositRequired: persistMoney(body.securityDepositRequired) ?? "0",
             camSharePercent: persistMoney(body.camSharePercent),
             lateFeeValue: persistMoney(body.lateFeeValue) ?? "0",
-          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string; startsOn: string; endsOn?: string | null; baseRent: string; billingDay: number; paymentTermsDays: number; securityDepositRequired: string; camMethod: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null; lateFeeType: "none" | "fixed" | "percent"; lateFeeValue: string; graceDays: number; autoInvoice: boolean; autoPost: boolean; });
+          } as unknown as {
+            orgId: string;
+            actorId: string;
+            allowedSubsidiaryIds: ReadonlySet<string> | null;
+            leaseId: string;
+            propertyId: string;
+            unitId?: string | null;
+            tenantId: string;
+            leaseNumber: string;
+            startsOn: string;
+            endsOn?: string | null;
+            baseRent: string;
+            billingDay: number;
+            paymentTermsDays: number;
+            securityDepositRequired: string;
+            camMethod: "none" | "fixed" | "pro_rata";
+            camSharePercent?: string | null;
+            lateFeeType: "none" | "fixed" | "percent";
+            lateFeeValue: string;
+            graceDays: number;
+            autoInvoice: boolean;
+            autoPost: boolean;
+          });
           break;
         case "cancelLease":
           result = await cancelPropertyLease(
@@ -585,7 +870,21 @@ export const POST = defineRoute({
             ...common,
             ...requestCorrelation,
             amount: requireMoney(body.amount),
-          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null; });
+          } as unknown as {
+            orgId: string;
+            actorId: string;
+            allowedSubsidiaryIds: ReadonlySet<string> | null;
+            leaseId: string;
+            chargeType: string;
+            description: string;
+            amount: string;
+            frequency: string;
+            effectiveFrom: string;
+            effectiveTo?: string | null;
+            incomeAccountId?: string | null;
+            itemId?: string | null;
+            taxCodeId?: string | null;
+          });
           break;
         case "addEscalation":
           result = await addLeaseEscalation({
@@ -593,7 +892,15 @@ export const POST = defineRoute({
             ...common,
             ...requestCorrelation,
             value: requireMoney(body.value),
-          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; effectiveOn: string; method: "percent" | "fixed" | "new_amount"; value: string; });
+          } as unknown as {
+            orgId: string;
+            actorId: string;
+            allowedSubsidiaryIds: ReadonlySet<string> | null;
+            leaseId: string;
+            effectiveOn: string;
+            method: "percent" | "fixed" | "new_amount";
+            value: string;
+          });
           break;
         case "applyEscalation":
           result = await applyLeaseEscalation(
@@ -640,15 +947,11 @@ export const POST = defineRoute({
               { error: "levelRent scopes by lease; pass leaseId without propertyId" },
               { status: 400 },
             );
-          result = await levelLeaseRentStraightLine(
-            common.orgId,
-            common.actorId,
-            {
-              asOf: dateOrUndefined(body.asOf) ?? (await businessToday(common.orgId)),
-              ...(body.leaseId == null ? {} : { onlyLeaseId: String(body.leaseId) }),
-              allowedSubsidiaryIds: common.allowedSubsidiaryIds,
-            },
-          );
+          result = await levelLeaseRentStraightLine(common.orgId, common.actorId, {
+            asOf: dateOrUndefined(body.asOf) ?? (await businessToday(common.orgId)),
+            ...(body.leaseId == null ? {} : { onlyLeaseId: String(body.leaseId) }),
+            allowedSubsidiaryIds: common.allowedSubsidiaryIds,
+          });
           break;
         }
         case "recordDeposit":
@@ -656,30 +959,81 @@ export const POST = defineRoute({
             ...body,
             ...common,
             amount: requireMoney(body.amount),
-          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; kind: string; occurredOn: string; amount: string; bankAccountId?: string | null; offsetAccountId?: string | null; appliedDocumentId?: string | null; memo?: string | null; importKey?: string | null; });
+          } as unknown as {
+            orgId: string;
+            actorId: string;
+            allowedSubsidiaryIds: ReadonlySet<string> | null;
+            leaseId: string;
+            kind: string;
+            occurredOn: string;
+            amount: string;
+            bankAccountId?: string | null;
+            offsetAccountId?: string | null;
+            appliedDocumentId?: string | null;
+            memo?: string | null;
+            importKey?: string | null;
+          });
           break;
         case "reverseDeposit":
           result = await reverseSecurityDepositTransaction({
             ...body,
             ...common,
-          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; transactionId: string; occurredOn: string; reason: string; });
+          } as unknown as {
+            orgId: string;
+            actorId: string;
+            allowedSubsidiaryIds: ReadonlySet<string> | null;
+            transactionId: string;
+            occurredOn: string;
+            reason: string;
+          });
           break;
         case "createCamPool":
           result = await createCamPool({
             ...body,
             ...common,
             budgetAmount: requireMoney(body.budgetAmount),
-          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; vacancyTreatment?: "occupied_area" | "total_rentable_area"; budgetAmount: string; expenseAccountIds: string[]; });
+          } as unknown as {
+            orgId: string;
+            actorId: string;
+            allowedSubsidiaryIds: ReadonlySet<string> | null;
+            propertyId: string;
+            name: string;
+            fiscalYear: number;
+            periodStartsOn: string;
+            periodEndsOn: string;
+            allocationBasis: "rentable_area" | "equal" | "custom";
+            vacancyTreatment?: "occupied_area" | "total_rentable_area";
+            budgetAmount: string;
+            expenseAccountIds: string[];
+          });
           break;
         case "updateCamPool":
           result = await updateCamPool({
             ...body,
             ...common,
             budgetAmount: requireMoney(body.budgetAmount),
-          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; poolId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; vacancyTreatment?: "occupied_area" | "total_rentable_area"; budgetAmount: string; expenseAccountIds: string[]; });
+          } as unknown as {
+            orgId: string;
+            actorId: string;
+            allowedSubsidiaryIds: ReadonlySet<string> | null;
+            poolId: string;
+            name: string;
+            fiscalYear: number;
+            periodStartsOn: string;
+            periodEndsOn: string;
+            allocationBasis: "rentable_area" | "equal" | "custom";
+            vacancyTreatment?: "occupied_area" | "total_rentable_area";
+            budgetAmount: string;
+            expenseAccountIds: string[];
+          });
           break;
         case "cancelCamPool":
-          await cancelCamPool(common.orgId, common.actorId, common.allowedSubsidiaryIds, String(body.poolId));
+          await cancelCamPool(
+            common.orgId,
+            common.actorId,
+            common.allowedSubsidiaryIds,
+            String(body.poolId),
+          );
           break;
         case "reopenCamPool":
           await reopenFinalizedCamPool(
@@ -712,27 +1066,22 @@ export const POST = defineRoute({
       }
       return NextResponse.json(result ?? { ok: true }, {
         status:
-          action.startsWith("create") ||
-          action.startsWith("add") ||
-          action === "recordDeposit"
+          action.startsWith("create") || action.startsWith("add") || action === "recordDeposit"
             ? 201
             : 200,
       });
     } catch (error) {
       // A subsidiary refusal inside an engine transaction is the uniform
       // not-found: the rehome-race denial must not reveal the record exists.
-      if (error instanceof ScopeNotFoundError)
-        return notFound("record");
-      if (error instanceof PropertyManagementError)
-        return apiErrorResponse(error);
+      if (error instanceof ScopeNotFoundError) return notFound("record");
+      if (error instanceof PropertyManagementError) return apiErrorResponse(error);
       // Drizzle wraps driver errors, so the PostgreSQL code can sit on `cause`.
       const pgCode = error as { code?: string; cause?: { code?: string } };
       const code = pgCode.code ?? pgCode.cause?.code;
       if (code === "23505")
         return NextResponse.json(
           {
-            error:
-              "That code, number, or active unit assignment is already in use",
+            error: "That code, number, or active unit assignment is already in use",
           },
           { status: 409 },
         );
@@ -742,10 +1091,7 @@ export const POST = defineRoute({
           { status: 409 },
         );
       console.error("[property-management] action failed", error);
-      return NextResponse.json(
-        { error: "Property management action failed" },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: "Property management action failed" }, { status: 500 });
     }
   },
 });

@@ -1,25 +1,24 @@
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 
 import { NextResponse } from "next/server";
 import { normalizeMoney } from "@openbooks/engine/money/money";
-import { guardPermission } from "../../../lib/authz";
+import type { Authz } from "@/lib/authz";
 import { isUuid } from "../../../lib/list-params";
-import {
-  createBillingRequest,
-  listBillingRequests,
-} from "../../../lib/billing-requests";
-import { canonicalDecimal } from "../../../lib/exact-decimal";
-import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
-import { guardProjectsFeature } from "../../../lib/projects-gate";
+import { createBillingRequest, listBillingRequests } from "@/lib/billing-requests";
+import { canonicalDecimal } from "@/lib/exact-decimal";
+import { moneyRefusal } from "@/lib/payroll-decimal-refusal";
+import { guardProjectsFeature } from "@/lib/projects-gate";
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.object({
   projectId: uuidString(),
   invoiceType: z.enum(["progress", "final"]).optional(),
-  basis: z.enum(["date_range", "draw_amount", "time_selection", "milestone", "field_ticket"]).optional(),
+  basis: z
+    .enum(["date_range", "draw_amount", "time_selection", "milestone", "field_ticket"])
+    .optional(),
   drawAmount: z.string().nullable().optional(),
   startDate: z.string().nullable().optional(),
   cutoffDate: z.string().nullable().optional(),
@@ -32,46 +31,33 @@ const requestBodySchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-
-
 export const runtime = "nodejs";
 
-async function legacyGET(req: Request) {
-  const gate = await guardPermission("projects.read");
-  if (gate instanceof NextResponse) return gate;
-  const feature = await guardProjectsFeature(gate.user.orgId);
-  if (feature) return feature;
+async function legacyGET(gate: Authz, req: Request) {
   const projectId = new URL(req.url).searchParams.get("projectId");
   if (!projectId || !isUuid(projectId))
     return NextResponse.json({ error: "projectId required" }, { status: 400 });
-  const requests = await listBillingRequests(
-    gate.user.orgId,
-    projectId,
-    gate.allowedSubsidiaryIds,
-  );
+  const requests = await listBillingRequests(gate.user.orgId, projectId, gate.allowedSubsidiaryIds);
   return NextResponse.json({ requests });
 }
 
-
-
 export const GET = defineRoute({
   permission: "projects.read",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  handler: async ({ request }) => legacyGET(request as never),
+  feature: "projects",
+  handler: async ({ request, authz }) => legacyGET(authz, request),
 });
 
 export const POST = defineRoute({
   permission: "projects.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks.",
+  },
   body: requestBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
-
     const gate = routeAuthz;
 
     const feature = await guardProjectsFeature(gate.user.orgId);
     if (feature) return feature;
-
-
 
     const projectId = String(body?.projectId ?? "");
     if (!body?.projectId || !isUuid(projectId)) {

@@ -1,27 +1,27 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 /**
  * View export already applies canRunReportEntity. Pin that a payroll plan
  * is not exported with only reports.read — the same refusal GET/list/PATCH
  * still lack.
  */
-const stateKey = Symbol.for('openbooks.view-export-authz-route-test')
+const stateKey = Symbol.for("openbooks.view-export-authz-route-test");
 interface RouteState {
-  granted: Set<string>
-  ran: boolean
+  granted: Set<string>;
+  ran: boolean;
   /** When set, the view executor throws this message instead of returning rows. */
-  explode: string | null
+  explode: string | null;
 }
-const state: RouteState = { granted: new Set(), ran: false, explode: null }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+const state: RouteState = { granted: new Set(), ran: false, explode: null };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
-const VIEW_ID = '00000000-0000-4000-8000-00000000c001'
+const VIEW_ID = "00000000-0000-4000-8000-00000000c001";
 
 const mockSources = new Map<string, string>([
   [
-    'mock:authz',
+    "mock:authz",
     `
       import { NextResponse } from 'next/server'
       const state = globalThis[Symbol.for('openbooks.view-export-authz-route-test')]
@@ -34,7 +34,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:report-authz',
+    "mock:report-authz",
     `
       export async function canRunReportEntity(authz, query) {
         const entity = query && typeof query === 'object' ? query.entity : undefined
@@ -44,7 +44,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:views',
+    "mock:views",
     `
       const state = globalThis[Symbol.for('openbooks.view-export-authz-route-test')]
       export async function loadView() {
@@ -64,61 +64,64 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
-const SELF_URL = new URL(import.meta.url).href
-const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
+const SELF_URL = new URL(import.meta.url).href;
+const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`;
 const mockUrls = new Map<string, string>([
-  ['../../../../../lib/authz', mockUrl('authz')],
-  ['@/lib/authz', mockUrl('authz')],
-  ['../../../../../lib/report-authz', mockUrl('report-authz')],
-  ['../../../../../lib/views', mockUrl('views')],
-])
+  ["../../../../../lib/authz", mockUrl("authz")],
+  ["@/lib/authz", mockUrl("authz")],
+  ["@/lib/report-authz", mockUrl("report-authz")],
+  ["@/lib/views", mockUrl("views")],
+]);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const parsed = new URL(url)
-    const mockName = parsed.searchParams.get('mock')
-    const source = mockSources.get(mockName ? `mock:${mockName}` : url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const parsed = new URL(url);
+    const mockName = parsed.searchParams.get("mock");
+    const source = mockSources.get(mockName ? `mock:${mockName}` : url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const view_export_authzUrl = './[id]/export/route.ts?view-export-authz'
-const { GET } = (await import(view_export_authzUrl)) as typeof import('./[id]/export/route.ts')
-test('view export refuses a payroll plan when the caller lacks payroll.read', async () => {
-  state.granted = new Set(['reports.read'])
-  state.ran = false
-
-  const response = await GET(
-    new Request(`http://openbooks.test/api/views/${VIEW_ID}/export?format=csv`),
-    { params: Promise.resolve({ id: VIEW_ID }) },
-  )
-
-  assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not_found' })
-  assert.equal(state.ran, false, 'the executor must not run after the entity gate refuses')
-})
-
-test('view export generalizes an executor failure instead of echoing it', async () => {
-  state.granted = new Set(['*'])
-  state.ran = false
-  const probe = 'sanitizer-probe-4d8b-missing-relation'
-  state.explode = `relation "report_rows" does not exist (${probe})`
+const view_export_authzUrl = "./[id]/export/route.ts?view-export-authz";
+const { GET } = (await import(view_export_authzUrl)) as typeof import("./[id]/export/route.ts");
+test("view export refuses a payroll plan when the caller lacks payroll.read", async () => {
+  state.granted = new Set(["reports.read"]);
+  state.ran = false;
 
   const response = await GET(
     new Request(`http://openbooks.test/api/views/${VIEW_ID}/export?format=csv`),
     { params: Promise.resolve({ id: VIEW_ID }) },
-  )
-  state.explode = null
+  );
 
-  assert.equal(response.status, 500)
-  const body = await response.text()
-  assert.ok(!body.includes(probe), 'the 500 body must carry a request id, not the executor error text')
-})
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "not_found" });
+  assert.equal(state.ran, false, "the executor must not run after the entity gate refuses");
+});
+
+test("view export generalizes an executor failure instead of echoing it", async () => {
+  state.granted = new Set(["*"]);
+  state.ran = false;
+  const probe = "sanitizer-probe-4d8b-missing-relation";
+  state.explode = `relation "report_rows" does not exist (${probe})`;
+
+  const response = await GET(
+    new Request(`http://openbooks.test/api/views/${VIEW_ID}/export?format=csv`),
+    { params: Promise.resolve({ id: VIEW_ID }) },
+  );
+  state.explode = null;
+
+  assert.equal(response.status, 500);
+  const body = await response.text();
+  assert.ok(
+    !body.includes(probe),
+    "the 500 body must carry a request id, not the executor error text",
+  );
+});

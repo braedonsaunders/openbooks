@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { guardPermission } from '../../../../../lib/authz'
-import { isUuid } from '../../../../../lib/list-params'
-import { canRunReportEntity } from '../../../../../lib/report-authz'
-import { loadView, runView } from '../../../../../lib/views'
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import type { Authz } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import { canRunReportEntity } from "@/lib/report-authz";
+import { loadView, runView } from "@/lib/views";
 import {
   exportDataToCsv,
   exportDataToPdf,
@@ -13,72 +13,70 @@ import {
   orgBranding,
   resolveLayout,
   runResultToExportData,
-} from '../../../../../lib/report-pdf'
-import { xlsxMoneyContext } from '../../../../../lib/xlsx-money'
-import { reportCsvOptions } from '../../../../../lib/report-labels'
-import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../lib/export'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
+} from "@/lib/report-pdf";
+import { xlsxMoneyContext } from "@/lib/xlsx-money";
+import { reportCsvOptions } from "@/lib/report-labels";
+import { csvResponse, pdfResponse, safeName, xlsxResponse } from "@/lib/export";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /** Export a view to PDF, Excel or CSV (runs fresh, current data). */
-async function legacyGET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('reports.read')
-  if (gate instanceof NextResponse) return gate
-  const { user, permissions } = gate
-  const { id } = await params
+async function legacyGET(gate: Authz, req: Request, id: string) {
+  const { user, permissions } = gate;
 
-  const url = new URL(req.url)
-  const format = (url.searchParams.get('format') ?? 'pdf').toLowerCase()
-  if (!['pdf', 'xlsx', 'csv'].includes(format)) {
-    return NextResponse.json({ error: 'invalid format' }, { status: 422 })
+  const url = new URL(req.url);
+  const format = (url.searchParams.get("format") ?? "pdf").toLowerCase();
+  if (!["pdf", "xlsx", "csv"].includes(format)) {
+    return NextResponse.json({ error: "invalid format" }, { status: 422 });
   }
 
-  if (!isUuid(id)) return notFound("record")
-  const view = await loadView(user.orgId, id, user.id, permissions)
-  if (!view) return notFound("record")
+  if (!isUuid(id)) return notFound("record");
+  const view = await loadView(user.orgId, id, user.id, permissions);
+  if (!view) return notFound("record");
   if (!(await canRunReportEntity(gate, view.query))) {
-    return notFound("record")
+    return notFound("record");
   }
 
-  let result
+  let result;
   try {
-    result = await runView(user.orgId, view.query)
+    result = await runView(user.orgId, view.query);
   } catch (err) {
-    return apiErrorResponse(err)
+    return apiErrorResponse(err);
   }
 
-  const data = runResultToExportData(result, { title: view.name, dateRangeLabel: '' })
-  const stamp = await businessToday(user.orgId)
-  const filename = `${safeName(view.slug)}-${stamp}`
+  const data = runResultToExportData(result, { title: view.name, dateRangeLabel: "" });
+  const stamp = await businessToday(user.orgId);
+  const filename = `${safeName(view.slug)}-${stamp}`;
 
-  if (format === 'csv') {
-    const { sectionHeader } = await reportCsvOptions()
-    return csvResponse(exportDataToCsv(data, { sectionHeader }), filename)
+  if (format === "csv") {
+    const { sectionHeader } = await reportCsvOptions();
+    return csvResponse(exportDataToCsv(data, { sectionHeader }), filename);
   }
-  if (format === 'xlsx') {
+  if (format === "xlsx") {
     const buf = await exportDataToXlsx(data, {
       reportName: view.name,
-      dateRangeLabel: '',
+      dateRangeLabel: "",
       generatedAt: new Date(`${stamp}T00:00:00Z`),
       money: await xlsxMoneyContext(user.orgId),
-    })
-    return xlsxResponse(buf, filename)
+    });
+    return xlsxResponse(buf, filename);
   }
-  const { page, showSummary } = resolveLayout(view.layout)
-  const branding = await orgBranding()
+  const { page, showSummary } = resolveLayout(view.layout);
+  const branding = await orgBranding();
   const pdf = await exportDataToPdf(data, branding, page, {
     showSummary,
     generatedAt: new Date(`${stamp}T00:00:00Z`),
-  })
-  return pdfResponse(pdf, filename)
+  });
+  return pdfResponse(pdf, filename);
 }
 
 export const GET = defineRoute({
   permission: "reports.read",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  params: z.object({ "id": z.string() }),
-  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+  feature: {
+    none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks.",
+  },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, authz, params }) => legacyGET(authz, request, params.id),
 });
