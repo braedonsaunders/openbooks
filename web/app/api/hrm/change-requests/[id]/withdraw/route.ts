@@ -1,10 +1,9 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { withdrawChangeRequest } from "@openbooks/engine/hrm/change-requests/operations";
-import { guardPermission } from "../../../../../../lib/authz";
-import { isUuid } from "../../../../../../lib/list-params";
+import { guardPermission } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
 import { changeRequestErrorResponse } from "../../_lib";
 import { withdrawChangeRequestBody } from "../../bodies";
 /**
@@ -14,30 +13,23 @@ import { withdrawChangeRequestBody } from "../../bodies";
  * enforces own-employment and kind; anything else keeps the manage refusal).
  */
 export const POST = defineRoute({
-  public: "session",
+  authorize: async () => {
+    const hr = await guardPermission("hrm.employment.manage");
+    return hr instanceof NextResponse ? await guardPermission("hrm.self.request") : hr;
+  },
   feature: "hrm",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, params }) => {
-    const hr = await guardPermission("hrm.employment.manage");
-    const gate =
-      hr instanceof NextResponse
-        ? await guardPermission("hrm.self.request")
-        : hr;
-    if (gate instanceof NextResponse) return gate;
+  body: withdrawChangeRequestBody,
+  handler: async ({ params, body, authz: gate }) => {
     const { id } = params;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "request id must be a uuid" },
-        { status: 400 },
-      );
-    const parsedBody = await parseJsonBody(req, withdrawChangeRequestBody);
-    if (!parsedBody.ok) return parsedBody.response;
+      return NextResponse.json({ error: "request id must be a uuid" }, { status: 400 });
     try {
       const request = await withdrawChangeRequest({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         requestId: id,
-        reason: parsedBody.data.reason,
+        reason: body.reason,
       });
       return NextResponse.json({ request });
     } catch (e) {
