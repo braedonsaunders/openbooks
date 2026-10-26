@@ -1,78 +1,77 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { z } from 'zod';
-import { defineRoute } from '@/lib/api/route';
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
 import {
   BankingError,
   adjustReconciliation,
   discardReconciliation,
   reconciliationStaleness,
   reconciliationTotals,
-} from '@openbooks/engine/banking/banking'
-import { isUuid } from '../../../../../lib/list-params'
-import { canonicalDecimal } from '../../../../../lib/exact-decimal'
-import { guardSubsidiaryScope } from '../../../../../lib/authz'
+} from "@openbooks/engine/banking/banking";
+import { getReconciliationRouteRow } from "@openbooks/engine/banking/reconciliation-queries";
+import { isUuid } from "@/lib/list-params";
+import { canonicalDecimal } from "@/lib/exact-decimal";
+import { guardSubsidiaryScope } from "@/lib/authz";
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({
-  throughDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), statementBalance: z.string().optional(),
-}).refine((body) => body.throughDate !== undefined || body.statementBalance !== undefined, { message: 'throughDate or statementBalance is required' });
+const PATCHBodySchema1 = z
+  .object({
+    throughDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    statementBalance: z.string().optional(),
+  })
+  .refine((body) => body.throughDate !== undefined || body.statementBalance !== undefined, {
+    message: "throughDate or statementBalance is required",
+  });
 
-
-
-export const runtime = 'nodejs'
-
+export const runtime = "nodejs";
 
 export const GET = defineRoute({
-  permission: 'banking.read',
-  feature: 'banking',
+  permission: "banking.read",
+  feature: "banking",
   handler: async ({ request: _req, authz: routeAuthz, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
-    const { user } = gate
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
+    const { user } = gate;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
     try {
-        const rec = (await db.execute<Record<string, unknown>>(sql`
-          select r.id, r.account_id, r.through_date, r.statement_balance, r.status,
-                 r.signed_off_by, r.signed_off_at, r.created_at,
-                 a.number as account_number, a.name as account_name,
-                 a.subsidiary_id as account_subsidiary_id
-            from reconciliations r
-            join accounts a on a.id = r.account_id and a.org_id = r.org_id
-           where r.id = ${id} and r.org_id = ${user.orgId}
-        `, 'objects'))
-        if (!rec[0]) return notFound("record")
-        // A session on another entity's account (or a shared account, for a
-        // restricted caller) reads exactly like a missing session.
-        const scoped = guardSubsidiaryScope(gate, rec[0].account_subsidiary_id as string | null)
-        if (scoped) return scoped
-        const totals = await reconciliationTotals(id, {
-          orgId: user.orgId,
-          userId: user.id,
-          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-        })
-        // Read-time staleness rides the same scope gate: late in-period
-        // postings and reversed matches behind a frozen sign-off.
-        const staleness = await reconciliationStaleness(id, {
-          orgId: user.orgId,
-          userId: user.id,
-          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-        })
-        // The ownership column gated the read; it is not part of the response shape.
-        delete rec[0].account_subsidiary_id
-        return NextResponse.json({ reconciliation: rec[0], totals, staleness })
-      } catch (e) {
-        return apiErrorResponse(e)
-      }
+      const reconciliation = await getReconciliationRouteRow(user.orgId, id);
+      if (!reconciliation) return notFound("record");
+      // A session on another entity's account (or a shared account, for a
+      // restricted caller) reads exactly like a missing session.
+      const scoped = guardSubsidiaryScope(
+        gate,
+        reconciliation.account_subsidiary_id as string | null,
+      );
+      if (scoped) return scoped;
+      const totals = await reconciliationTotals(id, {
+        orgId: user.orgId,
+        userId: user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      });
+      // Read-time staleness rides the same scope gate: late in-period
+      // postings and reversed matches behind a frozen sign-off.
+      const staleness = await reconciliationStaleness(id, {
+        orgId: user.orgId,
+        userId: user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      });
+      // The ownership column gated the read; it is not part of the response shape.
+      delete reconciliation.account_subsidiary_id;
+      return NextResponse.json({ reconciliation, totals, staleness });
+    } catch (e) {
+      return apiErrorResponse(e);
+    }
   },
 });
 
 /** Adjust an unsigned session's cutoff or statement balance. */
 export const PATCH = defineRoute({
-  permission: 'banking.reconcile',
-  feature: 'banking',
+  permission: "banking.reconcile",
+  feature: "banking",
   body: PATCHBodySchema1,
   // Cutoff and balance refusals are 422 domain refusals by contract; malformed
   // JSON still stays 400 in the shared parser.
@@ -80,54 +79,60 @@ export const PATCH = defineRoute({
   handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
-    const { user } = gate
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
+    const { user } = gate;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
 
-    const body = (routeBody) as { throughDate?: string; statementBalance?: string }
+    const body = routeBody as { throughDate?: string; statementBalance?: string };
     try {
-        if (body.throughDate !== undefined && (typeof body.throughDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.throughDate))) {
-          throw new BankingError('Through date must be YYYY-MM-DD')
-        }
-        const statementBalance = body.statementBalance === undefined
-          ? null
-          : canonicalDecimal(body.statementBalance, 4)
-        if (body.statementBalance !== undefined && statementBalance === null) {
-          throw new BankingError('Statement balance must be a number')
-        }
-        const totals = await adjustReconciliation(id, {
+      if (
+        body.throughDate !== undefined &&
+        (typeof body.throughDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.throughDate))
+      ) {
+        throw new BankingError("Through date must be YYYY-MM-DD");
+      }
+      const statementBalance =
+        body.statementBalance === undefined ? null : canonicalDecimal(body.statementBalance, 4);
+      if (body.statementBalance !== undefined && statementBalance === null) {
+        throw new BankingError("Statement balance must be a number");
+      }
+      const totals = await adjustReconciliation(
+        id,
+        {
           throughDate: body.throughDate,
           statementBalance: statementBalance ?? undefined,
-        }, { orgId: user.orgId, userId: user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
-        if (totals === null) {
-          return notFound('record')
-        }
-        return NextResponse.json({ ok: true, totals })
-      } catch (e) {
-        return apiErrorResponse(e)
+        },
+        { orgId: user.orgId, userId: user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
+      );
+      if (totals === null) {
+        return notFound("record");
       }
+      return NextResponse.json({ ok: true, totals });
+    } catch (e) {
+      return apiErrorResponse(e);
+    }
   },
 });
 
 /** Discard an unsigned session — releases its matched statement lines. */
 export const DELETE = defineRoute({
-  permission: 'banking.reconcile',
-  feature: 'banking',
+  permission: "banking.reconcile",
+  feature: "banking",
   handler: async ({ request: _req, authz: routeAuthz, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
-    const { user } = gate
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
+    const { user } = gate;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
     try {
-        await discardReconciliation(id, {
-          orgId: user.orgId,
-          userId: user.id,
-          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-        })
-        return NextResponse.json({ ok: true })
-      } catch (e) {
-        return apiErrorResponse(e)
-      }
+      await discardReconciliation(id, {
+        orgId: user.orgId,
+        userId: user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      });
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      return apiErrorResponse(e);
+    }
   },
 });
