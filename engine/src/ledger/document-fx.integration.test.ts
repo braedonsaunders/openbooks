@@ -69,6 +69,11 @@ test(
           org.subsidiaryId,
           org.date,
         );
+        const [persisted] = await db.execute<{ currency: string }>(
+          sql`select currency from documents where org_id = ${org.orgId} and id = ${created.id}`,
+          "objects",
+        );
+        assert.equal(persisted?.currency, "USD", "the create persists the requested currency");
         const edit = async (patch: Omit<DocumentEditInput, "expectedUpdatedAt">) => {
           const current = (await loadDocumentEditCurrent(created.id, org.orgId))!;
           await applyDocumentEdit(

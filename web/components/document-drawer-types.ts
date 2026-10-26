@@ -15,6 +15,9 @@ export type Opt = {
   tax_components?: TaxComponentConfig[];
   /** Settlement currency the account accepts (null = any). */
   currency_restriction?: string | null;
+  /** The party's vendor or customer role currency, which a new document
+   *  defaults to when a currency choice is offered. */
+  currency?: string | null;
   /** True when the item carries an inventory costing profile (line pickers). */
   has_inventory_profile?: boolean | null;
 };

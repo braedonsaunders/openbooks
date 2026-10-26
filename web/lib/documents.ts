@@ -10,6 +10,9 @@ import type { DocKindConfig } from "./document-kinds";
 import { taxProfileMap } from "@openbooks/engine/documents/totals";
 import { businessToday } from "@openbooks/engine/platform/business-date";
 import { receiptFundingAccountOptions } from "@openbooks/engine/payments/documents";
+import { EXPLICIT_FX_DOCUMENT_KINDS } from "@openbooks/engine/ledger/document-fx-kinds";
+import { organizationCurrencyOptions } from "@openbooks/engine/organization/currencies";
+import { isFeatureEnabled } from "./features";
 
 export * from "@openbooks/engine/documents/write";
 
@@ -279,4 +282,22 @@ export async function cardLiabilityAccountOptions(orgId?: string): Promise<Opt[]
     "objects",
   );
   return r;
+}
+
+/**
+ * Currencies a document drawer offers for `kind`: the organization's
+ * currency registry, only while Multi-currency is enabled and only for kinds
+ * that accept a foreign currency with an explicit exchange rate. Null renders
+ * no currency choice, so the drawer never names a currency the document
+ * editor would refuse.
+ */
+export async function documentCurrencyOptions(
+  orgId: string,
+  kind: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<{ value: string; label: string }[] | null> {
+  if (!EXPLICIT_FX_DOCUMENT_KINDS.has(kind)) return null;
+  if (!(await isFeatureEnabled(orgId, "multiCurrency"))) return null;
+  const options = await organizationCurrencyOptions(db, orgId, allowedSubsidiaryIds);
+  return options.map(({ value, label }) => ({ value, label }));
 }

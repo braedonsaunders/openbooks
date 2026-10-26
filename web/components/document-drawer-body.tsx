@@ -103,6 +103,8 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
     explicitFx,
     setExplicitFx,
     subsidiaryId,
+    offersCurrency,
+    currency,
     postingDate,
     tEntry,
     localDate,
@@ -629,12 +631,21 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
         </>
       )}
 
+      {offersCurrency ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className={field}>
+            {renderHeaderField({ key: "currency", visible: true }, editable)}
+          </div>
+        </div>
+      ) : null}
+
       <DocumentFxRateField
         kind={config.kind}
         doc={doc}
         editable={editable}
         isCreate={isCreate}
         subsidiaryId={subsidiaryId}
+        currency={currency}
         documentDate={documentDate}
         postingDate={postingDate}
         pending={explicitFx}
@@ -750,9 +761,9 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
             getRowKey={(row, i) => (row.clientKey !== "" ? row.clientKey : `row-${i}`)}
             cloneRow={(row) => ({ ...row, clientKey: crypto.randomUUID() })}
             readOnly={!editable || config.kind === "project_charge"}
-            formatAmount={(value) => money(value, { currency: doc.currency })}
+            formatAmount={(value) => money(value, { currency })}
             distribution={distribution}
-            minorUnits={currencyMinorUnits(String(doc.currency ?? ""))}
+            minorUnits={currencyMinorUnits(currency)}
           />
           {editable && partyDefaultHint ? (
             <p className="text-[11px] text-slate-500 dark:text-slate-400">{partyDefaultHint}</p>

@@ -399,6 +399,7 @@
     "./ledger/document-edit-queries": "./src/ledger/document-edit-queries.ts",
     "./ledger/document-delete": "./src/ledger/document-delete.ts",
     "./ledger/document-editing": "./src/ledger/document-editing.ts",
+    "./ledger/document-fx-kinds": "./src/ledger/document-fx-kinds.ts",
     "./ledger/document-input": "./src/ledger/document-input.ts",
     "./ledger/document-service": "./src/ledger/document-service.ts",
     "./ledger/document-void": "./src/ledger/document-void.ts",

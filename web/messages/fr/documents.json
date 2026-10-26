@@ -288,6 +288,7 @@
     "useMarketRates": "Utiliser les taux de change",
     "keepRecorded": "Conserver le taux saisi",
     "entityChanged": "Enregistrez le changement d'entité juridique avant de saisir un taux pour celle-ci.",
+    "currencyChanged": "Enregistrez le changement de devise avant de saisir un taux pour celle-ci.",
     "editorTitle": "Taux de change explicite",
     "editorDescription": "Convertit {from} en {to}, la monnaie fonctionnelle de l'entité juridique du document, pour le {date}.",
     "rate": "Taux (1 {from} en {to})",

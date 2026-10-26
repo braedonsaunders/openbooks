@@ -288,6 +288,7 @@
     "useMarketRates": "Usar taxas de câmbio",
     "keepRecorded": "Manter a taxa registrada",
     "entityChanged": "Salve a alteração da entidade legal antes de registrar uma taxa para ela.",
+    "currencyChanged": "Salve a alteração da moeda antes de registrar uma taxa para ela.",
     "editorTitle": "Taxa de câmbio explícita",
     "editorDescription": "Converte {from} para {to}, a moeda funcional da entidade legal do documento, em {date}.",
     "rate": "Taxa (1 {from} em {to})",

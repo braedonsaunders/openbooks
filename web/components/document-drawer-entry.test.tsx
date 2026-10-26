@@ -121,6 +121,7 @@ async function mount(
       documentDate: "2026-10-01",
       setDocumentDate() {},
       doc: { currency: "USD" },
+      currency: "USD",
       effectiveTotals: { total: "0" },
       items,
       parties,

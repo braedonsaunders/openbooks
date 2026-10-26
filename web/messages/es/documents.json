@@ -288,6 +288,7 @@
     "useMarketRates": "Usar tipos de cambio",
     "keepRecorded": "Conservar el tipo registrado",
     "entityChanged": "Guarde el cambio de entidad legal antes de registrar un tipo para ella.",
+    "currencyChanged": "Guarde el cambio de moneda antes de registrar un tipo para ella.",
     "editorTitle": "Tipo de cambio explícito",
     "editorDescription": "Convierte {from} a {to}, la moneda funcional de la entidad legal del documento, para el {date}.",
     "rate": "Tipo (1 {from} en {to})",

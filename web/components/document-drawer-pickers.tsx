@@ -33,6 +33,10 @@ export function useDocumentDrawerPickers(scope: DocumentDrawerDistributionScope)
     isDraft,
     parties,
     setSubsidiaryId,
+    offersCurrency,
+    partyRoleCurrency,
+    currencyChosen,
+    setCurrency,
     items,
     recordType,
     isCreate,
@@ -103,12 +107,20 @@ export function useDocumentDrawerPickers(scope: DocumentDrawerDistributionScope)
   );
   const subsidiaryName = (id: unknown): string =>
     (subsidiaries ?? []).find((s) => s.id === id)?.name ?? "—";
-  /** Picking a party on a draft defaults the document's subsidiary to the party's primary. */
+  /**
+   * Picking a party on a draft defaults the document's subsidiary to the
+   * party's primary, and — until a currency is chosen explicitly — the
+   * document currency to the party's role currency, else the currency the
+   * document opened in.
+   */
   const changeParty = (v: string | null | undefined) => {
     setPartyId(v ?? "");
     if (multiSub && isDraft && v) {
       const sub = (parties ?? []).find((p) => p.id === v)?.subsidiary_id;
       if (sub) setSubsidiaryId(sub);
+    }
+    if (offersCurrency && isDraft && !currencyChosen) {
+      setCurrency(partyRoleCurrency(v) ?? String(doc.currency ?? ""));
     }
   };
 

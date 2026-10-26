@@ -65,6 +65,7 @@ export function buildDocumentDrawerCommands(
     hrefForDocument,
     isPosted,
     doc,
+    currency,
     payload,
     payload_,
     persistedBaseline,
@@ -249,7 +250,7 @@ export function buildDocumentDrawerCommands(
     if (controlMismatch && controlDifference !== null) {
       refuse(
         tEntry("controlTotal.mismatch", {
-          difference: money(controlDifference, { currency: doc.currency }),
+          difference: money(controlDifference, { currency }),
         }),
         t("toasts.actionFailed"),
       );

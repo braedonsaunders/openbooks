@@ -18,6 +18,7 @@ import {
   accountOptions,
   createDocumentSeed,
   dimensionOptions,
+  documentCurrencyOptions,
   taxCodeOptions,
   taxGroupOptions,
 } from "../../../../lib/documents.ts";
@@ -88,6 +89,9 @@ export interface ApBillsDrawer {
   builtinSegments: unknown;
   items: unknown;
   subsidiaries: unknown;
+  /** Currencies the bill or credit may be denominated in; absent while
+   *  Multi-currency is off. */
+  currencyOptions?: { value: string; label: string }[];
   headerDefs: unknown;
   lineDefs: unknown;
   canCreate: boolean;
@@ -406,6 +410,11 @@ export async function loadApBills(
         .map((code) => ({ code }))
     : [];
 
+  const currencyOptions =
+    drawerPayload && drawerKind
+      ? await documentCurrencyOptions(authz.user.orgId, drawerKind, authz.allowedSubsidiaryIds)
+      : null;
+
   const amortizationTemplates =
     drawerPayload && drawerKind === "vendor_bill"
       ? await sourceAmortizationOptions(authz.user.orgId, drawerPayload)
@@ -443,6 +452,7 @@ export async function loadApBills(
           builtinSegments: dimensions?.builtinSegments,
           items: pickers[5],
           subsidiaries: pickers[6] ?? undefined,
+          ...(currencyOptions ? { currencyOptions } : {}),
           headerDefs,
           lineDefs,
           canCreate,

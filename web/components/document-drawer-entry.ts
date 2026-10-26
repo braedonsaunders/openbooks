@@ -145,6 +145,7 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
     documentDate,
     setDocumentDate,
     doc,
+    currency,
     effectiveTotals,
     items,
     parties,
@@ -280,7 +281,7 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
 
   const recallFrom = useCallback(
     (source: RecentPartyDocument, forParty: string) => {
-      if (!source.currency || source.currency !== doc.currency) return;
+      if (!source.currency || source.currency !== currency) return;
       const undo = { ...latest.current };
       const next = recentToRows(source);
       appliedParty.current = forParty;
@@ -290,7 +291,7 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
       if (!undo.memo && source.memo) setMemo(source.memo);
       setRecall({ key: `${forParty}:${source.id}`, documentNumber: source.documentNumber, undo });
     },
-    [recentToRows, setRows, setMemo, doc.currency],
+    [recentToRows, setRows, setMemo, currency],
   );
   const applyRecall = useCallback(() => {
     if (recent) recallFrom(recent, partyId);
@@ -347,7 +348,7 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
   }, [config.kind, partyKey, autoRecall, recallFrom]);
 
   const recallAvailable =
-    Boolean(recent?.currency && recent.currency === doc.currency) &&
+    Boolean(recent?.currency && recent.currency === currency) &&
     editable &&
     preferences.recallLastDocument !== "off" &&
     recall === null;

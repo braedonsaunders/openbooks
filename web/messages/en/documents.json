@@ -288,6 +288,7 @@
     "useMarketRates": "Use exchange rates",
     "keepRecorded": "Keep recorded rate",
     "entityChanged": "Save the legal entity change before recording a rate for it.",
+    "currencyChanged": "Save the currency change before recording a rate for it.",
     "editorTitle": "Explicit exchange rate",
     "editorDescription": "Converts {from} to {to}, the functional currency of the document's legal entity, for {date}.",
     "rate": "Rate (1 {from} in {to})",

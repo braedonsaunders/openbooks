@@ -46,6 +46,8 @@ export function useDocumentDrawerScope(props: DocumentDrawerProps) {
     tenderAccounts,
     depositAccounts,
     marketplaceFacilitators = EMPTY_FACILITATORS,
+    currencyOptions,
+    parties,
   } = props;
   const { money } = useMoney();
   const t = useTranslations(config.i18n);
@@ -130,6 +132,21 @@ export function useDocumentDrawerScope(props: DocumentDrawerProps) {
   const [locationId, setLocationId] = useState<string>(doc.location_id ?? "");
   const [classId, setClassId] = useState<string>(doc.class_id ?? "");
   const [subsidiaryId, setSubsidiaryId] = useState<string>(doc.subsidiary_id ?? "");
+  // The document currency, offered only where the loader passed currency
+  // options. A new document opened for a party starts in that party's role
+  // currency; choosing a currency explicitly stops party changes from
+  // replacing it.
+  const offersCurrency = (currencyOptions?.length ?? 0) > 0;
+  const partyRoleCurrency = (id: string | null | undefined): string | null => {
+    const code = (parties ?? []).find((party) => party.id === id)?.currency;
+    return code && (currencyOptions ?? []).some((option) => option.value === code) ? code : null;
+  };
+  const [currency, setCurrency] = useState<string>(
+    () =>
+      (offersCurrency && isCreate ? partyRoleCurrency(doc.party_id) : null) ??
+      String(doc.currency ?? ""),
+  );
+  const [currencyChosen, setCurrencyChosen] = useState(false);
   const [expectedPayDate, setExpectedPayDate] = useState<string>(doc.expected_pay_date ?? "");
   // Customer billing kinds carry when the invoiced work was completed and
   // each line's work period; generated invoices arrive with them stamped.
@@ -419,6 +436,12 @@ export function useDocumentDrawerScope(props: DocumentDrawerProps) {
     setClassId,
     subsidiaryId,
     setSubsidiaryId,
+    offersCurrency,
+    partyRoleCurrency,
+    currency,
+    setCurrency,
+    currencyChosen,
+    setCurrencyChosen,
     expectedPayDate,
     setExpectedPayDate,
     carriesWorkDates,

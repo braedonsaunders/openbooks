@@ -288,6 +288,7 @@
     "useMarketRates": "使用组织汇率",
     "keepRecorded": "保留已记录的汇率",
     "entityChanged": "请先保存法律实体的更改，再为其记录汇率。",
+    "currencyChanged": "请先保存币种的更改，再为其记录汇率。",
     "editorTitle": "明确汇率",
     "editorDescription": "将 {from} 换算为单据法律实体的功能货币 {to}，适用于 {date}。",
     "rate": "汇率（1 {from} 折合 {to}）",

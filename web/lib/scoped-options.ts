@@ -17,6 +17,15 @@ export interface ScopedPartyOption extends Record<string, unknown> {
   id: string;
   display_name: string;
   subsidiary_id: string | null;
+  /** The vendor or customer role currency, when the listing asked for it. */
+  currency?: string | null;
+}
+
+/** The role currency column for a vendor or customer party listing. */
+function roleCurrencyColumn(role: "vendor" | "customer") {
+  return role === "vendor"
+    ? sql`, (select r.currency from vendor_roles r where r.org_id = p.org_id and r.party_id = p.id) as currency`
+    : sql`, (select r.currency from customer_roles r where r.org_id = p.org_id and r.party_id = p.id) as currency`;
 }
 
 export interface ScopedDimensionOption extends Record<string, unknown> {
@@ -78,11 +87,12 @@ export async function listScopedPartyOptionsWithCurrent(
   const options = await listScopedPartyOptions(orgId, allowedSubsidiaryIds, {
     role,
     activeOnly: true,
+    roleCurrency: true,
   });
   if (currentPartyId && !options.some((option) => option.id === currentPartyId)) {
     const current = await db.execute<ScopedPartyOption>(
       sql`
-      select p.id, p.display_name, p.subsidiary_id from parties p
+      select p.id, p.display_name, p.subsidiary_id ${roleCurrencyColumn(role)} from parties p
        where p.id = ${currentPartyId} and p.org_id = ${orgId} and p.is_active`,
       "objects",
     );
@@ -102,6 +112,8 @@ export async function listScopedPartyOptions(
     role?: "vendor" | "customer" | "employee";
     activeOnly?: boolean;
     kind?: "person";
+    /** Include the vendor or customer role currency (document pickers default to it). */
+    roleCurrency?: boolean;
   } = {},
 ): Promise<ScopedPartyOption[]> {
   const roleFilter =
@@ -115,6 +127,7 @@ export async function listScopedPartyOptions(
   const result = await db.execute<ScopedPartyOption>(
     sql`
     select p.id, p.display_name, p.subsidiary_id
+           ${options.roleCurrency && (options.role === "vendor" || options.role === "customer") ? roleCurrencyColumn(options.role) : sql``}
       from parties p
      where p.org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}

@@ -288,6 +288,7 @@
     "useMarketRates": "Wechselkurse verwenden",
     "keepRecorded": "Erfassten Kurs behalten",
     "entityChanged": "Speichern Sie die Änderung der juristischen Einheit, bevor Sie einen Kurs dafür erfassen.",
+    "currencyChanged": "Speichern Sie die Währungsänderung, bevor Sie einen Kurs dafür erfassen.",
     "editorTitle": "Expliziter Wechselkurs",
     "editorDescription": "Rechnet {from} in {to} um, die funktionale Währung der juristischen Einheit des Belegs, für den {date}.",
     "rate": "Kurs (1 {from} in {to})",

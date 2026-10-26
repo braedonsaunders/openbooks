@@ -39,6 +39,7 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
     basePath,
     hrefForDocument,
     doc,
+    currency,
     isDraft,
     isPosted,
     isCreate,
@@ -536,7 +537,7 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
               {controlMismatch && controlDifference !== null ? (
                 <span className="font-medium text-red-600 dark:text-red-400">
                   {tEntry("controlTotal.off", {
-                    difference: money(controlDifference, { currency: doc.currency }),
+                    difference: money(controlDifference, { currency }),
                   })}
                 </span>
               ) : null}
@@ -548,21 +549,21 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
             ) : (
               <>
                 {t("drawer.subtotalAmount", {
-                  amount: money(effectiveTotals.subtotal, { currency: doc.currency }),
+                  amount: money(effectiveTotals.subtotal, { currency }),
                 })}
                 {config.hasTax ? (
                   <>
                     {" "}
                     ·{" "}
                     {t("drawer.taxTotalAmount", {
-                      amount: money(effectiveTotals.taxTotal, { currency: doc.currency }),
+                      amount: money(effectiveTotals.taxTotal, { currency }),
                     })}
                   </>
                 ) : null}
                 {" · "}
                 <strong className="text-slate-900 dark:text-slate-100">
                   {t("drawer.totalAmount", {
-                    amount: money(effectiveTotals.total, { currency: doc.currency }),
+                    amount: money(effectiveTotals.total, { currency }),
                   })}
                 </strong>
                 {isPosted && config.showsBalance ? (

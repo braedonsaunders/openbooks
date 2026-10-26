@@ -66,6 +66,11 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
     subsidiaryId,
     setSubsidiaryId,
     subsidiaryName,
+    offersCurrency,
+    currencyOptions,
+    currency,
+    setCurrency,
+    setCurrencyChosen,
     paymentHoldReason,
     setPaymentHoldReason,
     internalNotes,
@@ -213,6 +218,8 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
         return tCommon("labels.class");
       case "subsidiary_id":
         return tCommon("labels.subsidiary");
+      case "currency":
+        return tCommon("labels.currency");
       case "expected_pay_date":
         return tCommon("labels.expectedPayDate");
       case "work_completed_on":
@@ -558,6 +565,34 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
           </>
         );
       }
+      case "currency":
+        // Offered only where the loader passed the organization's currencies
+        // (Multi-currency on, a kind that accepts a foreign currency). Fixed
+        // once posted: the currency measures every posted amount, so a
+        // posted change goes through void-and-reissue.
+        if (!offersCurrency) return null;
+        return (
+          <>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>
+              {label}
+            </FieldLabel>
+            {isEditable && !isPosted ? (
+              <SearchSelect
+                id={fieldId(p.key)}
+                advanceOnSelect
+                options={currencyOptions ?? []}
+                value={currency}
+                onChange={(v) => {
+                  if (!v) return;
+                  setCurrency(v);
+                  setCurrencyChosen(true);
+                }}
+              />
+            ) : (
+              <p className="text-sm">{currency || "—"}</p>
+            )}
+          </>
+        );
       case "payment_hold_reason":
         return (
           <>

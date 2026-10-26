@@ -69,6 +69,11 @@ export function useDocumentDrawerPayload(scope: DocumentDrawerEntryScope) {
     subsidiaryId,
     setSubsidiaryId,
     multiSub,
+    isPosted,
+    offersCurrency,
+    currency,
+    setCurrency,
+    setCurrencyChosen,
     expectedPayDate,
     setExpectedPayDate,
     carriesWorkDates,
@@ -158,6 +163,12 @@ export function useDocumentDrawerPayload(scope: DocumentDrawerEntryScope) {
       // Only sent in multi-subsidiary orgs (undefined drops out of the JSON body).
       subsidiaryId: multiSub ? subsidiaryId || null : undefined,
       expectedPayDate: expectedPayDate || null,
+      // The currency rides only where the drawer offers it: a new document
+      // always names it, a saved draft only when the choice changed, so an
+      // untouched save never re-asserts the stored currency.
+      ...(offersCurrency && !isPosted && (isCreate || currency !== doc.currency)
+        ? { currency }
+        : {}),
       ...(carriesWorkDates ? { workCompletedOn: workCompletedOn || null } : {}),
       // Only an unsaved rate change rides; absent keeps the stored rate.
       ...(explicitFx !== undefined ? { explicitFx } : {}),
@@ -280,6 +291,10 @@ export function useDocumentDrawerPayload(scope: DocumentDrawerEntryScope) {
     classId,
     subsidiaryId,
     multiSub,
+    offersCurrency,
+    isPosted,
+    currency,
+    doc.currency,
     expectedPayDate,
     carriesWorkDates,
     workCompletedOn,
@@ -373,6 +388,8 @@ export function useDocumentDrawerPayload(scope: DocumentDrawerEntryScope) {
     setLocationId(sourceDoc.location_id ?? "");
     setClassId(sourceDoc.class_id ?? "");
     setSubsidiaryId(sourceDoc.subsidiary_id ?? "");
+    setCurrency(String(sourceDoc.currency ?? ""));
+    setCurrencyChosen(false);
     setExpectedPayDate(sourceDoc.expected_pay_date ?? "");
     setWorkCompletedOn(sourceDoc.work_completed_on ?? "");
     setExplicitFx(undefined);
@@ -425,7 +442,7 @@ export function useDocumentDrawerPayload(scope: DocumentDrawerEntryScope) {
     if (typeof override === "string" && override) {
       refs.push({ accountId: override, label: accountName(override) });
     }
-    return findCurrencyMismatchedAccount(doc.currency, refs, currencyRestrictionById);
+    return findCurrencyMismatchedAccount(currency, refs, currencyRestrictionById);
   };
   const blockCurrencyMismatch = (): boolean => {
     const mismatch = currencyMismatch();
@@ -433,7 +450,7 @@ export function useDocumentDrawerPayload(scope: DocumentDrawerEntryScope) {
     const message = t("drawer.currencyMismatch", {
       account: mismatch.label,
       allowed: mismatch.allowed,
-      actual: String(doc.currency),
+      actual: currency,
     });
     // A refusal the operator can trigger stays on the record, not only in
     // a toast: the typed reason pins as an alert until the next action.

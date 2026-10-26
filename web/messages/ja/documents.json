@@ -288,6 +288,7 @@
     "useMarketRates": "為替レートを使用",
     "keepRecorded": "記録済みのレートを維持",
     "entityChanged": "法人の変更を保存してから、その法人のレートを記録してください。",
+    "currencyChanged": "通貨の変更を保存してから、その通貨のレートを記録してください。",
     "editorTitle": "明示的な為替レート",
     "editorDescription": "{date} 時点で {from} を伝票の法人の機能通貨である {to} に換算します。",
     "rate": "レート (1 {from} あたりの {to})",

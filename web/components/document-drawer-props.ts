@@ -38,6 +38,11 @@ export interface DocumentDrawerProps {
    *  by loaders for kinds with inventory lines; empty/undefined (or a single
    *  location, which the writer stamps silently) renders NO picker. */
   stockLocations?: { id: string; code: string | null }[];
+  /** Currencies the document may be denominated in. Passed only for kinds
+   *  that accept a foreign currency while Multi-currency is enabled under
+   *  Company Settings → Features; absent renders no currency choice and the
+   *  save never names a currency. */
+  currencyOptions?: { value: string; label: string }[];
   /** The org's subsidiaries (depth-first tree order). Only passed by pages in
    *  multi-subsidiary orgs — empty/undefined renders NO subsidiary UI. */
   subsidiaries?: SubsidiaryOpt[];

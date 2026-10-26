@@ -27,7 +27,12 @@ import {
   postPermission,
   readPermission,
 } from "../lib/document-kinds.ts";
-import { isDocKindEnabled, taxCodeOptions, taxGroupOptions } from "../lib/documents.ts";
+import {
+  documentCurrencyOptions,
+  isDocKindEnabled,
+  taxCodeOptions,
+  taxGroupOptions,
+} from "../lib/documents.ts";
 import {
   listScopedAccountOptions,
   listScopedCardOptions,
@@ -473,11 +478,13 @@ export async function loadRelatedTransactionDrawerData({
     banks,
     subsidiaries,
     resolvedForm,
+    currencyOptions,
   ] = await Promise.all([
     config.partyRole
       ? listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
           role: config.partyRole,
           activeOnly: true,
+          roleCurrency: true,
         })
       : Promise.resolve(undefined),
     scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
@@ -538,6 +545,7 @@ export async function loadRelatedTransactionDrawerData({
       lineDefs: lineDefs,
       explicitLayoutId: formLayoutId,
     }),
+    documentCurrencyOptions(authz.user.orgId, kind, authz.allowedSubsidiaryIds),
   ]);
   return {
     type: "document",
@@ -567,6 +575,7 @@ export async function loadRelatedTransactionDrawerData({
       builtinSegments: dimensions.builtinSegments,
       items: items as DocumentProps["items"],
       subsidiaries,
+      ...(currencyOptions ? { currencyOptions } : {}),
       headerDefs: headerDefs as DocumentProps["headerDefs"],
       lineDefs: lineDefs as DocumentProps["lineDefs"],
       // A project charge uses the same explicit Edit cycle as every native

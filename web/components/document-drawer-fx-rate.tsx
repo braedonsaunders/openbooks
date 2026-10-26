@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Drawer, FieldLabel, Input, Label, Textarea } from "@openbooks/ui";
+import { EXPLICIT_FX_DOCUMENT_KINDS } from "@openbooks/engine/ledger/document-fx-kinds";
 import type { DocumentDoc } from "./document-drawer-types";
 
 /** The explicit-rate request a draft save carries (see the document edit API). */
@@ -14,14 +15,6 @@ export interface ExplicitFxDraft {
   toCurrency: string;
   rateDate: string;
 }
-
-/** Kinds that accept an explicit exchange rate. */
-export const EXPLICIT_FX_KINDS: ReadonlySet<string> = new Set([
-  "customer_invoice",
-  "vendor_bill",
-  "customer_credit",
-  "vendor_credit",
-]);
 
 /** Stored evidence as the drawer shows it; anything else reads as none. */
 export function storedExplicitFx(value: unknown): ExplicitFxDraft | null {
@@ -40,6 +33,8 @@ export function storedExplicitFx(value: unknown): ExplicitFxDraft | null {
  * reason, or return to the organization's exchange rates; the change rides
  * the next save, which binds it to the currency, entity and posting date
  * shown here. Absent for documents in their entity's functional currency.
+ * An unsaved currency change, like an unsaved entity change, must be saved
+ * before a rate is recorded for it.
  */
 export function DocumentFxRateField({
   kind,
@@ -47,6 +42,7 @@ export function DocumentFxRateField({
   editable,
   isCreate,
   subsidiaryId,
+  currency,
   documentDate,
   postingDate,
   pending,
@@ -58,6 +54,7 @@ export function DocumentFxRateField({
   isCreate: boolean;
   /** Form values: the posting identity the next save carries. */
   subsidiaryId: string;
+  currency: string;
   documentDate: string;
   postingDate: string;
   /** Unsaved change: undefined keeps the stored rate, null clears it. */
@@ -72,12 +69,14 @@ export function DocumentFxRateField({
 
   const functional = typeof doc.functional_currency === "string" ? doc.functional_currency : null;
   const stored = storedExplicitFx(doc.document_fx_rate_evidence);
-  if (!EXPLICIT_FX_KINDS.has(kind) || isCreate || !functional) return null;
+  if (!EXPLICIT_FX_DOCUMENT_KINDS.has(kind) || isCreate || !functional) return null;
   if (doc.currency === functional && !stored) return null;
 
   const shown = pending === undefined ? stored : pending;
   const rateDate = postingDate || documentDate;
   const entityChanged = (subsidiaryId || null) !== (doc.subsidiary_id || null);
+  const currencyChanged = currency !== doc.currency;
+  const identityChanged = entityChanged || currencyChanged;
   const staleStored =
     pending === undefined && stored !== null && (stored.rateDate !== rateDate || entityChanged);
   const stalePending = pending != null && (pending.rateDate !== rateDate || entityChanged);
@@ -147,7 +146,7 @@ export function DocumentFxRateField({
               type="button"
               size="sm"
               variant="outline"
-              disabled={entityChanged}
+              disabled={identityChanged}
               onClick={openEditor}
             >
               {shown ? t("change") : t("record")}
@@ -169,8 +168,10 @@ export function DocumentFxRateField({
           ) : null}
         </div>
       ) : null}
-      {editable && draft && entityChanged && doc.currency !== functional ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">{t("entityChanged")}</p>
+      {editable && draft && identityChanged && doc.currency !== functional ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {currencyChanged ? t("currencyChanged") : t("entityChanged")}
+        </p>
       ) : null}
       <Drawer
         open={open}

@@ -18,6 +18,7 @@ import {
   accountOptions,
   createDocumentSeed,
   dimensionOptions,
+  documentCurrencyOptions,
   taxCodeOptions,
   taxGroupOptions,
 } from "../../../../lib/documents.ts";
@@ -94,6 +95,7 @@ export interface ArInvoicesDrawer {
   items: Record<string, unknown>[];
   stockLocations: { id: string; code: string | null }[];
   subsidiaries: DocumentDrawerProps["subsidiaries"];
+  currencyOptions?: DocumentDrawerProps["currencyOptions"];
   headerDefs: DocumentDrawerProps["headerDefs"];
   lineDefs: DocumentDrawerProps["lineDefs"];
   canCreate: boolean;
@@ -376,6 +378,10 @@ export async function loadArInvoices(
           canRetry: can(authz, TAX_FILING_WRITE_PERMISSION),
         }
       : null;
+  const currencyOptions =
+    drawerPayload && drawerKind
+      ? await documentCurrencyOptions(authz.user.orgId, drawerKind, authz.allowedSubsidiaryIds)
+      : null;
   const drawer =
     drawerPayload && pickers && resolvedForm && drawerKind
       ? {
@@ -443,6 +449,7 @@ export async function loadArInvoices(
           items: pickers[5],
           stockLocations: (pickers[7] ?? []) as { id: string; code: string | null }[],
           subsidiaries: pickers[6] ?? undefined,
+          ...(currencyOptions ? { currencyOptions } : {}),
           headerDefs: headerDefs as DocumentDrawerProps["headerDefs"],
           lineDefs: lineDefs as DocumentDrawerProps["lineDefs"],
           canCreate,

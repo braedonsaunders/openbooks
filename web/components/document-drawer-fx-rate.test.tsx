@@ -61,6 +61,7 @@ async function mount(t: test.TestContext, props: Partial<FieldProps>) {
     editable: true,
     isCreate: false,
     subsidiaryId: ENTITY,
+    currency: String((props.doc ?? bill()).currency),
     documentDate: "2026-07-15",
     postingDate: "",
     pending: undefined,
@@ -162,6 +163,15 @@ test("a rate recorded for another posting date is flagged and can be cleared bef
   );
   await press("Use exchange rates");
   assert.deepEqual(changes, [null], "clearing sends null, which removes the recorded evidence");
+});
+
+test("an unsaved currency change must be saved before a rate is recorded for it", async (t) => {
+  await mount(t, { currency: "EUR" });
+  assert.equal(button("Record rate").disabled, true);
+  assert.match(
+    document.body.textContent ?? "",
+    /Save the currency change before recording a rate for it\./,
+  );
 });
 
 test("a posted bill shows its recorded rate without edit actions", async (t) => {
