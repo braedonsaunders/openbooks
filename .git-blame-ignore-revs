@@ -1,2 +1,2 @@
-# Repository-wide Prettier format; blame the change that preceded it.
-213eb86ba01969867cac2b717c3db7cec88428e0
+# Repository-wide Prettier format; skip in git blame with --ignore-revs-file or blame.ignoreRevsFile.
+961ca2356727eaa32d445aae4c51e229872dcc31
