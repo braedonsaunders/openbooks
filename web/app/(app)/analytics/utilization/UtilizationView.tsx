@@ -1,286 +1,534 @@
-'use client'
+"use client";
 
-import { ANALYTICS_TABS } from '../../../../lib/analytics/dashboard-tabs'
+import { ANALYTICS_TABS } from "../../../../lib/analytics/dashboard-tabs";
 
-import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
+import { useAnalyticsTab, AnalyticsTabContent } from "../use-analytics-tab";
 
-import { RecordTabs } from '@/components/module-home/record-tabs'
+import { RecordTabs } from "@/components/module-home/record-tabs";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
-import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
-import { useLocale, useTranslations } from 'next-intl'
 import {
-  AlertTriangle, ArrowDown, ArrowRightLeft, Box, Calculator,
-  ChartArea, CheckCircle2, Clock, DollarSign, Info, Lightbulb, PieChart as PieIcon,
-  Scale, Search, Table2, Target, TrendingDown, TrendingUp, Trophy,
-  UserRound, Users, LayoutGrid, Grid3X3 } from 'lucide-react'
-import { cn, Select, Drawer, Badge } from '@openbooks/ui'
-import { abs as absMoney, add, cmp as compareMoney, div, mulDecimal, neg } from '@openbooks/engine/money/money'
-import { divideDecimal } from '@openbooks/engine/money/decimal'
-import type { MoneyValue } from '../../../../lib/money-format'
-import type { UtilizationData, UGroupRow } from '../../../../lib/analytics/utilization-data'
-import { KpiCard } from '../_ui/KpiCard'
-import { Panel } from '../_ui/Panel'
-import { Donut, Chart } from '../_ui/charts'
-import { ConfigEditor } from '../_ui/ConfigEditor'
-import { useSort } from '../_ui/useSort'
-import { escapeTooltipHtml, useAnalyticsMoney } from '../_ui/format'
-import { refusalMessage } from '../_ui/fetch-refusal'
-import { countLabel } from '@/lib/format'
-import { InteractiveTableRow } from '@/components/interactive-table-row'
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "../../reports/ReportTable";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowRightLeft,
+  Box,
+  Calculator,
+  ChartArea,
+  CheckCircle2,
+  Clock,
+  DollarSign,
+  Info,
+  Lightbulb,
+  PieChart as PieIcon,
+  Scale,
+  Search,
+  Table2,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  Trophy,
+  UserRound,
+  Users,
+  LayoutGrid,
+  Grid3X3,
+} from "lucide-react";
+import { cn, Select, Drawer, Badge } from "@openbooks/ui";
+import {
+  abs as absMoney,
+  add,
+  cmp as compareMoney,
+  div,
+  mulDecimal,
+  neg,
+} from "@openbooks/engine/money/money";
+import { divideDecimal } from "@openbooks/engine/money/decimal";
+import type { MoneyValue } from "../../../../lib/money-format";
+import type { UtilizationData, UGroupRow } from "../../../../lib/analytics/utilization-data";
+import { KpiCard } from "../_ui/KpiCard";
+import { Panel } from "../_ui/Panel";
+import { Donut, Chart } from "../_ui/charts";
+import { ConfigEditor } from "../_ui/ConfigEditor";
+import { useSort } from "../_ui/useSort";
+import { escapeTooltipHtml, useAnalyticsMoney } from "../_ui/format";
+import { refusalMessage } from "../_ui/fetch-refusal";
+import { countLabel } from "@/lib/format";
+import { InteractiveTableRow } from "@/components/interactive-table-row";
 
 /* ------------------------------------------------------------------ helpers */
 
-const TABS = ANALYTICS_TABS['utilization']
-const pct1 = (v: number | null | undefined, d = 1) => (v == null || isNaN(v) ? '—' : `${Number(v).toFixed(d)}%`)
+const TABS = ANALYTICS_TABS["utilization"];
+const pct1 = (v: number | null | undefined, d = 1) =>
+  v == null || isNaN(v) ? "—" : `${Number(v).toFixed(d)}%`;
 /** Viewer-locale whole hours: one hook so every tab shares it. */
 function useHrs0() {
-  const locale = useLocale()
-  return (n: number) => `${countLabel(Math.round(n), locale)}`
+  const locale = useLocale();
+  return (n: number) => `${countLabel(Math.round(n), locale)}`;
 }
 
 /** Status colouring vs target: on / watch / warn / below (bands from dashboard configuration). */
 function statusTone(pct: number, target: number, watchPp: number, warnPp: number) {
-  if (pct >= target) return { text: 'text-emerald-600 dark:text-emerald-400', bar: 'bg-emerald-500', hex: '#10b981' }
-  if (pct >= target - watchPp) return { text: 'text-amber-600 dark:text-amber-400', bar: 'bg-amber-500', hex: '#f59e0b' }
-  if (pct >= target - warnPp) return { text: 'text-orange-600 dark:text-orange-400', bar: 'bg-orange-500', hex: '#f97316' }
-  return { text: 'text-rose-600 dark:text-rose-400', bar: 'bg-rose-500', hex: '#ef4444' }
+  if (pct >= target)
+    return {
+      text: "text-emerald-600 dark:text-emerald-400",
+      bar: "bg-emerald-500",
+      hex: "#10b981",
+    };
+  if (pct >= target - watchPp)
+    return { text: "text-amber-600 dark:text-amber-400", bar: "bg-amber-500", hex: "#f59e0b" };
+  if (pct >= target - warnPp)
+    return { text: "text-orange-600 dark:text-orange-400", bar: "bg-orange-500", hex: "#f97316" };
+  return { text: "text-rose-600 dark:text-rose-400", bar: "bg-rose-500", hex: "#ef4444" };
 }
 
 /** Trend chip: delta in pp, $ or plain hours — green when moving the good way. */
-function TrendDelta({ delta, goodIfUp, unit = 'pp', digits = 1 }: { delta: number | string; goodIfUp: boolean; unit?: 'pp' | 'money' | 'hours'; digits?: number }) {
-  const hrs0 = useHrs0()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
-  const positive = unit === 'money' ? compareMoney(delta as string, '0') > 0 : (delta as number) > 0
-  const magnitude = unit === 'money' ? absMoney(delta as string) : String(Math.abs(delta as number))
-  if (unit === 'money' ? compareMoney(magnitude, '0.5') < 0 : Math.abs(delta as number) < (unit === 'pp' ? 0.05 : 0.5)) return <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
-  const good = goodIfUp ? positive : !positive
-  const Icon = positive ? TrendingUp : TrendingDown
-  const text = unit === 'money' ? money(magnitude) : unit === 'hours' ? `${hrs0(Math.abs(delta as number))}h` : `${Math.abs(delta as number).toFixed(digits)}pp`
+function TrendDelta({
+  delta,
+  goodIfUp,
+  unit = "pp",
+  digits = 1,
+}: {
+  delta: number | string;
+  goodIfUp: boolean;
+  unit?: "pp" | "money" | "hours";
+  digits?: number;
+}) {
+  const hrs0 = useHrs0();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true });
+  const positive =
+    unit === "money" ? compareMoney(delta as string, "0") > 0 : (delta as number) > 0;
+  const magnitude =
+    unit === "money" ? absMoney(delta as string) : String(Math.abs(delta as number));
+  if (
+    unit === "money"
+      ? compareMoney(magnitude, "0.5") < 0
+      : Math.abs(delta as number) < (unit === "pp" ? 0.05 : 0.5)
+  )
+    return <span className="text-xs text-slate-400 dark:text-slate-500">—</span>;
+  const good = goodIfUp ? positive : !positive;
+  const Icon = positive ? TrendingUp : TrendingDown;
+  const text =
+    unit === "money"
+      ? money(magnitude)
+      : unit === "hours"
+        ? `${hrs0(Math.abs(delta as number))}h`
+        : `${Math.abs(delta as number).toFixed(digits)}pp`;
   return (
-    <span className={cn('inline-flex items-center gap-1 text-xs font-semibold tabular-nums', good ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 text-xs font-semibold tabular-nums",
+        good ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+      )}
+    >
       <Icon size={12} />
       {text}
     </span>
-  )
+  );
 }
 
 /** the risk-meter billable gauge (semicircle arc coloured vs target). */
-function BillableGauge({ pct, target, watchPp, warnPp }: { pct: number; target: number; watchPp: number; warnPp: number }) {
-  const t = useTranslations('analytics.utilization')
-  const diff = pct - target
-  const color = diff >= 0 ? '#10b981' : diff >= -watchPp ? '#f59e0b' : diff >= -warnPp ? '#f97316' : '#ef4444'
-  const label = diff >= 0 ? t('gauge.onTarget') : diff >= -watchPp ? t('gauge.nearTarget') : diff >= -warnPp ? t('gauge.belowTarget') : t('gauge.atRisk')
-  const arcLength = 141.37
-  const offset = arcLength * (1 - Math.min(pct, 100) / 100)
+function BillableGauge({
+  pct,
+  target,
+  watchPp,
+  warnPp,
+}: {
+  pct: number;
+  target: number;
+  watchPp: number;
+  warnPp: number;
+}) {
+  const t = useTranslations("analytics.utilization");
+  const diff = pct - target;
+  const color =
+    diff >= 0 ? "#10b981" : diff >= -watchPp ? "#f59e0b" : diff >= -warnPp ? "#f97316" : "#ef4444";
+  const label =
+    diff >= 0
+      ? t("gauge.onTarget")
+      : diff >= -watchPp
+        ? t("gauge.nearTarget")
+        : diff >= -warnPp
+          ? t("gauge.belowTarget")
+          : t("gauge.atRisk");
+  const arcLength = 141.37;
+  const offset = arcLength * (1 - Math.min(pct, 100) / 100);
   return (
     <div className="flex h-full items-center gap-3 rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <svg width="92" height="52" viewBox="0 0 100 55" className="shrink-0">
-        <path d="M 5 50 A 45 45 0 0 1 95 50" fill="none" stroke="currentColor" strokeWidth="10" strokeLinecap="round" className="text-slate-200 dark:text-slate-700" />
-        <path d="M 5 50 A 45 45 0 0 1 95 50" fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" strokeDasharray={arcLength} strokeDashoffset={offset} style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
+        <path
+          d="M 5 50 A 45 45 0 0 1 95 50"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="10"
+          strokeLinecap="round"
+          className="text-slate-200 dark:text-slate-700"
+        />
+        <path
+          d="M 5 50 A 45 45 0 0 1 95 50"
+          fill="none"
+          stroke={color}
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={arcLength}
+          strokeDashoffset={offset}
+          style={{ transition: "stroke-dashoffset 0.5s ease" }}
+        />
       </svg>
       <div className="min-w-0">
-        <p className="text-xl font-bold tabular-nums" style={{ color }}>{pct1(pct)}</p>
-        <p className="text-[10px] font-bold tracking-wider" style={{ color }}>{label}</p>
-        <p className="text-[10px] text-slate-400 dark:text-slate-500">{t('gauge.targetPct', { target })}</p>
+        <p className="text-xl font-bold tabular-nums" style={{ color }}>
+          {pct1(pct)}
+        </p>
+        <p className="text-[10px] font-bold tracking-wider" style={{ color }}>
+          {label}
+        </p>
+        <p className="text-[10px] text-slate-400 dark:text-slate-500">
+          {t("gauge.targetPct", { target })}
+        </p>
       </div>
     </div>
-  )
+  );
 }
 
 /** Tiny SVG sparkline for department cards (history % billed). */
 function Sparkline({ values }: { values: number[] }) {
-  if (values.length < 2) return null
-  const min = Math.min(...values), max = Math.max(...values)
-  const pad = (max - min) * 0.3 || 5
-  const lo = Math.max(0, min - pad), hi = max + pad
-  const w = 120, h = 28
-  const pts = values.map((v, i) => `${(i / (values.length - 1)) * w},${h - ((v - lo) / (hi - lo)) * h}`).join(' ')
+  if (values.length < 2) return null;
+  const min = Math.min(...values),
+    max = Math.max(...values);
+  const pad = (max - min) * 0.3 || 5;
+  const lo = Math.max(0, min - pad),
+    hi = max + pad;
+  const w = 120,
+    h = 28;
+  const pts = values
+    .map((v, i) => `${(i / (values.length - 1)) * w},${h - ((v - lo) / (hi - lo)) * h}`)
+    .join(" ");
   return (
-    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="mt-2">
+    <svg
+      width="100%"
+      height={h}
+      viewBox={`0 0 ${w} ${h}`}
+      preserveAspectRatio="none"
+      className="mt-2"
+    >
       <polyline points={pts} fill="none" stroke="#6366f1" strokeWidth="1.5" />
       <polygon points={`0,${h} ${pts} ${w},${h}`} fill="#6366f1" opacity="0.08" />
     </svg>
-  )
+  );
 }
 
 /** Treemap pastel scale (soft red → orange → yellow → mint → green). */
 function treemapColor(pct: number): string {
   const stops: [number, [number, number, number]][] = [
-    [0, [254, 202, 202]], [25, [254, 215, 170]], [50, [254, 240, 138]], [75, [187, 247, 208]], [100, [134, 239, 172]],
-  ]
-  const p = Math.max(0, Math.min(100, pct))
+    [0, [254, 202, 202]],
+    [25, [254, 215, 170]],
+    [50, [254, 240, 138]],
+    [75, [187, 247, 208]],
+    [100, [134, 239, 172]],
+  ];
+  const p = Math.max(0, Math.min(100, pct));
   for (let i = 1; i < stops.length; i++) {
     if (p <= stops[i]![0]) {
-      const [p0, c0] = stops[i - 1]!, [p1, c1] = stops[i]!
-      const t = (p - p0) / (p1 - p0)
-      const c = c0.map((v: number, j: number) => Math.round(v + (c1[j]! - v) * t))
-      return `rgb(${c[0]},${c[1]},${c[2]})`
+      const [p0, c0] = stops[i - 1]!,
+        [p1, c1] = stops[i]!;
+      const t = (p - p0) / (p1 - p0);
+      const c = c0.map((v: number, j: number) => Math.round(v + (c1[j]! - v) * t));
+      return `rgb(${c[0]},${c[1]},${c[2]})`;
     }
   }
-  return 'rgb(134,239,172)'
+  return "rgb(134,239,172)";
 }
 
 /* ---------------------------------------------------------- entries drawer */
 
 interface Entry {
-  id: string; date: string; hours: number; billable: boolean; cost: string
-  itemName: string; employeeName: string; customerName: string; memo: string
+  id: string;
+  date: string;
+  hours: number;
+  billable: boolean;
+  cost: string;
+  itemName: string;
+  employeeName: string;
+  customerName: string;
+  memo: string;
 }
 
-interface ServerGroup { label: string; hours: string; billableHours: string }
+interface ServerGroup {
+  label: string;
+  hours: string;
+  billableHours: string;
+}
 interface EntriesResponse {
-  entries: Entry[]
-  total: { count: number; hours: string; billableHours: string }
-  groups: { byPeer: ServerGroup[]; byCustomer: ServerGroup[] }
-  page: { limit: number; nextCursor: string | null; hasMore: boolean }
+  entries: Entry[];
+  total: { count: number; hours: string; billableHours: string };
+  groups: { byPeer: ServerGroup[]; byCustomer: ServerGroup[] };
+  page: { limit: number; nextCursor: string | null; hasMore: boolean };
 }
 
 /** Native Drawer listing raw time entries behind an employee / item drill. */
-function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
-  kind: 'employee' | 'item'; id: string; name: string; sub?: string; peer?: { title: string; empPct: number; peerAvg: number; peerCount: number }; from: string; to: string; onClose: () => void
+function EntriesDrawer({
+  kind,
+  id,
+  name,
+  sub,
+  peer,
+  from,
+  to,
+  onClose,
+}: {
+  kind: "employee" | "item";
+  id: string;
+  name: string;
+  sub?: string;
+  peer?: { title: string; empPct: number; peerAvg: number; peerCount: number };
+  from: string;
+  to: string;
+  onClose: () => void;
 }) {
-  const hrs0 = useHrs0()
-  const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: MoneyValue) => fmtMoney(n)
-  const t = useTranslations('analytics.utilization')
-  const [entries, setEntries] = useState<Entry[] | null>(null)
-  const [total, setTotal] = useState<EntriesResponse['total'] | null>(null)
-  const [peerGroups, setPeerGroups] = useState<ServerGroup[]>([])
-  const [custServerGroups, setCustServerGroups] = useState<ServerGroup[]>([])
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [moreError, setMoreError] = useState<string | null>(null)
-  const [view, setView] = useState<'entries' | 'byItem' | 'byCustomer'>('entries')
+  const hrs0 = useHrs0();
+  const fmtMoney = useAnalyticsMoney();
+  const money0 = (n: MoneyValue) => fmtMoney(n);
+  const t = useTranslations("analytics.utilization");
+  const [entries, setEntries] = useState<Entry[] | null>(null);
+  const [total, setTotal] = useState<EntriesResponse["total"] | null>(null);
+  const [peerGroups, setPeerGroups] = useState<ServerGroup[]>([]);
+  const [custServerGroups, setCustServerGroups] = useState<ServerGroup[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [moreError, setMoreError] = useState<string | null>(null);
+  const [view, setView] = useState<"entries" | "byItem" | "byCustomer">("entries");
   // Reset the drill state when its inputs change, during render (same
   // committed values, no extra render — and no one-commit flash of the
   // previous drill's rows while the new fetch is in flight).
-  const [prevKind, setPrevKind] = useState(kind)
-  const [prevId, setPrevId] = useState(id)
-  const [prevFrom, setPrevFrom] = useState(from)
-  const [prevTo, setPrevTo] = useState(to)
+  const [prevKind, setPrevKind] = useState(kind);
+  const [prevId, setPrevId] = useState(id);
+  const [prevFrom, setPrevFrom] = useState(from);
+  const [prevTo, setPrevTo] = useState(to);
   if (prevKind !== kind || prevId !== id || prevFrom !== from || prevTo !== to) {
-    setPrevKind(kind)
-    setPrevId(id)
-    setPrevFrom(from)
-    setPrevTo(to)
-    setEntries(null)
-    setTotal(null)
-    setPeerGroups([])
-    setCustServerGroups([])
-    setNextCursor(null)
-    setHasMore(false)
-    setError(null)
-    setMoreError(null)
-    setView('entries')
+    setPrevKind(kind);
+    setPrevId(id);
+    setPrevFrom(from);
+    setPrevTo(to);
+    setEntries(null);
+    setTotal(null);
+    setPeerGroups([]);
+    setCustServerGroups([]);
+    setNextCursor(null);
+    setHasMore(false);
+    setError(null);
+    setMoreError(null);
+    setView("entries");
   }
   useEffect(() => {
-    let live = true
-    fetch(`/api/analytics/utilization/entries?${kind}=${encodeURIComponent(id)}&from=${from}&to=${to}`)
+    let live = true;
+    fetch(
+      `/api/analytics/utilization/entries?${kind}=${encodeURIComponent(id)}&from=${from}&to=${to}`,
+    )
       .then(async (r) => {
         // The entries route refuses with a NAMED 422 (e.g. "no spot rate
         // for EUR→USD on or before DATE — add it at Setup → Exchange
         // Rates"): surface the refusal body, not just a generic load failure.
-        if (!r.ok) throw new Error(await refusalMessage(r))
-        return r.json()
+        if (!r.ok) throw new Error(await refusalMessage(r));
+        return r.json();
       })
       .then((j: EntriesResponse) => {
-        if (!live) return
-        setEntries(j.entries)
-        setTotal(j.total)
-        setPeerGroups(j.groups.byPeer)
-        setCustServerGroups(j.groups.byCustomer)
-        setNextCursor(j.page.nextCursor)
-        setHasMore(j.page.hasMore)
+        if (!live) return;
+        setEntries(j.entries);
+        setTotal(j.total);
+        setPeerGroups(j.groups.byPeer);
+        setCustServerGroups(j.groups.byCustomer);
+        setNextCursor(j.page.nextCursor);
+        setHasMore(j.page.hasMore);
       })
-      .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : String(e)) })
-    return () => { live = false }
-  }, [kind, id, from, to])
+      .catch((e: unknown) => {
+        if (live) setError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      live = false;
+    };
+  }, [kind, id, from, to]);
 
   const loadMore = () => {
-    if (!nextCursor || loadingMore) return
-    setLoadingMore(true)
-    setMoreError(null)
-    fetch(`/api/analytics/utilization/entries?${kind}=${encodeURIComponent(id)}&from=${from}&to=${to}&cursor=${encodeURIComponent(nextCursor)}`)
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setMoreError(null);
+    fetch(
+      `/api/analytics/utilization/entries?${kind}=${encodeURIComponent(id)}&from=${from}&to=${to}&cursor=${encodeURIComponent(nextCursor)}`,
+    )
       .then(async (r) => {
-        if (!r.ok) throw new Error(await refusalMessage(r))
-        return r.json()
+        if (!r.ok) throw new Error(await refusalMessage(r));
+        return r.json();
       })
       .then((j: EntriesResponse) => {
-        setEntries((prev) => [...(prev ?? []), ...j.entries])
-        setNextCursor(j.page.nextCursor)
-        setHasMore(j.page.hasMore)
-        setLoadingMore(false)
+        setEntries((prev) => [...(prev ?? []), ...j.entries]);
+        setNextCursor(j.page.nextCursor);
+        setHasMore(j.page.hasMore);
+        setLoadingMore(false);
       })
       // A failed load-more must not hide the rows already loaded: keep the
       // table and report the page failure inline with a retry.
-      .catch((e: unknown) => { setMoreError(e instanceof Error ? e.message : String(e)); setLoadingMore(false) })
-  }
+      .catch((e: unknown) => {
+        setMoreError(e instanceof Error ? e.message : String(e));
+        setLoadingMore(false);
+      });
+  };
 
   // Headline and shares read the server aggregates over the FULL population —
   // the visible page is only ever a window into it.
-  const totalHours = total ? Number(total.hours) : 0
-  const billableHours = total ? Number(total.billableHours) : 0
+  const totalHours = total ? Number(total.hours) : 0;
+  const billableHours = total ? Number(total.billableHours) : 0;
 
   // Server groups arrive pre-aggregated; numbers below are render-only.
-  const toGroup = (g: ServerGroup) => ({ label: g.label || '—', hours: Number(g.hours), billable: Number(g.billableHours) })
-  const itemGroups = view === 'byItem' ? peerGroups.map(toGroup) : []
-  const custGroups = view === 'byCustomer' ? custServerGroups.map(toGroup) : []
+  const toGroup = (g: ServerGroup) => ({
+    label: g.label || "—",
+    hours: Number(g.hours),
+    billable: Number(g.billableHours),
+  });
+  const itemGroups = view === "byItem" ? peerGroups.map(toGroup) : [];
+  const custGroups = view === "byCustomer" ? custServerGroups.map(toGroup) : [];
 
   return (
-    <Drawer open onClose={onClose} size="lg" title={name} description={sub ?? t('entries.title')} bodyClassName="overflow-hidden flex flex-col p-0">
+    <Drawer
+      open
+      onClose={onClose}
+      size="lg"
+      title={name}
+      description={sub ?? t("entries.title")}
+      bodyClassName="overflow-hidden flex flex-col p-0"
+    >
       {/* Peer strip (employee vs same-title average) */}
       {peer ? (
         <div className="flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-800/30">
           <div>
-            <p className="text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('entries.peers', { title: peer.title, count: peer.peerCount })}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('entries.thisVsPeer', { emp: pct1(peer.empPct), peer: pct1(peer.peerAvg) })}</p>
+            <p className="text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+              {t("entries.peers", { title: peer.title, count: peer.peerCount })}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t("entries.thisVsPeer", { emp: pct1(peer.empPct), peer: pct1(peer.peerAvg) })}
+            </p>
           </div>
-          <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', peer.empPct >= peer.peerAvg ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300')}>
-            {peer.empPct >= peer.peerAvg ? '+' : ''}{(peer.empPct - peer.peerAvg).toFixed(1)}pp
+          <span
+            className={cn(
+              "rounded-full px-2.5 py-1 text-xs font-semibold",
+              peer.empPct >= peer.peerAvg
+                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                : "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300",
+            )}
+          >
+            {peer.empPct >= peer.peerAvg ? "+" : ""}
+            {(peer.empPct - peer.peerAvg).toFixed(1)}pp
           </span>
         </div>
       ) : null}
 
       <div className="flex items-center gap-4 border-b border-slate-100 px-4 py-2.5 text-sm dark:border-slate-800">
-        <span className="text-slate-500 dark:text-slate-400">{total ? t('entries.count', { count: total.count, suffix: hasMore ? '+' : '' }) : '…'}</span>
-        <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">{t('entries.hrs', { hours: hrs0(totalHours) })}</span>
-        <span className="tabular-nums text-emerald-600 dark:text-emerald-400">{totalHours > 0 ? t('entries.billableOf', { pct: pct1((billableHours / totalHours) * 100) }) : '—'}</span>
+        <span className="text-slate-500 dark:text-slate-400">
+          {total ? t("entries.count", { count: total.count, suffix: hasMore ? "+" : "" }) : "…"}
+        </span>
+        <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+          {t("entries.hrs", { hours: hrs0(totalHours) })}
+        </span>
+        <span className="tabular-nums text-emerald-600 dark:text-emerald-400">
+          {totalHours > 0
+            ? t("entries.billableOf", { pct: pct1((billableHours / totalHours) * 100) })
+            : "—"}
+        </span>
       </div>
 
       {/* View pills */}
       <div className="flex items-center gap-1.5 border-b border-slate-100 px-4 py-2 dark:border-slate-800">
-        {([['entries', t('entries.pills.entries')], ['byItem', kind === 'employee' ? t('entries.pills.byItem') : t('entries.pills.byEmployee')], ['byCustomer', t('entries.pills.byCustomer')]] as const).map(([k, label]) => (
-          <button key={k} type="button" onClick={() => setView(k)} className={cn('rounded-full border px-2.5 py-1 text-xs font-medium', view === k ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300' : 'border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400')}>{label}</button>
+        {(
+          [
+            ["entries", t("entries.pills.entries")],
+            [
+              "byItem",
+              kind === "employee" ? t("entries.pills.byItem") : t("entries.pills.byEmployee"),
+            ],
+            ["byCustomer", t("entries.pills.byCustomer")],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setView(k)}
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-xs font-medium",
+              view === k
+                ? "border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300"
+                : "border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400",
+            )}
+          >
+            {label}
+          </button>
         ))}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p className="p-6 text-center text-sm text-red-500">{t('error.loadFailed')}: {error}</p>
+          <p className="p-6 text-center text-sm text-red-500">
+            {t("error.loadFailed")}: {error}
+          </p>
         ) : !entries ? (
-          <p className="p-6 text-center text-sm text-slate-400">{t('loading')}</p>
-        ) : view !== 'entries' ? (
+          <p className="p-6 text-center text-sm text-slate-400">{t("loading")}</p>
+        ) : view !== "entries" ? (
           <SharedTable className="w-full text-sm">
             <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
               <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <SharedTableHead className="px-4 py-2 text-left font-medium">{view === 'byItem' ? (kind === 'employee' ? t('entries.serviceItem') : t('entries.employee')) : t('table.customer')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.hours')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.billablePct')}</SharedTableHead>
-                <SharedTableHead className="w-32 px-4 py-2 text-left font-medium">{t('table.share')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">
+                  {view === "byItem"
+                    ? kind === "employee"
+                      ? t("entries.serviceItem")
+                      : t("entries.employee")
+                    : t("table.customer")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.hours")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.billablePct")}
+                </SharedTableHead>
+                <SharedTableHead className="w-32 px-4 py-2 text-left font-medium">
+                  {t("table.share")}
+                </SharedTableHead>
               </SharedTableRow>
             </SharedTableHeader>
             <SharedTableBody>
-              {(view === 'byItem' ? itemGroups : custGroups).map((g) => (
-                <SharedTableRow key={g.label} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <SharedTableCell className="max-w-48 truncate px-4 py-2 text-slate-700 dark:text-slate-300" title={g.label}>{g.label}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{g.hours.toFixed(1)}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{g.hours > 0 ? pct1((g.billable / g.hours) * 100) : '—'}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2"><span className="block h-1.5 w-24 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><span className="block h-full rounded-full bg-teal-400" style={{ width: `${totalHours > 0 ? (g.hours / totalHours) * 100 : 0}%` }} /></span></SharedTableCell>
+              {(view === "byItem" ? itemGroups : custGroups).map((g) => (
+                <SharedTableRow
+                  key={g.label}
+                  className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+                >
+                  <SharedTableCell
+                    className="max-w-48 truncate px-4 py-2 text-slate-700 dark:text-slate-300"
+                    title={g.label}
+                  >
+                    {g.label}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">
+                    {g.hours.toFixed(1)}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {g.hours > 0 ? pct1((g.billable / g.hours) * 100) : "—"}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2">
+                    <span className="block h-1.5 w-24 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                      <span
+                        className="block h-full rounded-full bg-teal-400"
+                        style={{ width: `${totalHours > 0 ? (g.hours / totalHours) * 100 : 0}%` }}
+                      />
+                    </span>
+                  </SharedTableCell>
                 </SharedTableRow>
               ))}
             </SharedTableBody>
@@ -289,33 +537,69 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
           <SharedTable className="w-full text-sm">
             <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
               <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.date')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-left font-medium">{kind === 'employee' ? t('entries.item') : t('entries.employee')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.customer')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.hours')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.billable')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">
+                  {t("table.date")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">
+                  {kind === "employee" ? t("entries.item") : t("entries.employee")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">
+                  {t("table.customer")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.hours")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-center font-medium">
+                  {t("table.billable")}
+                </SharedTableHead>
               </SharedTableRow>
             </SharedTableHeader>
             <SharedTableBody>
               {entries.map((e) => (
-                <SharedTableRow key={e.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <SharedTableCell className="px-4 py-1.5 whitespace-nowrap tabular-nums text-slate-500 dark:text-slate-400">{e.date}</SharedTableCell>
-                  <SharedTableCell className="max-w-40 truncate px-4 py-1.5 text-slate-700 dark:text-slate-300" title={kind === 'employee' ? e.itemName : e.employeeName}>{kind === 'employee' ? e.itemName : e.employeeName}</SharedTableCell>
-                  <SharedTableCell className="max-w-40 truncate px-4 py-1.5 text-slate-500 dark:text-slate-400" title={e.customerName}>{e.customerName || '—'}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-1.5 text-right tabular-nums text-slate-800 dark:text-slate-200">{e.hours.toFixed(1)}</SharedTableCell>
+                <SharedTableRow
+                  key={e.id}
+                  className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+                >
+                  <SharedTableCell className="px-4 py-1.5 whitespace-nowrap tabular-nums text-slate-500 dark:text-slate-400">
+                    {e.date}
+                  </SharedTableCell>
+                  <SharedTableCell
+                    className="max-w-40 truncate px-4 py-1.5 text-slate-700 dark:text-slate-300"
+                    title={kind === "employee" ? e.itemName : e.employeeName}
+                  >
+                    {kind === "employee" ? e.itemName : e.employeeName}
+                  </SharedTableCell>
+                  <SharedTableCell
+                    className="max-w-40 truncate px-4 py-1.5 text-slate-500 dark:text-slate-400"
+                    title={e.customerName}
+                  >
+                    {e.customerName || "—"}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-1.5 text-right tabular-nums text-slate-800 dark:text-slate-200">
+                    {e.hours.toFixed(1)}
+                  </SharedTableCell>
                   <SharedTableCell className="px-4 py-1.5 text-center">
-                    {e.billable
-                      ? <Badge variant="success">{t('yes')}</Badge>
-                      : <span className="text-xs text-rose-500 tabular-nums">{compareMoney(e.cost, '0') > 0 ? money0(e.cost) : t('no')}</span>}
+                    {e.billable ? (
+                      <Badge variant="success">{t("yes")}</Badge>
+                    ) : (
+                      <span className="text-xs text-rose-500 tabular-nums">
+                        {compareMoney(e.cost, "0") > 0 ? money0(e.cost) : t("no")}
+                      </span>
+                    )}
                   </SharedTableCell>
                 </SharedTableRow>
               ))}
             </SharedTableBody>
           </SharedTable>
         )}
-        {view === 'entries' && hasMore && entries ? (
+        {view === "entries" && hasMore && entries ? (
           <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-            <span className="tabular-nums">{t('entries.loaded', { loaded: entries.length, total: total?.count ?? entries.length })}</span>
+            <span className="tabular-nums">
+              {t("entries.loaded", {
+                loaded: entries.length,
+                total: total?.count ?? entries.length,
+              })}
+            </span>
             {moreError ? (
               <span className="flex items-center gap-2">
                 <span className="text-red-500">{moreError}</span>
@@ -325,7 +609,7 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
                   disabled={loadingMore}
                   className="rounded-full border border-teal-500 px-3 py-1 font-medium text-teal-700 disabled:opacity-40 dark:text-teal-300"
                 >
-                  {t('entries.loadMore')}
+                  {t("entries.loadMore")}
                 </button>
               </span>
             ) : (
@@ -335,142 +619,258 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
                 disabled={loadingMore}
                 className="rounded-full border border-teal-500 px-3 py-1 font-medium text-teal-700 disabled:opacity-40 dark:text-teal-300"
               >
-                {loadingMore ? t('loading') : t('entries.loadMore')}
+                {loadingMore ? t("loading") : t("entries.loadMore")}
               </button>
             )}
           </div>
         ) : null}
       </div>
     </Drawer>
-  )
+  );
 }
 
-type Flyout = { kind: 'employee' | 'item'; id: string; name: string; sub?: string; peer?: { title: string; empPct: number; peerAvg: number; peerCount: number } } | null
+type Flyout = {
+  kind: "employee" | "item";
+  id: string;
+  name: string;
+  sub?: string;
+  peer?: { title: string; empPct: number; peerAvg: number; peerCount: number };
+} | null;
 
 /* ------------------------------------------------------------------- shell */
 
-export function UtilizationView({ data: initialData, canConfigure }: { data: UtilizationData; canConfigure?: boolean }) {
-  const t = useTranslations('analytics.utilization')
-  const hrs0 = useHrs0()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
-  const read = useAnalyticsTab('utilization', { data: initialData }, TABS)
-  const { tab, setTab } = read
-  const { data } = read.props
-  const [flyout, setFlyout] = useState<Flyout>(null)
-  const target = data.config.target
-  const c = data.company.range
+export function UtilizationView({
+  data: initialData,
+  canConfigure,
+}: {
+  data: UtilizationData;
+  canConfigure?: boolean;
+}) {
+  const t = useTranslations("analytics.utilization");
+  const hrs0 = useHrs0();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true });
+  const read = useAnalyticsTab("utilization", { data: initialData }, TABS);
+  const { tab, setTab } = read;
+  const { data } = read.props;
+  const [flyout, setFlyout] = useState<Flyout>(null);
+  const target = data.config.target;
+  const c = data.company.range;
 
   return (
     <div className="space-y-5">
       {/* Hero row: gauge + 4 KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <BillableGauge pct={c.percentBilled} target={target} watchPp={data.config.watchBandPp} warnPp={data.config.warnBandPp} />
-        <KpiCard icon={DollarSign} accent="red" label={t('kpi.nonBillableCost')} value={money(c.nonBillableCost)} sub={t('sub.totalForRange')} tone="negative" />
-        <KpiCard icon={Clock} accent="slate" label={t('kpi.costPerDay')} value={money(c.nonBillableCostPerDay)} sub={t('sub.daysInRange', { days: data.period.days })} />
-        <KpiCard icon={UserRound} accent="violet" label={t('kpi.totalHours')} value={hrs0(c.hours)} sub={t('sub.recordedTime')} />
-        <KpiCard icon={CheckCircle2} accent="emerald" label={t('kpi.billableHours')} value={hrs0(c.billableHours)} sub={t('sub.revenueGenerating')} tone="positive" />
+        <BillableGauge
+          pct={c.percentBilled}
+          target={target}
+          watchPp={data.config.watchBandPp}
+          warnPp={data.config.warnBandPp}
+        />
+        <KpiCard
+          icon={DollarSign}
+          accent="red"
+          label={t("kpi.nonBillableCost")}
+          value={money(c.nonBillableCost)}
+          sub={t("sub.totalForRange")}
+          tone="negative"
+        />
+        <KpiCard
+          icon={Clock}
+          accent="slate"
+          label={t("kpi.costPerDay")}
+          value={money(c.nonBillableCostPerDay)}
+          sub={t("sub.daysInRange", { days: data.period.days })}
+        />
+        <KpiCard
+          icon={UserRound}
+          accent="violet"
+          label={t("kpi.totalHours")}
+          value={hrs0(c.hours)}
+          sub={t("sub.recordedTime")}
+        />
+        <KpiCard
+          icon={CheckCircle2}
+          accent="emerald"
+          label={t("kpi.billableHours")}
+          value={hrs0(c.billableHours)}
+          sub={t("sub.revenueGenerating")}
+          tone="positive"
+        />
       </div>
 
-      <RecordTabs label={t('title')} tabs={TABS.map((key) => ({ key, label: t(`tabs.${key}`) }))} active={tab} onChange={setTab}>
-      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry} refreshing={read.refreshing}>
-      <div key={tab}>
-        {tab === 'overview' ? <OverviewTab data={data} /> : null}
-        {tab === 'intelligence' ? <IntelligenceTab data={data} /> : null}
-        {tab === 'departments' ? <DepartmentsTab data={data} /> : null}
-        {tab === 'items' ? <ItemsTab data={data} onDrill={setFlyout} /> : null}
-        {tab === 'titles' ? <TitlesTab data={data} /> : null}
-        {tab === 'employees' ? <EmployeesTab data={data} onDrill={setFlyout} /> : null}
-        {tab === 'config' ? <ConfigTab data={data} canEdit={canConfigure ?? false} /> : null}
-      </div>
-            </AnalyticsTabContent>
+      <RecordTabs
+        label={t("title")}
+        tabs={TABS.map((key) => ({ key, label: t(`tabs.${key}`) }))}
+        active={tab}
+        onChange={setTab}
+      >
+        <AnalyticsTabContent
+          loading={read.loading}
+          error={read.error}
+          retry={read.retry}
+          refreshing={read.refreshing}
+        >
+          <div key={tab}>
+            {tab === "overview" ? <OverviewTab data={data} /> : null}
+            {tab === "intelligence" ? <IntelligenceTab data={data} /> : null}
+            {tab === "departments" ? <DepartmentsTab data={data} /> : null}
+            {tab === "items" ? <ItemsTab data={data} onDrill={setFlyout} /> : null}
+            {tab === "titles" ? <TitlesTab data={data} /> : null}
+            {tab === "employees" ? <EmployeesTab data={data} onDrill={setFlyout} /> : null}
+            {tab === "config" ? <ConfigTab data={data} canEdit={canConfigure ?? false} /> : null}
+          </div>
+        </AnalyticsTabContent>
       </RecordTabs>
 
       {flyout ? (
-        <EntriesDrawer kind={flyout.kind} id={flyout.id} name={flyout.name} sub={flyout.sub} peer={flyout.peer} from={data.period.from} to={data.period.to} onClose={() => setFlyout(null)} />
+        <EntriesDrawer
+          kind={flyout.kind}
+          id={flyout.id}
+          name={flyout.name}
+          sub={flyout.sub}
+          peer={flyout.peer}
+          from={data.period.from}
+          to={data.period.to}
+          onClose={() => setFlyout(null)}
+        />
       ) : null}
     </div>
-  )
+  );
 }
 
 /** Employees/depts visible to Intelligence: exclude no-billable departments. */
 function intelligenceScope(data: UtilizationData) {
-  const noBill = new Set(data.departments.filter((d) => d.noBillable).map((d) => d.id))
+  const noBill = new Set(data.departments.filter((d) => d.noBillable).map((d) => d.id));
   return {
     depts: data.departments.filter((d) => !d.noBillable),
     employees: data.employees.filter((e) => !e.departmentId || !noBill.has(e.departmentId)),
-  }
+  };
 }
 
 /* ---------------------------------------------------------------- Overview */
 
 function OverviewTab({ data }: { data: UtilizationData }) {
-  const t = useTranslations('analytics.utilization')
-  const hrs0 = useHrs0()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
-  const money0 = (n: MoneyValue) => fmtMoney(n)
-  const target = data.config.target
-  const c = data.company.range
-  const p = data.company.prior
-  const d = data.company.deltas
+  const t = useTranslations("analytics.utilization");
+  const hrs0 = useHrs0();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true });
+  const money0 = (n: MoneyValue) => fmtMoney(n);
+  const target = data.config.target;
+  const c = data.company.range;
+  const p = data.company.prior;
+  const d = data.company.deltas;
 
   const rows: [string, string, string, React.ReactNode][] = [
-    [t('metric.percentBilled'), pct1(c.percentBilled), pct1(p.percentBilled), <TrendDelta key="1" delta={d.pctDelta} goodIfUp />],
-    [t('metric.nonBillableCost'), money0(c.nonBillableCost), money0(p.nonBillableCost), <TrendDelta key="2" delta={d.costDelta} goodIfUp={false} unit="money" />],
-    [t('metric.totalHours'), hrs0(c.hours), hrs0(p.hours), <TrendDelta key="3" delta={c.hours - p.hours} goodIfUp unit="hours" />],
-    [t('metric.billableHours'), hrs0(c.billableHours), hrs0(p.billableHours), <TrendDelta key="4" delta={c.billableHours - p.billableHours} goodIfUp unit="hours" />],
-    [t('metric.nonBillableHours'), hrs0(c.nonBillableHours), hrs0(p.nonBillableHours), <TrendDelta key="5" delta={c.nonBillableHours - p.nonBillableHours} goodIfUp={false} unit="hours" />],
-    [t('metric.costPerDay'), money0(c.nonBillableCostPerDay), money0(p.nonBillableCostPerDay), '—'],
-  ]
+    [
+      t("metric.percentBilled"),
+      pct1(c.percentBilled),
+      pct1(p.percentBilled),
+      <TrendDelta key="1" delta={d.pctDelta} goodIfUp />,
+    ],
+    [
+      t("metric.nonBillableCost"),
+      money0(c.nonBillableCost),
+      money0(p.nonBillableCost),
+      <TrendDelta key="2" delta={d.costDelta} goodIfUp={false} unit="money" />,
+    ],
+    [
+      t("metric.totalHours"),
+      hrs0(c.hours),
+      hrs0(p.hours),
+      <TrendDelta key="3" delta={c.hours - p.hours} goodIfUp unit="hours" />,
+    ],
+    [
+      t("metric.billableHours"),
+      hrs0(c.billableHours),
+      hrs0(p.billableHours),
+      <TrendDelta key="4" delta={c.billableHours - p.billableHours} goodIfUp unit="hours" />,
+    ],
+    [
+      t("metric.nonBillableHours"),
+      hrs0(c.nonBillableHours),
+      hrs0(p.nonBillableHours),
+      <TrendDelta
+        key="5"
+        delta={c.nonBillableHours - p.nonBillableHours}
+        goodIfUp={false}
+        unit="hours"
+      />,
+    ],
+    [t("metric.costPerDay"), money0(c.nonBillableCostPerDay), money0(p.nonBillableCostPerDay), "—"],
+  ];
 
   // Cost hotspots (exclude no-billable departments, ).
-  const billableDepts = data.departments.filter((x) => !x.noBillable)
-  const topDept = billableDepts[0]
-  const topItem = data.items[0]
-  const noBillIds = new Set(data.departments.filter((x) => x.noBillable).map((x) => x.id))
+  const billableDepts = data.departments.filter((x) => !x.noBillable);
+  const topDept = billableDepts[0];
+  const topItem = data.items[0];
+  const noBillIds = new Set(data.departments.filter((x) => x.noBillable).map((x) => x.id));
   const qualified = data.employees
     .filter((e) => e.meetsMinHours && (!e.departmentId || !noBillIds.has(e.departmentId)))
-    .sort((a, b) => a.range.percentBilled - b.range.percentBilled)
-  const lowEmp = qualified[0]
-  const sameRate = lowEmp ? qualified.filter((e) => Math.round(e.range.percentBilled) === Math.round(lowEmp.range.percentBilled)).length : 0
+    .sort((a, b) => a.range.percentBilled - b.range.percentBilled);
+  const lowEmp = qualified[0];
+  const sameRate = lowEmp
+    ? qualified.filter(
+        (e) => Math.round(e.range.percentBilled) === Math.round(lowEmp.range.percentBilled),
+      ).length
+    : 0;
 
   // Top departments by non-billable cost, coloured vs target.
-  const topDepts = billableDepts.slice(0, 5)
+  const topDepts = billableDepts.slice(0, 5);
 
   // Zero tracked hours is a data prerequisite, not poor performance: the
   // 0% below would otherwise read as a failing team. Name the remedy and
   // link the timesheets that change it.
-  const noTimeTracked = c.hours === 0
+  const noTimeTracked = c.hours === 0;
 
   return (
     <div className="space-y-5">
       {noTimeTracked ? (
         <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-          {t('empty.noTimeTracked')}{' '}
-          <Link href="/timesheets" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
-            {t('empty.noTimeTrackedAction')}
+          {t("empty.noTimeTracked")}{" "}
+          <Link
+            href="/timesheets"
+            className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+          >
+            {t("empty.noTimeTrackedAction")}
           </Link>
         </p>
       ) : null}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
         <div className="space-y-5 lg:col-span-3">
-          <Panel title={t('panels.efficiencySummary')} icon={Scale} bodyClassName="p-0">
+          <Panel title={t("panels.efficiencySummary")} icon={Scale} bodyClassName="p-0">
             <SharedTable className="w-full text-sm">
               <SharedTableHeader>
                 <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.metric')}</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.currentRange')}</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.priorRange')}</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.change')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">
+                    {t("table.metric")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">
+                    {t("table.currentRange")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">
+                    {t("table.priorRange")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">
+                    {t("table.change")}
+                  </SharedTableHead>
                 </SharedTableRow>
               </SharedTableHeader>
               <SharedTableBody>
                 {rows.map(([label, cur, pri, trend]) => (
-                  <SharedTableRow key={label} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                    <SharedTableCell className="px-4 py-2.5 font-medium text-slate-700 dark:text-slate-300">{label}</SharedTableCell>
-                    <SharedTableCell className="px-4 py-2.5 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{cur}</SharedTableCell>
-                    <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-400 dark:text-slate-500">{pri}</SharedTableCell>
+                  <SharedTableRow
+                    key={label}
+                    className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+                  >
+                    <SharedTableCell className="px-4 py-2.5 font-medium text-slate-700 dark:text-slate-300">
+                      {label}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2.5 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">
+                      {cur}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-400 dark:text-slate-500">
+                      {pri}
+                    </SharedTableCell>
                     <SharedTableCell className="px-4 py-2.5 text-right">{trend}</SharedTableCell>
                   </SharedTableRow>
                 ))}
@@ -478,388 +878,700 @@ function OverviewTab({ data }: { data: UtilizationData }) {
             </SharedTable>
           </Panel>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <Panel title={t('panels.hoursDistribution')} icon={PieIcon}>
+            <Panel title={t("panels.hoursDistribution")} icon={PieIcon}>
               <Donut
-                data={[{ name: t('chart.billable'), value: c.billableHours }, { name: t('chart.nonBillable'), value: c.nonBillableHours }]}
+                data={[
+                  { name: t("chart.billable"), value: c.billableHours },
+                  { name: t("chart.nonBillable"), value: c.nonBillableHours },
+                ]}
                 height={200}
-                valueFormat={(v) => `${hrs0(Math.round(v))} ${t('unit.hrs')}`}
-                colors={['#10b981', '#ef4444']}
+                valueFormat={(v) => `${hrs0(Math.round(v))} ${t("unit.hrs")}`}
+                colors={["#10b981", "#ef4444"]}
               />
             </Panel>
-            <Panel title={t('panels.topDepartments')} hint={t('panels.topDepartmentsHint')}>
+            <Panel title={t("panels.topDepartments")} hint={t("panels.topDepartmentsHint")}>
               <div className="space-y-2.5">
                 {topDepts.map((x) => {
-                  const tone = statusTone(x.range.percentBilled, target, data.config.watchBandPp, data.config.warnBandPp)
-                  const max = topDepts[0]?.range.nonBillableCost ?? '0'
+                  const tone = statusTone(
+                    x.range.percentBilled,
+                    target,
+                    data.config.watchBandPp,
+                    data.config.warnBandPp,
+                  );
+                  const max = topDepts[0]?.range.nonBillableCost ?? "0";
                   // A decimal zero string is truthy. With no cost across the
                   // departments, show empty bars without dividing by zero.
-                  const costRatio = compareMoney(max, '0') === 0
-                    ? 0
-                    : Number(divideDecimal(x.range.nonBillableCost, max, 8))
+                  const costRatio =
+                    compareMoney(max, "0") === 0
+                      ? 0
+                      : Number(divideDecimal(x.range.nonBillableCost, max, 8));
                   return (
                     <div key={x.id}>
                       <div className="mb-0.5 flex justify-between text-xs">
-                        <span className="truncate text-slate-600 dark:text-slate-300">{x.name}</span>
-                        <span className="tabular-nums text-slate-500 dark:text-slate-400">{money(x.range.nonBillableCost)} · <span className={tone.text}>{pct1(x.range.percentBilled, 0)}</span></span>
+                        <span className="truncate text-slate-600 dark:text-slate-300">
+                          {x.name}
+                        </span>
+                        <span className="tabular-nums text-slate-500 dark:text-slate-400">
+                          {money(x.range.nonBillableCost)} ·{" "}
+                          <span className={tone.text}>{pct1(x.range.percentBilled, 0)}</span>
+                        </span>
                       </div>
                       <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                        <div className={cn('h-full rounded-full', tone.bar)} style={{ width: `${compareMoney(x.range.nonBillableCost, '0') > 0 ? Math.max(2, Math.min(100, costRatio * 100)) : 0}%` }} />
+                        <div
+                          className={cn("h-full rounded-full", tone.bar)}
+                          style={{
+                            width: `${compareMoney(x.range.nonBillableCost, "0") > 0 ? Math.max(2, Math.min(100, costRatio * 100)) : 0}%`,
+                          }}
+                        />
                       </div>
                     </div>
-                  )
+                  );
                 })}
               </div>
             </Panel>
           </div>
         </div>
         <div className="space-y-5 lg:col-span-2">
-          <Panel title={t('panels.alerts')} icon={AlertTriangle}>
+          <Panel title={t("panels.alerts")} icon={AlertTriangle}>
             {data.company.alerts.length ? (
               <ul className="space-y-2 text-sm">
                 {data.company.alerts.map((a, i) => (
-                  <li key={i} className={cn('flex items-start gap-2', a.type === 'danger' ? 'text-rose-600 dark:text-rose-400' : 'text-amber-700 dark:text-amber-300')}>
+                  <li
+                    key={i}
+                    className={cn(
+                      "flex items-start gap-2",
+                      a.type === "danger"
+                        ? "text-rose-600 dark:text-rose-400"
+                        : "text-amber-700 dark:text-amber-300",
+                    )}
+                  >
                     <AlertTriangle size={15} className="mt-0.5 shrink-0" />
                     {a.message}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={15} />{t('empty.allWithinTarget')}</p>
+              <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 size={15} />
+                {t("empty.allWithinTarget")}
+              </p>
             )}
           </Panel>
-          <Panel title={t('panels.costHotspots')} icon={Target} bodyClassName="p-0">
+          <Panel title={t("panels.costHotspots")} icon={Target} bodyClassName="p-0">
             <ul className="divide-y divide-slate-50 text-sm dark:divide-slate-800/60">
               <li className="flex items-center justify-between gap-4 px-4 py-3">
-                <span className="text-slate-500 dark:text-slate-400">{t('hotspot.mostExpensiveDept')}</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">{topDept?.name ?? '—'}</span>
+                <span className="text-slate-500 dark:text-slate-400">
+                  {t("hotspot.mostExpensiveDept")}
+                </span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  {topDept?.name ?? "—"}
+                </span>
               </li>
               <li className="flex items-center justify-between gap-4 px-4 py-3">
-                <span className="text-slate-500 dark:text-slate-400">{t('hotspot.highestCostItem')}</span>
-                <span className="max-w-52 truncate font-semibold text-slate-800 dark:text-slate-200" title={topItem?.name}>{topItem?.name ?? '—'}</span>
+                <span className="text-slate-500 dark:text-slate-400">
+                  {t("hotspot.highestCostItem")}
+                </span>
+                <span
+                  className="max-w-52 truncate font-semibold text-slate-800 dark:text-slate-200"
+                  title={topItem?.name}
+                >
+                  {topItem?.name ?? "—"}
+                </span>
               </li>
               <li className="flex items-center justify-between gap-4 px-4 py-3">
-                <span className="text-slate-500 dark:text-slate-400">{t('hotspot.lowestBilledEmp')}</span>
+                <span className="text-slate-500 dark:text-slate-400">
+                  {t("hotspot.lowestBilledEmp")}
+                </span>
                 <span className="text-right font-semibold text-slate-800 dark:text-slate-200">
-                  {lowEmp ? `${lowEmp.name} (${Math.round(lowEmp.range.percentBilled)}%)` : '—'}
-                  {sameRate > 1 ? <span className="ml-1 font-normal text-slate-400">{t('hotspot.others', { count: sameRate - 1 })}</span> : null}
+                  {lowEmp ? `${lowEmp.name} (${Math.round(lowEmp.range.percentBilled)}%)` : "—"}
+                  {sameRate > 1 ? (
+                    <span className="ml-1 font-normal text-slate-400">
+                      {t("hotspot.others", { count: sameRate - 1 })}
+                    </span>
+                  ) : null}
                 </span>
               </li>
             </ul>
           </Panel>
-          <Panel title={t('panels.noBillableExpectation')} icon={Info}>
+          <Panel title={t("panels.noBillableExpectation")} icon={Info}>
             <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-              {data.departments.filter((x) => x.noBillable).map((x) => x.name).join(', ') || t('none')} — {t('noBillableNote')}
+              {data.departments
+                .filter((x) => x.noBillable)
+                .map((x) => x.name)
+                .join(", ") || t("none")}{" "}
+              — {t("noBillableNote")}
             </p>
           </Panel>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /* ------------------------------------------------------------ Intelligence */
 
-const SUB_TABS = ['forecasting', 'anomalies', 'peers', 'whatif', 'treemap'] as const
-type SubTab = (typeof SUB_TABS)[number]
+const SUB_TABS = ["forecasting", "anomalies", "peers", "whatif", "treemap"] as const;
+type SubTab = (typeof SUB_TABS)[number];
 const SUB_ICON: Record<SubTab, typeof ChartArea> = {
-  forecasting: ChartArea, anomalies: AlertTriangle, peers: Scale, whatif: Calculator, treemap: LayoutGrid,
-}
+  forecasting: ChartArea,
+  anomalies: AlertTriangle,
+  peers: Scale,
+  whatif: Calculator,
+  treemap: LayoutGrid,
+};
 
 function IntelligenceTab({ data }: { data: UtilizationData }) {
-  const t = useTranslations('analytics.utilization')
-  const [sub, setSub] = useState<SubTab>('forecasting')
+  const t = useTranslations("analytics.utilization");
+  const [sub, setSub] = useState<SubTab>("forecasting");
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1.5">
         {SUB_TABS.map((k) => {
-          const Icon = SUB_ICON[k]
+          const Icon = SUB_ICON[k];
           return (
-            <button key={k} type="button" onClick={() => setSub(k)} className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors', sub === k ? 'border-teal-500 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-300' : 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800')}>
-              <Icon size={13} />{t(`subTabs.${k}`)}
+            <button
+              key={k}
+              type="button"
+              onClick={() => setSub(k)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                sub === k
+                  ? "border-teal-500 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-300"
+                  : "border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800",
+              )}
+            >
+              <Icon size={13} />
+              {t(`subTabs.${k}`)}
             </button>
-          )
+          );
         })}
       </div>
       <div key={sub}>
-        {sub === 'forecasting' ? <ForecastingSub data={data} /> : null}
-        {sub === 'anomalies' ? <AnomaliesSub data={data} /> : null}
-        {sub === 'peers' ? <PeersSub data={data} /> : null}
-        {sub === 'whatif' ? <WhatIfSub data={data} /> : null}
-        {sub === 'treemap' ? <TreemapSub data={data} /> : null}
+        {sub === "forecasting" ? <ForecastingSub data={data} /> : null}
+        {sub === "anomalies" ? <AnomaliesSub data={data} /> : null}
+        {sub === "peers" ? <PeersSub data={data} /> : null}
+        {sub === "whatif" ? <WhatIfSub data={data} /> : null}
+        {sub === "treemap" ? <TreemapSub data={data} /> : null}
       </div>
     </div>
-  )
+  );
 }
 
 /** : linear regression on history + inverse cost. */
 function useForecasts(data: UtilizationData) {
   return useMemo(() => {
-    const range = data.company.range
-    const series = data.history.periods.map((p) => p.companyPct).reverse()
-    series.push(range.percentBilled)
+    const range = data.company.range;
+    const series = data.history.periods.map((p) => p.companyPct).reverse();
+    series.push(range.percentBilled);
 
     const forecast = (s: number[]) => {
-      if (s.length < 2) return { projected: s[s.length - 1] || 0, trend: 0 }
-      const n = s.length
-      let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0
-      for (let i = 0; i < n; i++) { sumX += i; sumY += s[i]!; sumXY += i * s[i]!; sumXX += i * i }
-      const denom = n * sumXX - sumX * sumX
-      if (denom === 0) return { projected: s[s.length - 1] || 0, trend: 0 }
-      const slope = (n * sumXY - sumX * sumY) / denom
-      const intercept = (sumY - slope * sumX) / n
-      return { projected: Math.max(0, intercept + slope * n), trend: slope }
-    }
-    const f = forecast(series)
-    const projectedBillable = Math.min(100, Math.max(0, f.projected))
+      if (s.length < 2) return { projected: s[s.length - 1] || 0, trend: 0 };
+      const n = s.length;
+      let sumX = 0,
+        sumY = 0,
+        sumXY = 0,
+        sumXX = 0;
+      for (let i = 0; i < n; i++) {
+        sumX += i;
+        sumY += s[i]!;
+        sumXY += i * s[i]!;
+        sumXX += i * i;
+      }
+      const denom = n * sumXX - sumX * sumX;
+      if (denom === 0) return { projected: s[s.length - 1] || 0, trend: 0 };
+      const slope = (n * sumXY - sumX * sumY) / denom;
+      const intercept = (sumY - slope * sumX) / n;
+      return { projected: Math.max(0, intercept + slope * n), trend: slope };
+    };
+    const f = forecast(series);
+    const projectedBillable = Math.min(100, Math.max(0, f.projected));
 
     // Cost projection — inverse to billable %, including the ~100% edge case.
     // With no cost basis (no non-billable hours and no per-hour cost) the
     // projection is null and the tile says so by name instead of guessing
     // from a fallback rate or an arbitrary cap.
-    const currentCost = String(range.nonBillableCost)
-    const currentNonBillPct = 100 - range.percentBilled
-    const projectedNonBillPct = 100 - projectedBillable
-    let projectedCost: string | null = currentCost
+    const currentCost = String(range.nonBillableCost);
+    const currentNonBillPct = 100 - range.percentBilled;
+    const projectedNonBillPct = 100 - projectedBillable;
+    let projectedCost: string | null = currentCost;
     if (currentNonBillPct <= 0.01) {
       if (projectedNonBillPct > 0.01) {
-        const perHour = range.nonBillableCostPerHour
-        const avgCostPerHour = range.nonBillableHours > 0 && compareMoney(currentCost, '0') > 0
-          ? div(currentCost, String(range.nonBillableHours))
-          : (perHour == null || perHour === '' ? null : String(perHour))
-        const projectedHours = range.hours * (projectedNonBillPct / 100)
-        projectedCost = avgCostPerHour == null ? null : mulDecimal(avgCostPerHour, String(projectedHours))
-      } else projectedCost = '0.0000'
+        const perHour = range.nonBillableCostPerHour;
+        const avgCostPerHour =
+          range.nonBillableHours > 0 && compareMoney(currentCost, "0") > 0
+            ? div(currentCost, String(range.nonBillableHours))
+            : perHour == null || perHour === ""
+              ? null
+              : String(perHour);
+        const projectedHours = range.hours * (projectedNonBillPct / 100);
+        projectedCost =
+          avgCostPerHour == null ? null : mulDecimal(avgCostPerHour, String(projectedHours));
+      } else projectedCost = "0.0000";
     } else {
-      const exactProjectionRatio = divideDecimal(String(projectedNonBillPct), String(currentNonBillPct), 10)
-      projectedCost = mulDecimal(currentCost, exactProjectionRatio)
+      const exactProjectionRatio = divideDecimal(
+        String(projectedNonBillPct),
+        String(currentNonBillPct),
+        10,
+      );
+      projectedCost = mulDecimal(currentCost, exactProjectionRatio);
     }
 
-    return { series, projectedBillable, billableTrend: f.trend, projectedCost, costTrend: projectedCost == null ? null : add(projectedCost, neg(currentCost)) }
-  }, [data])
+    return {
+      series,
+      projectedBillable,
+      billableTrend: f.trend,
+      projectedCost,
+      costTrend: projectedCost == null ? null : add(projectedCost, neg(currentCost)),
+    };
+  }, [data]);
 }
 
 function ForecastingSub({ data }: { data: UtilizationData }) {
-  const t = useTranslations('analytics.utilization')
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
-  const target = data.config.target
-  const f = useForecasts(data)
-  const labels = [...data.history.periods.map((p) => p.label).reverse(), t('forecast.current'), t('forecast.projected')]
-  const hist = [...f.series, null]
-  const proj = [...f.series.slice(0, -1).map(() => null), f.series[f.series.length - 1], f.projectedBillable]
+  const t = useTranslations("analytics.utilization");
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true });
+  const target = data.config.target;
+  const f = useForecasts(data);
+  const labels = [
+    ...data.history.periods.map((p) => p.label).reverse(),
+    t("forecast.current"),
+    t("forecast.projected"),
+  ];
+  const hist = [...f.series, null];
+  const proj = [
+    ...f.series.slice(0, -1).map(() => null),
+    f.series[f.series.length - 1],
+    f.projectedBillable,
+  ];
 
-  const tone = f.projectedBillable >= target ? 'positive' : 'negative'
+  const tone = f.projectedBillable >= target ? "positive" : "negative";
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={ChartArea} accent="sky" label={t('kpi.projectedBillablePct')} value={pct1(f.projectedBillable)} sub={t('sub.trendArrow', { arrow: f.billableTrend >= 0 ? '↑' : '↓', trend: Math.abs(f.billableTrend).toFixed(1) })} tone={(tone)} />
-        <KpiCard icon={DollarSign} accent={f.costTrend == null ? 'slate' : compareMoney(f.costTrend, '0') <= 0 ? 'emerald' : 'red'} label={t('kpi.projectedNonBillCost')} value={f.projectedCost == null ? '—' : money(f.projectedCost)} sub={f.costTrend == null ? t('forecast.noCostBasis') : t('sub.trajectory', { arrow: compareMoney(f.costTrend, '0') <= 0 ? '↓' : '↑', amount: money(absMoney(f.costTrend)) })} tone={f.costTrend == null ? 'neutral' : compareMoney(f.costTrend, '0') <= 0 ? 'positive' : 'negative'} />
-        <KpiCard icon={Target} accent="violet" label={t('kpi.targetStatus')} value={f.projectedBillable >= target ? t('forecast.onTrack') : t('forecast.atRisk')} sub={t('sub.targetPct', { target })} tone={(tone)} />
+        <KpiCard
+          icon={ChartArea}
+          accent="sky"
+          label={t("kpi.projectedBillablePct")}
+          value={pct1(f.projectedBillable)}
+          sub={t("sub.trendArrow", {
+            arrow: f.billableTrend >= 0 ? "↑" : "↓",
+            trend: Math.abs(f.billableTrend).toFixed(1),
+          })}
+          tone={tone}
+        />
+        <KpiCard
+          icon={DollarSign}
+          accent={
+            f.costTrend == null ? "slate" : compareMoney(f.costTrend, "0") <= 0 ? "emerald" : "red"
+          }
+          label={t("kpi.projectedNonBillCost")}
+          value={f.projectedCost == null ? "—" : money(f.projectedCost)}
+          sub={
+            f.costTrend == null
+              ? t("forecast.noCostBasis")
+              : t("sub.trajectory", {
+                  arrow: compareMoney(f.costTrend, "0") <= 0 ? "↓" : "↑",
+                  amount: money(absMoney(f.costTrend)),
+                })
+          }
+          tone={
+            f.costTrend == null
+              ? "neutral"
+              : compareMoney(f.costTrend, "0") <= 0
+                ? "positive"
+                : "negative"
+          }
+        />
+        <KpiCard
+          icon={Target}
+          accent="violet"
+          label={t("kpi.targetStatus")}
+          value={f.projectedBillable >= target ? t("forecast.onTrack") : t("forecast.atRisk")}
+          sub={t("sub.targetPct", { target })}
+          tone={tone}
+        />
       </div>
-      <Panel title={t('panels.forecastTrend')} icon={ChartArea}>
+      <Panel title={t("panels.forecastTrend")} icon={ChartArea}>
         <Chart
           height={280}
           option={{
             grid: { top: 20, bottom: 30, left: 45, right: 20 },
-            tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => (v == null ? '—' : `${Number(v).toFixed(1)}%`) },
-            xAxis: { type: 'category', data: labels },
-            yAxis: { type: 'value', max: 100, min: 0, axisLabel: { formatter: '{value}%' } },
+            tooltip: {
+              trigger: "axis",
+              valueFormatter: (v: unknown) => (v == null ? "—" : `${Number(v).toFixed(1)}%`),
+            },
+            xAxis: { type: "category", data: labels },
+            yAxis: { type: "value", max: 100, min: 0, axisLabel: { formatter: "{value}%" } },
             series: [
-              { name: t('chart.historical'), type: 'line', data: hist, symbolSize: 7, lineStyle: { width: 2, color: '#3b82f6' }, itemStyle: { color: '#3b82f6' }, connectNulls: false },
-              { name: t('chart.forecast'), type: 'line', data: proj, symbolSize: 7, symbol: 'diamond', lineStyle: { width: 2, color: '#3b82f6', type: 'dashed' }, itemStyle: { color: '#3b82f6' } },
-              { name: t('chart.target'), type: 'line', data: labels.map(() => target), symbol: 'none', lineStyle: { width: 1, color: '#94a3b8', type: 'dotted' } },
+              {
+                name: t("chart.historical"),
+                type: "line",
+                data: hist,
+                symbolSize: 7,
+                lineStyle: { width: 2, color: "#3b82f6" },
+                itemStyle: { color: "#3b82f6" },
+                connectNulls: false,
+              },
+              {
+                name: t("chart.forecast"),
+                type: "line",
+                data: proj,
+                symbolSize: 7,
+                symbol: "diamond",
+                lineStyle: { width: 2, color: "#3b82f6", type: "dashed" },
+                itemStyle: { color: "#3b82f6" },
+              },
+              {
+                name: t("chart.target"),
+                type: "line",
+                data: labels.map(() => target),
+                symbol: "none",
+                lineStyle: { width: 1, color: "#94a3b8", type: "dotted" },
+              },
             ],
           }}
         />
       </Panel>
       <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
         <Info size={14} className="mt-0.5 shrink-0" />
-        <span><span className="font-semibold">{t('forecast.methodologyBold')}</span>{t('forecast.methodology')}</span>
+        <span>
+          <span className="font-semibold">{t("forecast.methodologyBold")}</span>
+          {t("forecast.methodology")}
+        </span>
       </p>
     </div>
-  )
+  );
 }
 
 /** Anomaly cutoffs come from dashboard configuration, never client constants. */
 function useAnomalies(data: UtilizationData, t: ReturnType<typeof useTranslations>) {
   return useMemo(() => {
-    const { employees } = intelligenceScope(data)
-    const target = data.config.target
-    const minHours = data.config.minHours
-    const dropPp = data.config.anomalyDropPp
-    const overtimeGapPp = data.config.overtimeBillableGapPp
-    const driftPp = data.config.titleDriftPp
-    const peerMin = data.config.peerMinCount
+    const { employees } = intelligenceScope(data);
+    const target = data.config.target;
+    const minHours = data.config.minHours;
+    const dropPp = data.config.anomalyDropPp;
+    const overtimeGapPp = data.config.overtimeBillableGapPp;
+    const driftPp = data.config.titleDriftPp;
+    const peerMin = data.config.peerMinCount;
 
     const suddenDrops = employees
       .filter((e) => e.range.hours >= minHours && e.deltas.pctDelta < -dropPp)
       .map((e) => ({ name: e.name, drop: e.deltas.pctDelta }))
       .sort((a, b) => a.drop - b.drop)
-      .slice(0, 10)
+      .slice(0, 10);
 
     // Overtime is actual hours above the employee's own work schedule (the
     // loader resolves it exactly); without a schedule it is unknown, never
     // flagged. The billable gap that makes it "no value" is configured.
     const overtimeNoValue = employees
-      .filter((e) => e.overtimeVsSchedule === true && e.range.percentBilled < target - overtimeGapPp)
+      .filter(
+        (e) => e.overtimeVsSchedule === true && e.range.percentBilled < target - overtimeGapPp,
+      )
       .map((e) => ({ name: e.name, hours: e.range.hours, pct: e.range.percentBilled }))
       .sort((a, b) => b.hours - a.hours)
-      .slice(0, 10)
+      .slice(0, 10);
 
-    const titleGroups = new Map<string, number[]>()
+    const titleGroups = new Map<string, number[]>();
     for (const e of employees) {
-      if (e.range.hours < minHours) continue
-      const title = e.title || t('noTitle')
-      if (!titleGroups.has(title)) titleGroups.set(title, [])
-      titleGroups.get(title)!.push(e.deltas.pctDelta)
+      if (e.range.hours < minHours) continue;
+      const title = e.title || t("noTitle");
+      if (!titleGroups.has(title)) titleGroups.set(title, []);
+      titleGroups.get(title)!.push(e.deltas.pctDelta);
     }
     const titleDrift = [...titleGroups.entries()]
       .map(([title, deltas]) => {
-        if (deltas.length < peerMin) return null
-        const avgDrop = deltas.reduce((a, b) => a + b, 0) / deltas.length
-        return { title, avgDrop, count: deltas.length, allNegative: deltas.every((d) => d < 0) }
+        if (deltas.length < peerMin) return null;
+        const avgDrop = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+        return { title, avgDrop, count: deltas.length, allNegative: deltas.every((d) => d < 0) };
       })
       .filter((t): t is NonNullable<typeof t> => !!t && t.avgDrop < -driftPp && t.allNegative)
       .sort((a, b) => a.avgDrop - b.avgDrop)
-      .slice(0, 5)
+      .slice(0, 5);
 
-    return { suddenDrops, overtimeNoValue, titleDrift, total: suddenDrops.length + overtimeNoValue.length + titleDrift.length }
-  }, [data, t])
+    return {
+      suddenDrops,
+      overtimeNoValue,
+      titleDrift,
+      total: suddenDrops.length + overtimeNoValue.length + titleDrift.length,
+    };
+  }, [data, t]);
 }
 
 function AnomalyList({ items, empty }: { items: React.ReactNode[]; empty: string }) {
   return items.length ? (
-    <ul className="max-h-64 divide-y divide-slate-50 overflow-y-auto dark:divide-slate-800/60">{items}</ul>
+    <ul className="max-h-64 divide-y divide-slate-50 overflow-y-auto dark:divide-slate-800/60">
+      {items}
+    </ul>
   ) : (
     <div className="py-8 text-center text-sm text-emerald-600 dark:text-emerald-400">
-      <CheckCircle2 size={22} className="mx-auto mb-1.5" />{empty}
+      <CheckCircle2 size={22} className="mx-auto mb-1.5" />
+      {empty}
     </div>
-  )
+  );
 }
 
 function AnomaliesSub({ data }: { data: UtilizationData }) {
-  const t = useTranslations('analytics.utilization')
-  const hrs0 = useHrs0()
-  const a = useAnomalies(data, t)
+  const t = useTranslations("analytics.utilization");
+  const hrs0 = useHrs0();
+  const a = useAnomalies(data, t);
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={AlertTriangle} accent={a.total > 0 ? 'red' : 'emerald'} label={t('kpi.totalIssues')} value={String(a.total)} sub={t('sub.detectedAnomalies')} tone={a.total > 0 ? 'negative' : 'positive'} />
-        <KpiCard icon={ArrowDown} accent="red" label={t('kpi.suddenDrops')} value={String(a.suddenDrops.length)} sub={t('sub.dropNpp', { pp: data.config.anomalyDropPp })} />
-        <KpiCard icon={Clock} accent="amber" label={t('kpi.overtimeNoValue')} value={String(a.overtimeNoValue.length)} sub={t('sub.highHoursLowBillable')} />
-        <KpiCard icon={UserRound} accent="violet" label={t('kpi.titleDrift')} value={String(a.titleDrift.length)} sub={t('sub.rolesTrendingDown')} />
+        <KpiCard
+          icon={AlertTriangle}
+          accent={a.total > 0 ? "red" : "emerald"}
+          label={t("kpi.totalIssues")}
+          value={String(a.total)}
+          sub={t("sub.detectedAnomalies")}
+          tone={a.total > 0 ? "negative" : "positive"}
+        />
+        <KpiCard
+          icon={ArrowDown}
+          accent="red"
+          label={t("kpi.suddenDrops")}
+          value={String(a.suddenDrops.length)}
+          sub={t("sub.dropNpp", { pp: data.config.anomalyDropPp })}
+        />
+        <KpiCard
+          icon={Clock}
+          accent="amber"
+          label={t("kpi.overtimeNoValue")}
+          value={String(a.overtimeNoValue.length)}
+          sub={t("sub.highHoursLowBillable")}
+        />
+        <KpiCard
+          icon={UserRound}
+          accent="violet"
+          label={t("kpi.titleDrift")}
+          value={String(a.titleDrift.length)}
+          sub={t("sub.rolesTrendingDown")}
+        />
       </div>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <Panel title={t('panels.suddenDrop')} hint={t('panels.suddenDropHint', { pp: data.config.anomalyDropPp })} bodyClassName="p-0">
+        <Panel
+          title={t("panels.suddenDrop")}
+          hint={t("panels.suddenDropHint", { pp: data.config.anomalyDropPp })}
+          bodyClassName="p-0"
+        >
           <AnomalyList
-            empty={t('empty.noSuddenDrops')}
+            empty={t("empty.noSuddenDrops")}
             items={a.suddenDrops.map((x, i) => (
               <li key={i} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
-                <span className="truncate text-slate-700 dark:text-slate-300" title={x.name}>{x.name}</span>
-                <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700 dark:bg-rose-950/50 dark:text-rose-400">{x.drop.toFixed(0)}pp</span>
+                <span className="truncate text-slate-700 dark:text-slate-300" title={x.name}>
+                  {x.name}
+                </span>
+                <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700 dark:bg-rose-950/50 dark:text-rose-400">
+                  {x.drop.toFixed(0)}pp
+                </span>
               </li>
             ))}
           />
         </Panel>
-        <Panel title={t('kpi.overtimeNoValue')} hint={t('panels.overtimeHint', { gap: data.config.overtimeBillableGapPp })} bodyClassName="p-0">
+        <Panel
+          title={t("kpi.overtimeNoValue")}
+          hint={t("panels.overtimeHint", { gap: data.config.overtimeBillableGapPp })}
+          bodyClassName="p-0"
+        >
           <AnomalyList
-            empty={t('empty.noIssues')}
+            empty={t("empty.noIssues")}
             items={a.overtimeNoValue.map((x, i) => (
               <li key={i} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
-                <span className="truncate text-slate-700 dark:text-slate-300" title={x.name}>{x.name}</span>
-                <span className="shrink-0 text-xs"><span className="text-slate-400">{hrs0(x.hours)}h</span> <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">{pct1(x.pct, 0)}</span></span>
+                <span className="truncate text-slate-700 dark:text-slate-300" title={x.name}>
+                  {x.name}
+                </span>
+                <span className="shrink-0 text-xs">
+                  <span className="text-slate-400">{hrs0(x.hours)}h</span>{" "}
+                  <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">
+                    {pct1(x.pct, 0)}
+                  </span>
+                </span>
               </li>
             ))}
           />
           {data.overtimeUnscheduled > 0 ? (
-            <p className="px-4 py-2 text-xs text-slate-400 dark:text-slate-500">{t('panels.overtimeUnscheduled', { count: data.overtimeUnscheduled })}</p>
+            <p className="px-4 py-2 text-xs text-slate-400 dark:text-slate-500">
+              {t("panels.overtimeUnscheduled", { count: data.overtimeUnscheduled })}
+            </p>
           ) : null}
         </Panel>
-        <Panel title={t('kpi.titleDrift')} hint={t('panels.titleDriftHint')} bodyClassName="p-0">
+        <Panel title={t("kpi.titleDrift")} hint={t("panels.titleDriftHint")} bodyClassName="p-0">
           <AnomalyList
-            empty={t('empty.noDriftingTitles')}
+            empty={t("empty.noDriftingTitles")}
             items={a.titleDrift.map((x, i) => (
               <li key={i} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
-                <span className="truncate text-slate-700 dark:text-slate-300" title={x.title}>{x.title}</span>
-                <span className="shrink-0 text-xs"><span className="text-slate-400">{t('empCount', { count: x.count })}</span> <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{t('ppAvg', { avg: x.avgDrop.toFixed(0) })}</span></span>
+                <span className="truncate text-slate-700 dark:text-slate-300" title={x.title}>
+                  {x.title}
+                </span>
+                <span className="shrink-0 text-xs">
+                  <span className="text-slate-400">{t("empCount", { count: x.count })}</span>{" "}
+                  <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    {t("ppAvg", { avg: x.avgDrop.toFixed(0) })}
+                  </span>
+                </span>
               </li>
             ))}
           />
         </Panel>
       </div>
-      <p className="text-xs text-slate-400 dark:text-slate-500">{t('anomalyNote')}</p>
+      <p className="text-xs text-slate-400 dark:text-slate-500">{t("anomalyNote")}</p>
     </div>
-  )
+  );
 }
 
 /** Peer cutoffs come from dashboard configuration, never client constants. */
 function usePeers(data: UtilizationData, t: ReturnType<typeof useTranslations>) {
   return useMemo(() => {
-    const { employees } = intelligenceScope(data)
-    const minHours = data.config.minHours
-    const peerMin = data.config.peerMinCount
-    const sigma = data.config.peerOutlierSigma
-    const groups = new Map<string, number[]>()
+    const { employees } = intelligenceScope(data);
+    const minHours = data.config.minHours;
+    const peerMin = data.config.peerMinCount;
+    const sigma = data.config.peerOutlierSigma;
+    const groups = new Map<string, number[]>();
     for (const e of employees) {
-      if (e.range.hours < minHours) continue
-      const title = e.title || t('noTitle')
-      if (!groups.has(title)) groups.set(title, [])
-      groups.get(title)!.push(e.range.percentBilled)
+      if (e.range.hours < minHours) continue;
+      const title = e.title || t("noTitle");
+      if (!groups.has(title)) groups.set(title, []);
+      groups.get(title)!.push(e.range.percentBilled);
     }
     return [...groups.entries()]
       .filter(([, pcts]) => pcts.length >= peerMin)
       .map(([title, pcts]) => {
-        const avg = pcts.reduce((a, b) => a + b, 0) / pcts.length
-        const min = Math.min(...pcts), max = Math.max(...pcts)
-        const stdDev = Math.sqrt(pcts.reduce((s, p) => s + (p - avg) ** 2, 0) / pcts.length)
-        const outliers = pcts.filter((p) => Math.abs(p - avg) > stdDev * sigma).length
-        return { title, count: pcts.length, avg, min, max, spread: max - min, outliers }
+        const avg = pcts.reduce((a, b) => a + b, 0) / pcts.length;
+        const min = Math.min(...pcts),
+          max = Math.max(...pcts);
+        const stdDev = Math.sqrt(pcts.reduce((s, p) => s + (p - avg) ** 2, 0) / pcts.length);
+        const outliers = pcts.filter((p) => Math.abs(p - avg) > stdDev * sigma).length;
+        return { title, count: pcts.length, avg, min, max, spread: max - min, outliers };
       })
-      .sort((a, b) => b.count - a.count)
-  }, [data, t])
+      .sort((a, b) => b.count - a.count);
+  }, [data, t]);
 }
 
 function PeersSub({ data }: { data: UtilizationData }) {
-  const t = useTranslations('analytics.utilization')
-  const target = data.config.target
-  const peers = usePeers(data, t)
-  const withOutliers = peers.filter((p) => p.outliers > 0).length
-  const avgSpread = peers.length ? peers.reduce((s, p) => s + p.spread, 0) / peers.length : 0
+  const t = useTranslations("analytics.utilization");
+  const target = data.config.target;
+  const peers = usePeers(data, t);
+  const withOutliers = peers.filter((p) => p.outliers > 0).length;
+  const avgSpread = peers.length ? peers.reduce((s, p) => s + p.spread, 0) / peers.length : 0;
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={UserRound} accent="sky" label={t('kpi.jobTitlesAnalyzed')} value={String(peers.length)} sub={t('sub.withNPlus', { count: data.config.peerMinCount })} />
-        <KpiCard icon={AlertTriangle} accent={withOutliers > 0 ? 'amber' : 'emerald'} label={t('kpi.titlesWithOutliers')} value={String(withOutliers)} sub={t('sub.performanceVariance')} />
-        <KpiCard icon={ArrowRightLeft} accent="violet" label={t('kpi.avgSpread')} value={pct1(avgSpread, 0)} sub={t('sub.maxMinusMin')} />
-        <KpiCard icon={Target} accent="emerald" label={t('kpi.target')} value={`${target}%`} sub={t('sub.billableThreshold')} />
+        <KpiCard
+          icon={UserRound}
+          accent="sky"
+          label={t("kpi.jobTitlesAnalyzed")}
+          value={String(peers.length)}
+          sub={t("sub.withNPlus", { count: data.config.peerMinCount })}
+        />
+        <KpiCard
+          icon={AlertTriangle}
+          accent={withOutliers > 0 ? "amber" : "emerald"}
+          label={t("kpi.titlesWithOutliers")}
+          value={String(withOutliers)}
+          sub={t("sub.performanceVariance")}
+        />
+        <KpiCard
+          icon={ArrowRightLeft}
+          accent="violet"
+          label={t("kpi.avgSpread")}
+          value={pct1(avgSpread, 0)}
+          sub={t("sub.maxMinusMin")}
+        />
+        <KpiCard
+          icon={Target}
+          accent="emerald"
+          label={t("kpi.target")}
+          value={`${target}%`}
+          sub={t("sub.billableThreshold")}
+        />
       </div>
-      <Panel title={t('panels.peerComparison')} hint={t('panels.peerHint')} bodyClassName="p-0">
+      <Panel title={t("panels.peerComparison")} hint={t("panels.peerHint")} bodyClassName="p-0">
         <div className="max-h-104 overflow-y-auto">
           <SharedTable className="w-full text-sm">
             <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
               <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.jobTitle')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.employees')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.avgPct')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.min')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.max')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.spread')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.outliers')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">
+                  {t("table.jobTitle")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-center font-medium">
+                  {t("table.employees")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.avgPct")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.min")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.max")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.spread")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-center font-medium">
+                  {t("table.outliers")}
+                </SharedTableHead>
               </SharedTableRow>
             </SharedTableHeader>
             <SharedTableBody>
-              {peers.length ? peers.map((p) => (
-                <SharedTableRow key={p.title} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <SharedTableCell className="max-w-52 truncate px-4 py-2 font-medium text-slate-700 dark:text-slate-300" title={p.title}>{p.title}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-center tabular-nums text-slate-500 dark:text-slate-400">{p.count}</SharedTableCell>
-                  <SharedTableCell className={cn('px-4 py-2 text-right font-bold tabular-nums', statusTone(p.avg, target, data.config.watchBandPp, data.config.warnBandPp).text)}>{pct1(p.avg, 0)}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{pct1(p.min, 0)}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{pct1(p.max, 0)}</SharedTableCell>
-                  <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', p.spread > data.config.peerSpreadActionPp ? 'text-rose-600 dark:text-rose-400' : p.spread > data.config.peerSpreadWarnPp ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400')}>{pct1(p.spread, 0)}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-center">{p.outliers > 0 ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">{p.outliers}</span> : <span className="text-emerald-500">—</span>}</SharedTableCell>
+              {peers.length ? (
+                peers.map((p) => (
+                  <SharedTableRow
+                    key={p.title}
+                    className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+                  >
+                    <SharedTableCell
+                      className="max-w-52 truncate px-4 py-2 font-medium text-slate-700 dark:text-slate-300"
+                      title={p.title}
+                    >
+                      {p.title}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-center tabular-nums text-slate-500 dark:text-slate-400">
+                      {p.count}
+                    </SharedTableCell>
+                    <SharedTableCell
+                      className={cn(
+                        "px-4 py-2 text-right font-bold tabular-nums",
+                        statusTone(p.avg, target, data.config.watchBandPp, data.config.warnBandPp)
+                          .text,
+                      )}
+                    >
+                      {pct1(p.avg, 0)}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">
+                      {pct1(p.min, 0)}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">
+                      {pct1(p.max, 0)}
+                    </SharedTableCell>
+                    <SharedTableCell
+                      className={cn(
+                        "px-4 py-2 text-right tabular-nums",
+                        p.spread > data.config.peerSpreadActionPp
+                          ? "text-rose-600 dark:text-rose-400"
+                          : p.spread > data.config.peerSpreadWarnPp
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-slate-500 dark:text-slate-400",
+                      )}
+                    >
+                      {pct1(p.spread, 0)}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-center">
+                      {p.outliers > 0 ? (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">
+                          {p.outliers}
+                        </span>
+                      ) : (
+                        <span className="text-emerald-500">—</span>
+                      )}
+                    </SharedTableCell>
+                  </SharedTableRow>
+                ))
+              ) : (
+                <SharedTableRow>
+                  <SharedTableCell colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                    {t("empty.noPeerTitles")}
+                  </SharedTableCell>
                 </SharedTableRow>
-              )) : (
-                <SharedTableRow><SharedTableCell colSpan={7} className="px-4 py-8 text-center text-slate-400">{t('empty.noPeerTitles')}</SharedTableCell></SharedTableRow>
               )}
             </SharedTableBody>
           </SharedTable>
@@ -867,128 +1579,178 @@ function PeersSub({ data }: { data: UtilizationData }) {
       </Panel>
       <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
         <Info size={14} className="mt-0.5 shrink-0" />
-        <span><span className="font-semibold">{t('peers.outliersBold')}</span>{t('peers.outliersNote')}</span>
+        <span>
+          <span className="font-semibold">{t("peers.outliersBold")}</span>
+          {t("peers.outliersNote")}
+        </span>
       </p>
     </div>
-  )
+  );
 }
 
 /** , verbatim formulas. */
 function useWhatIf(data: UtilizationData, t: ReturnType<typeof useTranslations>) {
   return useMemo(() => {
-    const { employees, depts } = intelligenceScope(data)
-    const target = data.config.target
-    const minHours = data.config.minHours
+    const { employees, depts } = intelligenceScope(data);
+    const target = data.config.target;
+    const minHours = data.config.minHours;
     // Reallocation bands come from the dashboard's configuration, never
     // client constants: how far below target a department must sit to donate
     // staff, and how far below target a donor must sit to move.
-    const reallocWarnPp = data.config.reallocWarnPp
-    const reallocActionPp = data.config.reallocActionPp
+    const reallocWarnPp = data.config.reallocWarnPp;
+    const reallocActionPp = data.config.reallocActionPp;
 
-    const titleGroups = new Map<string, { employees: UGroupRow[]; totalCost: string; avgPct: number }>()
+    const titleGroups = new Map<
+      string,
+      { employees: UGroupRow[]; totalCost: string; avgPct: number }
+    >();
     for (const e of employees) {
-      const t2 = e.title || t('noTitle')
-      let g = titleGroups.get(t2)
-      if (!g) { g = { employees: [], totalCost: '0.0000', avgPct: 0 }; titleGroups.set(t2, g) }
-      g.employees.push(e)
-      g.totalCost = add(g.totalCost, String(e.range.nonBillableCost))
+      const t2 = e.title || t("noTitle");
+      let g = titleGroups.get(t2);
+      if (!g) {
+        g = { employees: [], totalCost: "0.0000", avgPct: 0 };
+        titleGroups.set(t2, g);
+      }
+      g.employees.push(e);
+      g.totalCost = add(g.totalCost, String(e.range.nonBillableCost));
     }
     for (const g of titleGroups.values()) {
-      const q = g.employees.filter((e) => e.range.hours >= minHours)
-      const h = q.reduce((s, e) => s + e.range.hours, 0)
-      const b = q.reduce((s, e) => s + e.range.billableHours, 0)
-      g.avgPct = h > 0 ? (b / h) * 100 : 0
+      const q = g.employees.filter((e) => e.range.hours >= minHours);
+      const h = q.reduce((s, e) => s + e.range.hours, 0);
+      const b = q.reduce((s, e) => s + e.range.billableHours, 0);
+      g.avgPct = h > 0 ? (b / h) * 100 : 0;
     }
 
     const improvements = [...titleGroups.entries()]
-      .filter(([, g]) => g.avgPct < target && compareMoney(g.totalCost, '0') > 0)
+      .filter(([, g]) => g.avgPct < target && compareMoney(g.totalCost, "0") > 0)
       .map(([title, g]) => ({
-        description: t('whatif.improve', { title }),
-        detail: t('whatif.improveDetail', { count: g.employees.length, pct: g.avgPct.toFixed(0) }),
+        description: t("whatif.improve", { title }),
+        detail: t("whatif.improveDetail", { count: g.employees.length, pct: g.avgPct.toFixed(0) }),
         totalCost: g.totalCost,
       }))
-      .sort((a, b) => compareMoney(b.totalCost, a.totalCost))
+      .sort((a, b) => compareMoney(b.totalCost, a.totalCost));
 
-    const highDepts = depts.filter((d) => d.range.percentBilled >= target)
-    const lowDepts = depts.filter((d) => d.range.percentBilled < target - reallocWarnPp)
-    const reallocations: { from: string; to: string; employees: number }[] = []
+    const highDepts = depts.filter((d) => d.range.percentBilled >= target);
+    const lowDepts = depts.filter((d) => d.range.percentBilled < target - reallocWarnPp);
+    const reallocations: { from: string; to: string; employees: number }[] = [];
     for (const from of lowDepts) {
       for (const to of highDepts) {
-        if (from.id === to.id) continue
-        const movable = employees.filter((e) => e.departmentId === from.id && e.range.percentBilled < target - reallocActionPp)
-        if (movable.length) reallocations.push({ from: from.name, to: to.name, employees: Math.min(2, movable.length) })
+        if (from.id === to.id) continue;
+        const movable = employees.filter(
+          (e) => e.departmentId === from.id && e.range.percentBilled < target - reallocActionPp,
+        );
+        if (movable.length)
+          reallocations.push({
+            from: from.name,
+            to: to.name,
+            employees: Math.min(2, movable.length),
+          });
       }
     }
 
-    const employeeCount = employees.length || 1
-    const totalCost = employees.reduce((s, e) => add(s, String(e.range.nonBillableCost)), '0.0000')
-    const hoursAcrossEmployees = employees.reduce((s, e) => s + e.range.hours, 0)
-    const billableHoursAcrossEmployees = employees.reduce((s, e) => s + e.range.billableHours, 0)
-    const costPerEmployee = div(totalCost, String(employeeCount))
-    const avgBillable = hoursAcrossEmployees > 0 ? (billableHoursAcrossEmployees / hoursAcrossEmployees) * 100 : 0
-    const avgHoursPerEmployee = hoursAcrossEmployees / employeeCount
-    const nonBillableHoursAcrossEmployees = hoursAcrossEmployees - billableHoursAcrossEmployees
-    const costPerNonBillableHour = nonBillableHoursAcrossEmployees > 0 ? div(totalCost, String(nonBillableHoursAcrossEmployees)) : '0.0000'
+    const employeeCount = employees.length || 1;
+    const totalCost = employees.reduce((s, e) => add(s, String(e.range.nonBillableCost)), "0.0000");
+    const hoursAcrossEmployees = employees.reduce((s, e) => s + e.range.hours, 0);
+    const billableHoursAcrossEmployees = employees.reduce((s, e) => s + e.range.billableHours, 0);
+    const costPerEmployee = div(totalCost, String(employeeCount));
+    const avgBillable =
+      hoursAcrossEmployees > 0 ? (billableHoursAcrossEmployees / hoursAcrossEmployees) * 100 : 0;
+    const avgHoursPerEmployee = hoursAcrossEmployees / employeeCount;
+    const nonBillableHoursAcrossEmployees = hoursAcrossEmployees - billableHoursAcrossEmployees;
+    const costPerNonBillableHour =
+      nonBillableHoursAcrossEmployees > 0
+        ? div(totalCost, String(nonBillableHoursAcrossEmployees))
+        : "0.0000";
 
     const titlePerf = [...titleGroups.entries()]
       .filter(([, g]) => g.employees.length >= data.config.peerMinCount)
       .map(([title, g]) => ({ title, avgPct: g.avgPct, count: g.employees.length }))
-      .sort((a, b) => b.avgPct - a.avgPct)
-    const bestTitle = titlePerf[0]
-    const worstTitle = titlePerf[titlePerf.length - 1]
+      .sort((a, b) => b.avgPct - a.avgPct);
+    const bestTitle = titlePerf[0];
+    const worstTitle = titlePerf[titlePerf.length - 1];
 
     return {
       improvements,
       reallocations: reallocations.slice(0, 4),
-      be: { costPerEmployee, avgBillable, avgHoursPerEmployee, costPerNonBillableHour, bestTitle, worstTitle, totalEmployees: employeeCount },
-    }
-  }, [data, t])
+      be: {
+        costPerEmployee,
+        avgBillable,
+        avgHoursPerEmployee,
+        costPerNonBillableHour,
+        bestTitle,
+        worstTitle,
+        totalEmployees: employeeCount,
+      },
+    };
+  }, [data, t]);
 }
 
 function WhatIfSub({ data }: { data: UtilizationData }) {
-  const t = useTranslations('analytics.utilization')
-  const hrs0 = useHrs0()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
-  const money0 = (n: MoneyValue) => fmtMoney(n)
-  const target = data.config.target
-  const w = useWhatIf(data, t)
-  const be = w.be
+  const t = useTranslations("analytics.utilization");
+  const hrs0 = useHrs0();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true });
+  const money0 = (n: MoneyValue) => fmtMoney(n);
+  const target = data.config.target;
+  const w = useWhatIf(data, t);
+  const be = w.be;
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={Lightbulb} accent="emerald" label={t('kpi.opportunities')} value={String(w.improvements.length)} sub={t('sub.improvementScenarios')} />
+        <KpiCard
+          icon={Lightbulb}
+          accent="emerald"
+          label={t("kpi.opportunities")}
+          value={String(w.improvements.length)}
+          sub={t("sub.improvementScenarios")}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         <div className="lg:col-span-7">
-          <Panel title={t('panels.improvementOpportunities')} hint={t('panels.improvementHint')} bodyClassName="p-0">
+          <Panel
+            title={t("panels.improvementOpportunities")}
+            hint={t("panels.improvementHint")}
+            bodyClassName="p-0"
+          >
             {w.improvements.length ? (
               <ul className="max-h-80 divide-y divide-slate-50 overflow-y-auto dark:divide-slate-800/60">
                 {w.improvements.slice(0, 8).map((s, i) => (
                   <li key={i} className="flex items-center justify-between gap-4 px-4 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">{s.description}</p>
+                      <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
+                        {s.description}
+                      </p>
                       <p className="text-xs text-slate-400 dark:text-slate-500">{s.detail}</p>
                     </div>
-                    <span className="shrink-0 text-xs tabular-nums text-slate-500 dark:text-slate-400">{money(s.totalCost)}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                      {money(s.totalCost)}
+                    </span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="px-4 py-8 text-center text-sm text-slate-400">{t('empty.noImprovements')}</p>
+              <p className="px-4 py-8 text-center text-sm text-slate-400">
+                {t("empty.noImprovements")}
+              </p>
             )}
           </Panel>
           {w.reallocations.length ? (
             <div className="mt-5">
-              <Panel title={t('panels.reallocationIdeas')} bodyClassName="p-0">
+              <Panel title={t("panels.reallocationIdeas")} bodyClassName="p-0">
                 <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
                   {w.reallocations.slice(0, 3).map((r, i) => (
                     <li key={i} className="flex items-center gap-2 px-4 py-2.5 text-sm">
-                      <span className="max-w-32 truncate text-slate-700 dark:text-slate-300">{r.from}</span>
+                      <span className="max-w-32 truncate text-slate-700 dark:text-slate-300">
+                        {r.from}
+                      </span>
                       <ArrowRightLeft size={13} className="shrink-0 text-slate-400" />
-                      <span className="max-w-32 truncate text-slate-700 dark:text-slate-300">{r.to}</span>
-                      <span className="ml-auto rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">{t('empCount', { count: r.employees })}</span>
+                      <span className="max-w-32 truncate text-slate-700 dark:text-slate-300">
+                        {r.to}
+                      </span>
+                      <span className="ml-auto rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">
+                        {t("empCount", { count: r.employees })}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -998,39 +1760,70 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
         </div>
 
         <div className="lg:col-span-5">
-          <Panel title={t('panels.hiringIntelligence')}>
+          <Panel title={t("panels.hiringIntelligence")}>
             <div className="grid grid-cols-2 gap-3 text-center">
               <div className="rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-                <p className="text-xs text-slate-400 dark:text-slate-500">{t('whatif.avgCostEmployee')}</p>
-                <p className="text-2xl font-bold text-slate-800 tabular-nums dark:text-slate-200">{money(be.costPerEmployee)}</p>
-                <p className="text-[10px] text-slate-400">{t('whatif.nonBillableLabel')}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">
+                  {t("whatif.avgCostEmployee")}
+                </p>
+                <p className="text-2xl font-bold text-slate-800 tabular-nums dark:text-slate-200">
+                  {money(be.costPerEmployee)}
+                </p>
+                <p className="text-[10px] text-slate-400">{t("whatif.nonBillableLabel")}</p>
               </div>
             </div>
             <ul className="mt-3 divide-y divide-slate-50 rounded-lg border border-slate-100 text-sm dark:divide-slate-800/60 dark:border-slate-800">
               {[
-                [t('whatif.teamAvgBillable'), pct1(be.avgBillable), be.avgBillable >= target ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'],
-                [t('whatif.avgHoursEmployee'), hrs0(be.avgHoursPerEmployee), ''],
-                [t('whatif.costPerNonBillHour'), money0(be.costPerNonBillableHour), ''],
-                [t('whatif.totalEmployees'), String(be.totalEmployees), ''],
+                [
+                  t("whatif.teamAvgBillable"),
+                  pct1(be.avgBillable),
+                  be.avgBillable >= target
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-amber-600 dark:text-amber-400",
+                ],
+                [t("whatif.avgHoursEmployee"), hrs0(be.avgHoursPerEmployee), ""],
+                [t("whatif.costPerNonBillHour"), money0(be.costPerNonBillableHour), ""],
+                [t("whatif.totalEmployees"), String(be.totalEmployees), ""],
               ].map(([label, value, tone]) => (
                 <li key={label as string} className="flex items-center justify-between px-3 py-2">
                   <span className="text-xs text-slate-500 dark:text-slate-400">{label}</span>
-                  <span className={cn('font-semibold tabular-nums', tone || 'text-slate-800 dark:text-slate-200')}>{value}</span>
+                  <span
+                    className={cn(
+                      "font-semibold tabular-nums",
+                      tone || "text-slate-800 dark:text-slate-200",
+                    )}
+                  >
+                    {value}
+                  </span>
                 </li>
               ))}
             </ul>
             {be.bestTitle ? (
               <div className="mt-3 flex gap-2">
                 <div className="flex-1 rounded-lg bg-emerald-50 p-2.5 text-xs dark:bg-emerald-950/30">
-                  <p className="text-slate-500 dark:text-slate-400">{t('whatif.bestTitle')}</p>
-                  <p className="truncate font-semibold text-slate-800 dark:text-slate-200" title={be.bestTitle.title}>{be.bestTitle.title}</p>
-                  <p className="text-emerald-600 dark:text-emerald-400">{t('ppAvg', { avg: pct1(be.bestTitle.avgPct, 0) })}</p>
+                  <p className="text-slate-500 dark:text-slate-400">{t("whatif.bestTitle")}</p>
+                  <p
+                    className="truncate font-semibold text-slate-800 dark:text-slate-200"
+                    title={be.bestTitle.title}
+                  >
+                    {be.bestTitle.title}
+                  </p>
+                  <p className="text-emerald-600 dark:text-emerald-400">
+                    {t("ppAvg", { avg: pct1(be.bestTitle.avgPct, 0) })}
+                  </p>
                 </div>
                 {be.worstTitle && be.worstTitle.title !== be.bestTitle.title ? (
                   <div className="flex-1 rounded-lg bg-rose-50 p-2.5 text-xs dark:bg-rose-950/30">
-                    <p className="text-slate-500 dark:text-slate-400">{t('whatif.needsFocus')}</p>
-                    <p className="truncate font-semibold text-slate-800 dark:text-slate-200" title={be.worstTitle.title}>{be.worstTitle.title}</p>
-                    <p className="text-rose-600 dark:text-rose-400">{t('ppAvg', { avg: pct1(be.worstTitle.avgPct, 0) })}</p>
+                    <p className="text-slate-500 dark:text-slate-400">{t("whatif.needsFocus")}</p>
+                    <p
+                      className="truncate font-semibold text-slate-800 dark:text-slate-200"
+                      title={be.worstTitle.title}
+                    >
+                      {be.worstTitle.title}
+                    </p>
+                    <p className="text-rose-600 dark:text-rose-400">
+                      {t("ppAvg", { avg: pct1(be.worstTitle.avgPct, 0) })}
+                    </p>
                   </div>
                 ) : null}
               </div>
@@ -1039,29 +1832,29 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /**  → ECharts treemap (size = hours, colour = billable %). */
 
 /** One treemap node, as built below: name + hours value + billable pct. */
-type TreemapPoint = { name: string; value: number; data?: { pct?: number } }
+type TreemapPoint = { name: string; value: number; data?: { pct?: number } };
 
 function TreemapSub({ data }: { data: UtilizationData }) {
-  const t = useTranslations('analytics.utilization')
-  const hrs0 = useHrs0()
-  const { depts, employees } = intelligenceScope(data)
+  const t = useTranslations("analytics.utilization");
+  const hrs0 = useHrs0();
+  const { depts, employees } = intelligenceScope(data);
 
   const treeData = useMemo(() => {
     return depts
       .filter((d) => d.range.hours > 0)
       .map((d) => {
-        const deptEmps = employees.filter((e) => e.departmentId === d.id)
-        const titles = new Map<string, UGroupRow[]>()
+        const deptEmps = employees.filter((e) => e.departmentId === d.id);
+        const titles = new Map<string, UGroupRow[]>();
         for (const e of deptEmps) {
-          const title = e.title || t('noTitle')
-          if (!titles.has(title)) titles.set(title, [])
-          titles.get(title)!.push(e)
+          const title = e.title || t("noTitle");
+          if (!titles.has(title)) titles.set(title, []);
+          titles.get(title)!.push(e);
         }
         return {
           name: d.name,
@@ -1069,9 +1862,9 @@ function TreemapSub({ data }: { data: UtilizationData }) {
           pct: d.range.percentBilled,
           itemStyle: { color: treemapColor(d.range.percentBilled) },
           children: [...titles.entries()].map(([title, emps]) => {
-            const h = emps.reduce((s, e) => s + e.range.hours, 0)
-            const b = emps.reduce((s, e) => s + e.range.billableHours, 0)
-            const pct = h > 0 ? (b / h) * 100 : 0
+            const h = emps.reduce((s, e) => s + e.range.hours, 0);
+            const b = emps.reduce((s, e) => s + e.range.billableHours, 0);
+            const pct = h > 0 ? (b / h) * 100 : 0;
             return {
               name: title,
               value: h,
@@ -1079,160 +1872,299 @@ function TreemapSub({ data }: { data: UtilizationData }) {
               itemStyle: { color: treemapColor(pct) },
               children: emps
                 .filter((e) => e.range.hours > 0)
-                .map((e) => ({ name: e.name, value: e.range.hours, pct: e.range.percentBilled, itemStyle: { color: treemapColor(e.range.percentBilled) } })),
-            }
+                .map((e) => ({
+                  name: e.name,
+                  value: e.range.hours,
+                  pct: e.range.percentBilled,
+                  itemStyle: { color: treemapColor(e.range.percentBilled) },
+                })),
+            };
           }),
-        }
-      })
-  }, [depts, employees, t])
+        };
+      });
+  }, [depts, employees, t]);
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-center gap-2 text-xs text-slate-400 dark:text-slate-500">
-        <span>{t('chart.nonBillable')}</span>
-        <div className="h-2 w-40 rounded-full" style={{ background: 'linear-gradient(to right, #fecaca, #fed7aa, #fef08a, #bbf7d0, #86efac)' }} />
-        <span>{t('chart.billable')}</span>
+        <span>{t("chart.nonBillable")}</span>
+        <div
+          className="h-2 w-40 rounded-full"
+          style={{
+            background: "linear-gradient(to right, #fecaca, #fed7aa, #fef08a, #bbf7d0, #86efac)",
+          }}
+        />
+        <span>{t("chart.billable")}</span>
       </div>
-      <Panel title={t('panels.treemap')} hint={t('panels.treemapHint')}>
+      <Panel title={t("panels.treemap")} hint={t("panels.treemapHint")}>
         <Chart
           height={460}
           option={{
             tooltip: {
-              formatter: (p: TreemapPoint) => `<b>${escapeTooltipHtml(p.name)}</b><br/>${t('table.hours')}: <b>${hrs0(p.value)}</b><br/>${t('chart.billable')}: <b>${(p.data?.pct ?? 0).toFixed(1)}%</b>`,
+              formatter: (p: TreemapPoint) =>
+                `<b>${escapeTooltipHtml(p.name)}</b><br/>${t("table.hours")}: <b>${hrs0(p.value)}</b><br/>${t("chart.billable")}: <b>${(p.data?.pct ?? 0).toFixed(1)}%</b>`,
             },
-            series: [{
-              type: 'treemap',
-              data: treeData,
-              roam: false,
-              nodeClick: 'zoomToNode',
-              breadcrumb: { show: true, top: 4, itemStyle: { color: '#475569', textStyle: { color: '#f1f5f9' } } },
-              label: { show: true, formatter: (p: TreemapPoint) => `${p.name}\n${hrs0(p.value)}h`, fontSize: 12, color: '#334155' },
-              upperLabel: { show: true, height: 24, color: '#334155', fontWeight: 'bold' },
-              itemStyle: { borderColor: 'rgba(255,255,255,0.9)', borderWidth: 3, gapWidth: 3 },
-              levels: [
-                { itemStyle: { borderWidth: 0, gapWidth: 4 } },
-                { itemStyle: { gapWidth: 3 }, upperLabel: { show: true } },
-                { itemStyle: { gapWidth: 2 } },
-              ],
-            }],
+            series: [
+              {
+                type: "treemap",
+                data: treeData,
+                roam: false,
+                nodeClick: "zoomToNode",
+                breadcrumb: {
+                  show: true,
+                  top: 4,
+                  itemStyle: { color: "#475569", textStyle: { color: "#f1f5f9" } },
+                },
+                label: {
+                  show: true,
+                  formatter: (p: TreemapPoint) => `${p.name}\n${hrs0(p.value)}h`,
+                  fontSize: 12,
+                  color: "#334155",
+                },
+                upperLabel: { show: true, height: 24, color: "#334155", fontWeight: "bold" },
+                itemStyle: { borderColor: "rgba(255,255,255,0.9)", borderWidth: 3, gapWidth: 3 },
+                levels: [
+                  { itemStyle: { borderWidth: 0, gapWidth: 4 } },
+                  { itemStyle: { gapWidth: 3 }, upperLabel: { show: true } },
+                  { itemStyle: { gapWidth: 2 } },
+                ],
+              },
+            ],
           }}
         />
       </Panel>
       <div className="flex flex-wrap justify-center gap-x-5 gap-y-1 text-xs text-slate-400 dark:text-slate-500">
-        <span>{t('treemap.clickDrill')}</span><span>{t('treemap.sizeHours')}</span><span>{t('treemap.colourBillable')}</span><span>{t('treemap.breadcrumb')}</span>
+        <span>{t("treemap.clickDrill")}</span>
+        <span>{t("treemap.sizeHours")}</span>
+        <span>{t("treemap.colourBillable")}</span>
+        <span>{t("treemap.breadcrumb")}</span>
       </div>
     </div>
-  )
+  );
 }
 
 /* ------------------------------------------------------------- Departments */
 
 function DepartmentsTab({ data }: { data: UtilizationData }) {
-  const t = useTranslations('analytics.utilization')
-  const hrs0 = useHrs0()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
-  const target = data.config.target
-  const [view, setView] = useState<'cards' | 'table'>('cards')
+  const t = useTranslations("analytics.utilization");
+  const hrs0 = useHrs0();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true });
+  const target = data.config.target;
+  const [view, setView] = useState<"cards" | "table">("cards");
   // Sparkline: history % billed per dept, oldest → newest, then current.
   const sparkValues = (id: string, current: number) => [
     ...data.history.periods.map((p) => p.deptPct[id] ?? 0).reverse(),
     current,
-  ]
+  ];
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1.5 text-xs">
-          <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">≥{target}%</span>
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">{target - data.config.watchBandPp}–{target}%</span>
-          <span className="rounded-full bg-rose-100 px-2 py-0.5 font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-400">&lt;{target - data.config.watchBandPp}%</span>
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">{t('noBillExpectation')}</span>
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
+            ≥{target}%
+          </span>
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">
+            {target - data.config.watchBandPp}–{target}%
+          </span>
+          <span className="rounded-full bg-rose-100 px-2 py-0.5 font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-400">
+            &lt;{target - data.config.watchBandPp}%
+          </span>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            {t("noBillExpectation")}
+          </span>
         </div>
         <div className="flex gap-1">
-          <button type="button" aria-label={`${t('show')} ${t('tabs.departments')}`} aria-pressed={view === 'cards'} onClick={() => setView('cards')} className={cn('rounded-md border p-1.5', view === 'cards' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Grid3X3 size={15} /></button>
-          <button type="button" aria-label={`${t('show')} ${t('tableLabel')}`} aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn('rounded-md border p-1.5', view === 'table' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Table2 size={15} /></button>
+          <button
+            type="button"
+            aria-label={`${t("show")} ${t("tabs.departments")}`}
+            aria-pressed={view === "cards"}
+            onClick={() => setView("cards")}
+            className={cn(
+              "rounded-md border p-1.5",
+              view === "cards"
+                ? "border-teal-500 text-teal-600 dark:text-teal-400"
+                : "border-slate-200 text-slate-400 dark:border-slate-700",
+            )}
+          >
+            <Grid3X3 size={15} />
+          </button>
+          <button
+            type="button"
+            aria-label={`${t("show")} ${t("tableLabel")}`}
+            aria-pressed={view === "table"}
+            onClick={() => setView("table")}
+            className={cn(
+              "rounded-md border p-1.5",
+              view === "table"
+                ? "border-teal-500 text-teal-600 dark:text-teal-400"
+                : "border-slate-200 text-slate-400 dark:border-slate-700",
+            )}
+          >
+            <Table2 size={15} />
+          </button>
         </div>
       </div>
 
-      {view === 'cards' ? (
+      {view === "cards" ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {data.departments.map((d) => {
-            const pct = d.range.percentBilled
-            const tone = d.noBillable ? { text: 'text-slate-400 dark:text-slate-500', bar: 'bg-slate-400' } : statusTone(pct, target, data.config.watchBandPp, data.config.warnBandPp)
+            const pct = d.range.percentBilled;
+            const tone = d.noBillable
+              ? { text: "text-slate-400 dark:text-slate-500", bar: "bg-slate-400" }
+              : statusTone(pct, target, data.config.watchBandPp, data.config.warnBandPp);
             return (
-              <div key={d.id} className={cn('rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-900', d.noBillable ? 'border-slate-200 opacity-80 dark:border-slate-800' : 'border-slate-200/80 dark:border-slate-800')}>
+              <div
+                key={d.id}
+                className={cn(
+                  "rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-900",
+                  d.noBillable
+                    ? "border-slate-200 opacity-80 dark:border-slate-800"
+                    : "border-slate-200/80 dark:border-slate-800",
+                )}
+              >
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="truncate text-sm font-bold text-slate-800 dark:text-slate-200" title={d.name}>{d.name}</h3>
-                  {d.noBillable
-                    ? <span className="shrink-0 text-[10px] font-medium text-slate-400">{t('noBillExpShort')}</span>
-                    : pct >= target ? <CheckCircle2 size={16} className="shrink-0 text-emerald-500" />
-                      : pct >= target - data.config.watchBandPp ? <AlertTriangle size={16} className="shrink-0 text-amber-500" />
-                        : <AlertTriangle size={16} className="shrink-0 text-rose-500" />}
+                  <h3
+                    className="truncate text-sm font-bold text-slate-800 dark:text-slate-200"
+                    title={d.name}
+                  >
+                    {d.name}
+                  </h3>
+                  {d.noBillable ? (
+                    <span className="shrink-0 text-[10px] font-medium text-slate-400">
+                      {t("noBillExpShort")}
+                    </span>
+                  ) : pct >= target ? (
+                    <CheckCircle2 size={16} className="shrink-0 text-emerald-500" />
+                  ) : pct >= target - data.config.watchBandPp ? (
+                    <AlertTriangle size={16} className="shrink-0 text-amber-500" />
+                  ) : (
+                    <AlertTriangle size={16} className="shrink-0 text-rose-500" />
+                  )}
                 </div>
                 <div className="my-3 text-center">
-                  <p className={cn('text-3xl font-bold tabular-nums', tone.text)}>{pct1(pct)}</p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">{t('chart.billable')}</p>
+                  <p className={cn("text-3xl font-bold tabular-nums", tone.text)}>{pct1(pct)}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    {t("chart.billable")}
+                  </p>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                  <div className={cn('h-full rounded-full', tone.bar)} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+                  <div
+                    className={cn("h-full rounded-full", tone.bar)}
+                    style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                  />
                 </div>
                 <div className="mt-2 flex items-center justify-between text-xs">
-                  <span className="text-slate-400 dark:text-slate-500">{t('prior', { pct: pct1(d.prior.percentBilled) })}</span>
+                  <span className="text-slate-400 dark:text-slate-500">
+                    {t("prior", { pct: pct1(d.prior.percentBilled) })}
+                  </span>
                   <TrendDelta delta={d.deltas.pctDelta} goodIfUp />
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
                   <div>
-                    <p className="text-slate-400 dark:text-slate-500">{t('table.hours')}</p>
-                    <p className="font-bold tabular-nums text-slate-800 dark:text-slate-200">{hrs0(d.range.hours)}</p>
+                    <p className="text-slate-400 dark:text-slate-500">{t("table.hours")}</p>
+                    <p className="font-bold tabular-nums text-slate-800 dark:text-slate-200">
+                      {hrs0(d.range.hours)}
+                    </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-slate-400 dark:text-slate-500">{t('table.nonBillCost')}</p>
-                    <p className="font-bold tabular-nums text-rose-600 dark:text-rose-400">{money(d.range.nonBillableCost)}</p>
+                    <p className="text-slate-400 dark:text-slate-500">{t("table.nonBillCost")}</p>
+                    <p className="font-bold tabular-nums text-rose-600 dark:text-rose-400">
+                      {money(d.range.nonBillableCost)}
+                    </p>
                   </div>
                 </div>
                 <Sparkline values={sparkValues(d.id, pct)} />
               </div>
-            )
+            );
           })}
         </div>
       ) : (
-        <GroupTable rows={data.departments} target={target} watchPp={data.config.watchBandPp} warnPp={data.config.warnBandPp} kind="department" />
+        <GroupTable
+          rows={data.departments}
+          target={target}
+          watchPp={data.config.watchBandPp}
+          warnPp={data.config.warnBandPp}
+          kind="department"
+        />
       )}
     </div>
-  )
+  );
 }
 
 /* --------------------------------------------------- shared sortable table */
 
-type SortKey = 'name' | 'percentBilled' | 'delta' | 'nonBillableCost' | 'hours'
+type SortKey = "name" | "percentBilled" | "delta" | "nonBillableCost" | "hours";
 
-function GroupTable({ rows, target, watchPp, warnPp, kind, onDrill }: { rows: UGroupRow[]; target: number; watchPp: number; warnPp: number; kind: 'department' | 'item' | 'employee'; onDrill?: (r: UGroupRow) => void }) {
-  const t = useTranslations('analytics.utilization')
-  const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: MoneyValue) => fmtMoney(n)
-  const hrs0 = useHrs0()
-  const [sortKey, setSortKey] = useState<SortKey>(kind === 'employee' ? 'percentBilled' : 'nonBillableCost')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(kind === 'employee' ? 'asc' : 'desc')
+function GroupTable({
+  rows,
+  target,
+  watchPp,
+  warnPp,
+  kind,
+  onDrill,
+}: {
+  rows: UGroupRow[];
+  target: number;
+  watchPp: number;
+  warnPp: number;
+  kind: "department" | "item" | "employee";
+  onDrill?: (r: UGroupRow) => void;
+}) {
+  const t = useTranslations("analytics.utilization");
+  const fmtMoney = useAnalyticsMoney();
+  const money0 = (n: MoneyValue) => fmtMoney(n);
+  const hrs0 = useHrs0();
+  const [sortKey, setSortKey] = useState<SortKey>(
+    kind === "employee" ? "percentBilled" : "nonBillableCost",
+  );
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(kind === "employee" ? "asc" : "desc");
 
   const val = (r: UGroupRow, k: SortKey): number | string =>
-    k === 'name' ? r.name : k === 'percentBilled' ? r.range.percentBilled : k === 'delta' ? r.deltas.pctDelta : k === 'nonBillableCost' ? r.range.nonBillableCost : r.range.hours
-  const sorted = useMemo(() => [...rows].sort((a, b) => {
-    const av = val(a, sortKey), bv = val(b, sortKey)
-    const c = sortKey === 'nonBillableCost'
-      ? compareMoney(av as string, bv as string)
-      : typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number)
-    return sortDir === 'asc' ? c : -c
-  }), [rows, sortKey, sortDir])
+    k === "name"
+      ? r.name
+      : k === "percentBilled"
+        ? r.range.percentBilled
+        : k === "delta"
+          ? r.deltas.pctDelta
+          : k === "nonBillableCost"
+            ? r.range.nonBillableCost
+            : r.range.hours;
+  const sorted = useMemo(
+    () =>
+      [...rows].sort((a, b) => {
+        const av = val(a, sortKey),
+          bv = val(b, sortKey);
+        const c =
+          sortKey === "nonBillableCost"
+            ? compareMoney(av as string, bv as string)
+            : typeof av === "string"
+              ? av.localeCompare(bv as string)
+              : (av as number) - (bv as number);
+        return sortDir === "asc" ? c : -c;
+      }),
+    [rows, sortKey, sortDir],
+  );
 
-  const header = (label: string, k: SortKey, align = 'text-right') => (
+  const header = (label: string, k: SortKey, align = "text-right") => (
     <SharedTableHead
-      className={cn('cursor-pointer select-none px-4 py-2 font-medium hover:text-slate-700 dark:hover:text-slate-200', align)}
-      onClick={() => { if (sortKey === k) setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir(k === 'name' ? 'asc' : 'desc') } }}
+      className={cn(
+        "cursor-pointer select-none px-4 py-2 font-medium hover:text-slate-700 dark:hover:text-slate-200",
+        align,
+      )}
+      onClick={() => {
+        if (sortKey === k) setSortDir(sortDir === "asc" ? "desc" : "asc");
+        else {
+          setSortKey(k);
+          setSortDir(k === "name" ? "asc" : "desc");
+        }
+      }}
     >
-      {label}{sortKey === k ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+      {label}
+      {sortKey === k ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
     </SharedTableHead>
-  )
+  );
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -1240,14 +2172,28 @@ function GroupTable({ rows, target, watchPp, warnPp, kind, onDrill }: { rows: UG
         <SharedTable className="w-full text-sm">
           <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
             <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              {header(kind === 'department' ? t('table.department') : kind === 'item' ? t('entries.item') : t('entries.employee'), 'name', 'text-left')}
-              {header(t('table.pctBilled'), 'percentBilled')}
-              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.pctPrior')}</SharedTableHead>
-              {header(t('table.change'), 'delta')}
-              {header(t('table.nonBillCost'), 'nonBillableCost')}
-              {header(t('table.totalHrs'), 'hours')}
-              <SharedTableHead className="px-4 py-2 text-right font-medium text-emerald-600/70 dark:text-emerald-500/70">{t('chart.billable')}</SharedTableHead>
-              <SharedTableHead className="px-4 py-2 text-right font-medium text-rose-500/70">{t('table.nonBill')}</SharedTableHead>
+              {header(
+                kind === "department"
+                  ? t("table.department")
+                  : kind === "item"
+                    ? t("entries.item")
+                    : t("entries.employee"),
+                "name",
+                "text-left",
+              )}
+              {header(t("table.pctBilled"), "percentBilled")}
+              <SharedTableHead className="px-4 py-2 text-right font-medium">
+                {t("table.pctPrior")}
+              </SharedTableHead>
+              {header(t("table.change"), "delta")}
+              {header(t("table.nonBillCost"), "nonBillableCost")}
+              {header(t("table.totalHrs"), "hours")}
+              <SharedTableHead className="px-4 py-2 text-right font-medium text-emerald-600/70 dark:text-emerald-500/70">
+                {t("chart.billable")}
+              </SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium text-rose-500/70">
+                {t("table.nonBill")}
+              </SharedTableHead>
             </SharedTableRow>
           </SharedTableHeader>
           <SharedTableBody>
@@ -1255,142 +2201,309 @@ function GroupTable({ rows, target, watchPp, warnPp, kind, onDrill }: { rows: UG
               <InteractiveTableRow
                 key={r.id}
                 onClick={onDrill ? () => onDrill(r) : undefined}
-                className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', onDrill && 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40', r.noBillable && 'opacity-60')} noAnimate
+                className={cn(
+                  "border-b border-slate-50 last:border-0 dark:border-slate-800/60",
+                  onDrill && "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40",
+                  r.noBillable && "opacity-60",
+                )}
+                noAnimate
               >
                 <SharedTableCell className="px-4 py-2">
                   <span className="font-medium text-slate-800 dark:text-slate-200">{r.name}</span>
-                  {r.noBillable ? <span className="ml-2 text-[10px] text-slate-400">{t('noBillExpShort')}</span> : null}
-                  {kind === 'employee' && r.title ? <span className="block text-xs text-slate-400 dark:text-slate-500">{r.title}</span> : null}
+                  {r.noBillable ? (
+                    <span className="ml-2 text-[10px] text-slate-400">{t("noBillExpShort")}</span>
+                  ) : null}
+                  {kind === "employee" && r.title ? (
+                    <span className="block text-xs text-slate-400 dark:text-slate-500">
+                      {r.title}
+                    </span>
+                  ) : null}
                 </SharedTableCell>
-                <SharedTableCell className={cn('px-4 py-2 text-right font-bold tabular-nums', r.noBillable ? 'text-slate-400' : statusTone(r.range.percentBilled, target, watchPp, warnPp).text)}>{pct1(r.range.percentBilled)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{pct1(r.prior.percentBilled)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right"><TrendDelta delta={r.deltas.pctDelta} goodIfUp /></SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(r.range.nonBillableCost)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{hrs0(r.range.hours)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{hrs0(r.range.billableHours)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-rose-500">{hrs0(r.range.nonBillableHours)}</SharedTableCell>
+                <SharedTableCell
+                  className={cn(
+                    "px-4 py-2 text-right font-bold tabular-nums",
+                    r.noBillable
+                      ? "text-slate-400"
+                      : statusTone(r.range.percentBilled, target, watchPp, warnPp).text,
+                  )}
+                >
+                  {pct1(r.range.percentBilled)}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">
+                  {pct1(r.prior.percentBilled)}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right">
+                  <TrendDelta delta={r.deltas.pctDelta} goodIfUp />
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">
+                  {money0(r.range.nonBillableCost)}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">
+                  {hrs0(r.range.hours)}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                  {hrs0(r.range.billableHours)}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-rose-500">
+                  {hrs0(r.range.nonBillableHours)}
+                </SharedTableCell>
               </InteractiveTableRow>
             ))}
           </SharedTableBody>
         </SharedTable>
       </div>
     </div>
-  )
+  );
 }
 
 /* ------------------------------------------------------------------- Items */
 
 function ItemsTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: Flyout) => void }) {
-  const t = useTranslations('analytics.utilization')
-  const hrs0 = useHrs0()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
-  const target = data.config.target
-  const [search, setSearch] = useState('')
+  const t = useTranslations("analytics.utilization");
+  const hrs0 = useHrs0();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true });
+  const target = data.config.target;
+  const [search, setSearch] = useState("");
   const items = useMemo(
-    () => data.items.filter((i) => (i.range.hours > 0 || compareMoney(i.range.nonBillableCost, '0') > 0) && i.name.toLowerCase().includes(search.toLowerCase())),
+    () =>
+      data.items.filter(
+        (i) =>
+          (i.range.hours > 0 || compareMoney(i.range.nonBillableCost, "0") > 0) &&
+          i.name.toLowerCase().includes(search.toLowerCase()),
+      ),
     [data.items, search],
-  )
-  const all = data.items.filter((i) => i.range.hours > 0 || compareMoney(i.range.nonBillableCost, '0') > 0)
-  const totalHours = all.reduce((s, i) => s + i.range.hours, 0)
-  const billableHours = all.reduce((s, i) => s + i.range.billableHours, 0)
-  const avgBillable = totalHours > 0 ? (billableHours / totalHours) * 100 : 0
-  const above = all.filter((i) => i.range.percentBilled >= target).length
-  const below = all.filter((i) => i.range.percentBilled < target - data.config.watchBandPp).length
-  const highest = all[0]
+  );
+  const all = data.items.filter(
+    (i) => i.range.hours > 0 || compareMoney(i.range.nonBillableCost, "0") > 0,
+  );
+  const totalHours = all.reduce((s, i) => s + i.range.hours, 0);
+  const billableHours = all.reduce((s, i) => s + i.range.billableHours, 0);
+  const avgBillable = totalHours > 0 ? (billableHours / totalHours) * 100 : 0;
+  const above = all.filter((i) => i.range.percentBilled >= target).length;
+  const below = all.filter((i) => i.range.percentBilled < target - data.config.watchBandPp).length;
+  const highest = all[0];
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard icon={Box} accent="sky" label={t('kpi.serviceItems')} value={String(all.length)} sub={t('sub.withActivity')} />
-        <KpiCard icon={PieIcon} accent="emerald" label={t('kpi.avgBillablePct')} value={pct1(avgBillable)} sub={t('sub.acrossItems')} tone={avgBillable >= target ? 'positive' : 'negative'} />
-        <KpiCard icon={Clock} accent="violet" label={t('kpi.avgHoursItem')} value={hrs0(all.length ? totalHours / all.length : 0)} sub={t('sub.perServiceItem')} />
-        <KpiCard icon={CheckCircle2} accent="emerald" label={t('kpi.aboveTarget')} value={String(above)} sub={t('sub.belowTargetCount', { count: below })} tone="positive" />
-        <KpiCard icon={AlertTriangle} accent="amber" label={t('kpi.highestCost')} value={highest ? money(highest.range.nonBillableCost) : '—'} sub={highest?.name ?? '—'} tone="negative" />
+        <KpiCard
+          icon={Box}
+          accent="sky"
+          label={t("kpi.serviceItems")}
+          value={String(all.length)}
+          sub={t("sub.withActivity")}
+        />
+        <KpiCard
+          icon={PieIcon}
+          accent="emerald"
+          label={t("kpi.avgBillablePct")}
+          value={pct1(avgBillable)}
+          sub={t("sub.acrossItems")}
+          tone={avgBillable >= target ? "positive" : "negative"}
+        />
+        <KpiCard
+          icon={Clock}
+          accent="violet"
+          label={t("kpi.avgHoursItem")}
+          value={hrs0(all.length ? totalHours / all.length : 0)}
+          sub={t("sub.perServiceItem")}
+        />
+        <KpiCard
+          icon={CheckCircle2}
+          accent="emerald"
+          label={t("kpi.aboveTarget")}
+          value={String(above)}
+          sub={t("sub.belowTargetCount", { count: below })}
+          tone="positive"
+        />
+        <KpiCard
+          icon={AlertTriangle}
+          accent="amber"
+          label={t("kpi.highestCost")}
+          value={highest ? money(highest.range.nonBillableCost) : "—"}
+          sub={highest?.name ?? "—"}
+          tone="negative"
+        />
       </div>
       <div className="flex items-center gap-2">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('searchItems')} className="h-8 w-56 rounded-md border border-slate-200 bg-white pl-8 pr-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("searchItems")}
+            className="h-8 w-56 rounded-md border border-slate-200 bg-white pl-8 pr-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+          />
         </div>
-        <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">{t('itemsWithActivity', { count: items.length })}</span>
+        <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">
+          {t("itemsWithActivity", { count: items.length })}
+        </span>
       </div>
-      <GroupTable rows={items} target={target} watchPp={data.config.watchBandPp} warnPp={data.config.warnBandPp} kind="item" onDrill={(r) => onDrill({ kind: 'item', id: r.id, name: r.name, sub: `${hrs0(r.range.hours)} ${t('unit.hrs')} · ${pct1(r.range.percentBilled)} ${t('unit.billable')}` })} />
+      <GroupTable
+        rows={items}
+        target={target}
+        watchPp={data.config.watchBandPp}
+        warnPp={data.config.warnBandPp}
+        kind="item"
+        onDrill={(r) =>
+          onDrill({
+            kind: "item",
+            id: r.id,
+            name: r.name,
+            sub: `${hrs0(r.range.hours)} ${t("unit.hrs")} · ${pct1(r.range.percentBilled)} ${t("unit.billable")}`,
+          })
+        }
+      />
     </div>
-  )
+  );
 }
 
 /* ------------------------------------------------------------------ Titles */
 
 interface TitleGroup {
-  title: string
-  employees: UGroupRow[]
-  hours: number
-  billableHours: number
-  nonBillableCost: string
-  percentBilled: number
+  title: string;
+  employees: UGroupRow[];
+  hours: number;
+  billableHours: number;
+  nonBillableCost: string;
+  percentBilled: number;
 }
 
 function TitlesTab({ data }: { data: UtilizationData }) {
-  const t = useTranslations('analytics.utilization')
-  const hrs0 = useHrs0()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
-  const money0 = (n: MoneyValue) => fmtMoney(n)
-  const target = data.config.target
-  const [open, setOpen] = useState<TitleGroup | null>(null)
+  const t = useTranslations("analytics.utilization");
+  const hrs0 = useHrs0();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true });
+  const money0 = (n: MoneyValue) => fmtMoney(n);
+  const target = data.config.target;
+  const [open, setOpen] = useState<TitleGroup | null>(null);
 
   const titles = useMemo(() => {
-    const groups = new Map<string, TitleGroup>()
+    const groups = new Map<string, TitleGroup>();
     for (const e of data.employees) {
-      const title = e.title || t('noTitle')
-      let g = groups.get(title)
-      if (!g) { g = { title, employees: [], hours: 0, billableHours: 0, nonBillableCost: '0.0000', percentBilled: 0 }; groups.set(title, g) }
-      g.employees.push(e)
-      g.hours += e.range.hours
-      g.billableHours += e.range.billableHours
-      g.nonBillableCost = add(g.nonBillableCost, String(e.range.nonBillableCost))
+      const title = e.title || t("noTitle");
+      let g = groups.get(title);
+      if (!g) {
+        g = {
+          title,
+          employees: [],
+          hours: 0,
+          billableHours: 0,
+          nonBillableCost: "0.0000",
+          percentBilled: 0,
+        };
+        groups.set(title, g);
+      }
+      g.employees.push(e);
+      g.hours += e.range.hours;
+      g.billableHours += e.range.billableHours;
+      g.nonBillableCost = add(g.nonBillableCost, String(e.range.nonBillableCost));
     }
-    return [...groups.values()]
-      .map((g) => ({ ...g, percentBilled: g.hours > 0 ? (g.billableHours / g.hours) * 100 : 0, employeeCount: g.employees.length }))
-  }, [data.employees, t])
-  const { sorted: sortedTitles, SortTh } = useSort(titles, { key: 'nonBillableCost', dir: 'desc' }, ['nonBillableCost'])
+    return [...groups.values()].map((g) => ({
+      ...g,
+      percentBilled: g.hours > 0 ? (g.billableHours / g.hours) * 100 : 0,
+      employeeCount: g.employees.length,
+    }));
+  }, [data.employees, t]);
+  const { sorted: sortedTitles, SortTh } = useSort(
+    titles,
+    { key: "nonBillableCost", dir: "desc" },
+    ["nonBillableCost"],
+  );
 
-  const sortedByPct = [...titles].sort((a, b) => b.percentBilled - a.percentBilled)
-  const best = sortedByPct[0]
-  const worst = sortedByPct[sortedByPct.length - 1]
-  const aboveT = titles.filter((t) => t.percentBilled >= target).length
-  const belowT = titles.filter((t) => t.percentBilled < target - data.config.watchBandPp).length
+  const sortedByPct = [...titles].sort((a, b) => b.percentBilled - a.percentBilled);
+  const best = sortedByPct[0];
+  const worst = sortedByPct[sortedByPct.length - 1];
+  const aboveT = titles.filter((t) => t.percentBilled >= target).length;
+  const belowT = titles.filter((t) => t.percentBilled < target - data.config.watchBandPp).length;
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard icon={UserRound} accent="violet" label={t('kpi.jobTitles')} value={String(titles.length)} sub={t('sub.uniqueRoles')} />
-        <KpiCard icon={Users} accent="sky" label={t('kpi.avgTeamSize')} value={(titles.length ? data.employees.length / titles.length : 0).toFixed(1)} sub={t('sub.employeesPerTitle')} />
-        <KpiCard icon={Trophy} accent="emerald" label={t('kpi.bestTitle')} value={best ? pct1(best.percentBilled, 0) : '—'} sub={best?.title ?? '—'} tone="positive" />
-        <KpiCard icon={CheckCircle2} accent="emerald" label={t('kpi.aboveTarget')} value={String(aboveT)} sub={t('sub.belowTargetCount', { count: belowT })} />
-        <KpiCard icon={AlertTriangle} accent="amber" label={t('kpi.needsAttention')} value={worst ? pct1(worst.percentBilled, 0) : '—'} sub={worst?.title ?? '—'} tone="negative" />
+        <KpiCard
+          icon={UserRound}
+          accent="violet"
+          label={t("kpi.jobTitles")}
+          value={String(titles.length)}
+          sub={t("sub.uniqueRoles")}
+        />
+        <KpiCard
+          icon={Users}
+          accent="sky"
+          label={t("kpi.avgTeamSize")}
+          value={(titles.length ? data.employees.length / titles.length : 0).toFixed(1)}
+          sub={t("sub.employeesPerTitle")}
+        />
+        <KpiCard
+          icon={Trophy}
+          accent="emerald"
+          label={t("kpi.bestTitle")}
+          value={best ? pct1(best.percentBilled, 0) : "—"}
+          sub={best?.title ?? "—"}
+          tone="positive"
+        />
+        <KpiCard
+          icon={CheckCircle2}
+          accent="emerald"
+          label={t("kpi.aboveTarget")}
+          value={String(aboveT)}
+          sub={t("sub.belowTargetCount", { count: belowT })}
+        />
+        <KpiCard
+          icon={AlertTriangle}
+          accent="amber"
+          label={t("kpi.needsAttention")}
+          value={worst ? pct1(worst.percentBilled, 0) : "—"}
+          sub={worst?.title ?? "—"}
+          tone="negative"
+        />
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <SharedTable className="w-full text-sm">
           <SharedTableHeader>
             <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              <SortTh label={t('table.jobTitle')} col="title" align="left" defaultDir="asc" />
-              <SortTh label={t('table.employees')} col="employeeCount" />
-              <SortTh label={t('table.pctBilled')} col="percentBilled" />
-              <SortTh label={t('table.totalHrs')} col="hours" />
-              <SortTh label={t('table.nonBillCost')} col="nonBillableCost" />
+              <SortTh label={t("table.jobTitle")} col="title" align="left" defaultDir="asc" />
+              <SortTh label={t("table.employees")} col="employeeCount" />
+              <SortTh label={t("table.pctBilled")} col="percentBilled" />
+              <SortTh label={t("table.totalHrs")} col="hours" />
+              <SortTh label={t("table.nonBillCost")} col="nonBillableCost" />
             </SharedTableRow>
           </SharedTableHeader>
           <SharedTableBody>
             {sortedTitles.map((t) => (
-              <InteractiveTableRow key={t.title} onClick={() => setOpen(t)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
-                <SharedTableCell className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">{t.title}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{t.employees.length}</SharedTableCell>
-                <SharedTableCell className={cn('px-4 py-2.5 text-right font-bold tabular-nums', statusTone(t.percentBilled, target, data.config.watchBandPp, data.config.warnBandPp).text)}>{pct1(t.percentBilled)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">{hrs0(t.hours)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-rose-600 dark:text-rose-400">{money0(t.nonBillableCost)}</SharedTableCell>
+              <InteractiveTableRow
+                key={t.title}
+                onClick={() => setOpen(t)}
+                className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40"
+                noAnimate
+              >
+                <SharedTableCell className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">
+                  {t.title}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                  {t.employees.length}
+                </SharedTableCell>
+                <SharedTableCell
+                  className={cn(
+                    "px-4 py-2.5 text-right font-bold tabular-nums",
+                    statusTone(
+                      t.percentBilled,
+                      target,
+                      data.config.watchBandPp,
+                      data.config.warnBandPp,
+                    ).text,
+                  )}
+                >
+                  {pct1(t.percentBilled)}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">
+                  {hrs0(t.hours)}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-rose-600 dark:text-rose-400">
+                  {money0(t.nonBillableCost)}
+                </SharedTableCell>
               </InteractiveTableRow>
             ))}
           </SharedTableBody>
@@ -1398,138 +2511,326 @@ function TitlesTab({ data }: { data: UtilizationData }) {
       </div>
 
       {open ? (
-        <Drawer open onClose={() => setOpen(null)} size="lg" title={open.title} description={t('titles.drawerDesc', { count: open.employees.length, billable: pct1(open.percentBilled), cost: money(open.nonBillableCost) })} bodyClassName="p-0 overflow-y-auto">
+        <Drawer
+          open
+          onClose={() => setOpen(null)}
+          size="lg"
+          title={open.title}
+          description={t("titles.drawerDesc", {
+            count: open.employees.length,
+            billable: pct1(open.percentBilled),
+            cost: money(open.nonBillableCost),
+          })}
+          bodyClassName="p-0 overflow-y-auto"
+        >
           <SharedTable className="w-full text-sm">
             <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
               <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('entries.employee')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.pctBilled')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.hours')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('chart.billable')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.cost')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">
+                  {t("entries.employee")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.pctBilled")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.hours")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("chart.billable")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.cost")}
+                </SharedTableHead>
               </SharedTableRow>
             </SharedTableHeader>
             <SharedTableBody>
-              {[...open.employees].sort((a, b) => a.range.percentBilled - b.range.percentBilled).map((e) => (
-                <SharedTableRow key={e.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <SharedTableCell className="px-4 py-2">
-                    <span className="font-medium text-slate-800 dark:text-slate-200">{e.name}</span>
-                    <span className="block text-xs text-slate-400 dark:text-slate-500">{e.departmentName}</span>
-                  </SharedTableCell>
-                  <SharedTableCell className={cn('px-4 py-2 text-right font-bold tabular-nums', statusTone(e.range.percentBilled, target, data.config.watchBandPp, data.config.warnBandPp).text)}>{pct1(e.range.percentBilled)}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{hrs0(e.range.hours)}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{hrs0(e.range.billableHours)}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-rose-500">{money0(e.range.nonBillableCost)}</SharedTableCell>
-                </SharedTableRow>
-              ))}
+              {[...open.employees]
+                .sort((a, b) => a.range.percentBilled - b.range.percentBilled)
+                .map((e) => (
+                  <SharedTableRow
+                    key={e.id}
+                    className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+                  >
+                    <SharedTableCell className="px-4 py-2">
+                      <span className="font-medium text-slate-800 dark:text-slate-200">
+                        {e.name}
+                      </span>
+                      <span className="block text-xs text-slate-400 dark:text-slate-500">
+                        {e.departmentName}
+                      </span>
+                    </SharedTableCell>
+                    <SharedTableCell
+                      className={cn(
+                        "px-4 py-2 text-right font-bold tabular-nums",
+                        statusTone(
+                          e.range.percentBilled,
+                          target,
+                          data.config.watchBandPp,
+                          data.config.warnBandPp,
+                        ).text,
+                      )}
+                    >
+                      {pct1(e.range.percentBilled)}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">
+                      {hrs0(e.range.hours)}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                      {hrs0(e.range.billableHours)}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-rose-500">
+                      {money0(e.range.nonBillableCost)}
+                    </SharedTableCell>
+                  </SharedTableRow>
+                ))}
             </SharedTableBody>
           </SharedTable>
         </Drawer>
       ) : null}
     </div>
-  )
+  );
 }
 
 /* --------------------------------------------------------------- Employees */
 
 function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: Flyout) => void }) {
-  const t = useTranslations('analytics.utilization')
-  const hrs0 = useHrs0()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
-  const target = data.config.target
-  const minHours = data.config.minHours
-  const [dept, setDept] = useState('__ALL__')
-  const [search, setSearch] = useState('')
-  const [view, setView] = useState<'heatmap' | 'table'>('heatmap')
-  const [showLow, setShowLow] = useState(false)
+  const t = useTranslations("analytics.utilization");
+  const hrs0 = useHrs0();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true });
+  const target = data.config.target;
+  const minHours = data.config.minHours;
+  const [dept, setDept] = useState("__ALL__");
+  const [search, setSearch] = useState("");
+  const [view, setView] = useState<"heatmap" | "table">("heatmap");
+  const [showLow, setShowLow] = useState(false);
 
   const filtered = useMemo(
-    () => data.employees.filter((e) => (dept === '__ALL__' || e.departmentId === dept) && e.name.toLowerCase().includes(search.toLowerCase())),
+    () =>
+      data.employees.filter(
+        (e) =>
+          (dept === "__ALL__" || e.departmentId === dept) &&
+          e.name.toLowerCase().includes(search.toLowerCase()),
+      ),
     [data.employees, dept, search],
-  )
-  const qualified = filtered.filter((e) => e.range.hours >= minHours).sort((a, b) => a.range.percentBilled - b.range.percentBilled)
-  const low = filtered.filter((e) => e.range.hours < minHours)
+  );
+  const qualified = filtered
+    .filter((e) => e.range.hours >= minHours)
+    .sort((a, b) => a.range.percentBilled - b.range.percentBilled);
+  const low = filtered.filter((e) => e.range.hours < minHours);
 
   // KPI stats (weighted, ).
-  const qHours = qualified.reduce((s, e) => s + e.range.hours, 0)
-  const qBillable = qualified.reduce((s, e) => s + e.range.billableHours, 0)
-  const avgBillable = qHours > 0 ? (qBillable / qHours) * 100 : 0
-  const above = qualified.filter((e) => e.range.percentBilled >= target).length
-  const near = qualified.filter((e) => e.range.percentBilled >= target - data.config.watchBandPp && e.range.percentBilled < target).length
-  const belowN = qualified.filter((e) => e.range.percentBilled < target - data.config.watchBandPp).length
-  const top = [...qualified].sort((a, b) => b.range.percentBilled - a.range.percentBilled)[0]
-  const avgHours = filtered.length ? filtered.reduce((s, e) => s + e.range.hours, 0) / filtered.length : 0
+  const qHours = qualified.reduce((s, e) => s + e.range.hours, 0);
+  const qBillable = qualified.reduce((s, e) => s + e.range.billableHours, 0);
+  const avgBillable = qHours > 0 ? (qBillable / qHours) * 100 : 0;
+  const above = qualified.filter((e) => e.range.percentBilled >= target).length;
+  const near = qualified.filter(
+    (e) =>
+      e.range.percentBilled >= target - data.config.watchBandPp && e.range.percentBilled < target,
+  ).length;
+  const belowN = qualified.filter(
+    (e) => e.range.percentBilled < target - data.config.watchBandPp,
+  ).length;
+  const top = [...qualified].sort((a, b) => b.range.percentBilled - a.range.percentBilled)[0];
+  const avgHours = filtered.length
+    ? filtered.reduce((s, e) => s + e.range.hours, 0) / filtered.length
+    : 0;
 
   const drill = (e: UGroupRow) => {
     // Peer strip: this employee vs same-title peers' average billable %.
-    const peers = e.title ? data.employees.filter((p) => p.title === e.title && p.range.hours >= minHours) : []
-    const peer = e.title && peers.length >= data.config.peerMinCount
-      ? { title: e.title, empPct: e.range.percentBilled, peerAvg: peers.reduce((a, p) => a + p.range.percentBilled, 0) / peers.length, peerCount: peers.length }
-      : undefined
-    onDrill({ kind: 'employee', id: e.id, name: e.name, sub: `${e.title ?? ''} · ${e.departmentName ?? ''} · ${pct1(e.range.percentBilled)} ${t('unit.billable')}`, peer })
-  }
+    const peers = e.title
+      ? data.employees.filter((p) => p.title === e.title && p.range.hours >= minHours)
+      : [];
+    const peer =
+      e.title && peers.length >= data.config.peerMinCount
+        ? {
+            title: e.title,
+            empPct: e.range.percentBilled,
+            peerAvg: peers.reduce((a, p) => a + p.range.percentBilled, 0) / peers.length,
+            peerCount: peers.length,
+          }
+        : undefined;
+    onDrill({
+      kind: "employee",
+      id: e.id,
+      name: e.name,
+      sub: `${e.title ?? ""} · ${e.departmentName ?? ""} · ${pct1(e.range.percentBilled)} ${t("unit.billable")}`,
+      peer,
+    });
+  };
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard icon={Users} accent="sky" label={t('kpi.employees')} value={String(filtered.length)} sub={t('sub.qualified', { count: qualified.length, minHours })} />
-        <KpiCard icon={PieIcon} accent="emerald" label={t('kpi.avgBillablePct')} value={pct1(avgBillable)} sub={t('sub.hoursWeighted')} tone={avgBillable >= target ? 'positive' : 'negative'} />
-        <KpiCard icon={Clock} accent="violet" label={t('kpi.avgHours')} value={hrs0(avgHours)} sub={t('sub.perEmployee')} />
-        <KpiCard icon={Trophy} accent="emerald" label={t('kpi.topPerformer')} value={top ? pct1(top.range.percentBilled, 0) : '—'} sub={top?.name ?? '—'} tone="positive" />
-        <KpiCard icon={AlertTriangle} accent={belowN > 0 ? 'red' : 'emerald'} label={t('kpi.belowTarget')} value={String(belowN)} sub={t('sub.aboveNear', { above, near })} tone={belowN > 0 ? 'negative' : 'positive'} />
+        <KpiCard
+          icon={Users}
+          accent="sky"
+          label={t("kpi.employees")}
+          value={String(filtered.length)}
+          sub={t("sub.qualified", { count: qualified.length, minHours })}
+        />
+        <KpiCard
+          icon={PieIcon}
+          accent="emerald"
+          label={t("kpi.avgBillablePct")}
+          value={pct1(avgBillable)}
+          sub={t("sub.hoursWeighted")}
+          tone={avgBillable >= target ? "positive" : "negative"}
+        />
+        <KpiCard
+          icon={Clock}
+          accent="violet"
+          label={t("kpi.avgHours")}
+          value={hrs0(avgHours)}
+          sub={t("sub.perEmployee")}
+        />
+        <KpiCard
+          icon={Trophy}
+          accent="emerald"
+          label={t("kpi.topPerformer")}
+          value={top ? pct1(top.range.percentBilled, 0) : "—"}
+          sub={top?.name ?? "—"}
+          tone="positive"
+        />
+        <KpiCard
+          icon={AlertTriangle}
+          accent={belowN > 0 ? "red" : "emerald"}
+          label={t("kpi.belowTarget")}
+          value={String(belowN)}
+          sub={t("sub.aboveNear", { above, near })}
+          tone={belowN > 0 ? "negative" : "positive"}
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Select value={dept} onChange={(e) => setDept(e.target.value)} className="w-48" triggerClassName="h-8 text-sm">
-          <option value="__ALL__">{t('allDepartments')}</option>
+        <Select
+          value={dept}
+          onChange={(e) => setDept(e.target.value)}
+          className="w-48"
+          triggerClassName="h-8 text-sm"
+        >
+          <option value="__ALL__">{t("allDepartments")}</option>
           {data.departments.map((d) => (
-            <option key={d.id} value={d.id}>{d.name}</option>
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
           ))}
         </Select>
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('searchEmployees')} className="h-8 w-52 rounded-md border border-slate-200 bg-white pl-8 pr-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("searchEmployees")}
+            className="h-8 w-52 rounded-md border border-slate-200 bg-white pl-8 pr-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+          />
         </div>
         <div className="ml-auto flex gap-1">
-          <button type="button" onClick={() => setView('heatmap')} className={cn('inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium', view === 'heatmap' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Grid3X3 size={13} />{t('heatmap')}</button>
-          <button type="button" onClick={() => setView('table')} className={cn('inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium', view === 'table' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Table2 size={13} />{t('tableLabel')}</button>
+          <button
+            type="button"
+            onClick={() => setView("heatmap")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium",
+              view === "heatmap"
+                ? "border-teal-500 text-teal-600 dark:text-teal-400"
+                : "border-slate-200 text-slate-400 dark:border-slate-700",
+            )}
+          >
+            <Grid3X3 size={13} />
+            {t("heatmap")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("table")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium",
+              view === "table"
+                ? "border-teal-500 text-teal-600 dark:text-teal-400"
+                : "border-slate-200 text-slate-400 dark:border-slate-700",
+            )}
+          >
+            <Table2 size={13} />
+            {t("tableLabel")}
+          </button>
         </div>
       </div>
 
-      {view === 'heatmap' ? (
+      {view === "heatmap" ? (
         <>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             {qualified.map((e) => {
-              const tone = statusTone(e.range.percentBilled, target, data.config.watchBandPp, data.config.warnBandPp)
+              const tone = statusTone(
+                e.range.percentBilled,
+                target,
+                data.config.watchBandPp,
+                data.config.warnBandPp,
+              );
               return (
-                <button key={e.id} type="button" onClick={() => drill(e)} className="rounded-lg border-l-4 bg-white p-2.5 text-left shadow-sm ring-1 ring-slate-200/70 transition-shadow hover:shadow dark:bg-slate-900 dark:ring-slate-800" style={{ borderLeftColor: tone.hex }}>
+                <button
+                  key={e.id}
+                  type="button"
+                  onClick={() => drill(e)}
+                  className="rounded-lg border-l-4 bg-white p-2.5 text-left shadow-sm ring-1 ring-slate-200/70 transition-shadow hover:shadow dark:bg-slate-900 dark:ring-slate-800"
+                  style={{ borderLeftColor: tone.hex }}
+                >
                   <div className="flex items-start justify-between gap-1">
-                    <p className="truncate text-xs font-bold text-slate-800 dark:text-slate-200" title={e.name}>{e.name}</p>
-                    {Math.abs(e.deltas.pctDelta) >= 0.5 ? (e.deltas.pctDelta > 0 ? <TrendingUp size={11} className="shrink-0 text-emerald-500" /> : <TrendingDown size={11} className="shrink-0 text-rose-500" />) : null}
+                    <p
+                      className="truncate text-xs font-bold text-slate-800 dark:text-slate-200"
+                      title={e.name}
+                    >
+                      {e.name}
+                    </p>
+                    {Math.abs(e.deltas.pctDelta) >= 0.5 ? (
+                      e.deltas.pctDelta > 0 ? (
+                        <TrendingUp size={11} className="shrink-0 text-emerald-500" />
+                      ) : (
+                        <TrendingDown size={11} className="shrink-0 text-rose-500" />
+                      )
+                    ) : null}
                   </div>
-                  <p className="truncate text-[10px] text-slate-400 dark:text-slate-500" title={e.title}>{e.title}</p>
+                  <p
+                    className="truncate text-[10px] text-slate-400 dark:text-slate-500"
+                    title={e.title}
+                  >
+                    {e.title}
+                  </p>
                   <div className="mt-1 flex items-end justify-between">
-                    <span className={cn('text-lg font-bold tabular-nums', tone.text)}>{pct1(e.range.percentBilled, 0)}</span>
+                    <span className={cn("text-lg font-bold tabular-nums", tone.text)}>
+                      {pct1(e.range.percentBilled, 0)}
+                    </span>
                     <span className="text-right text-[10px] leading-tight text-slate-400 dark:text-slate-500">
                       {hrs0(e.range.hours)}h
-                      {compareMoney(e.range.nonBillableCost, '0') > 0 ? <span className="block text-rose-500">{money(e.range.nonBillableCost)}</span> : null}
+                      {compareMoney(e.range.nonBillableCost, "0") > 0 ? (
+                        <span className="block text-rose-500">
+                          {money(e.range.nonBillableCost)}
+                        </span>
+                      ) : null}
                     </span>
                   </div>
                 </button>
-              )
+              );
             })}
           </div>
           {low.length ? (
             <div>
-              <button type="button" onClick={() => setShowLow(!showLow)} className="text-xs text-slate-400 underline-offset-2 hover:underline dark:text-slate-500">
-                {showLow ? t('hide') : t('show')} {t('lowHoursCount', { count: low.length, minHours })}
+              <button
+                type="button"
+                onClick={() => setShowLow(!showLow)}
+                className="text-xs text-slate-400 underline-offset-2 hover:underline dark:text-slate-500"
+              >
+                {showLow ? t("hide") : t("show")}{" "}
+                {t("lowHoursCount", { count: low.length, minHours })}
               </button>
               {showLow ? (
                 <div className="mt-2 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
                   {low.map((e) => (
-                    <div key={e.id} className="rounded-lg bg-slate-50 p-2.5 opacity-70 dark:bg-slate-800/50">
-                      <p className="truncate text-xs text-slate-500 dark:text-slate-400">{e.name}</p>
+                    <div
+                      key={e.id}
+                      className="rounded-lg bg-slate-50 p-2.5 opacity-70 dark:bg-slate-800/50"
+                    >
+                      <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                        {e.name}
+                      </p>
                       <div className="mt-1 flex items-end justify-between text-[11px] text-slate-400">
                         <span className="tabular-nums">{pct1(e.range.percentBilled, 0)}</span>
                         <span className="tabular-nums">{hrs0(e.range.hours)}h</span>
@@ -1542,49 +2843,94 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
           ) : null}
         </>
       ) : (
-        <GroupTable rows={filtered} target={target} watchPp={data.config.watchBandPp} warnPp={data.config.warnBandPp} kind="employee" onDrill={drill} />
+        <GroupTable
+          rows={filtered}
+          target={target}
+          watchPp={data.config.watchBandPp}
+          warnPp={data.config.warnBandPp}
+          kind="employee"
+          onDrill={drill}
+        />
       )}
     </div>
-  )
+  );
 }
 
 /* ------------------------------------------------------------ Configuration */
 
 function ConfigTab({ data, canEdit }: { data: UtilizationData; canEdit: boolean }) {
-  const t = useTranslations('analytics.utilization')
+  const t = useTranslations("analytics.utilization");
   const items = [
-    { label: t('config.priorRange'), value: `${data.prior.from} → ${data.prior.to}`, note: t('config.priorRangeNote') },
-    { label: t('config.historyPeriods'), value: String(data.history.periods.length), note: t('config.historyNote', { months: data.history.periodMonths }) },
-  ]
+    {
+      label: t("config.priorRange"),
+      value: `${data.prior.from} → ${data.prior.to}`,
+      note: t("config.priorRangeNote"),
+    },
+    {
+      label: t("config.historyPeriods"),
+      value: String(data.history.periods.length),
+      note: t("config.historyNote", { months: data.history.periodMonths }),
+    },
+  ];
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <div className="space-y-5">
         <ConfigEditor dashboard="utilization" canEdit={canEdit} />
-        <Panel title={t('panels.modelAssumptions')} bodyClassName="p-0">
+        <Panel title={t("panels.modelAssumptions")} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
             {items.map((i) => (
               <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{i.label}</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {i.label}
+                  </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">{i.note}</p>
                 </div>
-                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{i.value}</span>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  {i.value}
+                </span>
               </li>
             ))}
           </ul>
         </Panel>
       </div>
-      <Panel title={t('panels.dataSources')} icon={Info}>
+      <Panel title={t("panels.dataSources")} icon={Info}>
         <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-          <p>{t('sources.intro')}<span className="font-semibold">{t('sources.timeEntries')}</span>{t('sources.introTail')}</p>
+          <p>
+            {t("sources.intro")}
+            <span className="font-semibold">{t("sources.timeEntries")}</span>
+            {t("sources.introTail")}
+          </p>
           <ul className="list-disc space-y-1 pl-5 text-slate-500 dark:text-slate-400">
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('sources.billableBold')}</span>{t('sources.billableItem')}</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('sources.nonBillCostBold')}</span>{t('sources.nonBillCostItem')}</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('sources.jobTitleBold')}</span>{t('sources.jobTitleMid')}<em>{t('sources.dominantClass')}</em>{t('sources.jobTitleItem')}</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('noBillExpectation')}</span>{t('sources.noBillItem')}</li>
+            <li>
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {t("sources.billableBold")}
+              </span>
+              {t("sources.billableItem")}
+            </li>
+            <li>
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {t("sources.nonBillCostBold")}
+              </span>
+              {t("sources.nonBillCostItem")}
+            </li>
+            <li>
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {t("sources.jobTitleBold")}
+              </span>
+              {t("sources.jobTitleMid")}
+              <em>{t("sources.dominantClass")}</em>
+              {t("sources.jobTitleItem")}
+            </li>
+            <li>
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {t("noBillExpectation")}
+              </span>
+              {t("sources.noBillItem")}
+            </li>
           </ul>
         </div>
       </Panel>
     </div>
-  )
+  );
 }

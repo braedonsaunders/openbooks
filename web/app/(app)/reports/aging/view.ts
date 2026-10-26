@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { civilDateParams } from '../../../../lib/format'
+import { getLocale, getTranslations } from "next-intl/server";
+import { civilDateParams } from "../../../../lib/format";
 import {
   column,
   drill,
@@ -17,21 +17,39 @@ import {
   widgetCell,
   type PageSpec,
   type TableSpanRow,
-} from '@braedonsaunders/appkit-viewspec'
-import { getMoneyFormatter } from '@/lib/money-server'
-import { agingByParty, agingCurrenciesInScope, agingDetail, agingSummaryAndDetail, AgingRatesUnavailableError, dimensionOptions, type AgingCurrencyBasis, type AgingRow, type AgingSide } from '../../../../lib/reports'
-import { orgInfo } from '../../../../lib/data'
-import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
-import { resolvePeriod, type ResolvedPeriod } from '../../../../lib/periods'
-import { AGING_PERIOD_PRESETS, agingPeriodPreset } from '../../../../lib/aging-periods'
-import { IncompleteReportPeriodError, parseReportQuery, resolveAgingCurrencyParams } from '../../../../lib/report-filters'
-import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
-import { getAuthz } from '@/lib/authz'
-import { dimensionOptionsScope } from '../../../../lib/reports/filters'
-import { reportTotalRowClass } from '../ReportTable'
-import { decimalCmp, decimalIsZero } from '../../../../lib/statement-format'
-import type { ReportDrillTarget } from '../../../../lib/report-drill'
-import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
+} from "@braedonsaunders/appkit-viewspec";
+import { getMoneyFormatter } from "@/lib/money-server";
+import {
+  agingByParty,
+  agingCurrenciesInScope,
+  agingDetail,
+  agingSummaryAndDetail,
+  AgingRatesUnavailableError,
+  dimensionOptions,
+  type AgingCurrencyBasis,
+  type AgingRow,
+  type AgingSide,
+} from "../../../../lib/reports";
+import { orgInfo } from "../../../../lib/data";
+import {
+  MissingRatesError,
+  reportSubsidiaryView,
+  type RatesBlockedNotice,
+} from "../../../../lib/consolidation";
+import { resolvePeriod, type ResolvedPeriod } from "../../../../lib/periods";
+import { AGING_PERIOD_PRESETS, agingPeriodPreset } from "../../../../lib/aging-periods";
+import {
+  IncompleteReportPeriodError,
+  parseReportQuery,
+  resolveAgingCurrencyParams,
+} from "../../../../lib/report-filters";
+import { reportScheduleAnchor, scheduleParamsFrom } from "../../../../lib/report-schedule-anchor";
+import { getAuthz } from "@/lib/authz";
+import { dimensionOptionsScope } from "../../../../lib/reports/filters";
+import { reportTotalRowClass } from "../ReportTable";
+import { decimalCmp, decimalIsZero } from "../../../../lib/statement-format";
+import type { ReportDrillTarget } from "../../../../lib/report-drill";
+import { statementReportSpec, stringReportParams } from "@/lib/reports/statement-report-spec";
 
 /**
  * Aging (AR / AP), split into a loader and a spec.
@@ -42,144 +60,144 @@ import { statementReportSpec, stringReportParams } from '@/lib/reports/statement
  * no conditional operator. Each table simply declares when it is present.
  */
 
-const BUCKETS = ['current', 'b1', 'b2', 'b3', 'b4'] as const
+const BUCKETS = ["current", "b1", "b2", "b3", "b4"] as const;
 
 /** Journal entries listed under one reconciling line before the list is summarised. */
-const RECONCILING_ENTRY_LIMIT = 10
+const RECONCILING_ENTRY_LIMIT = 10;
 
 // Aging reads as of a POINT IN TIME, never a window: only presets whose end
 // date is a meaningful as-of instant (today, yesterday, end of last month)
 // plus the explicit custom date. Range presets like "this fiscal year" or
 // "next month" would file every open item as "current".
-const AS_OF_PERIOD_PRESETS = [...AGING_PERIOD_PRESETS]
+const AS_OF_PERIOD_PRESETS = [...AGING_PERIOD_PRESETS];
 
-type DimensionOptions = Awaited<ReturnType<typeof dimensionOptions>>
-type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
+type DimensionOptions = Awaited<ReturnType<typeof dimensionOptions>>;
+type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>["picker"];
 
 interface BucketCell {
-  value: string
-  isZero: boolean
-  tone: 'default' | 'negative'
-  drill: ReportDrillTarget | undefined
+  value: string;
+  isZero: boolean;
+  tone: "default" | "negative";
+  drill: ReportDrillTarget | undefined;
 }
 
 export interface AgingSummaryRow {
-  key: string
-  partyId: string | null
-  partyName: string
-  partyHref: string
+  key: string;
+  partyId: string | null;
+  partyName: string;
+  partyHref: string;
   /** Provenance caption for partyless rows; null once a party names the row. */
-  partyNote: string | null
+  partyNote: string | null;
   /** The reconciling line: control balance with no open item behind it. */
-  reconciling: boolean
-  current: BucketCell
-  b1: BucketCell
-  b2: BucketCell
-  b3: BucketCell
-  b4: BucketCell
-  total: string
-  totalDrill: ReportDrillTarget
+  reconciling: boolean;
+  current: BucketCell;
+  b1: BucketCell;
+  b2: BucketCell;
+  b3: BucketCell;
+  b4: BucketCell;
+  total: string;
+  totalDrill: ReportDrillTarget;
 }
 
 export interface AgingDetailRow {
-  key: string
-  partyId: string | null
-  partyName: string
-  partyHref: string
+  key: string;
+  partyId: string | null;
+  partyName: string;
+  partyHref: string;
   /** Provenance caption for partyless rows; null once a party names the row. */
-  partyNote: string | null
-  reference: string
+  partyNote: string | null;
+  reference: string;
   /** Open items without terms carry no due date. */
-  dueDate: string | null
-  ageBasisDate: string
-  ageBasisSource: string
-  ageDays: string
-  bucketLabel: string
-  open: string
+  dueDate: string | null;
+  ageBasisDate: string;
+  ageBasisSource: string;
+  ageDays: string;
+  bucketLabel: string;
+  open: string;
   /** The document's own currency code — always shown, whatever basis converts. */
-  currency: string
+  currency: string;
   /** The open in the document's own currency (unconverted). Summary rows
    * cannot carry this: one party may owe in several currencies, so the
    * txn leg lives at document grain only. */
-  txnOpen: string
-  txn: { kind: 'transaction'; entryId: string; docKind: string | null; docId: string | null }
+  txnOpen: string;
+  txn: { kind: "transaction"; entryId: string; docKind: string | null; docId: string | null };
 }
 
 export interface AgingData {
-  title: string
-  backHref: string
-  backLabel: string
-  company: string
-  periodPhrase: string
-  isDetail: boolean
-  isSummary: boolean
-  hasSummaryRows: boolean
-  emptyLabel: string
-  labelParty: string
-  labelEntry: string
-  labelDue: string
-  labelAgeBasisDate: string
-  labelAgeBasisSource: string
-  labelAge: string
-  labelBucket: string
-  labelTotal: string
-  labelTotals: string
-  labelDocCurrency: string
-  labelTxnOpen: string
+  title: string;
+  backHref: string;
+  backLabel: string;
+  company: string;
+  periodPhrase: string;
+  isDetail: boolean;
+  isSummary: boolean;
+  hasSummaryRows: boolean;
+  emptyLabel: string;
+  labelParty: string;
+  labelEntry: string;
+  labelDue: string;
+  labelAgeBasisDate: string;
+  labelAgeBasisSource: string;
+  labelAge: string;
+  labelBucket: string;
+  labelTotal: string;
+  labelTotals: string;
+  labelDocCurrency: string;
+  labelTxnOpen: string;
   /** Reporting-currency selector options: base first, then in-scope txn codes. */
-  currencyOptions: { value: string; label: string }[]
-  currencyValue: string
-  currencyBasisValue: 'base' | 'transaction'
-  labelCurrency: string
-  labelConvertFrom: string
-  labelBase: string
-  labelTransaction: string
-  bucketLabels: Record<(typeof BUCKETS)[number], string>
+  currencyOptions: { value: string; label: string }[];
+  currencyValue: string;
+  currencyBasisValue: "base" | "transaction";
+  labelCurrency: string;
+  labelConvertFrom: string;
+  labelBase: string;
+  labelTransaction: string;
+  bucketLabels: Record<(typeof BUCKETS)[number], string>;
   /** Set when underived consolidated rates block the report:
    * the page renders a typed banner with a derive link instead of numbers. */
-  ratesBlocked: RatesBlockedNotice | null
-  periodRefusal: string | null
-  filterPeriodLabel: string
+  ratesBlocked: RatesBlockedNotice | null;
+  periodRefusal: string | null;
+  filterPeriodLabel: string;
   /** False while rates or the requested period cannot resolve. */
-  ratesReady: boolean
-  summaryRows: AgingSummaryRow[]
-  detailRows: AgingDetailRow[]
-  totals: Record<(typeof BUCKETS)[number], string> & { total: string }
-  totalsDrill: Record<(typeof BUCKETS)[number], ReportDrillTarget> & { total: ReportDrillTarget }
-  dimensions: DimensionOptions
-  subsidiaries: SubsidiaryPicker
-  periodPresets: string[]
-  scheduleDefId: string | null
-  scheduleParams: Record<string, string>
-  exportParams: Record<string, string>
+  ratesReady: boolean;
+  summaryRows: AgingSummaryRow[];
+  detailRows: AgingDetailRow[];
+  totals: Record<(typeof BUCKETS)[number], string> & { total: string };
+  totalsDrill: Record<(typeof BUCKETS)[number], ReportDrillTarget> & { total: ReportDrillTarget };
+  dimensions: DimensionOptions;
+  subsidiaries: SubsidiaryPicker;
+  periodPresets: string[];
+  scheduleDefId: string | null;
+  scheduleParams: Record<string, string>;
+  exportParams: Record<string, string>;
 }
 
 export async function loadAging(sp: Record<string, string | undefined>): Promise<AgingData> {
-  const { money: formatMoney } = await getMoneyFormatter()
-  const t = await getTranslations('reports.aging')
-  const locale = await getLocale()
-  const tr = await getTranslations('reports')
-  const tc = await getTranslations('common')
-  const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
-  const scheduleDefId = await reportScheduleAnchor('aging', { side })
-  const detail = sp.view === 'detail'
-  const q = parseReportQuery(sp)
+  const { money: formatMoney } = await getMoneyFormatter();
+  const t = await getTranslations("reports.aging");
+  const locale = await getLocale();
+  const tr = await getTranslations("reports");
+  const tc = await getTranslations("common");
+  const side: AgingSide = sp.side === "ap" ? "ap" : "ar";
+  const scheduleDefId = await reportScheduleAnchor("aging", { side });
+  const detail = sp.view === "detail";
+  const q = parseReportQuery(sp);
   // Aging is inherently "as of a date" — default to TODAY, not the fiscal year.
   // The URL is untrusted: a hand-edited preset outside the as-of whitelist
   // (say ?period=this_fiscal_year) must not compute a future as-of, so coerce
   // it to today instead of resolving it.
-  const requestedPeriod = agingPeriodPreset(sp.period)
-  let period: ResolvedPeriod | null = null
-  let periodRefusal: string | null = null
+  const requestedPeriod = agingPeriodPreset(sp.period);
+  let period: ResolvedPeriod | null = null;
+  let periodRefusal: string | null = null;
   try {
-    period = await resolvePeriod(requestedPeriod, { customFrom: q.from, customTo: q.to })
+    period = await resolvePeriod(requestedPeriod, { customFrom: q.from, customTo: q.to });
   } catch (error) {
-    if (!(error instanceof IncompleteReportPeriodError)) throw error
-    periodRefusal = error.message
+    if (!(error instanceof IncompleteReportPeriodError)) throw error;
+    periodRefusal = error.message;
   }
   // No substitute date may broaden a refused custom report. Unresolved
   // drill targets remain hidden with the paper until a valid date is set.
-  const asOf = period?.to ?? ''
+  const asOf = period?.to ?? "";
   // Legal-entity scope is enforced here, not by the picker: a restricted
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
@@ -187,29 +205,30 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
   // the page renders a typed banner with a derive link instead of any
   // numbers. Anything else is a real defect and still throws. Builders run
   // only with a resolved subsidiary scope — never scope-less (fail-closed).
-  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
-  let ratesBlocked: RatesBlockedNotice | null = null
-  if (period) try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, asOf)
-  } catch (e) {
-    if (!(e instanceof MissingRatesError)) throw e
-    ratesBlocked = {
-      code: 'rates-not-derived',
-      title: tr('statement.ratesBlockedTitle'),
-      description: (e as Error).message,
-      deriveLabel: tr('statement.ratesBlockedAction'),
-      deriveHref: '/close',
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined;
+  let ratesBlocked: RatesBlockedNotice | null = null;
+  if (period)
+    try {
+      subView = await reportSubsidiaryView(q.subsidiaryId, asOf);
+    } catch (e) {
+      if (!(e instanceof MissingRatesError)) throw e;
+      ratesBlocked = {
+        code: "rates-not-derived",
+        title: tr("statement.ratesBlockedTitle"),
+        description: (e as Error).message,
+        deriveLabel: tr("statement.ratesBlockedAction"),
+        deriveHref: "/close",
+      };
     }
-  }
   const dims = {
     ...q.dims,
     subsidiaryIds: subView?.subsidiary?.ids,
     // Unrestricted root-covering views read root-owned (null subsidiary)
     // documents alongside attributed ones; restricted views stay fail-closed.
     includeNullSubsidiary: subView?.subsidiary?.includeNullSubsidiary === true,
-  }
-  const authz = await getAuthz()
-  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds)
+  };
+  const authz = await getAuthz();
+  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds);
   // Currency basis is opt-in and URL-driven (never component state) so the
   // screen, its export, and its drill-downs all read the same selection.
   // Never the shared filter bar's `basis`: that word means accrual/cash.
@@ -221,86 +240,92 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
         dimensionOptions(undefined, undefined, optionScope),
         orgInfo(),
       ])
-    : [null, await dimensionOptions(undefined, undefined, optionScope), await orgInfo()] as const
+    : ([null, await dimensionOptions(undefined, undefined, optionScope), await orgInfo()] as const);
   // One shared resolver with the export (report-filters): the screen and the
   // CSV can never disagree on what a URL means. A hand-edited currency
   // outside the in-scope list falls back to base (ruling 1).
   const { basis: currencyBasis, currency: target } = scope
     ? resolveAgingCurrencyParams(sp, scope)
-    : { basis: 'base' as AgingCurrencyBasis, currency: '' }
-  let summary: Awaited<ReturnType<typeof agingByParty>> | null = null
-  let detailResult: Awaited<ReturnType<typeof agingDetail>> | null = null
+    : { basis: "base" as AgingCurrencyBasis, currency: "" };
+  let summary: Awaited<ReturnType<typeof agingByParty>> | null = null;
+  let detailResult: Awaited<ReturnType<typeof agingDetail>> | null = null;
   if (subView && scope) {
-    const runOpts = { basis: currencyBasis, reportingCurrency: target }
+    const runOpts = { basis: currencyBasis, reportingCurrency: target };
     try {
       if (detail) {
-        const both = await agingSummaryAndDetail(side, asOf, dims, undefined, runOpts)
-        summary = both.summary
-        detailResult = both.detail
+        const both = await agingSummaryAndDetail(side, asOf, dims, undefined, runOpts);
+        summary = both.summary;
+        detailResult = both.detail;
       } else {
-        summary = await agingByParty(side, asOf, dims, undefined, runOpts)
+        summary = await agingByParty(side, asOf, dims, undefined, runOpts);
       }
     } catch (e) {
       // Same banner contract as underived consolidated rates: a
       // txn-basis report whose spots are underived renders the derive link,
       // never numbers, and never a throw out of SSR.
-      if (!(e instanceof AgingRatesUnavailableError)) throw e
+      if (!(e instanceof AgingRatesUnavailableError)) throw e;
       ratesBlocked = {
-        code: 'rates-not-derived',
-        title: tr('statement.ratesBlockedTitle'),
+        code: "rates-not-derived",
+        title: tr("statement.ratesBlockedTitle"),
         description: (e as Error).message,
-        deriveLabel: tr('statement.ratesBlockedAction'),
-        deriveHref: '/close',
-      }
-      summary = null
-      detailResult = null
+        deriveLabel: tr("statement.ratesBlockedAction"),
+        deriveHref: "/close",
+      };
+      summary = null;
+      detailResult = null;
     }
   }
-  const m = (v: string | number) => formatMoney(v, { currency: target || org?.base_currency })
+  const m = (v: string | number) => formatMoney(v, { currency: target || org?.base_currency });
   // The txn leg formats in the DOCUMENT's currency. Registry codes are ISO
   // by construction, but a hand-entered code must never crash the render —
   // fall back to the raw amount with its code.
   const mt = (v: string | number, ccy: string) => {
     try {
-      return formatMoney(v, { currency: ccy })
+      return formatMoney(v, { currency: ccy });
     } catch {
-      return `${v} ${ccy}`
+      return `${v} ${ccy}`;
     }
-  }
-  const noParty = t('noParty')
+  };
+  const noParty = t("noParty");
   // OM-06: a partyless row is control lines with no counterparty — on a
   // sample tenant the opening-balance journal, on a live one possibly a
   // genuine break. The note says what is proven (no counterparty) and names
   // the common example without asserting it, so it can never mask a real
   // control/subledger divergence as "just opening balances".
-  const noPartyNote = t('noPartyNote')
+  const noPartyNote = t("noPartyNote");
   // The reconciling line's caption states what the balance is, then lists the
   // journal entries behind it (number, date, memo, party, amount) so the
   // bookkeeper can trace each one. Long lists are capped with a count.
-  const reconcilingNote = (entries: NonNullable<AgingRow['entries']>): string => {
-    const shown = entries.slice(0, RECONCILING_ENTRY_LIMIT).map((e) =>
-      [e.entryNumber ?? '—', e.postingDate, e.memo, e.partyName, m(e.amount)]
-        .filter((part): part is string => typeof part === 'string' && part !== '')
-        .join(' · '),
-    )
-    const hidden = entries.length - shown.length
-    return [t('controlEntries.hint'), ...shown, ...(hidden > 0 ? [t('controlEntries.more', { count: hidden })] : [])].join('\n')
-  }
+  const reconcilingNote = (entries: NonNullable<AgingRow["entries"]>): string => {
+    const shown = entries
+      .slice(0, RECONCILING_ENTRY_LIMIT)
+      .map((e) =>
+        [e.entryNumber ?? "—", e.postingDate, e.memo, e.partyName, m(e.amount)]
+          .filter((part): part is string => typeof part === "string" && part !== "")
+          .join(" · "),
+      );
+    const hidden = entries.length - shown.length;
+    return [
+      t("controlEntries.hint"),
+      ...shown,
+      ...(hidden > 0 ? [t("controlEntries.more", { count: hidden })] : []),
+    ].join("\n");
+  };
 
   const bucketLabels: Record<(typeof BUCKETS)[number], string> = {
-    current: t('buckets.current'),
-    b1: t('buckets.b1'),
-    b2: t('buckets.b2'),
-    b3: t('buckets.b3'),
-    b4: t('buckets.b4'),
-  }
+    current: t("buckets.current"),
+    b1: t("buckets.b1"),
+    b2: t("buckets.b2"),
+    b3: t("buckets.b3"),
+    b4: t("buckets.b4"),
+  };
 
   const bucketDrill = (
     label: string,
     partyId?: string,
     bucket?: (typeof BUCKETS)[number],
   ): ReportDrillTarget => ({
-    kind: 'aging',
+    kind: "aging",
     ...(q.subsidiaryId ? { subsidiaryId: q.subsidiaryId } : {}),
     label,
     side,
@@ -316,16 +341,17 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     ...(target ? { currency: target } : {}),
     ...(partyId ? { partyId } : { unassignedParty: true }),
     ...(bucket ? { bucket } : {}),
-  })
+  });
   const drillDims = (): typeof dims => {
-    const compact: Record<string, unknown> = {}
+    const compact: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(dims)) {
-      if (value === undefined || value === null) continue
-      if (key === 'segments' && typeof value === 'object' && Object.keys(value).length === 0) continue
-      compact[key] = typeof value === 'object' ? structuredClone(value) : value
+      if (value === undefined || value === null) continue;
+      if (key === "segments" && typeof value === "object" && Object.keys(value).length === 0)
+        continue;
+      compact[key] = typeof value === "object" ? structuredClone(value) : value;
     }
-    return compact as typeof dims
-  }
+    return compact as typeof dims;
+  };
 
   const bucketCell = (
     row: Record<string, string>,
@@ -333,57 +359,61 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     name: string,
     partyId: string | null,
   ): BucketCell => ({
-    value: decimalIsZero(row[b]!) ? '' : m(row[b]!),
+    value: decimalIsZero(row[b]!) ? "" : m(row[b]!),
     isZero: decimalIsZero(row[b]!),
-    tone: decimalCmp(row[b]!, '0') < 0 ? 'negative' : 'default',
+    tone: decimalCmp(row[b]!, "0") < 0 ? "negative" : "default",
     // An empty bucket has no documents to show, so it renders its dash plainly.
-    drill: decimalIsZero(row[b]!) ? undefined : bucketDrill(`${name} · ${bucketLabels[b]}`, partyId ?? undefined, b),
-  })
+    drill: decimalIsZero(row[b]!)
+      ? undefined
+      : bucketDrill(`${name} · ${bucketLabels[b]}`, partyId ?? undefined, b),
+  });
 
   // Every open-balance surface states BOTH facts: the denomination (and, on
   // the txn basis, which leg converted) and whether the figure is live or
   // as-of. The aging rebuild is always as-of; the list cache is live — the
   // two disagree on FX documents, and the label is what makes that legitimate.
-  const basisPhrase = currencyBasis === 'transaction' ? t('fromTransaction') : t('fromBase')
+  const basisPhrase = currencyBasis === "transaction" ? t("fromTransaction") : t("fromBase");
   return {
-    title: `${side === 'ap' ? t('payablesTitle') : t('receivablesTitle')} · ${detail ? t('detail') : t('summary')}`,
-    backHref: '/reports',
-    backLabel: tr('hub.title'),
-    company: org?.name ?? '',
-    periodPhrase: period ? `${t('asOf', civilDateParams({ date: asOf }, locale))} · ${basisPhrase} · ${t('inCurrency', { currency: target || org?.base_currency || '' })}` : '',
+    title: `${side === "ap" ? t("payablesTitle") : t("receivablesTitle")} · ${detail ? t("detail") : t("summary")}`,
+    backHref: "/reports",
+    backLabel: tr("hub.title"),
+    company: org?.name ?? "",
+    periodPhrase: period
+      ? `${t("asOf", civilDateParams({ date: asOf }, locale))} · ${basisPhrase} · ${t("inCurrency", { currency: target || org?.base_currency || "" })}`
+      : "",
     isDetail: Boolean(detailResult),
     isSummary: !detailResult,
     hasSummaryRows: (summary?.rows.length ?? 0) > 0,
     ratesBlocked,
     periodRefusal,
-    filterPeriodLabel: tr('filterBar.period'),
+    filterPeriodLabel: tr("filterBar.period"),
     ratesReady: ratesBlocked === null && periodRefusal === null,
-    emptyLabel: t('empty'),
-    labelParty: tc('labels.party'),
-    labelEntry: tr('generalLedger.columns.entry'),
-    labelDue: t('columns.due'),
-    labelAgeBasisDate: t('columns.ageBasisDate'),
-    labelAgeBasisSource: t('columns.ageBasisSource'),
-    labelAge: t('columns.age'),
-    labelBucket: t('columns.bucket'),
-    labelTotal: t('columns.total'),
-    labelTotals: tr('trialBalance.totals'),
-    labelDocCurrency: t('columns.currency'),
-    labelTxnOpen: t('columns.txnOpen'),
+    emptyLabel: t("empty"),
+    labelParty: tc("labels.party"),
+    labelEntry: tr("generalLedger.columns.entry"),
+    labelDue: t("columns.due"),
+    labelAgeBasisDate: t("columns.ageBasisDate"),
+    labelAgeBasisSource: t("columns.ageBasisSource"),
+    labelAge: t("columns.age"),
+    labelBucket: t("columns.bucket"),
+    labelTotal: t("columns.total"),
+    labelTotals: tr("trialBalance.totals"),
+    labelDocCurrency: t("columns.currency"),
+    labelTxnOpen: t("columns.txnOpen"),
     currencyOptions: (scope?.currencies ?? []).map((c) => ({ value: c, label: c })),
     currencyValue: target,
     currencyBasisValue: currencyBasis,
-    labelCurrency: t('currency'),
-    labelConvertFrom: t('convertFrom'),
-    labelBase: t('baseOption'),
-    labelTransaction: t('transactionOption'),
+    labelCurrency: t("currency"),
+    labelConvertFrom: t("convertFrom"),
+    labelBase: t("baseOption"),
+    labelTransaction: t("transactionOption"),
     bucketLabels,
     summaryRows: (summary?.rows ?? []).map((r, i) => {
-      const reconciling = r.reconciling === true
-      const name = reconciling ? t('controlEntries.label') : r.partyName ?? noParty
-      const row = r as unknown as Record<string, string>
+      const reconciling = r.reconciling === true;
+      const name = reconciling ? t("controlEntries.label") : (r.partyName ?? noParty);
+      const row = r as unknown as Record<string, string>;
       return {
-        key: reconciling ? `control-${i}` : r.partyId ?? `none-${i}`,
+        key: reconciling ? `control-${i}` : (r.partyId ?? `none-${i}`),
         // A reconciling line is not a party's statement: it names the control
         // balance, so it carries no party link even when a party is stamped.
         partyId: reconciling ? null : r.partyId,
@@ -391,22 +421,22 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
         partyHref: `/reports/statements/${r.partyId}?side=${side}`,
         partyNote: reconciling ? reconcilingNote(r.entries ?? []) : r.partyId ? null : noPartyNote,
         reconciling,
-        current: bucketCell(row, 'current', name, r.partyId),
-        b1: bucketCell(row, 'b1', name, r.partyId),
-        b2: bucketCell(row, 'b2', name, r.partyId),
-        b3: bucketCell(row, 'b3', name, r.partyId),
-        b4: bucketCell(row, 'b4', name, r.partyId),
+        current: bucketCell(row, "current", name, r.partyId),
+        b1: bucketCell(row, "b1", name, r.partyId),
+        b2: bucketCell(row, "b2", name, r.partyId),
+        b3: bucketCell(row, "b3", name, r.partyId),
+        b4: bucketCell(row, "b4", name, r.partyId),
         total: m(r.total),
         totalDrill: bucketDrill(name, r.partyId ?? undefined),
-      }
+      };
     }),
     detailRows: (detailResult?.rows ?? []).map((r, i) => ({
-      key: `${r.reference ?? 'x'}-${i}`,
+      key: `${r.reference ?? "x"}-${i}`,
       partyId: r.partyId,
       partyName: r.partyName ?? noParty,
       partyHref: `/reports/statements/${r.partyId}?side=${side}`,
       partyNote: r.partyId ? null : noPartyNote,
-      reference: r.reference ?? '',
+      reference: r.reference ?? "",
       dueDate: r.dueDate,
       ageBasisDate: r.ageBasisDate,
       ageBasisSource: t(`dateSources.${r.ageBasisSource}`),
@@ -415,23 +445,23 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
       open: m(r.open),
       currency: r.docCurrency,
       txnOpen: mt(r.txnOpen, r.docCurrency),
-      txn: { kind: 'transaction', entryId: r.docId, docKind: r.docKind, docId: r.docId },
+      txn: { kind: "transaction", entryId: r.docId, docKind: r.docKind, docId: r.docId },
     })),
     totals: {
-      current: m(summary?.totals.current ?? '0'),
-      b1: m(summary?.totals.b1 ?? '0'),
-      b2: m(summary?.totals.b2 ?? '0'),
-      b3: m(summary?.totals.b3 ?? '0'),
-      b4: m(summary?.totals.b4 ?? '0'),
-      total: m(summary?.totals.total ?? '0'),
+      current: m(summary?.totals.current ?? "0"),
+      b1: m(summary?.totals.b1 ?? "0"),
+      b2: m(summary?.totals.b2 ?? "0"),
+      b3: m(summary?.totals.b3 ?? "0"),
+      b4: m(summary?.totals.b4 ?? "0"),
+      total: m(summary?.totals.total ?? "0"),
     },
     totalsDrill: {
-      current: bucketDrill(bucketLabels.current, undefined, 'current'),
-      b1: bucketDrill(bucketLabels.b1, undefined, 'b1'),
-      b2: bucketDrill(bucketLabels.b2, undefined, 'b2'),
-      b3: bucketDrill(bucketLabels.b3, undefined, 'b3'),
-      b4: bucketDrill(bucketLabels.b4, undefined, 'b4'),
-      total: bucketDrill(tr('trialBalance.totals')),
+      current: bucketDrill(bucketLabels.current, undefined, "current"),
+      b1: bucketDrill(bucketLabels.b1, undefined, "b1"),
+      b2: bucketDrill(bucketLabels.b2, undefined, "b2"),
+      b3: bucketDrill(bucketLabels.b3, undefined, "b3"),
+      b4: bucketDrill(bucketLabels.b4, undefined, "b4"),
+      total: bucketDrill(tr("trialBalance.totals")),
     },
     dimensions: opts,
     subsidiaries: subView?.picker ?? [],
@@ -442,23 +472,23 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     // Without the resolved as-of the endpoint falls back to the
     // fiscal year end and every bucket is wrong.
     exportParams: stringReportParams({ ...sp, asOf }),
-  }
+  };
 }
 
-const f = ref<AgingData>()
-const item = field
-const rootF = rootRef<AgingData>()
+const f = ref<AgingData>();
+const item = field;
+const rootF = rootRef<AgingData>();
 
-const DASH = 'text-slate-300 dark:text-slate-600'
-const EMPTY_ROW_CLASS = 'text-center text-slate-400 italic'
+const DASH = "text-slate-300 dark:text-slate-600";
+const EMPTY_ROW_CLASS = "text-center text-slate-400 italic";
 
 function partyCell() {
-  return widgetCell('party-link-cell', {
-    partyId: item('partyId'),
-    partyName: item('partyName'),
-    href: item('partyHref'),
-    note: item('partyNote'),
-  })
+  return widgetCell("party-link-cell", {
+    partyId: item("partyId"),
+    partyName: item("partyName"),
+    href: item("partyHref"),
+    note: item("partyNote"),
+  });
 }
 
 /** Bucket amount: drilled, dimmed em-dash when zero, red when negative. */
@@ -471,144 +501,158 @@ function bucketColumn(b: (typeof BUCKETS)[number]) {
         // A literal, not a page value: a cell that reads only its row can
         // render in the browser, so long agings send only their first rows
         // as markup.
-        fallback: '—',
+        fallback: "—",
         fallbackClassName: DASH,
         tone: item(`${b}.tone`),
       }),
     ),
-    { align: 'right', className: 'tabular-nums' },
-  )
+    { align: "right", className: "tabular-nums" },
+  );
 }
 
 const totalsRow: TableSpanRow = {
-  label: rootF('labelTotals'),
+  label: rootF("labelTotals"),
   labelColSpan: 1,
-  labelClassName: 'font-bold',
+  labelClassName: "font-bold",
   className: reportTotalRowClass,
   cells: [
     ...BUCKETS.map((b) => ({
       cell: drill(rootF(`totalsDrill.${b}`), money(rootF(`totals.${b}`))),
-      align: 'right' as const,
-      className: 'font-bold tabular-nums',
+      align: "right" as const,
+      className: "font-bold tabular-nums",
     })),
     {
-      cell: drill(rootF('totalsDrill.total'), money(rootF('totals.total'))),
-      align: 'right' as const,
-      className: 'font-bold tabular-nums',
+      cell: drill(rootF("totalsDrill.total"), money(rootF("totals.total"))),
+      align: "right" as const,
+      className: "font-bold tabular-nums",
     },
   ],
-}
+};
 
 export function agingSpec(data: AgingData): PageSpec {
   return statementReportSpec({
-    route: '/reports/aging',
-    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
-    filters: [{
-      controls: { period: true, asOf: true, dimensions: true, subsidiary: true },
-      options: {
-        dimensions: f('dimensions'),
-        subsidiaries: f('subsidiaries'),
-        defaultPeriod: 'today',
-        periodPresets: f('periodPresets'),
+    route: "/reports/aging",
+    header: { title: f("title"), back: { href: f("backHref"), label: f("backLabel") } },
+    filters: [
+      {
+        controls: { period: true, asOf: true, dimensions: true, subsidiary: true },
+        options: {
+          dimensions: f("dimensions"),
+          subsidiaries: f("subsidiaries"),
+          defaultPeriod: "today",
+          periodPresets: f("periodPresets"),
+        },
       },
-    }],
-    actionsBefore: [widget('currency-basis', {
-      currencies: data.currencyOptions,
-      currency: data.currencyValue,
-      currencyBasis: data.currencyBasisValue,
-      currencyLabel: data.labelCurrency,
-      basisLabel: data.labelConvertFrom,
-      baseLabel: data.labelBase,
-      transactionLabel: data.labelTransaction,
-    }, f('ratesReady'))],
+    ],
+    actionsBefore: [
+      widget(
+        "currency-basis",
+        {
+          currencies: data.currencyOptions,
+          currency: data.currencyValue,
+          currencyBasis: data.currencyBasisValue,
+          currencyLabel: data.labelCurrency,
+          basisLabel: data.labelConvertFrom,
+          baseLabel: data.labelBase,
+          transactionLabel: data.labelTransaction,
+        },
+        f("ratesReady"),
+      ),
+    ],
     schedule: {
-      definitionId: data.scheduleDefId ?? '',
+      definitionId: data.scheduleDefId ?? "",
       statementParams: data.scheduleParams,
-      when: f('scheduleDefId'),
+      when: f("scheduleDefId"),
     },
-    exportMenu: { kind: 'aging', params: data.exportParams },
+    exportMenu: { kind: "aging", params: data.exportParams },
     bodyBeforePaper: [
       {
-        ...widgetBlock('empty-state', {
-          title: data.ratesBlocked?.title ?? '',
+        ...widgetBlock("empty-state", {
+          title: data.ratesBlocked?.title ?? "",
           description: data.ratesBlocked?.description,
-          action: 'link-button',
+          action: "link-button",
           actionProps: {
-            href: data.ratesBlocked?.deriveHref ?? '/close',
-            label: data.ratesBlocked?.deriveLabel ?? '',
+            href: data.ratesBlocked?.deriveHref ?? "/close",
+            label: data.ratesBlocked?.deriveLabel ?? "",
           },
         }),
-        when: f('ratesBlocked'),
+        when: f("ratesBlocked"),
       },
       {
-        ...widgetBlock('empty-state', {
+        ...widgetBlock("empty-state", {
           title: data.filterPeriodLabel,
-          description: data.periodRefusal ?? '',
+          description: data.periodRefusal ?? "",
         }),
-        when: f('periodRefusal'),
+        when: f("periodRefusal"),
       },
     ],
     paper: {
-      company: f('company'),
-      title: f('title'),
-      periodPhrase: f('periodPhrase'),
+      company: f("company"),
+      title: f("title"),
+      periodPhrase: f("periodPhrase"),
       wide: true,
-      when: f('ratesReady'),
+      when: f("ratesReady"),
     },
     blocks: [
       // Two independent presence flags, not a negation.
       {
         ...table({
-          variant: 'report',
-          rows: f('detailRows'),
-          rowKey: item('key'),
-          emptyRow: { text: f('emptyLabel'), colSpan: 10, className: EMPTY_ROW_CLASS },
+          variant: "report",
+          rows: f("detailRows"),
+          rowKey: item("key"),
+          emptyRow: { text: f("emptyLabel"), colSpan: 10, className: EMPTY_ROW_CLASS },
           columns: [
-            column(rootF('labelParty'), partyCell()),
-            column(rootF('labelEntry'), txn(item('txn'), text(item('reference'))), {
-              className: 'font-mono text-xs',
+            column(rootF("labelParty"), partyCell()),
+            column(rootF("labelEntry"), txn(item("txn"), text(item("reference"))), {
+              className: "font-mono text-xs",
             }),
-            column(rootF('labelDue'), text(item('dueDate')), { className: 'tabular-nums' }),
-            column(rootF('labelAgeBasisDate'), text(item('ageBasisDate')), { className: 'tabular-nums' }),
-            column(rootF('labelAgeBasisSource'), text(item('ageBasisSource'))),
-            column(rootF('labelAge'), txn(item('txn'), text(item('ageDays'))), {
-              align: 'right',
-              className: 'tabular-nums',
+            column(rootF("labelDue"), text(item("dueDate")), { className: "tabular-nums" }),
+            column(rootF("labelAgeBasisDate"), text(item("ageBasisDate")), {
+              className: "tabular-nums",
             }),
-            column(rootF('labelBucket'), text(item('bucketLabel'))),
-            column(rootF('labelTotal'), txn(item('txn'), money(item('open'))), {
-              align: 'right',
-              className: 'font-medium tabular-nums',
+            column(rootF("labelAgeBasisSource"), text(item("ageBasisSource"))),
+            column(rootF("labelAge"), txn(item("txn"), text(item("ageDays"))), {
+              align: "right",
+              className: "tabular-nums",
             }),
-            column(rootF('labelDocCurrency'), text(item('currency')), {
-              className: 'font-mono text-xs',
+            column(rootF("labelBucket"), text(item("bucketLabel"))),
+            column(rootF("labelTotal"), txn(item("txn"), money(item("open"))), {
+              align: "right",
+              className: "font-medium tabular-nums",
             }),
-            column(rootF('labelTxnOpen'), txn(item('txn'), money(item('txnOpen'))), {
-              align: 'right',
-              className: 'tabular-nums',
+            column(rootF("labelDocCurrency"), text(item("currency")), {
+              className: "font-mono text-xs",
+            }),
+            column(rootF("labelTxnOpen"), txn(item("txn"), money(item("txnOpen"))), {
+              align: "right",
+              className: "tabular-nums",
             }),
           ],
         }),
-        when: f('isDetail'),
+        when: f("isDetail"),
       },
       {
         ...table({
-          variant: 'report',
-          rows: f('summaryRows'),
-          rowKey: item('key'),
-          emptyRow: { text: f('emptyLabel'), colSpan: BUCKETS.length + 2, className: EMPTY_ROW_CLASS },
+          variant: "report",
+          rows: f("summaryRows"),
+          rowKey: item("key"),
+          emptyRow: {
+            text: f("emptyLabel"),
+            colSpan: BUCKETS.length + 2,
+            className: EMPTY_ROW_CLASS,
+          },
           trailing: data.hasSummaryRows ? [totalsRow] : [],
           columns: [
-            column(rootF('labelParty'), partyCell()),
+            column(rootF("labelParty"), partyCell()),
             ...BUCKETS.map(bucketColumn),
-            column(rootF('labelTotal'), drill(item('totalDrill'), money(item('total'))), {
-              align: 'right',
-              className: 'font-semibold tabular-nums',
+            column(rootF("labelTotal"), drill(item("totalDrill"), money(item("total"))), {
+              align: "right",
+              className: "font-semibold tabular-nums",
             }),
           ],
         }),
-        when: f('isSummary'),
+        when: f("isSummary"),
       },
     ],
-  })
+  });
 }

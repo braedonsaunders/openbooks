@@ -1,12 +1,29 @@
-import { translationMultiplier, statementHistoricalAmounts, statementTranslatedAmount, assertRateCoverage, type StatementSubsidiaryContext } from '../statement-matrix'
-import { HistoricalTranslationEvidenceError } from '@openbooks/engine/journal/historical-translation-evidence'
+import {
+  translationMultiplier,
+  statementHistoricalAmounts,
+  statementTranslatedAmount,
+  assertRateCoverage,
+  type StatementSubsidiaryContext,
+} from "../statement-matrix";
+import { HistoricalTranslationEvidenceError } from "@openbooks/engine/journal/historical-translation-evidence";
 import "server-only";
 import { sql } from "drizzle-orm";
 import { functionalReportReader } from "./currency-basis";
 import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
-import { bucketSubsidiaryFilter, glActivityBuckets, glSummaryEligibleDims, statementBookIdsExpr } from "../gl-summary";
+import {
+  bucketSubsidiaryFilter,
+  glActivityBuckets,
+  glSummaryEligibleDims,
+  statementBookIdsExpr,
+} from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
-import { decimalAdd, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
+import {
+  decimalAdd,
+  decimalIsMaterial,
+  decimalNeg,
+  decimalSum,
+  type ExactDecimal,
+} from "../statement-format";
 import { ZERO, compareAbsoluteDescending, decimalSubtract } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
 import { PNL_TYPES } from "../account-types";
@@ -71,7 +88,12 @@ export interface CashFlowIndirectResult {
  * stripped here: they are handled by the entry-level I/F classification below,
  * which is robust to disposals that write off working-capital balances.
  */
-const CF_REMEASURE_ORIGINS = ["revaluation", "fx_revaluation", "currency_adjustment", "translation"];
+const CF_REMEASURE_ORIGINS = [
+  "revaluation",
+  "fx_revaluation",
+  "currency_adjustment",
+  "translation",
+];
 /**
  * Remeasurement origins whose P&L legs need an operating add-back: asset
  * remeasurement and unrealized FX revaluation (the FX engine posts
@@ -125,24 +147,47 @@ export async function cashFlowIndirect(
   subsidiary?: StatementSubsidiaryContext,
 ): Promise<CashFlowIndirectResult> {
   const resolvedOrgId = await resolveOrgId(orgId);
-  const translated = !!(subsidiary?.presentationCurrency || subsidiary?.rates?.length || subsidiary?.weights?.length || subsidiary?.controlLosses?.length)
-  const openingDate = new Date(`${from}T00:00:00Z`)
-  openingDate.setUTCDate(openingDate.getUTCDate()-1)
-  const openingAsOf = openingDate.toISOString().slice(0,10)
+  const translated = !!(
+    subsidiary?.presentationCurrency ||
+    subsidiary?.rates?.length ||
+    subsidiary?.weights?.length ||
+    subsidiary?.controlLosses?.length
+  );
+  const openingDate = new Date(`${from}T00:00:00Z`);
+  openingDate.setUTCDate(openingDate.getUTCDate() - 1);
+  const openingAsOf = openingDate.toISOString().slice(0, 10);
   if (subsidiary?.rates?.length) {
-    assertRateCoverage(subsidiary!,[{from,to}], 'flow')
-    assertRateCoverage(subsidiary!,[{from:openingAsOf,to:openingAsOf},{from:to,to}], 'balance')
+    assertRateCoverage(subsidiary!, [{ from, to }], "flow");
+    assertRateCoverage(
+      subsidiary!,
+      [
+        { from: openingAsOf, to: openingAsOf },
+        { from: to, to },
+      ],
+      "balance",
+    );
   }
-  const historical = await statementHistoricalAmounts(resolvedOrgId, subsidiary, 'flow', sql`e.posting_date`, sql`
+  const historical = await statementHistoricalAmounts(
+    resolvedOrgId,
+    subsidiary,
+    "flow",
+    sql`e.posting_date`,
+    sql`
     e.posting_date between ${from}::date and ${to}::date
     and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}
     and e.origin<>'translation'
     and exists(select 1 from journal_lines bank join accounts bank_account on bank_account.org_id=bank.org_id and bank_account.id=bank.account_id
-      where bank.org_id=e.org_id and bank.entry_id=e.id and bank_account.type='asset_bank')`, true)
-  const flowAmount = statementTranslatedAmount('flow', subsidiary, historical, undefined, true)
-  const openingAmount = sql`l.amount * ${translationMultiplier('balance',subsidiary,openingAsOf,true)}`
-  const closingAmount = sql`l.amount * ${translationMultiplier('balance',subsidiary,to,true)}`
-  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${to} and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`,translated);
+      where bank.org_id=e.org_id and bank.entry_id=e.id and bank_account.type='asset_bank')`,
+    true,
+  );
+  const flowAmount = statementTranslatedAmount("flow", subsidiary, historical, undefined, true);
+  const openingAmount = sql`l.amount * ${translationMultiplier("balance", subsidiary, openingAsOf, true)}`;
+  const closingAmount = sql`l.amount * ${translationMultiplier("balance", subsidiary, to, true)}`;
+  const reportDb = functionalReportReader(
+    resolvedOrgId,
+    sql`e.posting_date <= ${to} and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`,
+    translated,
+  );
   const dim = dimWhere(dims);
   const IF_TYPES = [...CF_INVESTING_TYPES, ...CF_FINANCING_TYPES];
 
@@ -177,14 +222,15 @@ export async function cashFlowIndirect(
     )`;
 
   // Net income for the window (credit-normal positive), posted only.
-  const niBuckets = !translated && glSummaryEligibleDims(dims)
-    ? glActivityBuckets(resolvedOrgId, { minDate: from, maxDate: to, boundaries: [], bookId })
-    : null;
-  const ni = (await reportDb.execute<{ ni: string }>(
+  const niBuckets =
+    !translated && glSummaryEligibleDims(dims)
+      ? glActivityBuckets(resolvedOrgId, { minDate: from, maxDate: to, boundaries: [], bookId })
+      : null;
+  const ni = await reportDb.execute<{ ni: string }>(
     niBuckets
-      // Window P&L from the summary; only months the report boundaries split
-      // are read from the lines.
-      ? sql`
+      ? // Window P&L from the summary; only months the report boundaries split
+        // are read from the lines.
+        sql`
           select ${reportDb.censusColumn}, -coalesce(sum(b.amount), 0) as ni
             from ${niBuckets} b
             join accounts a on a.id = b.account_id and a.org_id = ${resolvedOrgId}
@@ -201,7 +247,7 @@ export async function cashFlowIndirect(
              and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
              and ${excludePeriodEndJournals(sql`e.origin`)}
              and a.type in ${PNL_TYPES} and ${dim}`,
-  ));
+  );
   const netIncome = ni.rows[0]?.ni ?? ZERO;
 
   // Add-backs. Sign convention throughout: the sum of the entry's debit-signed
@@ -209,7 +255,7 @@ export async function cashFlowIndirect(
   const adjustments: CfAdjustmentLine[] = [];
   {
     // (a) Unrealized FX revaluation (paired with the WC origin strip below).
-    const a = (await reportDb.execute<{ impact: string }>(sql`
+    const a = await reportDb.execute<{ impact: string }>(sql`
       select ${reportDb.censusColumn}, coalesce(round(sum(${flowAmount}),4), 0) as impact
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -219,14 +265,19 @@ export async function cashFlowIndirect(
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
          and e.origin in ${CF_REMEASURE_PNL_ORIGINS} and a.type in ${PNL_TYPES} and ${dim}
-    `));
+    `);
     const impact = a.rows[0]?.impact ?? ZERO;
     if (decimalIsMaterial(impact)) adjustments.push({ key: "unrealizedFx", amount: impact });
 
     // (b) P&L legs of no-bank entries that touch I/F accounts: depreciation
     // and amortization, impairment, non-cash disposal gains/losses. Per
     // account for detail; revaluation origin is excluded (handled at (a)).
-    const b = (await reportDb.execute<{ account_id: string; number: string | null; name: string; impact: string }>(sql`
+    const b = await reportDb.execute<{
+      account_id: string;
+      number: string | null;
+      name: string;
+      impact: string;
+    }>(sql`
       with ${flaggedCte}
       select ${reportDb.censusColumn}, l.account_id, a.number, a.name, round(sum(${flowAmount}),4) as impact
         from journal_lines l
@@ -245,7 +296,7 @@ export async function cashFlowIndirect(
          and e.origin not in ${CF_REMEASURE_PNL_ORIGINS}
          and a.type in ${PNL_TYPES} and ${dim}
        group by l.account_id, a.number, a.name
-    `));
+    `);
     for (const r of b.rows) {
       const amount = r.impact;
       if (!decimalIsMaterial(amount)) continue;
@@ -262,16 +313,30 @@ export async function cashFlowIndirect(
   //   adjustedDelta = (balance[to] − balance[from−1]) − stripped[window]
   // stripped = re-measurement origins + legs of no-bank entries touching I/F.
   // Asset increases use cash (negative); liability increases provide cash.
-  type WcRow = { account_id: string; number: string | null; name: string; type: string; bal_to: string; bal_from: string; stripped: string };
+  type WcRow = {
+    account_id: string;
+    number: string | null;
+    name: string;
+    type: string;
+    bal_to: string;
+    bal_from: string;
+    stripped: string;
+  };
   const wcTypes = [...CF_WC_ASSET_TYPES, ...CF_WC_LIABILITY_TYPES];
-  const wcBuckets = !translated && glSummaryEligibleDims(dims)
-    ? glActivityBuckets(resolvedOrgId, { minDate: null, maxDate: to, boundaries: [{ date: from, kind: 'start' }], bookId })
-    : null;
+  const wcBuckets =
+    !translated && glSummaryEligibleDims(dims)
+      ? glActivityBuckets(resolvedOrgId, {
+          minDate: null,
+          maxDate: to,
+          boundaries: [{ date: from, kind: "start" }],
+          bookId,
+        })
+      : null;
   const wc = wcBuckets
-    // Untranslated balances come from the monthly summary (only the months
-    // the window boundaries split are read from lines); the stripped
-    // non-cash legs are window-bounded line reads.
-    ? (await reportDb.execute<WcRow>(sql`
+    ? // Untranslated balances come from the monthly summary (only the months
+      // the window boundaries split are read from lines); the stripped
+      // non-cash legs are window-bounded line reads.
+      await reportDb.execute<WcRow>(sql`
         with ${flaggedCte},
         balances as (
           select b.account_id,
@@ -307,8 +372,8 @@ export async function cashFlowIndirect(
           left join stripped st on st.account_id = a.id
          where a.org_id = ${resolvedOrgId} and a.type in ${wcTypes}
            and (bal.account_id is not null or st.account_id is not null)
-      `))
-    : (await reportDb.execute<WcRow>(sql`
+      `)
+    : await reportDb.execute<WcRow>(sql`
 
     with ${flaggedCte}
     select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type,
@@ -325,7 +390,7 @@ export async function cashFlowIndirect(
        and ${excludePeriodEndJournals(sql`e.origin`)}
        and a.type in ${[...CF_WC_ASSET_TYPES, ...CF_WC_LIABILITY_TYPES]} and ${dim}
      group by l.account_id, a.number, a.name, a.type
-  `));
+  `);
   const workingCapital: CfWorkingCapitalLine[] = wc.rows
     .map((r) => {
       // Debit-signed balances: an increase reads positive on assets (cash
@@ -348,7 +413,15 @@ export async function cashFlowIndirect(
   // investing section presents gross proceeds (NBV movement + gain), matching
   // the disposal add-back in operating. Translation entries are excluded —
   // their non-bank legs are CTA re-measurement, not flows.
-  const contra = (await reportDb.execute<{ account_id: string; number: string | null; name: string; type: string; origin: string; cash_effect: string; missingHistorical: boolean }>(sql`
+  const contra = await reportDb.execute<{
+    account_id: string;
+    number: string | null;
+    name: string;
+    type: string;
+    origin: string;
+    cash_effect: string;
+    missingHistorical: boolean;
+  }>(sql`
     with cash_entries as (
       -- Bank-touching entries by account id: joining accounts per line made
       -- the planner drive from accounts and probe the entry pk per line.
@@ -381,16 +454,24 @@ export async function cashFlowIndirect(
          or (a.type in ${PNL_TYPES} and e.origin = 'disposal')
        ) and ${dimWhere(dims)}
      group by l.account_id, a.number, a.name, a.type, e.origin
-  `));
-  if (contra.rows.some(row => row.missingHistorical))
-    throw new HistoricalTranslationEvidenceError("A cash-flow translation source is unavailable. Reload the statement; for historical equity, open the Journal entry → Historical translation tab, obtain Accounting event approval for its retained source and genuine layers, then Apply. For period rates, derive the missing consolidated rate set from Period Close.");
+  `);
+  if (contra.rows.some((row) => row.missingHistorical))
+    throw new HistoricalTranslationEvidenceError(
+      "A cash-flow translation source is unavailable. Reload the statement; for historical equity, open the Journal entry → Historical translation tab, obtain Accounting event approval for its retained source and genuine layers, then Apply. For period rates, derive the missing consolidated rate set from Period Close.",
+    );
   const investing: CfAccountLine[] = [];
   const financing: CfAccountLine[] = [];
   let disposalGainOnCash = ZERO;
   for (const r of contra.rows) {
     const amount = r.cash_effect;
     if (!decimalIsMaterial(amount)) continue;
-    const line: CfAccountLine = { accountId: r.account_id, number: r.number, name: r.name, type: r.type, amount };
+    const line: CfAccountLine = {
+      accountId: r.account_id,
+      number: r.number,
+      name: r.name,
+      type: r.type,
+      amount,
+    };
     if (CF_FINANCING_TYPES.includes(r.type)) financing.push(line);
     else investing.push(line);
     // The P&L leg of a cash disposal is reclassified from operating (it is in
@@ -404,7 +485,7 @@ export async function cashFlowIndirect(
   financing.sort((a, b) => compareAbsoluteDescending(a.amount, b.amount));
 
   // FX translation effect on foreign-currency cash balances.
-  const fx = (await reportDb.execute<{ effect: string }>(sql`
+  const fx = await reportDb.execute<{ effect: string }>(sql`
     select ${reportDb.censusColumn}, coalesce(round(sum(${flowAmount}),4), 0) as effect
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -414,7 +495,7 @@ export async function cashFlowIndirect(
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
        and e.origin in ${CF_FX_CASH_ORIGINS} and a.type = 'asset_bank' and ${dim}
-  `));
+  `);
   let fxEffectOnCash = fx.rows[0]?.effect ?? ZERO;
 
   const operating = decimalSum([
@@ -426,19 +507,20 @@ export async function cashFlowIndirect(
   const financingTotal = decimalSum(financing.map((line) => line.amount));
   let netChange = decimalSum([operating, investingTotal, financingTotal, fxEffectOnCash]);
 
-  const cashBuckets = !translated && glSummaryEligibleDims(dims)
-    ? glActivityBuckets(resolvedOrgId, {
-        minDate: null,
-        maxDate: to,
-        boundaries: [{ date: from, kind: 'start' }],
-        bookId,
-      })
-    : null;
-  const cash = (await reportDb.execute<{ opening: string; closing: string }>(
+  const cashBuckets =
+    !translated && glSummaryEligibleDims(dims)
+      ? glActivityBuckets(resolvedOrgId, {
+          minDate: null,
+          maxDate: to,
+          boundaries: [{ date: from, kind: "start" }],
+          bookId,
+        })
+      : null;
+  const cash = await reportDb.execute<{ opening: string; closing: string }>(
     cashBuckets
-      // Inception-to-date bank movement from the summary; the two report
-      // boundaries are the only months that fall back to the lines.
-      ? sql`
+      ? // Inception-to-date bank movement from the summary; the two report
+        // boundaries are the only months that fall back to the lines.
+        sql`
           select ${reportDb.censusColumn}, coalesce(sum(b.amount) filter (where b.d < ${from}), 0) as opening,
                  coalesce(sum(b.amount) filter (where b.d <= ${to}), 0) as closing
             from ${cashBuckets} b
@@ -454,26 +536,28 @@ export async function cashFlowIndirect(
               and ${excludePeriodEndJournals(sql`e.origin`)}
             join accounts a on a.id = l.account_id and a.org_id = l.org_id
            where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}`,
-  ));
+  );
   const openingCash = cash.rows[0]?.opening ?? ZERO;
   const closingCash = cash.rows[0]?.closing ?? ZERO;
   if (translated) {
-    const movement = (await reportDb.execute<{ amount: string }>(sql`
+    const movement =
+      (
+        await reportDb.execute<{ amount: string }>(sql`
       select ${reportDb.censusColumn},coalesce(round(sum(${flowAmount}),4),0)::text as amount
       from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
       join accounts a on a.org_id=l.org_id and a.id=l.account_id
       where l.org_id=${resolvedOrgId} and e.status in ('posted','reversed') and a.type='asset_bank'
         and l.posting_date >= ${from}::date and l.posting_date <= ${to}::date
         and e.posting_date between ${from}::date and ${to}::date
-        and e.book_id in ${statementBookIdsExpr(resolvedOrgId,bookId)} and ${dimWhere(dims)}
+        and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}
         and ${excludePeriodEndJournals(sql`e.origin`)}
-    `)).rows[0]?.amount ?? ZERO
-    const currencyEffect = decimalSubtract(decimalSubtract(closingCash,openingCash),movement)
-    netChange = decimalSubtract(netChange,fxEffectOnCash)
-    fxEffectOnCash = decimalSum([fxEffectOnCash,currencyEffect])
-    netChange = decimalSum([netChange,fxEffectOnCash])
+    `)
+      ).rows[0]?.amount ?? ZERO;
+    const currencyEffect = decimalSubtract(decimalSubtract(closingCash, openingCash), movement);
+    netChange = decimalSubtract(netChange, fxEffectOnCash);
+    fxEffectOnCash = decimalSum([fxEffectOnCash, currencyEffect]);
+    netChange = decimalSum([netChange, fxEffectOnCash]);
   }
-
 
   return {
     netIncome,

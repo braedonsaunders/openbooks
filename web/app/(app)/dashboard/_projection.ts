@@ -1,10 +1,19 @@
-import 'server-only'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import type { Authz } from '@/lib/authz'
-import { latestProjection, rebuildProjection, type LatestProjection } from '@/lib/analytics/latest-projection'
-import { analyticsCacheIdentity, analyticsPreviewKey } from '@/lib/analytics/preview-cache'
-import { WIDGETS } from './_widget-registry'
-import { loadDashboardMetrics, pruneDashboardMetrics, widgetReadsLiveMetrics, type DashboardMetrics } from './_metrics'
+import "server-only";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import type { Authz } from "@/lib/authz";
+import {
+  latestProjection,
+  rebuildProjection,
+  type LatestProjection,
+} from "@/lib/analytics/latest-projection";
+import { analyticsCacheIdentity, analyticsPreviewKey } from "@/lib/analytics/preview-cache";
+import { WIDGETS } from "./_widget-registry";
+import {
+  loadDashboardMetrics,
+  pruneDashboardMetrics,
+  widgetReadsLiveMetrics,
+  type DashboardMetrics,
+} from "./_metrics";
 
 /**
  * Dashboard tile figures answer from their latest projection.
@@ -19,13 +28,23 @@ import { loadDashboardMetrics, pruneDashboardMetrics, widgetReadsLiveMetrics, ty
  * the revision, so a new day re-reads every figure.
  */
 async function projectionIdentity(authz: Authz, group: readonly string[], locale: string) {
-  const [{ revision }, today] = await Promise.all([analyticsCacheIdentity(authz.user.orgId), businessToday(authz.user.orgId)])
-  const ids = [...group].sort()
+  const [{ revision }, today] = await Promise.all([
+    analyticsCacheIdentity(authz.user.orgId),
+    businessToday(authz.user.orgId),
+  ]);
+  const ids = [...group].sort();
   return {
-    key: analyticsPreviewKey(authz, 'dashboard-tiles', { user: authz.user.id, widgets: ids.join(',') }, locale, 'latest'),
+    key: analyticsPreviewKey(
+      authz,
+      "dashboard-tiles",
+      { user: authz.user.id, widgets: ids.join(",") },
+      locale,
+      "latest",
+    ),
     revision: `${revision}|${today}`,
-    build: async () => pruneDashboardMetrics(await loadDashboardMetrics(authz, ids, undefined, locale), ids),
-  }
+    build: async () =>
+      pruneDashboardMetrics(await loadDashboardMetrics(authz, ids, undefined, locale), ids),
+  };
 }
 
 export async function dashboardGroupProjection(
@@ -34,11 +53,15 @@ export async function dashboardGroupProjection(
   locale: string,
 ): Promise<LatestProjection<DashboardMetrics>> {
   if (group.some(widgetReadsLiveMetrics)) {
-    const observedAt = new Date().toISOString()
-    return { data: await loadDashboardMetrics(authz, group, undefined, locale), observedAt, refreshing: false }
+    const observedAt = new Date().toISOString();
+    return {
+      data: await loadDashboardMetrics(authz, group, undefined, locale),
+      observedAt,
+      refreshing: false,
+    };
   }
-  const { key, revision, build } = await projectionIdentity(authz, group, locale)
-  return latestProjection(key, revision, build)
+  const { key, revision, build } = await projectionIdentity(authz, group, locale);
+  return latestProjection(key, revision, build);
 }
 
 /** Rebuild the named tile groups the viewer may see; ids outside their set
@@ -51,12 +74,12 @@ export async function refreshDashboardGroups(
 ): Promise<number> {
   const visible = groups
     .map((group) => group.filter((id) => id in WIDGETS && allowed.has(id)))
-    .filter((group) => group.length > 0 && !group.some(widgetReadsLiveMetrics))
+    .filter((group) => group.length > 0 && !group.some(widgetReadsLiveMetrics));
   await Promise.all(
     visible.map(async (group) => {
-      const { key, revision, build } = await projectionIdentity(authz, group, locale)
-      await rebuildProjection(key, revision, build)
+      const { key, revision, build } = await projectionIdentity(authz, group, locale);
+      await rebuildProjection(key, revision, build);
     }),
-  )
-  return visible.length
+  );
+  return visible.length;
 }

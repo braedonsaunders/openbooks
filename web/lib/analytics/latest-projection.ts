@@ -44,7 +44,8 @@ function forget(key: string) {
 function remember(key: string, value: Stored) {
   forget(key);
   if (value.payload.length > MAX_PAYLOAD_BYTES) return;
-  while (local.size >= MAX_LOCAL || localBytes + value.payload.length > MAX_LOCAL_BYTES) forget(local.keys().next().value!);
+  while (local.size >= MAX_LOCAL || localBytes + value.payload.length > MAX_LOCAL_BYTES)
+    forget(local.keys().next().value!);
   local.set(key, value);
   localBytes += value.payload.length;
 }
@@ -80,8 +81,13 @@ export function encodeProjection(data: unknown): string | null {
   const payload = JSON.stringify(data, function (this: Record<string, unknown>, key, value) {
     const original = this[key];
     if (original instanceof Date) return { $date: original.toISOString() };
-    if (original instanceof Map || original instanceof Set || typeof original === "bigint") faithful = false;
-    if (Array.isArray(original) && original.some((item) => item === undefined || typeof item === "function")) faithful = false;
+    if (original instanceof Map || original instanceof Set || typeof original === "bigint")
+      faithful = false;
+    if (
+      Array.isArray(original) &&
+      original.some((item) => item === undefined || typeof item === "function")
+    )
+      faithful = false;
     return typeof value === "bigint" ? null : value;
   });
   return faithful ? payload : null;
@@ -89,7 +95,11 @@ export function encodeProjection(data: unknown): string | null {
 
 export function decodeProjection<T>(payload: string): T {
   return JSON.parse(payload, (_key, value) =>
-    value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && typeof value.$date === "string"
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    typeof value.$date === "string"
       ? new Date(value.$date)
       : value,
   ) as T;
@@ -114,7 +124,8 @@ export function rebuildProjection<T>(
         if (payload !== null) {
           const value: Stored = { version: 1, revision, observedAt: at, payload };
           remember(key, value);
-          if (token && payload.length <= MAX_PAYLOAD_BYTES) await publishSharedCache(key, token, JSON.stringify(value), RETENTION_MS);
+          if (token && payload.length <= MAX_PAYLOAD_BYTES)
+            await publishSharedCache(key, token, JSON.stringify(value), RETENTION_MS);
           return { data: decodeProjection<T>(payload), observedAt: at };
         }
         return { data, observedAt: at };
@@ -125,7 +136,11 @@ export function rebuildProjection<T>(
     building.set(key, work);
   }
   // Each caller receives its own copy: callers annotate what they answer.
-  return work.then((value) => ({ data: structuredClone(value.data), observedAt: value.observedAt, refreshing: false }));
+  return work.then((value) => ({
+    data: structuredClone(value.data),
+    observedAt: value.observedAt,
+    refreshing: false,
+  }));
 }
 
 /**
@@ -144,5 +159,9 @@ export async function latestProjection<T>(
   if (!retained(stored)) return rebuildProjection(key, revision, build, observedAt);
   remember(key, stored);
   const current = stored.revision === revision && ageOf(stored) < ANALYTICS_PREVIEW_FRESHNESS_MS;
-  return { data: decodeProjection<T>(stored.payload), observedAt: stored.observedAt, refreshing: !current };
+  return {
+    data: decodeProjection<T>(stored.payload),
+    observedAt: stored.observedAt,
+    refreshing: !current,
+  };
 }

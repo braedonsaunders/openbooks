@@ -8,9 +8,18 @@ import { mulDecimal } from "@openbooks/engine/money/money";
 // resolve until merge; a relative import binds this checkout everywhere.
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "@openbooks/engine/records/open-item-kinds";
 import { appliedLegAmountExpr, datedAppliedAmountSql } from "@openbooks/engine/records/balance-due";
-import { asOfPostedEntryLateral, openItemCandidateDocumentsSql, openItemCandidateLinesSql } from "@openbooks/engine/records/open-item-scopes";
+import {
+  asOfPostedEntryLateral,
+  openItemCandidateDocumentsSql,
+  openItemCandidateLinesSql,
+} from "@openbooks/engine/records/open-item-scopes";
 import { resolveOrgId } from "../org-scope";
-import { presentationCurrency, presentationRates, presentationSpotRatesSql, presentationAmountSql } from "../fx-presentation";
+import {
+  presentationCurrency,
+  presentationRates,
+  presentationSpotRatesSql,
+  presentationAmountSql,
+} from "../fx-presentation";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
 import { ZERO, compareAbsoluteDescending, decimalSubtract } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
@@ -101,7 +110,7 @@ export interface AgingResult {
  */
 export type AgingCurrencyBasis = "base" | "transaction";
 
-export type AgingBucket = "current" | "b1" | "b2" | "b3" | "b4"
+export type AgingBucket = "current" | "b1" | "b2" | "b3" | "b4";
 
 export interface AgingOptions {
   /** Default "base": the numbers booked to date, unchanged. */
@@ -186,7 +195,7 @@ interface OpenDocument {
   reference: string | null;
   due: string | null;
   ageBasisDate: string;
-  ageBasisSource: 'due_date' | 'posting_date' | 'document_date';
+  ageBasisSource: "due_date" | "posting_date" | "document_date";
   ageDays: number;
   docCurrency: string;
   txnCcy: string;
@@ -215,7 +224,10 @@ interface OpenDocument {
 const AP_NEGATIVE_KINDS = ["vendor_credit", "vendor_payment", "check"] as const;
 const AR_NEGATIVE_KINDS = ["customer_credit", "customer_payment"] as const;
 
-function agingKinds(side: AgingSide): { kinds: readonly string[]; negativeKinds: readonly string[] } {
+function agingKinds(side: AgingSide): {
+  kinds: readonly string[];
+  negativeKinds: readonly string[];
+} {
   // Population is the shared open-item kinds const (the same doorway as the
   // tiles/cockpits) plus this side's settlement documents, which post
   // open-item control legs when they relieve the balances above.
@@ -240,9 +252,8 @@ function openDocumentsSql(
   // where OOP reports actually post); the AR side admits asset_receivable.
   // Same scope object the dashboard tile reads — one shared answer to which
   // open items are payables, not a second list.
-  const accountScope = side === "ap"
-    ? apOpenAccountScope(sql`a`, orgId)
-    : arOpenAccountScope(sql`a`);
+  const accountScope =
+    side === "ap" ? apOpenAccountScope(sql`a`, orgId) : arOpenAccountScope(sql`a`);
   return sql`
     -- The open is reconstructed AS OF the report date — gross open-item
     -- lines minus applications dated on/before it — never the live cached
@@ -295,7 +306,10 @@ function openDocumentsSql(
        where d.org_id = ${orgId}
          and d.id in (${openItemCandidateDocumentsSql({ orgId, asOf, accounts: accountScope })})
          and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
-         and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
+         and d.kind in (${sql.join(
+           kinds.map((kind) => sql`${kind}`),
+           sql`, `,
+         )})
          and ${accountScope}
          and e.book_id in ${statementBookIdsExpr(orgId, scope?.bookId)}
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
@@ -310,9 +324,15 @@ function openDocumentsSql(
              -- open is its UNAPPLIED remainder (gross control leg minus dated
              -- applications), so a fully applied payment nets to zero and drops
              -- out alongside the bill it relieved.
-             (case when dl.kind in (${sql.join(negativeKinds.map((kind) => sql`${kind}`), sql`, `)}) then -1 else 1 end)
+             (case when dl.kind in (${sql.join(
+               negativeKinds.map((kind) => sql`${kind}`),
+               sql`, `,
+             )}) then -1 else 1 end)
                * (sum(dl.base_gross) - coalesce(sum(al.applied_base), 0)) as open_base,
-             (case when dl.kind in (${sql.join(negativeKinds.map((kind) => sql`${kind}`), sql`, `)}) then -1 else 1 end)
+             (case when dl.kind in (${sql.join(
+               negativeKinds.map((kind) => sql`${kind}`),
+               sql`, `,
+             )}) then -1 else 1 end)
                * (sum(dl.txn_gross) - coalesce(sum(al.applied_txn), 0)) as open_txn
         from doc_lines dl
         left join lateral (
@@ -349,16 +369,30 @@ function openDocumentsSql(
 }
 
 interface OpenDocumentSource extends Record<string, unknown> {
-  doc_id: string; kind: string; party_id: string | null; party_name: string | null;
-  reference: string | null; due: string | null; age_days: number;
-  age_basis_date: string; age_basis_source: OpenDocument['ageBasisSource'];
-  doc_currency: string; txn_ccy: string; func_ccy: string;
-  open_base: string; open_txn: string;
+  doc_id: string;
+  kind: string;
+  party_id: string | null;
+  party_name: string | null;
+  reference: string | null;
+  due: string | null;
+  age_days: number;
+  age_basis_date: string;
+  age_basis_source: OpenDocument["ageBasisSource"];
+  doc_currency: string;
+  txn_ccy: string;
+  func_ccy: string;
+  open_base: string;
+  open_txn: string;
 }
 
-async function openDocuments(...args: Parameters<typeof openDocumentsSql>): Promise<OpenDocument[]> {
-  const r = await db.execute<OpenDocumentSource>(sql`select * from (${openDocumentsSql(...args)}) document_rows
-    order by party_name nulls last, age_days desc, doc_id`, "objects");
+async function openDocuments(
+  ...args: Parameters<typeof openDocumentsSql>
+): Promise<OpenDocument[]> {
+  const r = await db.execute<OpenDocumentSource>(
+    sql`select * from (${openDocumentsSql(...args)}) document_rows
+    order by party_name nulls last, age_days desc, doc_id`,
+    "objects",
+  );
   return r.map((x) => ({
     docId: x.doc_id,
     kind: x.kind,
@@ -399,14 +433,17 @@ async function missingSpotCoverage(
 ): Promise<string[]> {
   const list = [...needed].filter((c) => c !== target);
   if (list.length === 0) return [];
-  const r = await db.execute<{ ccy: string }>(sql`
+  const r = await db.execute<{ ccy: string }>(
+    sql`
     select c as ccy from unnest(${"{" + list.join(",") + "}"}::text[]) as c
      where not exists (
        select 1 from fx_rates
         where org_id = ${orgId} and rate_type = 'spot' and as_of <= ${asOf}::date
           and ((from_currency = c and to_currency = ${target})
             or (from_currency = ${target} and to_currency = c))
-     )`, "objects");
+     )`,
+    "objects",
+  );
   return r.map((x) => x.ccy);
 }
 
@@ -430,7 +467,14 @@ export async function agingByParty(
   const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, negativeKinds, {
     bookId: opts?.bookId,
   });
-  const { residuals, unopenedLines } = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase, opts?.bookId);
+  const { residuals, unopenedLines } = await controlResiduals(
+    side,
+    asOf,
+    dims,
+    resolvedOrgId,
+    orgBase,
+    opts?.bookId,
+  );
   // A document currency with no spot must never block the BASE report (it
   // converts nothing through it): only request the legs this basis reads,
   // plus the functional legs the residual always needs.
@@ -450,15 +494,28 @@ export async function agingByParty(
       );
     }
   }
-  const convert = (native: string, from: string): ExactDecimal => convertOpen(native, from, target, rates);
+  const convert = (native: string, from: string): ExactDecimal =>
+    convertOpen(native, from, target, rates);
   const byParty = new Map<string | null, AgingRow>();
   for (const d of docs) {
-    const open = convert(basis === "transaction" ? d.openTxn : d.openBase, basis === "transaction" ? d.txnCcy : d.funcCcy);
+    const open = convert(
+      basis === "transaction" ? d.openTxn : d.openBase,
+      basis === "transaction" ? d.txnCcy : d.funcCcy,
+    );
     if (decimalCmp(open, ZERO) === 0) continue;
     const bucket = bucketOf(d.ageDays);
     let row = byParty.get(d.partyId);
     if (!row) {
-      row = { partyId: d.partyId, partyName: d.partyName, current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO };
+      row = {
+        partyId: d.partyId,
+        partyName: d.partyName,
+        current: ZERO,
+        b1: ZERO,
+        b2: ZERO,
+        b3: ZERO,
+        b4: ZERO,
+        total: ZERO,
+      };
       byParty.set(d.partyId, row);
     }
     row[bucket] = decimalAdd(row[bucket], open);
@@ -468,7 +525,11 @@ export async function agingByParty(
   await foldControlResidual(side, resolvedOrgId, rows, docs, residuals, unopenedLines, convert);
   // Reconciling lines sort after the document rows; within each group the
   // rows read in abs(total)-descending order.
-  rows.sort((x, y) => Number(x.reconciling === true) - Number(y.reconciling === true) || compareAbsoluteDescending(x.total, y.total));
+  rows.sort(
+    (x, y) =>
+      Number(x.reconciling === true) - Number(y.reconciling === true) ||
+      compareAbsoluteDescending(x.total, y.total),
+  );
   const totals = rows.reduce(
     (a, r) => ({
       current: decimalAdd(a.current, r.current),
@@ -549,7 +610,10 @@ async function controlResiduals(
 ): Promise<{ residuals: ControlResidual[]; unopenedLines: () => Promise<UnopenedControlLine[]> }> {
   const noLines = async (): Promise<UnopenedControlLine[]> => [];
   if (
-    dims?.departmentId || dims?.projectId || dims?.locationId || dims?.classId ||
+    dims?.departmentId ||
+    dims?.projectId ||
+    dims?.locationId ||
+    dims?.classId ||
     (dims?.segments && Object.keys(dims.segments).length > 0)
   ) {
     return { residuals: [], unopenedLines: noLines };
@@ -560,10 +624,10 @@ async function controlResiduals(
   // residual instead of being netted back off it; the AR control excludes
   // the designated employee-receivable account, whose personal balances age
   // nowhere by design and must not land as document-less AR rows.
-  const controlScope = side === "ap"
-    ? apOpenAccountScope(sql`a`, orgId)
-    : arResidualAccountScope(sql`a`, orgId);
-  const control = await db.execute<{ party_id: string | null; func_ccy: string; bal: string }>(sql`
+  const controlScope =
+    side === "ap" ? apOpenAccountScope(sql`a`, orgId) : arResidualAccountScope(sql`a`, orgId);
+  const control = await db.execute<{ party_id: string | null; func_ccy: string; bal: string }>(
+    sql`
     select l.party_id, coalesce(sub.base_currency, ${orgBase}) as func_ccy, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
@@ -575,7 +639,9 @@ async function controlResiduals(
      -- Ordinal, not a repeated expression: the SELECT's coalesce carries a
      -- different bind parameter per occurrence, which GROUP BY will not match.
      group by l.party_id, 2
-  `, "objects");
+  `,
+    "objects",
+  );
   const residuals = control.map((c) => ({ partyId: c.party_id, funcCcy: c.func_ccy, bal: c.bal }));
   // The journal-entry listing is read only once a reconciling balance is
   // known to exist (see foldControlResidual), so a tied subledger pays nothing.
@@ -601,14 +667,20 @@ async function unopenedControlLines(
   orgBase: string,
   bookId?: string | null,
 ): Promise<UnopenedControlLine[]> {
-  const controlScope = side === "ap"
-    ? apOpenAccountScope(sql`a`, orgId)
-    : arResidualAccountScope(sql`a`, orgId);
+  const controlScope =
+    side === "ap" ? apOpenAccountScope(sql`a`, orgId) : arResidualAccountScope(sql`a`, orgId);
   const { kinds } = agingKinds(side);
   const r = await db.execute<{
-    party_id: string | null; party_name: string | null; entry_id: string; entry_number: string | null;
-    posting_date: string; memo: string | null; func_ccy: string; remainder: string;
-  }>(sql`
+    party_id: string | null;
+    party_name: string | null;
+    entry_id: string;
+    entry_number: string | null;
+    posting_date: string;
+    memo: string | null;
+    func_ccy: string;
+    remainder: string;
+  }>(
+    sql`
     with control_lines as (
       select l.id as line_id, l.amount, l.party_id, e.id as entry_id, e.entry_number,
              e.posting_date::text as posting_date, e.memo,
@@ -634,7 +706,10 @@ async function unopenedControlLines(
           where d.org_id = ${orgId}
             and (d.id = e.source_document_id or d.posted_entry_id = e.id)
             and je.id = e.id
-            and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
+            and d.kind in (${sql.join(
+              kinds.map((kind) => sql`${kind}`),
+              sql`, `,
+            )})
             and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
             and coalesce(d.posting_date, d.document_date) <= ${asOf}
             and ${dimWhere(dims, sql`d`)}
@@ -651,7 +726,9 @@ async function unopenedControlLines(
      group by rm.party_id, p.display_name, rm.entry_id, rm.entry_number, rm.posting_date, rm.memo, rm.func_ccy
     having sum(rm.amount - (case when rm.amount < 0 then -1 else 1 end) * rm.consumed) <> 0
      order by rm.posting_date, rm.entry_number nulls last, rm.entry_id
-  `, "objects");
+  `,
+    "objects",
+  );
   return r.map((x) => ({
     partyId: x.party_id,
     partyName: x.party_name,
@@ -687,10 +764,16 @@ async function foldControlResidual(
   for (const c of residuals) {
     // AP control is credit-normal; present it positive like the document opens.
     const presented = (side === "ap" ? decimalNeg(c.bal) : c.bal) as ExactDecimal;
-    const residual = decimalSubtract(presented, docBase.get(`${c.partyId ?? "\0"}‖${c.funcCcy}`) ?? ZERO);
+    const residual = decimalSubtract(
+      presented,
+      docBase.get(`${c.partyId ?? "\0"}‖${c.funcCcy}`) ?? ZERO,
+    );
     if (decimalCmp(residual, ZERO) === 0) continue;
     const key = c.partyId;
-    residualByParty.set(key, decimalAdd(residualByParty.get(key) ?? ZERO, convert(residual, c.funcCcy)));
+    residualByParty.set(
+      key,
+      decimalAdd(residualByParty.get(key) ?? ZERO, convert(residual, c.funcCcy)),
+    );
   }
   if (residualByParty.size === 0) return;
   const entriesByParty = new Map<string | null, UnopenedControlEntry[]>();
@@ -710,17 +793,20 @@ async function foldControlResidual(
   const partyIds = [...residualByParty.keys()].filter((id): id is string => id !== null);
   const names = new Map<string, string | null>();
   if (partyIds.length > 0) {
-    const named = await db.execute<{ id: string; display_name: string | null }>(sql`
+    const named = await db.execute<{ id: string; display_name: string | null }>(
+      sql`
       select p.id, p.display_name from parties p
        where p.org_id = ${orgId} and p.id = any(${`{${partyIds.join(",")}}`}::uuid[])
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const n of named) names.set(n.id, n.display_name);
   }
   for (const [partyId, residual] of residualByParty) {
     if (decimalCmp(residual, ZERO) === 0) continue;
     rows.push({
       partyId,
-      partyName: partyId === null ? null : names.get(partyId) ?? null,
+      partyName: partyId === null ? null : (names.get(partyId) ?? null),
       current: residual,
       b1: ZERO,
       b2: ZERO,
@@ -738,46 +824,52 @@ async function foldControlResidual(
 // ---------------------------------------------------------------------------
 
 export interface AgingDetailRow {
-  docId: string
-  docKind: string
-  partyId: string | null
-  partyName: string | null
-  reference: string | null
-  dueDate: string | null
-  ageBasisDate: string
-  ageBasisSource: OpenDocument['ageBasisSource']
-  ageDays: number
-  bucket: AgingBucket
-  open: ExactDecimal
+  docId: string;
+  docKind: string;
+  partyId: string | null;
+  partyName: string | null;
+  reference: string | null;
+  dueDate: string | null;
+  ageBasisDate: string;
+  ageBasisSource: OpenDocument["ageBasisSource"];
+  ageDays: number;
+  bucket: AgingBucket;
+  open: ExactDecimal;
   /** The document's own currency, always shown whatever basis is selected. */
-  docCurrency: string
+  docCurrency: string;
   /** The open rebuilt in the document's own currency (unconverted) — the
    * "what the customer actually owes" leg, always shown alongside `open`. */
-  txnOpen: ExactDecimal
+  txnOpen: ExactDecimal;
 }
 export interface AgingDetailResult {
-  rows: AgingDetailRow[]
-  totals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal }
-  asOf: string
-  basis: AgingCurrencyBasis
-  reportingCurrency: string
+  rows: AgingDetailRow[];
+  totals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal };
+  asOf: string;
+  basis: AgingCurrencyBasis;
+  reportingCurrency: string;
 }
 
-const AGING_BUCKET_KEYS = ["current", "b1", "b2", "b3", "b4"] as const satisfies readonly AgingBucket[]
+const AGING_BUCKET_KEYS = [
+  "current",
+  "b1",
+  "b2",
+  "b3",
+  "b4",
+] as const satisfies readonly AgingBucket[];
 
 export function bucketOf(age: number): AgingBucket {
-  return AGING_BUCKET_KEYS[agingBucketIndex(age)]
+  return AGING_BUCKET_KEYS[agingBucketIndex(age)];
 }
 
 /** SQL predicate that matches `bucketOf` exactly — including `b3` as age < 90. */
 function agingBucketSql(asOf: string, bucket?: AgingBucket) {
-  if (!bucket) return sql`true`
-  const age = sql`(${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date))`
-  if (bucket === "current") return sql`${age} <= 0`
-  if (bucket === "b1") return sql`${age} > 0 and ${age} <= 30`
-  if (bucket === "b2") return sql`${age} > 30 and ${age} <= 60`
-  if (bucket === "b3") return sql`${age} > 60 and ${age} < 90`
-  return sql`${age} >= 90`
+  if (!bucket) return sql`true`;
+  const age = sql`(${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date))`;
+  if (bucket === "current") return sql`${age} <= 0`;
+  if (bucket === "b1") return sql`${age} > 0 and ${age} <= 30`;
+  if (bucket === "b2") return sql`${age} > 30 and ${age} <= 60`;
+  if (bucket === "b3") return sql`${age} > 60 and ${age} < 90`;
+  return sql`${age} >= 90`;
 }
 
 /**
@@ -797,7 +889,7 @@ export async function agingDetail(
   // Same shared population as the summary above — detail and summary always tie.
   // The account gate rides inside the shared rebuild, so detail rows inherit
   // it: personal lines never surface here either.
-  const { kinds, negativeKinds } = agingKinds(side)
+  const { kinds, negativeKinds } = agingKinds(side);
   const basis: AgingCurrencyBasis = opts?.basis ?? "base";
   const orgBase = await presentationCurrency(resolvedOrgId);
   const target = opts?.reportingCurrency ?? orgBase;
@@ -827,13 +919,13 @@ export async function agingDetail(
       );
     }
   }
-  return presentAgingDetail(docs, basis, target, asOf, rates)
+  return presentAgingDetail(docs, basis, target, asOf, rates);
 }
 
 export interface AgingDetailPageResult extends AgingDetailResult {
-  total: number
-  page: number
-  perPage: number
+  total: number;
+  page: number;
+  perPage: number;
 }
 
 /** Rebuild once in SQL, retain exact full-scope totals, and transfer only the
@@ -846,26 +938,43 @@ export async function agingDetailPage(
   opts: AgingOptions,
   window: { page: number; perPage: number },
 ): Promise<AgingDetailPageResult> {
-  if (!Number.isSafeInteger(window.page) || window.page < 1
-    || !Number.isSafeInteger(window.perPage) || window.perPage < 1 || window.perPage > 500
-    || !Number.isSafeInteger((window.page - 1) * window.perPage)) {
-    throw new RangeError('Aging pages require a positive page and a page size from 1 to 500.')
+  if (
+    !Number.isSafeInteger(window.page) ||
+    window.page < 1 ||
+    !Number.isSafeInteger(window.perPage) ||
+    window.perPage < 1 ||
+    window.perPage > 500 ||
+    !Number.isSafeInteger((window.page - 1) * window.perPage)
+  ) {
+    throw new RangeError("Aging pages require a positive page and a page size from 1 to 500.");
   }
-  const resolvedOrgId = await resolveOrgId(orgId)
-  const orgBase = await presentationCurrency(resolvedOrgId)
-  const basis = opts.basis ?? 'base'
-  const target = opts.reportingCurrency ?? orgBase
-  const currency = basis === 'transaction' ? sql`od.txn_ccy` : sql`od.func_ccy`
-  const amount = basis === 'transaction' ? sql`od.open_txn` : sql`od.open_base`
+  const resolvedOrgId = await resolveOrgId(orgId);
+  const orgBase = await presentationCurrency(resolvedOrgId);
+  const basis = opts.basis ?? "base";
+  const target = opts.reportingCurrency ?? orgBase;
+  const currency = basis === "transaction" ? sql`od.txn_ccy` : sql`od.func_ccy`;
+  const amount = basis === "transaction" ? sql`od.open_txn` : sql`od.open_base`;
   // The same shared population as every other aging reader — a paged detail
   // row can never disagree with the summary buckets per document.
-  const { kinds: pageKinds, negativeKinds: pageNegativeKinds } = agingKinds(side)
+  const { kinds: pageKinds, negativeKinds: pageNegativeKinds } = agingKinds(side);
   const result = await db.execute<{
-    rows: AgingDetailRow[] | null; total: string; totals: Record<string, string>; missing: string[] | null
-  }>(sql`
+    rows: AgingDetailRow[] | null;
+    total: string;
+    totals: Record<string, string>;
+    missing: string[] | null;
+  }>(
+    sql`
     with open_document_rows as materialized (
-      ${openDocumentsSql(side, asOf, dims, resolvedOrgId, orgBase,
-        pageKinds, pageNegativeKinds, opts)}
+      ${openDocumentsSql(
+        side,
+        asOf,
+        dims,
+        resolvedOrgId,
+        orgBase,
+        pageKinds,
+        pageNegativeKinds,
+        opts,
+      )}
     ), currencies as (
       select distinct ${currency} as ccy from open_document_rows od where ${currency} <> ${target}
     ), rates as (
@@ -902,12 +1011,27 @@ export async function agingDetailPage(
       (select array_agg(distinct source_currency order by source_currency)
         from presented where source_currency <> ${target} and presented_open is null) as missing
     from visible
-  `, "objects")
-  const data = result[0]
-  if (!data) throw new Error('The aging query did not return its totals.')
-  if (data.missing?.length) throw new AgingRatesUnavailableError(data.missing, target, asOf)
-  const totals = Object.fromEntries(['current', 'b1', 'b2', 'b3', 'b4', 'total'].map((key) => [key, decimalAdd(ZERO, data.totals[key]!)])) as AgingDetailResult['totals']
-  return { rows: data.rows ?? [], total: Number(data.total), totals, asOf, basis, reportingCurrency: target, ...window }
+  `,
+    "objects",
+  );
+  const data = result[0];
+  if (!data) throw new Error("The aging query did not return its totals.");
+  if (data.missing?.length) throw new AgingRatesUnavailableError(data.missing, target, asOf);
+  const totals = Object.fromEntries(
+    ["current", "b1", "b2", "b3", "b4", "total"].map((key) => [
+      key,
+      decimalAdd(ZERO, data.totals[key]!),
+    ]),
+  ) as AgingDetailResult["totals"];
+  return {
+    rows: data.rows ?? [],
+    total: Number(data.total),
+    totals,
+    asOf,
+    basis,
+    reportingCurrency: target,
+    ...window,
+  };
 }
 
 function presentAgingDetail(
@@ -917,22 +1041,43 @@ function presentAgingDetail(
   asOf: string,
   rates: Map<string, string>,
 ): AgingDetailResult {
-  const totals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal } = { current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO }
-  const rows: AgingDetailRow[] = []
+  const totals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal } = {
+    current: ZERO,
+    b1: ZERO,
+    b2: ZERO,
+    b3: ZERO,
+    b4: ZERO,
+    total: ZERO,
+  };
+  const rows: AgingDetailRow[] = [];
   for (const d of docs) {
-    const open = convertOpen(basis === "transaction" ? d.openTxn : d.openBase, basis === "transaction" ? d.txnCcy : d.funcCcy, target, rates)
+    const open = convertOpen(
+      basis === "transaction" ? d.openTxn : d.openBase,
+      basis === "transaction" ? d.txnCcy : d.funcCcy,
+      target,
+      rates,
+    );
     if (decimalCmp(open, ZERO) === 0) continue;
-    const bucket = bucketOf(d.ageDays)
-    totals[bucket] = decimalAdd(totals[bucket], open)
-    totals.total = decimalAdd(totals.total, open)
+    const bucket = bucketOf(d.ageDays);
+    totals[bucket] = decimalAdd(totals[bucket], open);
+    totals.total = decimalAdd(totals.total, open);
     rows.push({
-      docId: d.docId, docKind: d.kind, partyId: d.partyId, partyName: d.partyName,
-      reference: d.reference, dueDate: d.due, ageBasisDate: d.ageBasisDate, ageBasisSource: d.ageBasisSource,
-      ageDays: d.ageDays, bucket, open,
-      docCurrency: d.docCurrency, txnOpen: d.openTxn as ExactDecimal,
-    })
+      docId: d.docId,
+      docKind: d.kind,
+      partyId: d.partyId,
+      partyName: d.partyName,
+      reference: d.reference,
+      dueDate: d.due,
+      ageBasisDate: d.ageBasisDate,
+      ageBasisSource: d.ageBasisSource,
+      ageDays: d.ageDays,
+      bucket,
+      open,
+      docCurrency: d.docCurrency,
+      txnOpen: d.openTxn as ExactDecimal,
+    });
   }
-  return { rows, totals, asOf, basis, reportingCurrency: target }
+  return { rows, totals, asOf, basis, reportingCurrency: target };
 }
 
 /**
@@ -954,7 +1099,14 @@ export async function agingSummaryAndDetail(
   const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, negativeKinds, {
     bookId: opts?.bookId,
   });
-  const { residuals, unopenedLines } = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase, opts?.bookId);
+  const { residuals, unopenedLines } = await controlResiduals(
+    side,
+    asOf,
+    dims,
+    resolvedOrgId,
+    orgBase,
+    opts?.bookId,
+  );
   const needed = new Set<string>();
   for (const d of docs) needed.add(basis === "transaction" ? d.txnCcy : d.funcCcy);
   for (const res of residuals) needed.add(res.funcCcy);
@@ -971,15 +1123,28 @@ export async function agingSummaryAndDetail(
       );
     }
   }
-  const convert = (native: string, from: string): ExactDecimal => convertOpen(native, from, target, rates);
+  const convert = (native: string, from: string): ExactDecimal =>
+    convertOpen(native, from, target, rates);
   const byParty = new Map<string | null, AgingRow>();
   for (const d of docs) {
-    const open = convert(basis === "transaction" ? d.openTxn : d.openBase, basis === "transaction" ? d.txnCcy : d.funcCcy);
+    const open = convert(
+      basis === "transaction" ? d.openTxn : d.openBase,
+      basis === "transaction" ? d.txnCcy : d.funcCcy,
+    );
     if (decimalCmp(open, ZERO) === 0) continue;
     const bucket = bucketOf(d.ageDays);
     let row = byParty.get(d.partyId);
     if (!row) {
-      row = { partyId: d.partyId, partyName: d.partyName, current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO };
+      row = {
+        partyId: d.partyId,
+        partyName: d.partyName,
+        current: ZERO,
+        b1: ZERO,
+        b2: ZERO,
+        b3: ZERO,
+        b4: ZERO,
+        total: ZERO,
+      };
       byParty.set(d.partyId, row);
     }
     row[bucket] = decimalAdd(row[bucket], open);
@@ -987,7 +1152,11 @@ export async function agingSummaryAndDetail(
   }
   const rows: AgingRow[] = [...byParty.values()];
   await foldControlResidual(side, resolvedOrgId, rows, docs, residuals, unopenedLines, convert);
-  rows.sort((x, y) => Number(x.reconciling === true) - Number(y.reconciling === true) || compareAbsoluteDescending(x.total, y.total));
+  rows.sort(
+    (x, y) =>
+      Number(x.reconciling === true) - Number(y.reconciling === true) ||
+      compareAbsoluteDescending(x.total, y.total),
+  );
   const totals = rows.reduce(
     (a, r) => ({
       current: decimalAdd(a.current, r.current),
@@ -1026,8 +1195,10 @@ export async function agingCurrenciesInScope(
   const baseCurrency = await presentationCurrency(resolvedOrgId);
   // A currency is offered when a document in it can still be open on the
   // date: the report in any other currency has no rows to show.
-  const accountScope = side === "ap" ? apOpenAccountScope(sql`a`, resolvedOrgId) : arOpenAccountScope(sql`a`);
-  const r = await db.execute<{ ccy: string }>(sql`
+  const accountScope =
+    side === "ap" ? apOpenAccountScope(sql`a`, resolvedOrgId) : arOpenAccountScope(sql`a`);
+  const r = await db.execute<{ ccy: string }>(
+    sql`
     select distinct d.currency as ccy
       from documents d
       join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
@@ -1035,11 +1206,16 @@ export async function agingCurrenciesInScope(
      where d.org_id = ${resolvedOrgId}
        and d.id in (${openItemCandidateDocumentsSql({ orgId: resolvedOrgId, asOf, accounts: accountScope })})
        and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
-       and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
+       and d.kind in (${sql.join(
+         kinds.map((kind) => sql`${kind}`),
+         sql`, `,
+       )})
        and coalesce(d.posting_date, d.document_date) <= ${asOf}
        and je.book_id in ${statementBookIdsExpr(resolvedOrgId)}
        and ${dimWhere(dims, sql`d`)}
-  `, "objects");
+  `,
+    "objects",
+  );
   const inScope = [...new Set(r.map((x) => x.ccy))].sort();
   return {
     baseCurrency,

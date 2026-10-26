@@ -1,253 +1,536 @@
-'use client'
+"use client";
 
-import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
-import { ANALYTICS_TABS } from '../../../../lib/analytics/dashboard-tabs'
+import { useAnalyticsTab, AnalyticsTabContent } from "../use-analytics-tab";
+import { ANALYTICS_TABS } from "../../../../lib/analytics/dashboard-tabs";
 
-import { RecordTabs } from '@/components/module-home/record-tabs'
+import { RecordTabs } from "@/components/module-home/record-tabs";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
-import { useMemo, useState } from 'react'
-import { useLocale, useTranslations } from 'next-intl'
-import { countLabel, decimalLabel, formatPercent01 } from '@/lib/format'
 import {
-  AlertTriangle, ArrowDown, ArrowUp, BarChart3, Bolt, Bug, CalendarRange, ChartArea,
-  CheckCircle2, Coins, Flame, Ghost, Info, Layers, Lightbulb, Mountain,
-  PieChart as PieIcon, Puzzle, Search, SlidersHorizontal, Snowflake, Target, TrendingDown,
-  TrendingUp, UserRound, PiggyBank, Gauge as GaugeIcon, Download,
-} from 'lucide-react'
-import { cn, Select, Badge } from '@openbooks/ui'
-import { cmp as compareMoney } from '@openbooks/engine/money/money'
-import type { SpendVelocityData, VelocityRow } from '../../../../lib/analytics/spend-velocity-data'
-import { KpiCard } from '../_ui/KpiCard'
-import { Panel } from '../_ui/Panel'
-import { Donut, Chart, TrendChart } from '../_ui/charts'
-import { DrillDrawer } from '../_ui/DrillDrawer'
-import { ConfigEditor } from '../_ui/ConfigEditor'
-import { useBusinessToday } from '../../../../components/business-date-provider'
-import { exportCsv } from '../_ui/exportCsv'
-import { escapeTooltipHtml, useAnalyticsMoney, toChartNumber } from '../_ui/format'
-import { InteractiveTableRow } from '@/components/interactive-table-row'
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "../../reports/ReportTable";
+import { useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { countLabel, decimalLabel, formatPercent01 } from "@/lib/format";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  BarChart3,
+  Bolt,
+  Bug,
+  CalendarRange,
+  ChartArea,
+  CheckCircle2,
+  Coins,
+  Flame,
+  Ghost,
+  Info,
+  Layers,
+  Lightbulb,
+  Mountain,
+  PieChart as PieIcon,
+  Puzzle,
+  Search,
+  SlidersHorizontal,
+  Snowflake,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  UserRound,
+  PiggyBank,
+  Gauge as GaugeIcon,
+  Download,
+} from "lucide-react";
+import { cn, Select, Badge } from "@openbooks/ui";
+import { cmp as compareMoney } from "@openbooks/engine/money/money";
+import type { SpendVelocityData, VelocityRow } from "../../../../lib/analytics/spend-velocity-data";
+import { KpiCard } from "../_ui/KpiCard";
+import { Panel } from "../_ui/Panel";
+import { Donut, Chart, TrendChart } from "../_ui/charts";
+import { DrillDrawer } from "../_ui/DrillDrawer";
+import { ConfigEditor } from "../_ui/ConfigEditor";
+import { useBusinessToday } from "../../../../components/business-date-provider";
+import { exportCsv } from "../_ui/exportCsv";
+import { escapeTooltipHtml, useAnalyticsMoney, toChartNumber } from "../_ui/format";
+import { InteractiveTableRow } from "@/components/interactive-table-row";
 
 /* ------------------------------------------------------------------ helpers */
 
 // 'expenses' moved out: the expense-report analysis now lives on the /expenses dashboard.
-const TABS = ANALYTICS_TABS['spend-velocity']
+const TABS = ANALYTICS_TABS["spend-velocity"];
 /** Velocity pill colouring from the org's own high/medium thresholds. */
 function velTone(v: number, hi: number, med: number) {
-  if (v > hi) return 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400'
-  if (v > med) return 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400'
-  if (v < -med) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400'
-  return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+  if (v > hi) return "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400";
+  if (v > med) return "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400";
+  if (v < -med)
+    return "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400";
+  return "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
 }
 
 function VelocityPill({ v, hi, med }: { v: number | null; hi: number; med: number }) {
-  const locale = useLocale()
-  if (v === null) return <span className="text-xs text-slate-300">—</span>
+  const locale = useLocale();
+  if (v === null) return <span className="text-xs text-slate-300">—</span>;
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums', velTone(v, hi, med))}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
+        velTone(v, hi, med),
+      )}
+    >
       {v >= 0 ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
       {formatPercent01(Math.abs(v) / 100, locale, 1)}
     </span>
-  )
+  );
 }
 
 /** Acceleration indicator from the org's own mild/strong thresholds. */
 function Accel({ a, mild, strong }: { a: number | null; mild: number; strong: number }) {
-  const locale = useLocale()
-  if (a === null) return <span className="text-xs text-slate-300">—</span>
-  const tone = a > strong ? 'text-rose-600 dark:text-rose-400' : a > mild ? 'text-amber-600 dark:text-amber-400'
-    : a < -strong ? 'text-emerald-600 dark:text-emerald-400' : a < -mild ? 'text-sky-600 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'
-  return <span className={cn('text-xs font-semibold tabular-nums', tone)}>{a >= 0 ? '+' : '−'}{formatPercent01(Math.abs(a) / 100, locale, 1)}</span>
+  const locale = useLocale();
+  if (a === null) return <span className="text-xs text-slate-300">—</span>;
+  const tone =
+    a > strong
+      ? "text-rose-600 dark:text-rose-400"
+      : a > mild
+        ? "text-amber-600 dark:text-amber-400"
+        : a < -strong
+          ? "text-emerald-600 dark:text-emerald-400"
+          : a < -mild
+            ? "text-sky-600 dark:text-sky-400"
+            : "text-slate-400 dark:text-slate-500";
+  return (
+    <span className={cn("text-xs font-semibold tabular-nums", tone)}>
+      {a >= 0 ? "+" : "−"}
+      {formatPercent01(Math.abs(a) / 100, locale, 1)}
+    </span>
+  );
 }
 
-const TREND_BADGE_CLS: Record<VelocityRow['trend'], string> = {
-  accelerating: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400',
-  high: 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400',
-  rising: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400',
-  declining: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400',
-  stable: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-  new: 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400',
-}
+const TREND_BADGE_CLS: Record<VelocityRow["trend"], string> = {
+  accelerating: "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400",
+  high: "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400",
+  rising: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400",
+  declining: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400",
+  stable: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+  new: "bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400",
+};
 
 /** Pure-SVG sparkline for compact table cells (60×20). */
 function Spark({ values }: { values: number[] }) {
-  if (values.length < 2) return <span className="text-xs text-slate-300">—</span>
-  const min = Math.min(...values), max = Math.max(...values)
-  const range = max - min || 1
-  const w = 64, h = 20
-  const pts = values.map((v, i) => `${(i / (values.length - 1)) * w},${h - 2 - ((v - min) / range) * (h - 4)}`).join(' ')
+  if (values.length < 2) return <span className="text-xs text-slate-300">—</span>;
+  const min = Math.min(...values),
+    max = Math.max(...values);
+  const range = max - min || 1;
+  const w = 64,
+    h = 20;
+  const pts = values
+    .map((v, i) => `${(i / (values.length - 1)) * w},${h - 2 - ((v - min) / range) * (h - 4)}`)
+    .join(" ");
   return (
     <svg width={w} height={h} className="opacity-80">
       <polyline points={pts} fill="none" stroke="#6366f1" strokeWidth="1.5" />
     </svg>
-  )
+  );
 }
 
 /** Health gauge (Risk-meter): score 0-100 → colour + grade, from the org's own grade cutoffs. Muted (slate) while omitted detectors caveat the score. */
-function HealthGauge({ score, grade, b, c, d, notice, muted }: { score: number; grade: string; b: number; c: number; d: number; notice?: string; muted?: boolean }) {
-  const t = useTranslations('analytics.spendVelocity')
-  const color = muted ? '#64748b' : score >= b ? '#10b981' : score >= c ? '#f59e0b' : score >= d ? '#f97316' : '#ef4444'
-  const label = score >= b ? t('health.healthy') : score >= c ? t('health.watch') : score >= d ? t('health.elevated') : t('health.atRisk')
-  const arcLength = 141.37
-  const offset = arcLength * (1 - Math.min(score, 100) / 100)
+function HealthGauge({
+  score,
+  grade,
+  b,
+  c,
+  d,
+  notice,
+  muted,
+}: {
+  score: number;
+  grade: string;
+  b: number;
+  c: number;
+  d: number;
+  notice?: string;
+  muted?: boolean;
+}) {
+  const t = useTranslations("analytics.spendVelocity");
+  const color = muted
+    ? "#64748b"
+    : score >= b
+      ? "#10b981"
+      : score >= c
+        ? "#f59e0b"
+        : score >= d
+          ? "#f97316"
+          : "#ef4444";
+  const label =
+    score >= b
+      ? t("health.healthy")
+      : score >= c
+        ? t("health.watch")
+        : score >= d
+          ? t("health.elevated")
+          : t("health.atRisk");
+  const arcLength = 141.37;
+  const offset = arcLength * (1 - Math.min(score, 100) / 100);
   return (
     <div className="flex h-full items-center gap-3 rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <svg width="92" height="52" viewBox="0 0 100 55" className="shrink-0">
-        <path d="M 5 50 A 45 45 0 0 1 95 50" fill="none" stroke="currentColor" strokeWidth="10" strokeLinecap="round" className="text-slate-200 dark:text-slate-700" />
-        <path d="M 5 50 A 45 45 0 0 1 95 50" fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" strokeDasharray={arcLength} strokeDashoffset={offset} style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
+        <path
+          d="M 5 50 A 45 45 0 0 1 95 50"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="10"
+          strokeLinecap="round"
+          className="text-slate-200 dark:text-slate-700"
+        />
+        <path
+          d="M 5 50 A 45 45 0 0 1 95 50"
+          fill="none"
+          stroke={color}
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={arcLength}
+          strokeDashoffset={offset}
+          style={{ transition: "stroke-dashoffset 0.5s ease" }}
+        />
       </svg>
       <div className="min-w-0">
-        <p className="text-xl font-bold tabular-nums" style={{ color }}>{score} <span className="text-sm">({grade})</span></p>
-        <p className="text-[10px] font-bold tracking-wider" style={{ color }}>{label}</p>
-        <p className="text-[10px] text-slate-400 dark:text-slate-500">{t('health.caption')}</p>
-        {notice ? <p className="mt-1 text-[10px] leading-snug text-slate-400 dark:text-slate-500">{notice}</p> : null}
+        <p className="text-xl font-bold tabular-nums" style={{ color }}>
+          {score} <span className="text-sm">({grade})</span>
+        </p>
+        <p className="text-[10px] font-bold tracking-wider" style={{ color }}>
+          {label}
+        </p>
+        <p className="text-[10px] text-slate-400 dark:text-slate-500">{t("health.caption")}</p>
+        {notice ? (
+          <p className="mt-1 text-[10px] leading-snug text-slate-400 dark:text-slate-500">
+            {notice}
+          </p>
+        ) : null}
       </div>
     </div>
-  )
+  );
 }
 
 /* ------------------------------------------------------------ drill drawer */
 
-type Drill = { kind: 'account' | 'vendor'; id: string; name: string } | null
+type Drill = { kind: "account" | "vendor"; id: string; name: string } | null;
 
 /* ------------------------------------------------------------------- shell */
 
-export function SpendVelocityView({ data: initialData, canConfigure }: { data: SpendVelocityData; canConfigure?: boolean }) {
-  const t = useTranslations('analytics.spendVelocity')
-  const locale = useLocale()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: number | string) => fmtMoney(n, { compact: true })
-  const read = useAnalyticsTab('spend-velocity', { data: initialData }, TABS)
-  const { tab, setTab } = read
-  const { data } = read.props
-  const [drill, setDrill] = useState<Drill>(null)
-  const s = data.summary
+export function SpendVelocityView({
+  data: initialData,
+  canConfigure,
+}: {
+  data: SpendVelocityData;
+  canConfigure?: boolean;
+}) {
+  const t = useTranslations("analytics.spendVelocity");
+  const locale = useLocale();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: number | string) => fmtMoney(n, { compact: true });
+  const read = useAnalyticsTab("spend-velocity", { data: initialData }, TABS);
+  const { tab, setTab } = read;
+  const { data } = read.props;
+  const [drill, setDrill] = useState<Drill>(null);
+  const s = data.summary;
 
-  const vel = s.avgVelocity
+  const vel = s.avgVelocity;
   // Detectors the score and alert count omit still name their remedy here:
   // a clean-looking headline must never hide an unconfigured detector.
-  const caveat = data.summary.unconfiguredDetectors
-    .map((key) => (key === 'fragmentation' ? data.fragmentation.summary.reason : data.commitmentCliff.summary.reason))
-    .filter((reason) => reason !== '')
-    .join(' · ') || null
+  const caveat =
+    data.summary.unconfiguredDetectors
+      .map((key) =>
+        key === "fragmentation"
+          ? data.fragmentation.summary.reason
+          : data.commitmentCliff.summary.reason,
+      )
+      .filter((reason) => reason !== "")
+      .join(" · ") || null;
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <HealthGauge score={s.healthScore} grade={s.healthGrade} b={data.config.healthGradeB} c={data.config.healthGradeC} d={data.config.healthGradeD} notice={caveat ?? undefined} muted={caveat !== null && s.totalAlerts === 0} />
-        <KpiCard icon={Coins} accent="sky" label={t('kpi.totalSpend')} value={money(s.totalSpend)} sub={t('sub.accountsCount', { count: s.accountCount })} />
-        <KpiCard icon={GaugeIcon} accent={vel === null ? 'slate' : vel > data.config.velocityMediumThreshold ? 'red' : vel < -data.config.velocityMediumThreshold ? 'emerald' : 'slate'} label={t('kpi.avgVelocity')} value={vel === null ? '—' : `${vel > 0 ? '↑' : vel < 0 ? '↓' : ''} ${formatPercent01(Math.abs(vel) / 100, locale, 1)}`} sub={t('sub.acceleratingCount', { count: s.acceleratingCount })} tone={vel === null ? 'neutral' : vel > data.config.velocityMediumThreshold ? 'negative' : vel < -data.config.velocityMediumThreshold ? 'positive' : 'neutral'} />
-        <KpiCard icon={PiggyBank} accent="violet" label={t('kpi.savingsPotential')} value={s.savingsPotential === null ? '—' : money(s.savingsPotential)} sub={s.savingsPotential === null ? t('insights.annualizedUnknown') : toChartNumber(s.savingsPotential) > 0 ? t('sub.creepAndZombies') : t('sub.noIssues')} />
-        <KpiCard icon={AlertTriangle} accent={s.totalAlerts > 0 ? 'red' : caveat !== null ? 'slate' : 'emerald'} label={t('kpi.alerts')} value={String(s.totalAlerts)} sub={caveat ?? t('sub.anomaliesCount', { count: data.anomalies.summary.count })} tone={s.totalAlerts > 0 ? 'negative' : caveat !== null ? 'neutral' : 'positive'} />
+        <HealthGauge
+          score={s.healthScore}
+          grade={s.healthGrade}
+          b={data.config.healthGradeB}
+          c={data.config.healthGradeC}
+          d={data.config.healthGradeD}
+          notice={caveat ?? undefined}
+          muted={caveat !== null && s.totalAlerts === 0}
+        />
+        <KpiCard
+          icon={Coins}
+          accent="sky"
+          label={t("kpi.totalSpend")}
+          value={money(s.totalSpend)}
+          sub={t("sub.accountsCount", { count: s.accountCount })}
+        />
+        <KpiCard
+          icon={GaugeIcon}
+          accent={
+            vel === null
+              ? "slate"
+              : vel > data.config.velocityMediumThreshold
+                ? "red"
+                : vel < -data.config.velocityMediumThreshold
+                  ? "emerald"
+                  : "slate"
+          }
+          label={t("kpi.avgVelocity")}
+          value={
+            vel === null
+              ? "—"
+              : `${vel > 0 ? "↑" : vel < 0 ? "↓" : ""} ${formatPercent01(Math.abs(vel) / 100, locale, 1)}`
+          }
+          sub={t("sub.acceleratingCount", { count: s.acceleratingCount })}
+          tone={
+            vel === null
+              ? "neutral"
+              : vel > data.config.velocityMediumThreshold
+                ? "negative"
+                : vel < -data.config.velocityMediumThreshold
+                  ? "positive"
+                  : "neutral"
+          }
+        />
+        <KpiCard
+          icon={PiggyBank}
+          accent="violet"
+          label={t("kpi.savingsPotential")}
+          value={s.savingsPotential === null ? "—" : money(s.savingsPotential)}
+          sub={
+            s.savingsPotential === null
+              ? t("insights.annualizedUnknown")
+              : toChartNumber(s.savingsPotential) > 0
+                ? t("sub.creepAndZombies")
+                : t("sub.noIssues")
+          }
+        />
+        <KpiCard
+          icon={AlertTriangle}
+          accent={s.totalAlerts > 0 ? "red" : caveat !== null ? "slate" : "emerald"}
+          label={t("kpi.alerts")}
+          value={String(s.totalAlerts)}
+          sub={caveat ?? t("sub.anomaliesCount", { count: data.anomalies.summary.count })}
+          tone={s.totalAlerts > 0 ? "negative" : caveat !== null ? "neutral" : "positive"}
+        />
       </div>
 
-      <RecordTabs label={t('title')} tabs={TABS.map((k) => ({ key: k, label: t(`tabs.${k}`), count: k === 'detectors' ? s.totalAlerts : undefined }))} active={tab} onChange={setTab}>
-      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry} refreshing={read.refreshing}>
-      <div key={tab}>
-        {tab === 'overview' ? <OverviewTab data={data} onDrill={setDrill} /> : null}
-        {tab === 'velocity' ? <VelocityTab data={data} onDrill={setDrill} /> : null}
-        {tab === 'detectors' ? <DetectorsTab data={data} onDrill={setDrill} /> : null}
-        {tab === 'accounts' ? <AccountsTab data={data} onDrill={setDrill} /> : null}
-        {tab === 'trends' ? <TrendsTab data={data} /> : null}
-        {tab === 'config' ? <ConfigTab data={data} canEdit={canConfigure ?? false} /> : null}
-      </div>
-            </AnalyticsTabContent>
+      <RecordTabs
+        label={t("title")}
+        tabs={TABS.map((k) => ({
+          key: k,
+          label: t(`tabs.${k}`),
+          count: k === "detectors" ? s.totalAlerts : undefined,
+        }))}
+        active={tab}
+        onChange={setTab}
+      >
+        <AnalyticsTabContent
+          loading={read.loading}
+          error={read.error}
+          retry={read.retry}
+          refreshing={read.refreshing}
+        >
+          <div key={tab}>
+            {tab === "overview" ? <OverviewTab data={data} onDrill={setDrill} /> : null}
+            {tab === "velocity" ? <VelocityTab data={data} onDrill={setDrill} /> : null}
+            {tab === "detectors" ? <DetectorsTab data={data} onDrill={setDrill} /> : null}
+            {tab === "accounts" ? <AccountsTab data={data} onDrill={setDrill} /> : null}
+            {tab === "trends" ? <TrendsTab data={data} /> : null}
+            {tab === "config" ? <ConfigTab data={data} canEdit={canConfigure ?? false} /> : null}
+          </div>
+        </AnalyticsTabContent>
       </RecordTabs>
 
       <DrillDrawer
-        target={drill ? { kind: drill.kind === 'vendor' ? 'party' : 'account', id: drill.id, name: drill.name } : null}
+        target={
+          drill
+            ? {
+                kind: drill.kind === "vendor" ? "party" : "account",
+                id: drill.id,
+                name: drill.name,
+              }
+            : null
+        }
         from={data.period.from}
         to={data.period.to}
         onClose={() => setDrill(null)}
       />
     </div>
-  )
+  );
 }
 
 /* ---------------------------------------------------------------- Overview */
 
 /** One velocity-scatter datum, as built below: [velocity, acceleration, spend, name]. */
-type ScatterPoint = { data: [number, number, number, string] }
+type ScatterPoint = { data: [number, number, number, string] };
 
 function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
-  const t = useTranslations('analytics.spendVelocity')
-  const locale = useLocale()
-  const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: number | string) => fmtMoney(n)
-  const accounts = data.accountVelocity
-  const byVelocity = [...accounts].sort((a, b) => (b.velocity ?? Number.NEGATIVE_INFINITY) - (a.velocity ?? Number.NEGATIVE_INFINITY)).slice(0, 6)
-  const top10 = accounts.slice(0, 10)
+  const t = useTranslations("analytics.spendVelocity");
+  const locale = useLocale();
+  const fmtMoney = useAnalyticsMoney();
+  const money0 = (n: number | string) => fmtMoney(n);
+  const accounts = data.accountVelocity;
+  const byVelocity = [...accounts]
+    .sort(
+      (a, b) => (b.velocity ?? Number.NEGATIVE_INFINITY) - (a.velocity ?? Number.NEGATIVE_INFINITY),
+    )
+    .slice(0, 6);
+  const top10 = accounts.slice(0, 10);
 
   // IQR-based scatter bounds (stable) over measurable accounts only.
   const scatterOption = useMemo(() => {
-    const vels = accounts.map((a) => a.velocity).filter((v): v is number => v !== null)
-    const accels = accounts.map((a) => a.acceleration).filter((a): a is number => a !== null)
+    const vels = accounts.map((a) => a.velocity).filter((v): v is number => v !== null);
+    const accels = accounts.map((a) => a.acceleration).filter((a): a is number => a !== null);
     const iqr = (arr: number[]) => {
-      if (arr.length === 0) return { min: 0, max: 0 }
-      const sorted = [...arr].sort((a, b) => a - b)
-      const q1 = sorted[Math.floor(sorted.length * 0.25)] ?? 0
-      const q3 = sorted[Math.floor(sorted.length * 0.75)] ?? 0
-      return { min: q1 - 1.5 * (q3 - q1), max: q3 + 1.5 * (q3 - q1) }
-    }
-    const vB = iqr(vels), aB = iqr(accels)
-    const vMin = vels.length ? Math.max(vB.min, Math.min(...vels)) : 0, vMax = vels.length ? Math.min(vB.max, Math.max(...vels)) : 0
-    const aMin = accels.length ? Math.max(aB.min, Math.min(...accels)) : 0, aMax = accels.length ? Math.min(aB.max, Math.max(...accels)) : 0
-    const vPad = Math.max(2, (vMax - vMin) * 0.15), aPad = Math.max(1, (aMax - aMin) * 0.15)
-    const maxSpend = Math.max(...accounts.map((a) => toChartNumber(a.totalSpend)), 1)
+      if (arr.length === 0) return { min: 0, max: 0 };
+      const sorted = [...arr].sort((a, b) => a - b);
+      const q1 = sorted[Math.floor(sorted.length * 0.25)] ?? 0;
+      const q3 = sorted[Math.floor(sorted.length * 0.75)] ?? 0;
+      return { min: q1 - 1.5 * (q3 - q1), max: q3 + 1.5 * (q3 - q1) };
+    };
+    const vB = iqr(vels),
+      aB = iqr(accels);
+    const vMin = vels.length ? Math.max(vB.min, Math.min(...vels)) : 0,
+      vMax = vels.length ? Math.min(vB.max, Math.max(...vels)) : 0;
+    const aMin = accels.length ? Math.max(aB.min, Math.min(...accels)) : 0,
+      aMax = accels.length ? Math.min(aB.max, Math.max(...accels)) : 0;
+    const vPad = Math.max(2, (vMax - vMin) * 0.15),
+      aPad = Math.max(1, (aMax - aMin) * 0.15);
+    const maxSpend = Math.max(...accounts.map((a) => toChartNumber(a.totalSpend)), 1);
     return {
       grid: { top: 12, bottom: 34, left: 48, right: 16 },
-      xAxis: { type: 'value' as const, name: t('scatter.xAxis'), nameLocation: 'middle' as const, nameGap: 24, min: vMin - vPad, max: vMax + vPad },
-      yAxis: { type: 'value' as const, name: t('scatter.yAxis'), min: aMin - aPad, max: aMax + aPad },
-      tooltip: {
-        formatter: (p: ScatterPoint) => `<b>${escapeTooltipHtml(p.data[3])}</b><br/>${t('scatter.tooltipVelocity', { pct: formatPercent01(p.data[0] / 100, locale, 1) })}<br/>${t('scatter.tooltipAccel', { pct: formatPercent01(p.data[1] / 100, locale, 1) })}<br/>${t('scatter.tooltipSpend', { amount: fmtMoney(p.data[2], { compact: true }) })}`,
+      xAxis: {
+        type: "value" as const,
+        name: t("scatter.xAxis"),
+        nameLocation: "middle" as const,
+        nameGap: 24,
+        min: vMin - vPad,
+        max: vMax + vPad,
       },
-      series: [{
-        type: 'scatter' as const,
-        symbolSize: (d: number[]) => Math.max(8, Math.min(25, 8 + (d[2]! / maxSpend) * 17)),
-        data: accounts.map((a) => [a.velocity, a.acceleration, toChartNumber(a.totalSpend), a.name]),
-        itemStyle: {
-          color: (p: ScatterPoint) => {
-            const v = p.data[0]
-            const hi = data.config.velocityHighThreshold, med = data.config.velocityMediumThreshold
-            return v > hi ? '#dc2626' : v > med ? '#f97316' : v < -med ? '#10b981' : '#94a3b8'
+      yAxis: {
+        type: "value" as const,
+        name: t("scatter.yAxis"),
+        min: aMin - aPad,
+        max: aMax + aPad,
+      },
+      tooltip: {
+        formatter: (p: ScatterPoint) =>
+          `<b>${escapeTooltipHtml(p.data[3])}</b><br/>${t("scatter.tooltipVelocity", { pct: formatPercent01(p.data[0] / 100, locale, 1) })}<br/>${t("scatter.tooltipAccel", { pct: formatPercent01(p.data[1] / 100, locale, 1) })}<br/>${t("scatter.tooltipSpend", { amount: fmtMoney(p.data[2], { compact: true }) })}`,
+      },
+      series: [
+        {
+          type: "scatter" as const,
+          symbolSize: (d: number[]) => Math.max(8, Math.min(25, 8 + (d[2]! / maxSpend) * 17)),
+          data: accounts.map((a) => [
+            a.velocity,
+            a.acceleration,
+            toChartNumber(a.totalSpend),
+            a.name,
+          ]),
+          itemStyle: {
+            color: (p: ScatterPoint) => {
+              const v = p.data[0];
+              const hi = data.config.velocityHighThreshold,
+                med = data.config.velocityMediumThreshold;
+              return v > hi ? "#dc2626" : v > med ? "#f97316" : v < -med ? "#10b981" : "#94a3b8";
+            },
+            borderColor: "rgba(255,255,255,0.5)",
+            borderWidth: 1,
+            opacity: 0.85,
           },
-          borderColor: 'rgba(255,255,255,0.5)', borderWidth: 1, opacity: 0.85,
         },
-      }],
-    }
-  }, [accounts, data.config, fmtMoney, locale, t])
+      ],
+    };
+  }, [accounts, data.config, fmtMoney, locale, t]);
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
-          <Panel title={t('panels.velocityVsAccel')} icon={Target} hint={t('panels.velocityVsAccelHint')}>
+          <Panel
+            title={t("panels.velocityVsAccel")}
+            icon={Target}
+            hint={t("panels.velocityVsAccelHint")}
+          >
             <Chart option={scatterOption} height={220} />
           </Panel>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <Panel title={t('panels.top10BySpend')} icon={PieIcon}>
-              <Donut data={top10.map((a) => ({ name: a.name, value: toChartNumber(a.totalSpend) }))} height={210} />
+            <Panel title={t("panels.top10BySpend")} icon={PieIcon}>
+              <Donut
+                data={top10.map((a) => ({ name: a.name, value: toChartNumber(a.totalSpend) }))}
+                height={210}
+              />
             </Panel>
-            <Panel title={t('panels.monthlyTrend')} icon={ChartArea}>
-              <TrendChart labels={data.monthlyTrends.map((m) => m.label)} area height={210} series={[{ name: t('chart.spend'), data: data.monthlyTrends.map((m) => toChartNumber(m.totalAmount)), color: '#6366f1' }]} />
+            <Panel title={t("panels.monthlyTrend")} icon={ChartArea}>
+              <TrendChart
+                labels={data.monthlyTrends.map((m) => m.label)}
+                area
+                height={210}
+                series={[
+                  {
+                    name: t("chart.spend"),
+                    data: data.monthlyTrends.map((m) => toChartNumber(m.totalAmount)),
+                    color: "#6366f1",
+                  },
+                ]}
+              />
             </Panel>
           </div>
-          <Panel title={t('panels.highestVelocity')} icon={Flame} bodyClassName="p-0">
+          <Panel title={t("panels.highestVelocity")} icon={Flame} bodyClassName="p-0">
             <SharedTable className="w-full text-sm">
               <SharedTableHeader>
                 <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.account')}</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.spend')}</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.velocity')}</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.trend')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">
+                    {t("table.account")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">
+                    {t("table.spend")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">
+                    {t("table.velocity")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-center font-medium">
+                    {t("table.trend")}
+                  </SharedTableHead>
                 </SharedTableRow>
               </SharedTableHeader>
               <SharedTableBody>
                 {byVelocity.map((a) => (
-                  <InteractiveTableRow key={a.id} onClick={() => onDrill({ kind: 'account', id: a.id, name: a.name })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
-                    <SharedTableCell className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">{a.name}</SharedTableCell>
-                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(a.totalSpend)}</SharedTableCell>
-                    <SharedTableCell className="px-4 py-2 text-right"><VelocityPill v={a.velocity} hi={data.config.velocityHighThreshold} med={data.config.velocityMediumThreshold} /></SharedTableCell>
-                    <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', TREND_BADGE_CLS[a.trend])}>{t(`trend.${a.trend}`)}</span></SharedTableCell>
+                  <InteractiveTableRow
+                    key={a.id}
+                    onClick={() => onDrill({ kind: "account", id: a.id, name: a.name })}
+                    className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40"
+                    noAnimate
+                  >
+                    <SharedTableCell className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">
+                      {a.name}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">
+                      {money0(a.totalSpend)}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right">
+                      <VelocityPill
+                        v={a.velocity}
+                        hi={data.config.velocityHighThreshold}
+                        med={data.config.velocityMediumThreshold}
+                      />
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-center">
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                          TREND_BADGE_CLS[a.trend],
+                        )}
+                      >
+                        {t(`trend.${a.trend}`)}
+                      </span>
+                    </SharedTableCell>
                   </InteractiveTableRow>
                 ))}
               </SharedTableBody>
@@ -256,130 +539,360 @@ function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
         </div>
 
         <div className="space-y-5">
-          <Panel title={t('panels.insights')} icon={Lightbulb} actions={<Badge variant={data.insights.length > 3 ? 'destructive' : data.insights.length > 0 ? 'warning' : 'success'}>{data.insights.length}</Badge>} bodyClassName="p-0">
+          <Panel
+            title={t("panels.insights")}
+            icon={Lightbulb}
+            actions={
+              <Badge
+                variant={
+                  data.insights.length > 3
+                    ? "destructive"
+                    : data.insights.length > 0
+                      ? "warning"
+                      : "success"
+                }
+              >
+                {data.insights.length}
+              </Badge>
+            }
+            bodyClassName="p-0"
+          >
             {data.insights.length ? (
               <ul className="max-h-80 divide-y divide-slate-50 overflow-y-auto dark:divide-slate-800/60">
                 {data.insights.slice(0, 6).map((i, k) => (
                   <li key={k} className="flex items-start gap-2.5 px-4 py-2.5">
-                    <AlertTriangle size={14} className={cn('mt-0.5 shrink-0', i.type === 'alert' ? 'text-rose-500' : i.type === 'warning' ? 'text-amber-500' : 'text-sky-500')} />
+                    <AlertTriangle
+                      size={14}
+                      className={cn(
+                        "mt-0.5 shrink-0",
+                        i.type === "alert"
+                          ? "text-rose-500"
+                          : i.type === "warning"
+                            ? "text-amber-500"
+                            : "text-sky-500",
+                      )}
+                    />
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{i.title}</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        {i.title}
+                      </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{i.message}</p>
                     </div>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="flex items-center gap-2 px-4 py-6 text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={15} />{t('empty.noAnomalies')}</p>
+              <p className="flex items-center gap-2 px-4 py-6 text-sm text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 size={15} />
+                {t("empty.noAnomalies")}
+              </p>
             )}
           </Panel>
-          <Panel title={t('panels.detectorSummary')} icon={Search}>
+          <Panel title={t("panels.detectorSummary")} icon={Search}>
             <DetectorGrid data={data} compact />
           </Panel>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /* ---------------------------------------------------- detector grid (shared) */
 
-function DetectorGrid({ data, compact, selected, onSelect }: { data: SpendVelocityData; compact?: boolean; selected?: string; onSelect?: (k: string) => void }) {
-  const t = useTranslations('analytics.spendVelocity')
-  const locale = useLocale()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: number | string) => fmtMoney(n, { compact: true })
-  const cliff = data.commitmentCliff.summary
-  const tiles: { key: string; label: string; icon: typeof Bug; tone: string; count: string; active: boolean; metric: string; sub: string; desc: string }[] = [
-    { key: 'frog', label: t('detectors.frog.label'), icon: Bug, tone: 'text-violet-500', count: String(data.boilingFrog.summary.count), active: data.boilingFrog.summary.count > 0, metric: data.boilingFrog.summary.totalAnnualizedCreep === null ? '—' : money(data.boilingFrog.summary.totalAnnualizedCreep), sub: data.boilingFrog.summary.totalAnnualizedCreep === null ? t('insights.annualizedUnknown') : t('detectors.frog.sub'), desc: t('detectors.frog.desc') },
-    { key: 'anomaly', label: t('detectors.anomaly.label'), icon: Bolt, tone: 'text-rose-500', count: String(data.anomalies.summary.count), active: data.anomalies.summary.count > 0, metric: String(data.anomalies.summary.criticalCount), sub: t('detectors.anomaly.sub'), desc: t('detectors.anomaly.desc', { sigma: data.config.anomalyStdDevThreshold }) },
-    { key: 'zombie', label: t('detectors.zombie.label'), icon: Ghost, tone: 'text-slate-400', count: String(data.zombies.summary.count), active: data.zombies.summary.count > 0, metric: data.zombies.summary.totalAnnualCost === null ? '—' : money(data.zombies.summary.totalAnnualCost), sub: data.zombies.summary.totalAnnualCost === null ? t('insights.annualizedUnknown') : t('detectors.zombie.sub'), desc: t('detectors.zombie.desc') },
-    { key: 'fragmentation', label: t('detectors.fragmentation.label'), icon: Puzzle, tone: 'text-orange-500', count: data.fragmentation.summary.configured ? String(data.fragmentation.summary.fragmentedCategories) : '—', active: data.fragmentation.summary.fragmentedCategories > 0, metric: data.fragmentation.summary.configured ? money(data.fragmentation.summary.totalFragmentedSpend) : '—', sub: data.fragmentation.summary.configured ? t('detectors.fragmentation.sub') : data.fragmentation.summary.reason, desc: t('detectors.fragmentation.desc') },
-    { key: 'concentration', label: t('detectors.concentration.label'), icon: PieIcon, tone: 'text-amber-500', count: formatPercent01(data.concentration.summary.top1Share / 100, locale, 0), active: data.concentration.summary.top1Share > data.config.concentrationTop1Warning, metric: formatPercent01(data.concentration.summary.top5Share / 100, locale, 0), sub: t('detectors.concentration.sub'), desc: t('detectors.concentration.desc') },
-    { key: 'cliff', label: t('detectors.cliff.label'), icon: Mountain, tone: 'text-sky-500', count: cliff.status === 'unknown' || cliff.velocityGap === null ? '—' : formatPercent01(cliff.velocityGap / 100, locale, 0), active: cliff.status === 'critical' || cliff.status === 'warning', metric: cliff.status === 'unknown' || cliff.poVelocity === null ? '—' : formatPercent01(cliff.poVelocity / 100, locale, 0), sub: !cliff.configured || cliff.status === 'unknown' ? cliff.reason : cliff.poVelocity === null ? t('detectors.cliff.insufficientHistory') : t('detectors.cliff.sub'), desc: t('detectors.cliff.desc') },
-    { key: 'seasonal', label: t('detectors.seasonal.label'), icon: Snowflake, tone: 'text-teal-500', count: String(data.seasonal.insights.length), active: data.seasonal.insights.length > 0, metric: String(data.seasonal.patterns.filter((p) => p.isHigh || p.isLow).length), sub: t('detectors.seasonal.sub'), desc: t('detectors.seasonal.desc') },
-    { key: 'shadow', label: t('detectors.shadow.label'), icon: Bug, tone: 'text-pink-500', count: '—', active: false, metric: '—', sub: t('detectors.shadow.sub'), desc: t('detectors.shadow.desc') },
-  ]
+function DetectorGrid({
+  data,
+  compact,
+  selected,
+  onSelect,
+}: {
+  data: SpendVelocityData;
+  compact?: boolean;
+  selected?: string;
+  onSelect?: (k: string) => void;
+}) {
+  const t = useTranslations("analytics.spendVelocity");
+  const locale = useLocale();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: number | string) => fmtMoney(n, { compact: true });
+  const cliff = data.commitmentCliff.summary;
+  const tiles: {
+    key: string;
+    label: string;
+    icon: typeof Bug;
+    tone: string;
+    count: string;
+    active: boolean;
+    metric: string;
+    sub: string;
+    desc: string;
+  }[] = [
+    {
+      key: "frog",
+      label: t("detectors.frog.label"),
+      icon: Bug,
+      tone: "text-violet-500",
+      count: String(data.boilingFrog.summary.count),
+      active: data.boilingFrog.summary.count > 0,
+      metric:
+        data.boilingFrog.summary.totalAnnualizedCreep === null
+          ? "—"
+          : money(data.boilingFrog.summary.totalAnnualizedCreep),
+      sub:
+        data.boilingFrog.summary.totalAnnualizedCreep === null
+          ? t("insights.annualizedUnknown")
+          : t("detectors.frog.sub"),
+      desc: t("detectors.frog.desc"),
+    },
+    {
+      key: "anomaly",
+      label: t("detectors.anomaly.label"),
+      icon: Bolt,
+      tone: "text-rose-500",
+      count: String(data.anomalies.summary.count),
+      active: data.anomalies.summary.count > 0,
+      metric: String(data.anomalies.summary.criticalCount),
+      sub: t("detectors.anomaly.sub"),
+      desc: t("detectors.anomaly.desc", { sigma: data.config.anomalyStdDevThreshold }),
+    },
+    {
+      key: "zombie",
+      label: t("detectors.zombie.label"),
+      icon: Ghost,
+      tone: "text-slate-400",
+      count: String(data.zombies.summary.count),
+      active: data.zombies.summary.count > 0,
+      metric:
+        data.zombies.summary.totalAnnualCost === null
+          ? "—"
+          : money(data.zombies.summary.totalAnnualCost),
+      sub:
+        data.zombies.summary.totalAnnualCost === null
+          ? t("insights.annualizedUnknown")
+          : t("detectors.zombie.sub"),
+      desc: t("detectors.zombie.desc"),
+    },
+    {
+      key: "fragmentation",
+      label: t("detectors.fragmentation.label"),
+      icon: Puzzle,
+      tone: "text-orange-500",
+      count: data.fragmentation.summary.configured
+        ? String(data.fragmentation.summary.fragmentedCategories)
+        : "—",
+      active: data.fragmentation.summary.fragmentedCategories > 0,
+      metric: data.fragmentation.summary.configured
+        ? money(data.fragmentation.summary.totalFragmentedSpend)
+        : "—",
+      sub: data.fragmentation.summary.configured
+        ? t("detectors.fragmentation.sub")
+        : data.fragmentation.summary.reason,
+      desc: t("detectors.fragmentation.desc"),
+    },
+    {
+      key: "concentration",
+      label: t("detectors.concentration.label"),
+      icon: PieIcon,
+      tone: "text-amber-500",
+      count: formatPercent01(data.concentration.summary.top1Share / 100, locale, 0),
+      active: data.concentration.summary.top1Share > data.config.concentrationTop1Warning,
+      metric: formatPercent01(data.concentration.summary.top5Share / 100, locale, 0),
+      sub: t("detectors.concentration.sub"),
+      desc: t("detectors.concentration.desc"),
+    },
+    {
+      key: "cliff",
+      label: t("detectors.cliff.label"),
+      icon: Mountain,
+      tone: "text-sky-500",
+      count:
+        cliff.status === "unknown" || cliff.velocityGap === null
+          ? "—"
+          : formatPercent01(cliff.velocityGap / 100, locale, 0),
+      active: cliff.status === "critical" || cliff.status === "warning",
+      metric:
+        cliff.status === "unknown" || cliff.poVelocity === null
+          ? "—"
+          : formatPercent01(cliff.poVelocity / 100, locale, 0),
+      sub:
+        !cliff.configured || cliff.status === "unknown"
+          ? cliff.reason
+          : cliff.poVelocity === null
+            ? t("detectors.cliff.insufficientHistory")
+            : t("detectors.cliff.sub"),
+      desc: t("detectors.cliff.desc"),
+    },
+    {
+      key: "seasonal",
+      label: t("detectors.seasonal.label"),
+      icon: Snowflake,
+      tone: "text-teal-500",
+      count: String(data.seasonal.insights.length),
+      active: data.seasonal.insights.length > 0,
+      metric: String(data.seasonal.patterns.filter((p) => p.isHigh || p.isLow).length),
+      sub: t("detectors.seasonal.sub"),
+      desc: t("detectors.seasonal.desc"),
+    },
+    {
+      key: "shadow",
+      label: t("detectors.shadow.label"),
+      icon: Bug,
+      tone: "text-pink-500",
+      count: "—",
+      active: false,
+      metric: "—",
+      sub: t("detectors.shadow.sub"),
+      desc: t("detectors.shadow.desc"),
+    },
+  ];
 
   if (compact) {
     return (
       <div className="grid grid-cols-4 gap-2 text-center">
         {tiles.map((t) => {
-          const Icon = t.icon
+          const Icon = t.icon;
           return (
-            <div key={t.key} className={cn('rounded-lg p-2', t.active ? 'bg-slate-100 dark:bg-slate-800' : 'bg-slate-50/60 dark:bg-slate-800/40')}>
-              <Icon size={13} className={cn('mx-auto', t.tone)} />
-              <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-200">{t.count}</p>
+            <div
+              key={t.key}
+              className={cn(
+                "rounded-lg p-2",
+                t.active ? "bg-slate-100 dark:bg-slate-800" : "bg-slate-50/60 dark:bg-slate-800/40",
+              )}
+            >
+              <Icon size={13} className={cn("mx-auto", t.tone)} />
+              <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-200">
+                {t.count}
+              </p>
               <p className="text-[9px] text-slate-400 dark:text-slate-500">{t.label}</p>
             </div>
-          )
+          );
         })}
       </div>
-    )
+    );
   }
 
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
       {tiles.map((t) => {
-        const Icon = t.icon
+        const Icon = t.icon;
         return (
           <button
             key={t.key}
             type="button"
-            onClick={onSelect ? () => onSelect(selected === t.key ? 'all' : t.key) : undefined}
+            onClick={onSelect ? () => onSelect(selected === t.key ? "all" : t.key) : undefined}
             className={cn(
-              'rounded-xl border bg-white p-3.5 text-left shadow-sm transition-colors dark:bg-slate-900',
-              selected === t.key ? 'border-teal-500 ring-1 ring-teal-500' : t.active ? 'border-slate-300 dark:border-slate-700' : 'border-slate-200/80 dark:border-slate-800',
+              "rounded-xl border bg-white p-3.5 text-left shadow-sm transition-colors dark:bg-slate-900",
+              selected === t.key
+                ? "border-teal-500 ring-1 ring-teal-500"
+                : t.active
+                  ? "border-slate-300 dark:border-slate-700"
+                  : "border-slate-200/80 dark:border-slate-800",
             )}
           >
             <div className="flex items-start justify-between gap-2">
-              <span className="flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-slate-200"><Icon size={14} className={t.tone} />{t.label}</span>
-              <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold tabular-nums', t.active ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400')}>{t.count}</span>
+              <span className="flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-slate-200">
+                <Icon size={14} className={t.tone} />
+                {t.label}
+              </span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-xs font-bold tabular-nums",
+                  t.active
+                    ? "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400"
+                    : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
+                )}
+              >
+                {t.count}
+              </span>
             </div>
             <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{t.desc}</p>
-            <p className="mt-2 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">{t.metric} <span className="text-xs font-normal text-slate-400">{t.sub}</span></p>
+            <p className="mt-2 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
+              {t.metric} <span className="text-xs font-normal text-slate-400">{t.sub}</span>
+            </p>
           </button>
-        )
+        );
       })}
     </div>
-  )
+  );
 }
 
 /* ---------------------------------------------------------------- Velocity */
 
 function VelocityTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
-  const t = useTranslations('analytics.spendVelocity')
-  const locale = useLocale()
-  const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: number | string) => fmtMoney(n)
+  const t = useTranslations("analytics.spendVelocity");
+  const locale = useLocale();
+  const fmtMoney = useAnalyticsMoney();
+  const money0 = (n: number | string) => fmtMoney(n);
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
       <div className="lg:col-span-7">
-        <Panel title={t('panels.accountVelocity')} icon={Layers} actions={<Badge>{data.accountVelocity.length}</Badge>} bodyClassName="p-0">
+        <Panel
+          title={t("panels.accountVelocity")}
+          icon={Layers}
+          actions={<Badge>{data.accountVelocity.length}</Badge>}
+          bodyClassName="p-0"
+        >
           <div className="max-h-128 overflow-y-auto">
             <SharedTable className="w-full text-sm">
               <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
                 <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.account')}</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.spend')}</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.billsExp')}</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.velocity')}</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.accel')}</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.sparkline')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">
+                    {t("table.account")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">
+                    {t("table.spend")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">
+                    {t("table.billsExp")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">
+                    {t("table.velocity")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-center font-medium">
+                    {t("table.accel")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">
+                    {t("table.sparkline")}
+                  </SharedTableHead>
                 </SharedTableRow>
               </SharedTableHeader>
               <SharedTableBody>
                 {data.accountVelocity.map((a) => (
-                  <InteractiveTableRow key={a.id} onClick={() => onDrill({ kind: 'account', id: a.id, name: a.name })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
+                  <InteractiveTableRow
+                    key={a.id}
+                    onClick={() => onDrill({ kind: "account", id: a.id, name: a.name })}
+                    className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40"
+                    noAnimate
+                  >
                     <SharedTableCell className="px-4 py-2">
                       <p className="font-medium text-slate-800 dark:text-slate-200">{a.name}</p>
-                      <p className="text-xs text-slate-400 dark:text-slate-500">{t('row.txnsMonths', { txns: a.transactionCount, months: a.monthCount })}</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">
+                        {t("row.txnsMonths", { txns: a.transactionCount, months: a.monthCount })}
+                      </p>
                     </SharedTableCell>
-                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(a.totalSpend)}</SharedTableCell>
-                    <SharedTableCell className="px-4 py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{formatPercent01(a.billPct / 100, locale, 0)} / {formatPercent01(a.expensePct / 100, locale, 0)}</SharedTableCell>
-                    <SharedTableCell className="px-4 py-2 text-right"><VelocityPill v={a.velocity} hi={data.config.velocityHighThreshold} med={data.config.velocityMediumThreshold} /></SharedTableCell>
-                    <SharedTableCell className="px-4 py-2 text-center"><Accel a={a.acceleration} mild={data.config.accelMild} strong={data.config.accelStrong} /></SharedTableCell>
-                    <SharedTableCell className="px-4 py-2"><Spark values={a.monthlyAmounts} /></SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">
+                      {money0(a.totalSpend)}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">
+                      {formatPercent01(a.billPct / 100, locale, 0)} /{" "}
+                      {formatPercent01(a.expensePct / 100, locale, 0)}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right">
+                      <VelocityPill
+                        v={a.velocity}
+                        hi={data.config.velocityHighThreshold}
+                        med={data.config.velocityMediumThreshold}
+                      />
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-center">
+                      <Accel
+                        a={a.acceleration}
+                        mild={data.config.accelMild}
+                        strong={data.config.accelStrong}
+                      />
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2">
+                      <Spark values={a.monthlyAmounts} />
+                    </SharedTableCell>
                   </InteractiveTableRow>
                 ))}
               </SharedTableBody>
@@ -388,25 +901,51 @@ function VelocityTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
         </Panel>
       </div>
       <div className="lg:col-span-5">
-        <Panel title={t('panels.vendorDrillDown')} icon={UserRound} actions={<Badge variant="secondary">{data.vendorVelocity.length}</Badge>} bodyClassName="p-0">
+        <Panel
+          title={t("panels.vendorDrillDown")}
+          icon={UserRound}
+          actions={<Badge variant="secondary">{data.vendorVelocity.length}</Badge>}
+          bodyClassName="p-0"
+        >
           <div className="max-h-128 overflow-y-auto">
             <SharedTable className="w-full text-sm">
               <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
                 <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.vendor')}</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.spend')}</SharedTableHead>
-                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.velocity')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">
+                    {t("table.vendor")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">
+                    {t("table.spend")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">
+                    {t("table.velocity")}
+                  </SharedTableHead>
                 </SharedTableRow>
               </SharedTableHeader>
               <SharedTableBody>
                 {data.vendorVelocity.map((v) => (
-                  <InteractiveTableRow key={v.id} onClick={() => onDrill({ kind: 'vendor', id: v.id, name: v.name })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
+                  <InteractiveTableRow
+                    key={v.id}
+                    onClick={() => onDrill({ kind: "vendor", id: v.id, name: v.name })}
+                    className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40"
+                    noAnimate
+                  >
                     <SharedTableCell className="px-4 py-2">
                       <p className="font-medium text-slate-800 dark:text-slate-200">{v.name}</p>
-                      <p className="text-xs text-slate-400 dark:text-slate-500">{t('row.txns', { txns: v.transactionCount })}</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">
+                        {t("row.txns", { txns: v.transactionCount })}
+                      </p>
                     </SharedTableCell>
-                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(v.totalSpend)}</SharedTableCell>
-                    <SharedTableCell className="px-4 py-2 text-right"><VelocityPill v={v.velocity} hi={data.config.velocityHighThreshold} med={data.config.velocityMediumThreshold} /></SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">
+                      {money0(v.totalSpend)}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right">
+                      <VelocityPill
+                        v={v.velocity}
+                        hi={data.config.velocityHighThreshold}
+                        med={data.config.velocityMediumThreshold}
+                      />
+                    </SharedTableCell>
                   </InteractiveTableRow>
                 ))}
               </SharedTableBody>
@@ -415,88 +954,256 @@ function VelocityTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
         </Panel>
       </div>
     </div>
-  )
+  );
 }
 
 /* --------------------------------------------------------------- Detectors */
 
 interface Alert {
-  detector: string
-  label: string
-  item: string
-  severity: 'Critical' | 'High' | 'Medium' | 'Low'
-  impact: string | null
-  details: string
-  accountId?: string
-  vendorId?: string
+  detector: string;
+  label: string;
+  item: string;
+  severity: "Critical" | "High" | "Medium" | "Low";
+  impact: string | null;
+  details: string;
+  accountId?: string;
+  vendorId?: string;
 }
 
 function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
-  const t = useTranslations('analytics.spendVelocity')
-  const locale = useLocale()
-  const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: number | string) => fmtMoney(n)
-  const [selected, setSelected] = useState('all')
+  const t = useTranslations("analytics.spendVelocity");
+  const locale = useLocale();
+  const fmtMoney = useAnalyticsMoney();
+  const money0 = (n: number | string) => fmtMoney(n);
+  const [selected, setSelected] = useState("all");
 
   const alerts = useMemo(() => {
-    const out: Alert[] = []
-    const want = (k: string) => selected === 'all' || selected === k
-    const c = data.config
-    if (want('frog')) for (const v of data.boilingFrog.accounts) out.push({ detector: 'frog', label: t('detectors.frog.label'), item: v.accountName, severity: v.totalCreep > c.boilingFrogCriticalCreep ? 'High' : 'Medium', impact: v.annualizedCreep, details: t('details.frog', { rate: formatPercent01(v.avgMonthlyIncrease / 100, locale, 1), months: v.monthCount }), accountId: v.accountId })
-    if (want('anomaly')) for (const a of data.anomalies.items) out.push({ detector: 'anomaly', label: t('detectors.anomaly.label'), item: a.accountName, severity: a.severity === 'critical' ? 'Critical' : 'High', impact: a.amount, details: t('details.anomaly', { sigma: decimalLabel(a.zScore, locale, 1, 1), month: a.month }), accountId: a.accountId })
-    if (want('zombie')) for (const z of data.zombies.subscriptions) out.push({ detector: 'zombie', label: t('detectors.zombie.label'), item: z.vendorName, severity: 'Medium', impact: z.annualCost, details: t('details.zombie', { amount: fmtMoney(z.amount), months: z.monthCount }), vendorId: z.vendorId })
-    if (want('concentration')) for (const cc of data.concentration.accounts) out.push({ detector: 'concentration', label: t('detectors.concentration.label'), item: cc.name, severity: cc.spendShare > c.concentrationHighShare ? 'High' : 'Medium', impact: cc.totalSpend, details: t('details.concentration', { share: formatPercent01(cc.spendShare / 100, locale, 1), trend: t(`trend.${cc.trend}`) }), accountId: cc.id })
-    if (want('fragmentation')) for (const f of data.fragmentation.categories) out.push({ detector: 'fragmentation', label: t('detectors.fragmentation.label'), item: f.accountName, severity: f.txnsPerMonth > c.fragmentationHighTxns ? 'High' : 'Medium', impact: f.totalSpend, details: t('details.fragmentation', { txns: f.txnsPerMonth, avg: fmtMoney(f.avgTransactionSize) }), accountId: f.accountId })
-    if (want('seasonal')) for (const p of data.seasonal.patterns.filter((x) => x.isHigh || x.isLow)) out.push({ detector: 'seasonal', label: t('detectors.seasonal.label'), item: p.monthName, severity: Math.abs(p.deviation) > c.seasonalCriticalDeviation ? 'High' : 'Low', impact: p.totalSpend, details: t('details.seasonal', { sign: p.deviation > 0 ? '+' : '', deviation: p.deviation }) })
-    if (want('cliff') && (data.commitmentCliff.summary.status === 'critical' || data.commitmentCliff.summary.status === 'warning')) {
-      const cliff = data.commitmentCliff.summary
-      const ratioText = cliff.ratio === null ? '—' : String(cliff.ratio)
-      out.push({ detector: 'cliff', label: t('detectors.cliff.label'), item: t('details.cliffItem'), severity: cliff.status === 'critical' ? 'Critical' : 'High', impact: cliff.totalPO, details: cliff.velocityGap === null ? t('details.cliffNoVelocity', { ratio: ratioText }) : t('details.cliff', { gap: formatPercent01(cliff.velocityGap / 100, locale, 1), ratio: ratioText }) })
+    const out: Alert[] = [];
+    const want = (k: string) => selected === "all" || selected === k;
+    const c = data.config;
+    if (want("frog"))
+      for (const v of data.boilingFrog.accounts)
+        out.push({
+          detector: "frog",
+          label: t("detectors.frog.label"),
+          item: v.accountName,
+          severity: v.totalCreep > c.boilingFrogCriticalCreep ? "High" : "Medium",
+          impact: v.annualizedCreep,
+          details: t("details.frog", {
+            rate: formatPercent01(v.avgMonthlyIncrease / 100, locale, 1),
+            months: v.monthCount,
+          }),
+          accountId: v.accountId,
+        });
+    if (want("anomaly"))
+      for (const a of data.anomalies.items)
+        out.push({
+          detector: "anomaly",
+          label: t("detectors.anomaly.label"),
+          item: a.accountName,
+          severity: a.severity === "critical" ? "Critical" : "High",
+          impact: a.amount,
+          details: t("details.anomaly", {
+            sigma: decimalLabel(a.zScore, locale, 1, 1),
+            month: a.month,
+          }),
+          accountId: a.accountId,
+        });
+    if (want("zombie"))
+      for (const z of data.zombies.subscriptions)
+        out.push({
+          detector: "zombie",
+          label: t("detectors.zombie.label"),
+          item: z.vendorName,
+          severity: "Medium",
+          impact: z.annualCost,
+          details: t("details.zombie", { amount: fmtMoney(z.amount), months: z.monthCount }),
+          vendorId: z.vendorId,
+        });
+    if (want("concentration"))
+      for (const cc of data.concentration.accounts)
+        out.push({
+          detector: "concentration",
+          label: t("detectors.concentration.label"),
+          item: cc.name,
+          severity: cc.spendShare > c.concentrationHighShare ? "High" : "Medium",
+          impact: cc.totalSpend,
+          details: t("details.concentration", {
+            share: formatPercent01(cc.spendShare / 100, locale, 1),
+            trend: t(`trend.${cc.trend}`),
+          }),
+          accountId: cc.id,
+        });
+    if (want("fragmentation"))
+      for (const f of data.fragmentation.categories)
+        out.push({
+          detector: "fragmentation",
+          label: t("detectors.fragmentation.label"),
+          item: f.accountName,
+          severity: f.txnsPerMonth > c.fragmentationHighTxns ? "High" : "Medium",
+          impact: f.totalSpend,
+          details: t("details.fragmentation", {
+            txns: f.txnsPerMonth,
+            avg: fmtMoney(f.avgTransactionSize),
+          }),
+          accountId: f.accountId,
+        });
+    if (want("seasonal"))
+      for (const p of data.seasonal.patterns.filter((x) => x.isHigh || x.isLow))
+        out.push({
+          detector: "seasonal",
+          label: t("detectors.seasonal.label"),
+          item: p.monthName,
+          severity: Math.abs(p.deviation) > c.seasonalCriticalDeviation ? "High" : "Low",
+          impact: p.totalSpend,
+          details: t("details.seasonal", {
+            sign: p.deviation > 0 ? "+" : "",
+            deviation: p.deviation,
+          }),
+        });
+    if (
+      want("cliff") &&
+      (data.commitmentCliff.summary.status === "critical" ||
+        data.commitmentCliff.summary.status === "warning")
+    ) {
+      const cliff = data.commitmentCliff.summary;
+      const ratioText = cliff.ratio === null ? "—" : String(cliff.ratio);
+      out.push({
+        detector: "cliff",
+        label: t("detectors.cliff.label"),
+        item: t("details.cliffItem"),
+        severity: cliff.status === "critical" ? "Critical" : "High",
+        impact: cliff.totalPO,
+        details:
+          cliff.velocityGap === null
+            ? t("details.cliffNoVelocity", { ratio: ratioText })
+            : t("details.cliff", {
+                gap: formatPercent01(cliff.velocityGap / 100, locale, 1),
+                ratio: ratioText,
+              }),
+      });
     }
     // Impacts are canonical money strings: exact comparison, no float round-trip.
     // Unmeasurable impacts sort last, never as zeroes among measured ones.
-    return out.sort((a, b) => (a.impact === null ? 1 : b.impact === null ? -1 : compareMoney(b.impact, a.impact)))
-  }, [data, selected, fmtMoney, locale, t])
+    return out.sort((a, b) =>
+      a.impact === null ? 1 : b.impact === null ? -1 : compareMoney(b.impact, a.impact),
+    );
+  }, [data, selected, fmtMoney, locale, t]);
 
-  const total = data.summary.totalAlerts
+  const total = data.summary.totalAlerts;
   return (
     <div className="space-y-5">
-      <p className={cn('flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm', total > data.config.alertBannerThreshold ? 'bg-rose-50 text-rose-800 dark:bg-rose-950/30 dark:text-rose-300' : total > 0 ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400')}>
+      <p
+        className={cn(
+          "flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm",
+          total > data.config.alertBannerThreshold
+            ? "bg-rose-50 text-rose-800 dark:bg-rose-950/30 dark:text-rose-300"
+            : total > 0
+              ? "bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+              : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400",
+        )}
+      >
         {total > 0 ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}
-        <span><span className="font-bold">{t('banner.count', { total })}</span>{t('banner.rest')}</span>
+        <span>
+          <span className="font-bold">{t("banner.count", { total })}</span>
+          {t("banner.rest")}
+        </span>
       </p>
       <DetectorGrid data={data} selected={selected} onSelect={setSelected} />
-      <Panel title={t('panels.alertDetails')} icon={Search} actions={selected !== 'all' ? (
-        <button type="button" onClick={() => setSelected('all')} className="text-xs text-teal-600 hover:underline dark:text-teal-400">{t('clearFilter', { key: selected })}</button>
-      ) : undefined} bodyClassName="p-0">
+      <Panel
+        title={t("panels.alertDetails")}
+        icon={Search}
+        actions={
+          selected !== "all" ? (
+            <button
+              type="button"
+              onClick={() => setSelected("all")}
+              className="text-xs text-teal-600 hover:underline dark:text-teal-400"
+            >
+              {t("clearFilter", { key: selected })}
+            </button>
+          ) : undefined
+        }
+        bodyClassName="p-0"
+      >
         <div className="max-h-104 overflow-y-auto">
           <SharedTable className="w-full text-sm">
             <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
               <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.detector')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.item')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.severity')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.impact')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.details')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">
+                  {t("table.detector")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">
+                  {t("table.item")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-center font-medium">
+                  {t("table.severity")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.impact")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">
+                  {t("table.details")}
+                </SharedTableHead>
               </SharedTableRow>
             </SharedTableHeader>
             <SharedTableBody>
-              {alerts.length ? alerts.map((a, i) => (
-                <InteractiveTableRow
-                  key={i}
-                  onClick={a.accountId ? () => onDrill({ kind: 'account', id: a.accountId!, name: a.item }) : a.vendorId ? () => onDrill({ kind: 'vendor', id: a.vendorId!, name: a.item }) : undefined}
-                  className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', (a.accountId || a.vendorId) && 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40')} noAnimate
-                >
-                  <SharedTableCell className="px-4 py-2 text-slate-500 dark:text-slate-400">{a.label}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">{a.item}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-center">
-                    <Badge variant={a.severity === 'Critical' ? 'destructive' : a.severity === 'High' ? 'warning' : 'secondary'}>{t(`severity.${a.severity.toLowerCase()}`)}</Badge>
+              {alerts.length ? (
+                alerts.map((a, i) => (
+                  <InteractiveTableRow
+                    key={i}
+                    onClick={
+                      a.accountId
+                        ? () => onDrill({ kind: "account", id: a.accountId!, name: a.item })
+                        : a.vendorId
+                          ? () => onDrill({ kind: "vendor", id: a.vendorId!, name: a.item })
+                          : undefined
+                    }
+                    className={cn(
+                      "border-b border-slate-50 last:border-0 dark:border-slate-800/60",
+                      (a.accountId || a.vendorId) &&
+                        "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40",
+                    )}
+                    noAnimate
+                  >
+                    <SharedTableCell className="px-4 py-2 text-slate-500 dark:text-slate-400">
+                      {a.label}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">
+                      {a.item}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-center">
+                      <Badge
+                        variant={
+                          a.severity === "Critical"
+                            ? "destructive"
+                            : a.severity === "High"
+                              ? "warning"
+                              : "secondary"
+                        }
+                      >
+                        {t(`severity.${a.severity.toLowerCase()}`)}
+                      </Badge>
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">
+                      {a.impact === null ? "—" : money0(a.impact)}
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-xs text-slate-400 dark:text-slate-500">
+                      {a.details}
+                    </SharedTableCell>
+                  </InteractiveTableRow>
+                ))
+              ) : (
+                <SharedTableRow>
+                  <SharedTableCell
+                    colSpan={5}
+                    className="px-4 py-10 text-center text-sm text-slate-400"
+                  >
+                    <CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />
+                    {t("empty.noAlerts")}
+                    {selected !== "all" ? t("empty.forDetector") : ""}
                   </SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{a.impact === null ? '—' : money0(a.impact)}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-xs text-slate-400 dark:text-slate-500">{a.details}</SharedTableCell>
-                </InteractiveTableRow>
-              )) : (
-                <SharedTableRow><SharedTableCell colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400"><CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />{t('empty.noAlerts')}{selected !== 'all' ? t('empty.forDetector') : ''}</SharedTableCell></SharedTableRow>
+                </SharedTableRow>
               )}
             </SharedTableBody>
           </SharedTable>
@@ -504,88 +1211,180 @@ function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d:
       </Panel>
       <p className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500 dark:bg-slate-800/40 dark:text-slate-400">
         <Info size={14} className="mt-0.5 shrink-0" />
-        <span><span className="font-semibold">{t('shadowIt.title')}</span>{t('shadowIt.body', { reason: data.shadowIT.reason })}</span>
+        <span>
+          <span className="font-semibold">{t("shadowIt.title")}</span>
+          {t("shadowIt.body", { reason: data.shadowIT.reason })}
+        </span>
       </p>
     </div>
-  )
+  );
 }
 
 /* ---------------------------------------------------------------- Accounts */
 
-type AcctFilter = 'all' | 'increases' | 'decreases' | 'highvel' | 'new'
+type AcctFilter = "all" | "increases" | "decreases" | "highvel" | "new";
 
 function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
-  const t = useTranslations('analytics.spendVelocity')
-  const locale = useLocale()
-  const today = useBusinessToday()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: number | string) => fmtMoney(n, { compact: true })
-  const money0 = (n: number | string) => fmtMoney(n)
-  const cmp = data.periodComparison
-  const [filter, setFilter] = useState<AcctFilter>('all')
-  const [search, setSearch] = useState('')
+  const t = useTranslations("analytics.spendVelocity");
+  const locale = useLocale();
+  const today = useBusinessToday();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: number | string) => fmtMoney(n, { compact: true });
+  const money0 = (n: number | string) => fmtMoney(n);
+  const cmp = data.periodComparison;
+  const [filter, setFilter] = useState<AcctFilter>("all");
+  const [search, setSearch] = useState("");
   /** Numeric account keys the deep-analysis table can sort by (the sort menu below). */
-  type AcctSortKey = 'currentAmount' | 'velocity' | 'changePct' | 'acceleration'
-  const [sortBy, setSortBy] = useState<AcctSortKey>('currentAmount')
+  type AcctSortKey = "currentAmount" | "velocity" | "changePct" | "acceleration";
+  const [sortBy, setSortBy] = useState<AcctSortKey>("currentAmount");
 
   const rows = useMemo(() => {
-    let list = cmp.accounts
-    if (filter === 'increases') list = list.filter((a) => (a.changePct ?? 0) > data.config.accountFilterChange)
-    else if (filter === 'decreases') list = list.filter((a) => (a.changePct ?? 0) < -data.config.accountFilterChange)
-    else if (filter === 'highvel') list = list.filter((a) => a.velocity !== null && Math.abs(a.velocity) > data.config.accountFilterHighVel)
-    else if (filter === 'new') list = list.filter((a) => a.isNew)
-    if (search) list = list.filter((a) => a.accountName.toLowerCase().includes(search.toLowerCase()))
+    let list = cmp.accounts;
+    if (filter === "increases")
+      list = list.filter((a) => (a.changePct ?? 0) > data.config.accountFilterChange);
+    else if (filter === "decreases")
+      list = list.filter((a) => (a.changePct ?? 0) < -data.config.accountFilterChange);
+    else if (filter === "highvel")
+      list = list.filter(
+        (a) => a.velocity !== null && Math.abs(a.velocity) > data.config.accountFilterHighVel,
+      );
+    else if (filter === "new") list = list.filter((a) => a.isNew);
+    if (search)
+      list = list.filter((a) => a.accountName.toLowerCase().includes(search.toLowerCase()));
     const sortNum = (a: (typeof list)[number]): number =>
-      sortBy === 'currentAmount' ? toChartNumber(a.currentAmount) : Math.abs(a[sortBy] ?? 0)
-    return [...list].sort((a, b) => sortNum(b) - sortNum(a))
-  }, [cmp.accounts, data.config, filter, search, sortBy])
+      sortBy === "currentAmount" ? toChartNumber(a.currentAmount) : Math.abs(a[sortBy] ?? 0);
+    return [...list].sort((a, b) => sortNum(b) - sortNum(a));
+  }, [cmp.accounts, data.config, filter, search, sortBy]);
 
   const chips: { key: AcctFilter; label: string }[] = [
-    { key: 'all', label: t('chips.all') }, { key: 'increases', label: t('chips.increases') }, { key: 'decreases', label: t('chips.decreases') },
-    { key: 'highvel', label: t('chips.highVel') }, { key: 'new', label: t('chips.new') },
-  ]
+    { key: "all", label: t("chips.all") },
+    { key: "increases", label: t("chips.increases") },
+    { key: "decreases", label: t("chips.decreases") },
+    { key: "highvel", label: t("chips.highVel") },
+    { key: "new", label: t("chips.new") },
+  ];
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={CalendarRange} accent="sky" label={t('period.current')} value={money(cmp.summary.currentTotal)} sub={data.period.label} />
-        <KpiCard icon={CalendarRange} accent="slate" label={t('period.prior')} value={money(cmp.summary.priorTotal)} sub={cmp.summary.changePct == null ? '—' : `${cmp.summary.changePct > 0 ? '↑' : '↓'} ${formatPercent01(Math.abs(cmp.summary.changePct) / 100, locale, 1)}`} tone={cmp.summary.changePct != null && cmp.summary.changePct > 0 ? 'negative' : 'positive'} />
-        <KpiCard icon={CalendarRange} accent="slate" label={t('period.twoBack')} value={money(cmp.summary.twoBackTotal)} sub={cmp.summary.twoBackLabel} />
-        <KpiCard icon={TrendingUp} accent="violet" label={t('period.projectedNext')} value={money(cmp.summary.projectedTotal)} sub={t('period.basedOnTrend')} />
+        <KpiCard
+          icon={CalendarRange}
+          accent="sky"
+          label={t("period.current")}
+          value={money(cmp.summary.currentTotal)}
+          sub={data.period.label}
+        />
+        <KpiCard
+          icon={CalendarRange}
+          accent="slate"
+          label={t("period.prior")}
+          value={money(cmp.summary.priorTotal)}
+          sub={
+            cmp.summary.changePct == null
+              ? "—"
+              : `${cmp.summary.changePct > 0 ? "↑" : "↓"} ${formatPercent01(Math.abs(cmp.summary.changePct) / 100, locale, 1)}`
+          }
+          tone={
+            cmp.summary.changePct != null && cmp.summary.changePct > 0 ? "negative" : "positive"
+          }
+        />
+        <KpiCard
+          icon={CalendarRange}
+          accent="slate"
+          label={t("period.twoBack")}
+          value={money(cmp.summary.twoBackTotal)}
+          sub={cmp.summary.twoBackLabel}
+        />
+        <KpiCard
+          icon={TrendingUp}
+          accent="violet"
+          label={t("period.projectedNext")}
+          value={money(cmp.summary.projectedTotal)}
+          sub={t("period.basedOnTrend")}
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('searchPlaceholder')} className="h-8 w-52 rounded-md border border-slate-200 bg-white pl-8 pr-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("searchPlaceholder")}
+            className="h-8 w-52 rounded-md border border-slate-200 bg-white pl-8 pr-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+          />
         </div>
         <div className="flex flex-wrap gap-1.5">
           {chips.map((c) => (
-            <button key={c.key} type="button" onClick={() => setFilter(c.key)} className={cn('rounded-full border px-2.5 py-1 text-xs font-medium', filter === c.key ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300' : 'border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400')}>{c.label}</button>
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => setFilter(c.key)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs font-medium",
+                filter === c.key
+                  ? "border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300"
+                  : "border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400",
+              )}
+            >
+              {c.label}
+            </button>
           ))}
         </div>
         <div className="ml-auto">
-          <Select value={sortBy} onChange={(e) => setSortBy(e.target.value as AcctSortKey)} className="w-40" triggerClassName="h-8 text-sm">
-            <option value="currentAmount">{t('sort.spend')}</option>
-            <option value="velocity">{t('sort.velocity')}</option>
-            <option value="changePct">{t('sort.changePct')}</option>
-            <option value="acceleration">{t('sort.accel')}</option>
+          <Select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as AcctSortKey)}
+            className="w-40"
+            triggerClassName="h-8 text-sm"
+          >
+            <option value="currentAmount">{t("sort.spend")}</option>
+            <option value="velocity">{t("sort.velocity")}</option>
+            <option value="changePct">{t("sort.changePct")}</option>
+            <option value="acceleration">{t("sort.accel")}</option>
           </Select>
         </div>
       </div>
 
       <Panel
-        title={t('panels.deepAnalysis')}
+        title={t("panels.deepAnalysis")}
         icon={Layers}
-        hint={t('panels.deepAnalysisHint', { count: rows.length })}
+        hint={t("panels.deepAnalysisHint", { count: rows.length })}
         bodyClassName="p-0"
         actions={
           <button
             type="button"
-            onClick={() => exportCsv('spend-accounts', [t('table.account'), t('csv.current'), t('csv.prior'), t('csv.twoBack'), t('csv.changePct'), t('csv.projected'), t('csv.velocityPctMo'), t('table.accel'), t('table.trend')], rows.map((a) => [a.accountName, a.currentAmount, a.priorAmount, a.twoBackAmount, a.changePct ?? '', a.projectedAmount, a.velocity ?? '', a.acceleration ?? '', t(`trend.${a.trend}`)]), today)}
+            onClick={() =>
+              exportCsv(
+                "spend-accounts",
+                [
+                  t("table.account"),
+                  t("csv.current"),
+                  t("csv.prior"),
+                  t("csv.twoBack"),
+                  t("csv.changePct"),
+                  t("csv.projected"),
+                  t("csv.velocityPctMo"),
+                  t("table.accel"),
+                  t("table.trend"),
+                ],
+                rows.map((a) => [
+                  a.accountName,
+                  a.currentAmount,
+                  a.priorAmount,
+                  a.twoBackAmount,
+                  a.changePct ?? "",
+                  a.projectedAmount,
+                  a.velocity ?? "",
+                  a.acceleration ?? "",
+                  t(`trend.${a.trend}`),
+                ]),
+                today,
+              )
+            }
             className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
           >
-            <Download size={11} /> {t('csv.export')}
+            <Download size={11} /> {t("csv.export")}
           </button>
         }
       >
@@ -593,30 +1392,83 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
           <SharedTable className="w-full text-sm">
             <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
               <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.account')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.current')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.prior')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.change')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.velocity')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.projected')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.trend')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">
+                  {t("table.account")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.current")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.prior")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.change")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.velocity")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("table.projected")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">
+                  {t("table.trend")}
+                </SharedTableHead>
               </SharedTableRow>
             </SharedTableHeader>
             <SharedTableBody>
               {rows.map((a) => (
-                <InteractiveTableRow key={a.accountId} onClick={() => onDrill({ kind: 'account', id: a.accountId, name: a.accountName })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
+                <InteractiveTableRow
+                  key={a.accountId}
+                  onClick={() => onDrill({ kind: "account", id: a.accountId, name: a.accountName })}
+                  className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40"
+                  noAnimate
+                >
                   <SharedTableCell className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">
                     {a.accountName}
-                    {a.isNew ? <span className="ml-2 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">{t('newBadge')}</span> : null}
+                    {a.isNew ? (
+                      <span className="ml-2 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">
+                        {t("newBadge")}
+                      </span>
+                    ) : null}
                   </SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(a.currentAmount)}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{money0(a.priorAmount)}</SharedTableCell>
-                  <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', (a.changePct ?? 0) > 0 ? 'text-rose-600 dark:text-rose-400' : (a.changePct ?? 0) < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>
-                    {a.changePct == null ? '—' : <>{a.changePct > 0 ? '+' : ''}{formatPercent01(a.changePct / 100, locale, 1)}</>}
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">
+                    {money0(a.currentAmount)}
                   </SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right"><VelocityPill v={a.velocity} hi={data.config.velocityHighThreshold} med={data.config.velocityMediumThreshold} /></SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money0(a.projectedAmount)}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2"><Spark values={a.monthlyTrend} /></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">
+                    {money0(a.priorAmount)}
+                  </SharedTableCell>
+                  <SharedTableCell
+                    className={cn(
+                      "px-4 py-2 text-right font-semibold tabular-nums",
+                      (a.changePct ?? 0) > 0
+                        ? "text-rose-600 dark:text-rose-400"
+                        : (a.changePct ?? 0) < 0
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-slate-400",
+                    )}
+                  >
+                    {a.changePct == null ? (
+                      "—"
+                    ) : (
+                      <>
+                        {a.changePct > 0 ? "+" : ""}
+                        {formatPercent01(a.changePct / 100, locale, 1)}
+                      </>
+                    )}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right">
+                    <VelocityPill
+                      v={a.velocity}
+                      hi={data.config.velocityHighThreshold}
+                      med={data.config.velocityMediumThreshold}
+                    />
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                    {money0(a.projectedAmount)}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2">
+                    <Spark values={a.monthlyTrend} />
+                  </SharedTableCell>
                 </InteractiveTableRow>
               ))}
             </SharedTableBody>
@@ -624,56 +1476,81 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
         </div>
       </Panel>
     </div>
-  )
+  );
 }
 
 /* ---------------------------------------------------------------- Expenses */
 
-
 /* ------------------------------------------------------------------ Trends */
 
 function TrendsTab({ data }: { data: SpendVelocityData }) {
-  const t = useTranslations('analytics.spendVelocity')
-  const locale = useLocale()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: number | string) => fmtMoney(n, { compact: true })
-  const money0 = (n: number | string) => fmtMoney(n)
-  const trends = data.monthlyTrends
+  const t = useTranslations("analytics.spendVelocity");
+  const locale = useLocale();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: number | string) => fmtMoney(n, { compact: true });
+  const money0 = (n: number | string) => fmtMoney(n);
+  const trends = data.monthlyTrends;
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <Panel title={t('panels.monthlySpendVelocity')} icon={ChartArea} hint={t('panels.monthlySpendVelocityHint')}>
+          <Panel
+            title={t("panels.monthlySpendVelocity")}
+            icon={ChartArea}
+            hint={t("panels.monthlySpendVelocityHint")}
+          >
             <Chart
               height={300}
               option={{
                 grid: { top: 26, bottom: 26, left: 62, right: 14 },
                 legend: { top: 0 },
-                tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => (v == null ? '—' : money0(Number(v))) },
-                xAxis: { type: 'category', data: trends.map((m) => m.label) },
-                yAxis: { type: 'value', axisLabel: { formatter: (v: number) => money(v) } },
+                tooltip: {
+                  trigger: "axis",
+                  valueFormatter: (v: unknown) => (v == null ? "—" : money0(Number(v))),
+                },
+                xAxis: { type: "category", data: trends.map((m) => m.label) },
+                yAxis: { type: "value", axisLabel: { formatter: (v: number) => money(v) } },
                 series: [
-                  { name: t('chart.spend'), type: 'line', areaStyle: { opacity: 0.15 }, data: trends.map((m) => toChartNumber(m.totalAmount)), lineStyle: { width: 2, color: '#6366f1' }, itemStyle: { color: '#6366f1' } },
-                  { name: t('chart.priorYear'), type: 'line', data: trends.map((m) => (m.yoyChange === null ? null : toChartNumber(m.priorYearAmount))), lineStyle: { width: 1.5, type: 'dashed', color: '#94a3b8' }, itemStyle: { color: '#94a3b8' } },
+                  {
+                    name: t("chart.spend"),
+                    type: "line",
+                    areaStyle: { opacity: 0.15 },
+                    data: trends.map((m) => toChartNumber(m.totalAmount)),
+                    lineStyle: { width: 2, color: "#6366f1" },
+                    itemStyle: { color: "#6366f1" },
+                  },
+                  {
+                    name: t("chart.priorYear"),
+                    type: "line",
+                    data: trends.map((m) =>
+                      m.yoyChange === null ? null : toChartNumber(m.priorYearAmount),
+                    ),
+                    lineStyle: { width: 1.5, type: "dashed", color: "#94a3b8" },
+                    itemStyle: { color: "#94a3b8" },
+                  },
                 ],
               }}
             />
           </Panel>
         </div>
-        <Panel title={t('panels.seasonalPatterns')} icon={Snowflake}>
+        <Panel title={t("panels.seasonalPatterns")} icon={Snowflake}>
           {data.seasonal.insights.length ? (
             <ul className="mb-3 space-y-1.5 text-sm">
               {data.seasonal.insights.map((i, k) => (
                 <li key={k} className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
-                  {i.type === 'high_season' ? <TrendingUp size={14} className="mt-0.5 shrink-0 text-rose-500" /> : <TrendingDown size={14} className="mt-0.5 shrink-0 text-emerald-500" />}
+                  {i.type === "high_season" ? (
+                    <TrendingUp size={14} className="mt-0.5 shrink-0 text-rose-500" />
+                  ) : (
+                    <TrendingDown size={14} className="mt-0.5 shrink-0 text-emerald-500" />
+                  )}
                   {i.message}
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="mb-3 text-sm text-slate-400">{t('empty.noSeasonal')}</p>
+            <p className="mb-3 text-sm text-slate-400">{t("empty.noSeasonal")}</p>
           )}
-          <p className="mb-1.5 text-xs text-slate-400 dark:text-slate-500">{t('deviationNote')}</p>
+          <p className="mb-1.5 text-xs text-slate-400 dark:text-slate-500">{t("deviationNote")}</p>
           <div className="space-y-1">
             {data.seasonal.patterns.map((p) => (
               <div key={p.month} className="flex items-center gap-2 text-xs">
@@ -683,48 +1560,97 @@ function TrendsTab({ data }: { data: SpendVelocityData }) {
                     className="absolute top-0 h-full rounded"
                     style={{
                       width: `${Math.min(Math.abs(p.deviation), 50)}%`,
-                      backgroundColor: p.deviation > 0 ? '#ef4444' : '#10b981',
-                      ...(p.deviation > 0 ? { left: '50%' } : { right: '50%' }),
+                      backgroundColor: p.deviation > 0 ? "#ef4444" : "#10b981",
+                      ...(p.deviation > 0 ? { left: "50%" } : { right: "50%" }),
                     }}
                   />
                   <div className="absolute inset-y-0 left-1/2 w-px bg-slate-300 dark:bg-slate-600" />
                 </div>
-                <span className="w-10 text-right tabular-nums text-slate-500 dark:text-slate-400">{p.deviation > 0 ? '+' : ''}{formatPercent01(Math.abs(p.deviation) / 100, locale, 0)}</span>
+                <span className="w-10 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                  {p.deviation > 0 ? "+" : ""}
+                  {formatPercent01(Math.abs(p.deviation) / 100, locale, 0)}
+                </span>
               </div>
             ))}
           </div>
         </Panel>
       </div>
-      <Panel title={t('panels.monthlySummary')} icon={BarChart3} bodyClassName="p-0">
+      <Panel title={t("panels.monthlySummary")} icon={BarChart3} bodyClassName="p-0">
         <SharedTable className="w-full text-sm">
           <SharedTableHeader>
             <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.month')}</SharedTableHead>
-              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.totalSpend')}</SharedTableHead>
-              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.priorYear')}</SharedTableHead>
-              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.yoyChange')}</SharedTableHead>
-              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.velocity')}</SharedTableHead>
-              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.txns')}</SharedTableHead>
-              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.vendors')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-left font-medium">
+                {t("table.month")}
+              </SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">
+                {t("table.totalSpend")}
+              </SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">
+                {t("table.priorYear")}
+              </SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">
+                {t("table.yoyChange")}
+              </SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">
+                {t("table.velocity")}
+              </SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">
+                {t("table.txns")}
+              </SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">
+                {t("table.vendors")}
+              </SharedTableHead>
             </SharedTableRow>
           </SharedTableHeader>
           <SharedTableBody>
             {trends.map((m) => (
-              <SharedTableRow key={m.month} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                <SharedTableCell className="px-4 py-2 font-medium tabular-nums text-slate-800 dark:text-slate-200">{m.label}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(m.totalAmount)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{m.yoyChange === null ? '—' : money0(m.priorYearAmount)}</SharedTableCell>
-                <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', (m.yoyChange ?? 0) > 0 ? 'text-rose-600 dark:text-rose-400' : (m.yoyChange ?? 0) < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>{m.yoyChange === null ? '—' : `${m.yoyChange > 0 ? '+' : ''}${formatPercent01(m.yoyChange / 100, locale, 1)}`}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right"><VelocityPill v={m.velocity} hi={data.config.velocityHighThreshold} med={data.config.velocityMediumThreshold} /></SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{countLabel(m.transactionCount, locale)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{m.vendorCount}</SharedTableCell>
+              <SharedTableRow
+                key={m.month}
+                className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+              >
+                <SharedTableCell className="px-4 py-2 font-medium tabular-nums text-slate-800 dark:text-slate-200">
+                  {m.label}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">
+                  {money0(m.totalAmount)}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">
+                  {m.yoyChange === null ? "—" : money0(m.priorYearAmount)}
+                </SharedTableCell>
+                <SharedTableCell
+                  className={cn(
+                    "px-4 py-2 text-right font-semibold tabular-nums",
+                    (m.yoyChange ?? 0) > 0
+                      ? "text-rose-600 dark:text-rose-400"
+                      : (m.yoyChange ?? 0) < 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-slate-400",
+                  )}
+                >
+                  {m.yoyChange === null
+                    ? "—"
+                    : `${m.yoyChange > 0 ? "+" : ""}${formatPercent01(m.yoyChange / 100, locale, 1)}`}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right">
+                  <VelocityPill
+                    v={m.velocity}
+                    hi={data.config.velocityHighThreshold}
+                    med={data.config.velocityMediumThreshold}
+                  />
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">
+                  {countLabel(m.transactionCount, locale)}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">
+                  {m.vendorCount}
+                </SharedTableCell>
               </SharedTableRow>
             ))}
           </SharedTableBody>
         </SharedTable>
       </Panel>
     </div>
-  )
+  );
 }
 
 /* ----------------------------------------------------------- Configuration */
@@ -735,72 +1661,144 @@ function TrendsTab({ data }: { data: SpendVelocityData }) {
  * thresholds, so the tab shows every number with no editor.
  */
 function SeverityModelPanel({ data }: { data: SpendVelocityData }) {
-  const t = useTranslations('analytics.spendVelocity')
-  const locale = useLocale()
-  const sections = ['velocity', 'critical', 'warning', 'structural', 'savings'] as const
+  const t = useTranslations("analytics.spendVelocity");
+  const locale = useLocale();
+  const sections = ["velocity", "critical", "warning", "structural", "savings"] as const;
   return (
-    <Panel title={t('panels.severityModel')} icon={SlidersHorizontal} bodyClassName="p-0">
+    <Panel title={t("panels.severityModel")} icon={SlidersHorizontal} bodyClassName="p-0">
       {sections.map((section) => (
-        <div key={section} className="border-b border-slate-50 px-4 py-3 last:border-0 dark:border-slate-800/60">
-          <p className="mb-1.5 text-xs font-bold tracking-wider text-slate-400 uppercase dark:text-slate-500">{t(`model.${section}.label`)}</p>
+        <div
+          key={section}
+          className="border-b border-slate-50 px-4 py-3 last:border-0 dark:border-slate-800/60"
+        >
+          <p className="mb-1.5 text-xs font-bold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+            {t(`model.${section}.label`)}
+          </p>
           <ul className="space-y-1">
             {Object.entries(data.severityModel[section]).map(([leaf, value]) => (
               <li key={leaf} className="flex items-start justify-between gap-4">
-                <span className="text-sm text-slate-600 dark:text-slate-300">{t(`model.${section}.${leaf}`)}</span>
-                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{decimalLabel(value, locale, 0, 2)}</span>
+                <span className="text-sm text-slate-600 dark:text-slate-300">
+                  {t(`model.${section}.${leaf}`)}
+                </span>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  {decimalLabel(value, locale, 0, 2)}
+                </span>
               </li>
             ))}
           </ul>
         </div>
       ))}
     </Panel>
-  )
+  );
 }
 
 function ConfigTab({ data, canEdit }: { data: SpendVelocityData; canEdit: boolean }) {
-  const t = useTranslations('analytics.spendVelocity')
-  const locale = useLocale()
-  const fmtMoney = useAnalyticsMoney()
-  const c = data.config
+  const t = useTranslations("analytics.spendVelocity");
+  const locale = useLocale();
+  const fmtMoney = useAnalyticsMoney();
+  const c = data.config;
   const items = [
-    { label: t('config.velocityThresholds.label'), value: `${formatPercent01(c.velocityMediumThreshold / 100, locale, 1)} / ${formatPercent01(c.velocityHighThreshold / 100, locale, 1)}`, note: t('config.velocityThresholds.note') },
-    { label: t('config.anomalyThreshold.label'), value: `${decimalLabel(c.anomalyStdDevThreshold, locale, 1, 1)}σ`, note: t('config.anomalyThreshold.note', { critical: c.anomalyStdDevThreshold + c.anomalyCriticalOffset }) },
-    { label: t('config.boilingFrog.label'), value: t('unit.months', { count: c.boilingFrogMonths }), note: t('config.boilingFrog.note', { stepCap: c.boilingFrogStepCap }) },
-    { label: t('config.zombieWindow.label'), value: t('unit.months', { count: c.zombieMinMonths }), note: t('config.zombieWindow.note', { maxDeviation: c.zombieMaxDeviation }) },
-    { label: t('config.fragmentation.label'), value: c.fragmentationMaxAvgSize === '' ? t('config.unsetMinimum') : t('config.fragmentation.value', { txns: c.fragmentationMinTxns, max: fmtMoney(c.fragmentationMaxAvgSize) }), note: t('config.fragmentation.note') },
-    { label: t('config.velocityEngine.label'), value: t('config.velocityEngine.value'), note: c.minBaseAmount === '' ? t('config.velocityEngine.noteUnset') : t('config.velocityEngine.note', { minBase: fmtMoney(c.minBaseAmount) }) },
-  ]
+    {
+      label: t("config.velocityThresholds.label"),
+      value: `${formatPercent01(c.velocityMediumThreshold / 100, locale, 1)} / ${formatPercent01(c.velocityHighThreshold / 100, locale, 1)}`,
+      note: t("config.velocityThresholds.note"),
+    },
+    {
+      label: t("config.anomalyThreshold.label"),
+      value: `${decimalLabel(c.anomalyStdDevThreshold, locale, 1, 1)}σ`,
+      note: t("config.anomalyThreshold.note", {
+        critical: c.anomalyStdDevThreshold + c.anomalyCriticalOffset,
+      }),
+    },
+    {
+      label: t("config.boilingFrog.label"),
+      value: t("unit.months", { count: c.boilingFrogMonths }),
+      note: t("config.boilingFrog.note", { stepCap: c.boilingFrogStepCap }),
+    },
+    {
+      label: t("config.zombieWindow.label"),
+      value: t("unit.months", { count: c.zombieMinMonths }),
+      note: t("config.zombieWindow.note", { maxDeviation: c.zombieMaxDeviation }),
+    },
+    {
+      label: t("config.fragmentation.label"),
+      value:
+        c.fragmentationMaxAvgSize === ""
+          ? t("config.unsetMinimum")
+          : t("config.fragmentation.value", {
+              txns: c.fragmentationMinTxns,
+              max: fmtMoney(c.fragmentationMaxAvgSize),
+            }),
+      note: t("config.fragmentation.note"),
+    },
+    {
+      label: t("config.velocityEngine.label"),
+      value: t("config.velocityEngine.value"),
+      note:
+        c.minBaseAmount === ""
+          ? t("config.velocityEngine.noteUnset")
+          : t("config.velocityEngine.note", { minBase: fmtMoney(c.minBaseAmount) }),
+    },
+  ];
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <div className="space-y-5">
         <ConfigEditor dashboard="spendVelocity" canEdit={canEdit} />
         <SeverityModelPanel data={data} />
-        <Panel title={t('panels.modelThresholds')} icon={SlidersHorizontal} bodyClassName="p-0">
+        <Panel title={t("panels.modelThresholds")} icon={SlidersHorizontal} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
             {items.map((i) => (
               <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{i.label}</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {i.label}
+                  </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">{i.note}</p>
                 </div>
-                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{i.value}</span>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  {i.value}
+                </span>
               </li>
             ))}
           </ul>
         </Panel>
       </div>
-      <Panel title={t('panels.dataSources')} icon={Info}>
+      <Panel title={t("panels.dataSources")} icon={Info}>
         <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-          <p>{t('sources.intro')}</p>
+          <p>{t("sources.intro")}</p>
           <ul className="list-disc space-y-1 pl-5 text-slate-500 dark:text-slate-400">
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('sources.li1Bold1')}</span>{t('sources.li1Mid')}<span className="font-medium text-slate-700 dark:text-slate-200">{t('sources.li1Bold2')}</span>{t('sources.li1Tail')}</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('sources.li2Bold')}</span>{t('sources.li2Tail')}</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('sources.li3Bold')}</span>{t('sources.li3Tail', { ratio: data.revenue.opexRatio })}</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('sources.li4Bold')}</span>{t('sources.li4Tail', { reason: data.shadowIT.reason })}</li>
+            <li>
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {t("sources.li1Bold1")}
+              </span>
+              {t("sources.li1Mid")}
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {t("sources.li1Bold2")}
+              </span>
+              {t("sources.li1Tail")}
+            </li>
+            <li>
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {t("sources.li2Bold")}
+              </span>
+              {t("sources.li2Tail")}
+            </li>
+            <li>
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {t("sources.li3Bold")}
+              </span>
+              {t("sources.li3Tail", { ratio: data.revenue.opexRatio })}
+            </li>
+            <li>
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {t("sources.li4Bold")}
+              </span>
+              {t("sources.li4Tail", { reason: data.shadowIT.reason })}
+            </li>
           </ul>
-          <p>{t('sources.outro')}</p>
+          <p>{t("sources.outro")}</p>
         </div>
       </Panel>
     </div>
-  )
+  );
 }

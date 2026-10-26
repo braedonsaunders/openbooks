@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import type { AgingData } from './view'
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { AgingData } from "./view";
 
-const { agingSpec } = await import('./view')
+const { agingSpec } = await import("./view");
 
 // the Export button built its URL from the raw page params, so
 // the screen's resolved as-of never reached the endpoint — the CSV aged as
@@ -11,43 +11,47 @@ const { agingSpec } = await import('./view')
 // whatever the screen resolved (including the as-of) must reach the export
 // menu unchanged. (Resolving the as-of needs a database and has no unit
 // interface.)
-test('the export menu receives the screen params including the resolved as-of', () => {
-  const exportParams = { period: 'custom', asOf: '2026-09-30', side: 'ar' }
-  const spec = agingSpec({ exportParams } as unknown as AgingData)
-  const found: Record<string, unknown>[] = []
+test("the export menu receives the screen params including the resolved as-of", () => {
+  const exportParams = { period: "custom", asOf: "2026-09-30", side: "ar" };
+  const spec = agingSpec({ exportParams } as unknown as AgingData);
+  const found: Record<string, unknown>[] = [];
   const visit = (node: unknown): void => {
     if (Array.isArray(node)) {
-      for (const item of node) visit(item)
-      return
+      for (const item of node) visit(item);
+      return;
     }
-    if (typeof node === 'object' && node !== null) {
-      found.push(node as Record<string, unknown>)
-      for (const value of Object.values(node)) visit(value)
+    if (typeof node === "object" && node !== null) {
+      found.push(node as Record<string, unknown>);
+      for (const value of Object.values(node)) visit(value);
     }
-  }
-  visit((spec as { header: unknown }).header)
-  const menu = found.find((block) => block.widget === 'export-menu')
-  assert.ok(menu, 'the export menu must be on the page')
+  };
+  visit((spec as { header: unknown }).header);
+  const menu = found.find((block) => block.widget === "export-menu");
+  assert.ok(menu, "the export menu must be on the page");
   assert.deepEqual(
     (menu.props as Record<string, unknown>).params,
     exportParams,
-    'the export must run against the screen-resolved params, not just the raw page params',
-  )
-})
+    "the export must run against the screen-resolved params, not just the raw page params",
+  );
+});
 
-test('a long summary renders its party rows in the browser, a window at a time', async () => {
-  const { rowsRenderInBrowser } = await import('../../../../components/viewspec/windowed-rows')
-  const spec = agingSpec({ isSummary: true, hasSummaryRows: true, ratesReady: true } as unknown as AgingData)
-  const tables: Record<string, unknown>[] = []
+test("a long summary renders its party rows in the browser, a window at a time", async () => {
+  const { rowsRenderInBrowser } = await import("../../../../components/viewspec/windowed-rows");
+  const spec = agingSpec({
+    isSummary: true,
+    hasSummaryRows: true,
+    ratesReady: true,
+  } as unknown as AgingData);
+  const tables: Record<string, unknown>[] = [];
   const visit = (node: unknown): void => {
-    if (Array.isArray(node)) return node.forEach(visit)
-    if (typeof node !== 'object' || node === null) return
-    const block = node as Record<string, unknown>
-    if (block.kind === 'table') tables.push(block)
-    Object.values(block).forEach(visit)
-  }
-  visit(spec)
-  const summary = tables.find((table) => JSON.stringify(table.rows).includes('summaryRows'))
-  assert.ok(summary, 'the summary table is on the page')
-  assert.equal(rowsRenderInBrowser(summary as never), true, 'its cells read only their own row')
-})
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (typeof node !== "object" || node === null) return;
+    const block = node as Record<string, unknown>;
+    if (block.kind === "table") tables.push(block);
+    Object.values(block).forEach(visit);
+  };
+  visit(spec);
+  const summary = tables.find((table) => JSON.stringify(table.rows).includes("summaryRows"));
+  assert.ok(summary, "the summary table is on the page");
+  assert.equal(rowsRenderInBrowser(summary as never), true, "its cells read only their own row");
+});

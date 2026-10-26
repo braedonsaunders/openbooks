@@ -1,40 +1,72 @@
-'use client'
+"use client";
 
-import { ANALYTICS_TABS } from '../../../../lib/analytics/dashboard-tabs'
+import { ANALYTICS_TABS } from "../../../../lib/analytics/dashboard-tabs";
 
-import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
-import { RecordTabs } from '@/components/module-home/record-tabs'
-import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell, TableHeader as SharedTableHeader, TableHead as SharedTableHead } from "../../reports/ReportTable"
-import { toChartNumber } from '../_ui/format'
-
-import { useMemo, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useFormatter, useTranslations } from 'next-intl'
-import { toast } from 'sonner'
+import { useAnalyticsTab, AnalyticsTabContent } from "../use-analytics-tab";
+import { RecordTabs } from "@/components/module-home/record-tabs";
 import {
-  AlertTriangle, Building2, Calculator, ChartArea, CheckCircle2, Clock, Coins, DollarSign,
-  Grid3X3, Info, Layers, Package, Percent, Pin, PlusCircle, RotateCcw, Scale, SlidersHorizontal,
-  TrendingDown, TrendingUp, UserRound, Wand2, Gauge as GaugeIcon, Download,
-} from 'lucide-react'
-import { cn, Select, Drawer } from '@openbooks/ui'
-import { add, cmp as compareMoney, div, mulDecimal, neg } from '@openbooks/engine/money/money'
-import type { CustomCategory, TrueCostData, TrueCostProfile } from '../../../../lib/analytics/true-cost-data'
-import type { RateFormat } from '../../../../lib/analytics/true-cost-engine'
-import { KpiCard } from '../_ui/KpiCard'
-import { Panel } from '../_ui/Panel'
-import { Donut } from '../_ui/charts'
-import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
-import { useBusinessToday } from '../../../../components/business-date-provider'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { exportCsv } from '../_ui/exportCsv'
-import { useAnalyticsMoney } from '../_ui/format'
-import { useMoney } from '@/components/money-provider'
-import { InteractiveTableRow } from '@/components/interactive-table-row'
+  Table as SharedTable,
+  TableBody as SharedTableBody,
+  TableRow as SharedTableRow,
+  TableCell as SharedTableCell,
+  TableHeader as SharedTableHeader,
+  TableHead as SharedTableHead,
+} from "../../reports/ReportTable";
+import { toChartNumber } from "../_ui/format";
+
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useFormatter, useTranslations } from "next-intl";
+import { toast } from "sonner";
+import {
+  AlertTriangle,
+  Building2,
+  Calculator,
+  ChartArea,
+  CheckCircle2,
+  Clock,
+  Coins,
+  DollarSign,
+  Grid3X3,
+  Info,
+  Layers,
+  Package,
+  Percent,
+  Pin,
+  PlusCircle,
+  RotateCcw,
+  Scale,
+  SlidersHorizontal,
+  TrendingDown,
+  TrendingUp,
+  UserRound,
+  Wand2,
+  Gauge as GaugeIcon,
+  Download,
+} from "lucide-react";
+import { cn, Select, Drawer } from "@openbooks/ui";
+import { add, cmp as compareMoney, div, mulDecimal, neg } from "@openbooks/engine/money/money";
+import type {
+  CustomCategory,
+  TrueCostData,
+  TrueCostProfile,
+} from "../../../../lib/analytics/true-cost-data";
+import type { RateFormat } from "../../../../lib/analytics/true-cost-engine";
+import { KpiCard } from "../_ui/KpiCard";
+import { Panel } from "../_ui/Panel";
+import { Donut } from "../_ui/charts";
+import { DrillDrawer, type DrillTarget } from "../_ui/DrillDrawer";
+import { useBusinessToday } from "../../../../components/business-date-provider";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { exportCsv } from "../_ui/exportCsv";
+import { useAnalyticsMoney } from "../_ui/format";
+import { useMoney } from "@/components/money-provider";
+import { InteractiveTableRow } from "@/components/interactive-table-row";
 
 /* ------------------------------------------------------------------ helpers */
 
-type Tab = 'categories' | 'matrix' | 'absorption' | 'selling' | 'config'
+type Tab = "categories" | "matrix" | "absorption" | "selling" | "config";
 
 /**
  * Which tabs each surface owns. The BUILDER (categories/matrix/config) lives in
@@ -42,31 +74,33 @@ type Tab = 'categories' | 'matrix' | 'absorption' | 'selling' | 'config'
  * rate-engine config. Recovery/selling planners link to Setup to configure;
  * historical analytical output lives in the shared True Cost report.
  */
-export type TrueCostMode = 'analytics' | 'setup'
+export type TrueCostMode = "analytics" | "setup";
 const MODE_TABS: Record<TrueCostMode, readonly Tab[]> = {
-  analytics: ANALYTICS_TABS['true-cost'],
-  setup: ['categories', 'matrix', 'config'],
-}
+  analytics: ANALYTICS_TABS["true-cost"],
+  setup: ["categories", "matrix", "config"],
+};
 const useRate = () => {
-  const { money } = useMoney()
-  const t = useTranslations('analytics.trueCost')
-  return (value: number) => t('formats.perHour', {
-    amount: money(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-  })
-}
+  const { money } = useMoney();
+  const t = useTranslations("analytics.trueCost");
+  return (value: number) =>
+    t("formats.perHour", {
+      amount: money(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    });
+};
 const useWholeNumber = () => {
-  const format = useFormatter()
-  return (value: number) => format.number(Math.round(value), { maximumFractionDigits: 0 })
-}
+  const format = useFormatter();
+  return (value: number) => format.number(Math.round(value), { maximumFractionDigits: 0 });
+};
 const usePercent = () => {
-  const format = useFormatter()
-  return (value: number, fractionDigits = 0) => format.number(value / 100, {
-    style: 'percent',
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  })
-}
-const FALLBACK = '#94a3b8'
+  const format = useFormatter();
+  return (value: number, fractionDigits = 0) =>
+    format.number(value / 100, {
+      style: "percent",
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    });
+};
+const FALLBACK = "#94a3b8";
 
 /**
  * A rate in its category's own format: $/hr, %, $/FTE or $/unit — never
@@ -74,228 +108,441 @@ const FALLBACK = '#94a3b8'
  * format (mixed units refuse, so a surviving composite is uniform).
  */
 const useCategoryRate = () => {
-  const rate = useRate()
-  const percent = usePercent()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: string | number) => fmtMoney(n, { compact: true })
-  const t = useTranslations('analytics.trueCost')
+  const rate = useRate();
+  const percent = usePercent();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: string | number) => fmtMoney(n, { compact: true });
+  const t = useTranslations("analytics.trueCost");
   return (value: number | null | undefined, format: RateFormat | null | undefined) => {
-    if (value == null) return '—'
-    switch (format ?? 'per_hour') {
-      case 'percent_labor':
-      case 'percent_cost': return percent(value, 1)
-      case 'per_fte': return t('formats.perFte', { amount: money(value) })
-      case 'per_unit': return t('formats.perUnit', { amount: money(value) })
-      default: return rate(value)
+    if (value == null) return "—";
+    switch (format ?? "per_hour") {
+      case "percent_labor":
+      case "percent_cost":
+        return percent(value, 1);
+      case "per_fte":
+        return t("formats.perFte", { amount: money(value) });
+      case "per_unit":
+        return t("formats.perUnit", { amount: money(value) });
+      default:
+        return rate(value);
     }
-  }
-}
+  };
+};
 
 /** Pill wrapper for inline filter selects (the .srb-filter). */
-function FilterPill({ icon: Icon, children }: { icon: typeof Building2; children: React.ReactNode }) {
+function FilterPill({
+  icon: Icon,
+  children,
+}: {
+  icon: typeof Building2;
+  children: React.ReactNode;
+}) {
   return (
     <span className="inline-flex items-center gap-0.5 rounded-full border border-slate-200 bg-white py-0.5 pl-2 pr-0.5 dark:border-slate-700 dark:bg-slate-900">
       <Icon size={11} className="shrink-0 text-slate-400" />
       {children}
     </span>
-  )
+  );
 }
 /** Select trigger styled to sit borderless inside a FilterPill. */
-const PILL_TRIGGER = 'h-6 rounded-full border-0 bg-transparent px-1.5 text-xs shadow-none dark:bg-transparent'
+const PILL_TRIGGER =
+  "h-6 rounded-full border-0 bg-transparent px-1.5 text-xs shadow-none dark:bg-transparent";
 
 const ALLOCATION_BASE_KEYS = [
-  'billed_hours', 'total_hours', 'labor_dollars', 'headcount',
-  'revenue', 'direct_cost', 'square_feet', 'units', 'custom',
-] as const
+  "billed_hours",
+  "total_hours",
+  "labor_dollars",
+  "headcount",
+  "revenue",
+  "direct_cost",
+  "square_feet",
+  "units",
+  "custom",
+] as const;
 
 /* ---------------------------------------------------------- API mutations */
 
-type ApiResult = { ok: true } | { ok: false; error: string }
+type ApiResult = { ok: true } | { ok: false; error: string };
 
 async function runMutation(
   fn: () => Promise<ApiResult>,
   setBusy: (busy: boolean) => void,
   onSuccess: () => void,
 ) {
-  setBusy(true)
+  setBusy(true);
   try {
-    const result = await fn()
-    if (!result.ok) toast.error(result.error)
-    else onSuccess()
+    const result = await fn();
+    if (!result.ok) toast.error(result.error);
+    else onSuccess();
   } catch (error) {
-    toast.error(error instanceof Error && error.message ? error.message : 'Request failed. Please retry.')
+    toast.error(
+      error instanceof Error && error.message ? error.message : "Request failed. Please retry.",
+    );
   } finally {
-    setBusy(false)
+    setBusy(false);
   }
 }
 
 async function apiCall(path: string, init: RequestInit): Promise<ApiResult> {
-  const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
-  if (!res.ok) return { ok: false, error: await readApiErrorMessage(res, 'Request failed') }
-  return { ok: true }
+  const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...init });
+  if (!res.ok) return { ok: false, error: await readApiErrorMessage(res, "Request failed") };
+  return { ok: true };
 }
 const pinAccount = (groupId: string, accountId: string) =>
-  apiCall(`/api/account-groups/${groupId}/pins`, { method: 'POST', body: JSON.stringify({ accountId }) })
+  apiCall(`/api/account-groups/${groupId}/pins`, {
+    method: "POST",
+    body: JSON.stringify({ accountId }),
+  });
 const unpinAccount = (groupId: string, accountId: string) =>
-  apiCall(`/api/account-groups/${groupId}/pins?accountId=${accountId}`, { method: 'DELETE' })
+  apiCall(`/api/account-groups/${groupId}/pins?accountId=${accountId}`, { method: "DELETE" });
 const patchGroup = (groupId: string, body: { name?: string; color?: string; match?: object }) =>
-  apiCall(`/api/account-groups/${groupId}`, { method: 'PATCH', body: JSON.stringify(body) })
+  apiCall(`/api/account-groups/${groupId}`, { method: "PATCH", body: JSON.stringify(body) });
 
 /** Read the full engine config, apply a mutation to the ACTIVE profile, PUT it back. */
-type TrueCostConfigResponse = { revision: number; activeProfileId: string; profiles: TrueCostProfile[] }
+type TrueCostConfigResponse = {
+  revision: number;
+  activeProfileId: string;
+  profiles: TrueCostProfile[];
+};
 
 async function mutateActiveProfile(mutate: (profile: TrueCostProfile) => void): Promise<ApiResult> {
-  const res = await fetch('/api/analytics/true-cost/config')
-  if (!res.ok) return { ok: false, error: await readApiErrorMessage(res, 'Could not load True Cost configuration') }
-  const cfg = await res.json() as TrueCostConfigResponse
-  const profile = cfg.profiles.find((p) => p.id === cfg.activeProfileId) ?? cfg.profiles[0]
-  if (!profile) return { ok: false, error: 'No True Cost profile is configured — add a profile before saving.' }
-  mutate(profile)
+  const res = await fetch("/api/analytics/true-cost/config");
+  if (!res.ok)
+    return {
+      ok: false,
+      error: await readApiErrorMessage(res, "Could not load True Cost configuration"),
+    };
+  const cfg = (await res.json()) as TrueCostConfigResponse;
+  const profile = cfg.profiles.find((p) => p.id === cfg.activeProfileId) ?? cfg.profiles[0];
+  if (!profile)
+    return {
+      ok: false,
+      error: "No True Cost profile is configured — add a profile before saving.",
+    };
+  mutate(profile);
   // The PUT is fenced on expectedRevision. A 409 names "reload and review";
   // callers must render that body — collapsing the response to a boolean
   // discarded the conflict and refreshed as if the write landed.
-  return apiCall('/api/analytics/true-cost/config', {
-    method: 'PUT',
-    body: JSON.stringify({ activeProfileId: cfg.activeProfileId, profiles: cfg.profiles, expectedRevision: cfg.revision }),
-  })
+  return apiCall("/api/analytics/true-cost/config", {
+    method: "PUT",
+    body: JSON.stringify({
+      activeProfileId: cfg.activeProfileId,
+      profiles: cfg.profiles,
+      expectedRevision: cfg.revision,
+    }),
+  });
 }
 /** Set the active profile, then PUT. */
 async function switchProfile(activeProfileId: string): Promise<ApiResult> {
-  const res = await fetch('/api/analytics/true-cost/config')
-  if (!res.ok) return { ok: false, error: await readApiErrorMessage(res, 'Could not load True Cost configuration') }
-  const cfg = await res.json() as TrueCostConfigResponse
-  cfg.activeProfileId = activeProfileId
-  return apiCall('/api/analytics/true-cost/config', {
-    method: 'PUT',
-    body: JSON.stringify({ activeProfileId: cfg.activeProfileId, profiles: cfg.profiles, expectedRevision: cfg.revision }),
-  })
+  const res = await fetch("/api/analytics/true-cost/config");
+  if (!res.ok)
+    return {
+      ok: false,
+      error: await readApiErrorMessage(res, "Could not load True Cost configuration"),
+    };
+  const cfg = (await res.json()) as TrueCostConfigResponse;
+  cfg.activeProfileId = activeProfileId;
+  return apiCall("/api/analytics/true-cost/config", {
+    method: "PUT",
+    body: JSON.stringify({
+      activeProfileId: cfg.activeProfileId,
+      profiles: cfg.profiles,
+      expectedRevision: cfg.revision,
+    }),
+  });
 }
 
 /* ------------------------------------------------------------------- shell */
 
-type CellRef = { catId: string; deptId: string }
+type CellRef = { catId: string; deptId: string };
 
-export function TrueCostView({ data: initialData, mode = 'analytics' }: { data: TrueCostData; mode?: TrueCostMode }) {
-  const catRate = useCategoryRate()
-  const whole = useWholeNumber()
-  const percent = usePercent()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: string | number) => fmtMoney(n, { compact: true })
-  const t = useTranslations('analytics.trueCost')
-  const tabs = MODE_TABS[mode]
-  const read = useAnalyticsTab('true-cost', { data: initialData }, tabs)
-  const { tab, setTab } = read
-  const { data } = read.props
-  const [openCatId, setOpenCatId] = useState<string | null>(null)
-  const [cell, setCell] = useState<CellRef | null>(null)
-  const [drill, setDrill] = useState<DrillTarget | null>(null)
-  const k = data.kpis
-  const under = k.gap != null && k.gap < 0
-  const noAbsorption = k.burdenApplied == null || k.gap == null
+export function TrueCostView({
+  data: initialData,
+  mode = "analytics",
+}: {
+  data: TrueCostData;
+  mode?: TrueCostMode;
+}) {
+  const catRate = useCategoryRate();
+  const whole = useWholeNumber();
+  const percent = usePercent();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: string | number) => fmtMoney(n, { compact: true });
+  const t = useTranslations("analytics.trueCost");
+  const tabs = MODE_TABS[mode];
+  const read = useAnalyticsTab("true-cost", { data: initialData }, tabs);
+  const { tab, setTab } = read;
+  const { data } = read.props;
+  const [openCatId, setOpenCatId] = useState<string | null>(null);
+  const [cell, setCell] = useState<CellRef | null>(null);
+  const [drill, setDrill] = useState<DrillTarget | null>(null);
+  const k = data.kpis;
+  const under = k.gap != null && k.gap < 0;
+  const noAbsorption = k.burdenApplied == null || k.gap == null;
 
   return (
     <div className="space-y-5">
-      {mode === 'analytics' ? (
+      {mode === "analytics" ? (
         /* Hero — the 5 KPIs verbatim (dashboard surface only) */
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <KpiCard
-            icon={GaugeIcon} accent="sky" label={t('hero.compositeRate')} value={catRate(k.compositeRate, k.compositeFormat)}
-            sub={k.compositeRateChangePct == null ? t('hero.compositeSubDefault') : t('hero.vsPrior', { arrow: k.compositeRateChangePct > 0 ? '↑' : '↓', change: percent(Math.abs(k.compositeRateChangePct), 1) })}
-            tone={k.compositeRateChangePct != null && k.compositeRateChangePct > 0 ? 'negative' : 'neutral'}
+            icon={GaugeIcon}
+            accent="sky"
+            label={t("hero.compositeRate")}
+            value={catRate(k.compositeRate, k.compositeFormat)}
+            sub={
+              k.compositeRateChangePct == null
+                ? t("hero.compositeSubDefault")
+                : t("hero.vsPrior", {
+                    arrow: k.compositeRateChangePct > 0 ? "↑" : "↓",
+                    change: percent(Math.abs(k.compositeRateChangePct), 1),
+                  })
+            }
+            tone={
+              k.compositeRateChangePct != null && k.compositeRateChangePct > 0
+                ? "negative"
+                : "neutral"
+            }
           />
-          <KpiCard icon={Package} accent="red" label={t('hero.totalOverhead')} value={money(k.totalOverhead)} sub={t('hero.accountsCount', { count: k.overheadAccounts })} />
-          <KpiCard icon={Coins} accent="emerald" label={t('hero.overheadApplied')} value={k.burdenApplied == null ? '—' : money(k.burdenApplied)} sub={k.burdenApplied == null ? t('hero.notAvailable') : t('hero.recovered')} tone={k.burdenApplied == null ? 'neutral' : 'positive'} />
-          <KpiCard icon={Scale} accent={noAbsorption ? 'slate' : under ? 'red' : 'emerald'} label={t('hero.absorption')} value={k.gap == null ? '—' : `${k.gap < 0 ? '−' : '+'}${money(Math.abs(k.gap))}`} sub={k.gap == null ? t('hero.notAvailable') : under ? t('hero.underAbsorbed') : t('hero.overAbsorbed')} tone={noAbsorption ? 'neutral' : under ? 'negative' : 'positive'} />
-          <KpiCard icon={Clock} accent="amber" label={t('hero.billedHours')} value={whole(k.billedHours)} sub={t('hero.utilizationPct', { pct: percent(k.utilization * 100) })} />
+          <KpiCard
+            icon={Package}
+            accent="red"
+            label={t("hero.totalOverhead")}
+            value={money(k.totalOverhead)}
+            sub={t("hero.accountsCount", { count: k.overheadAccounts })}
+          />
+          <KpiCard
+            icon={Coins}
+            accent="emerald"
+            label={t("hero.overheadApplied")}
+            value={k.burdenApplied == null ? "—" : money(k.burdenApplied)}
+            sub={k.burdenApplied == null ? t("hero.notAvailable") : t("hero.recovered")}
+            tone={k.burdenApplied == null ? "neutral" : "positive"}
+          />
+          <KpiCard
+            icon={Scale}
+            accent={noAbsorption ? "slate" : under ? "red" : "emerald"}
+            label={t("hero.absorption")}
+            value={k.gap == null ? "—" : `${k.gap < 0 ? "−" : "+"}${money(Math.abs(k.gap))}`}
+            sub={
+              k.gap == null
+                ? t("hero.notAvailable")
+                : under
+                  ? t("hero.underAbsorbed")
+                  : t("hero.overAbsorbed")
+            }
+            tone={noAbsorption ? "neutral" : under ? "negative" : "positive"}
+          />
+          <KpiCard
+            icon={Clock}
+            accent="amber"
+            label={t("hero.billedHours")}
+            value={whole(k.billedHours)}
+            sub={t("hero.utilizationPct", { pct: percent(k.utilization * 100) })}
+          />
         </div>
       ) : null}
 
-      {mode === 'analytics' ? <Link href="/admin/setup/overhead" className="flex items-center gap-1 text-xs font-medium text-teal-600 hover:underline dark:text-teal-400"><SlidersHorizontal size={12} aria-hidden /> {t('configureInSetup')}</Link> : null}
+      {mode === "analytics" ? (
+        <Link
+          href="/admin/setup/overhead"
+          className="flex items-center gap-1 text-xs font-medium text-teal-600 hover:underline dark:text-teal-400"
+        >
+          <SlidersHorizontal size={12} aria-hidden /> {t("configureInSetup")}
+        </Link>
+      ) : null}
       {/* A refused composite never hides the dashboard: the refusal reads
           here, while every category, department and editor below still renders. */}
       {data.compositeRefusal ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30" role="note">
-          <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">{t('hero.compositeRate')}</p>
-          <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">{data.compositeRefusal.message}</p>
+        <div
+          className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30"
+          role="note"
+        >
+          <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+            {t("hero.compositeRate")}
+          </p>
+          <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+            {data.compositeRefusal.message}
+          </p>
         </div>
       ) : null}
-      <RecordTabs label={t('title')} tabs={tabs.map((key) => ({ key, label: t(`tabs.${key}`) }))} active={tab} onChange={setTab}>
-      <AnalyticsTabContent loading={read.loading} error={read.error} retry={read.retry} refreshing={read.refreshing}>
-      <div key={tab}>
-        {tab === 'categories' ? <CategoriesTab data={data} openCat={setOpenCatId} /> : null}
-        {tab === 'matrix' ? <MatrixTab data={data} onDrill={setCell} /> : null}
-        {tab === 'absorption' ? <AbsorptionTab data={data} /> : null}
-        {tab === 'selling' ? <SellingTab data={data} /> : null}
-        {tab === 'config' ? <ConfigTab data={data} /> : null}
-      </div>
-            </AnalyticsTabContent>
+      <RecordTabs
+        label={t("title")}
+        tabs={tabs.map((key) => ({ key, label: t(`tabs.${key}`) }))}
+        active={tab}
+        onChange={setTab}
+      >
+        <AnalyticsTabContent
+          loading={read.loading}
+          error={read.error}
+          retry={read.retry}
+          refreshing={read.refreshing}
+        >
+          <div key={tab}>
+            {tab === "categories" ? <CategoriesTab data={data} openCat={setOpenCatId} /> : null}
+            {tab === "matrix" ? <MatrixTab data={data} onDrill={setCell} /> : null}
+            {tab === "absorption" ? <AbsorptionTab data={data} /> : null}
+            {tab === "selling" ? <SellingTab data={data} /> : null}
+            {tab === "config" ? <ConfigTab data={data} /> : null}
+          </div>
+        </AnalyticsTabContent>
       </RecordTabs>
 
-      {openCatId ? <CategoryFlyout catId={openCatId} data={data} onClose={() => setOpenCatId(null)} onDrillAccount={setDrill} /> : null}
+      {openCatId ? (
+        <CategoryFlyout
+          catId={openCatId}
+          data={data}
+          onClose={() => setOpenCatId(null)}
+          onDrillAccount={setDrill}
+        />
+      ) : null}
       {cell ? <CellFlyout cell={cell} data={data} onClose={() => setCell(null)} /> : null}
-      <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
+      <DrillDrawer
+        target={drill}
+        from={data.period.from}
+        to={data.period.to}
+        onClose={() => setDrill(null)}
+      />
     </div>
-  )
+  );
 }
 
 /* --------------------------------------------------------- Category flyout */
 
-function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: string; data: TrueCostData; onClose: () => void; onDrillAccount: (t: DrillTarget) => void }) {
-  const t = useTranslations('analytics.trueCost')
-  const catRate = useCategoryRate()
-  const { currency } = useMoney()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: string | number) => fmtMoney(n, { compact: true })
-  const money0 = (n: string | number) => fmtMoney(n)
-  const router = useRouter()
-  const cat = data.categories.find((c) => c.id === catId)
-  const [busy, setBusy] = useState(false)
-  const [editOpen, setEditOpen] = useState(false)
-  const [name, setName] = useState(cat?.name ?? '')
-  const [color, setColor] = useState(cat?.color ?? FALLBACK)
-  const [pattern, setPattern] = useState(cat?.match.namePattern ?? '')
-  if (!cat) return null
+function CategoryFlyout({
+  catId,
+  data,
+  onClose,
+  onDrillAccount,
+}: {
+  catId: string;
+  data: TrueCostData;
+  onClose: () => void;
+  onDrillAccount: (t: DrillTarget) => void;
+}) {
+  const t = useTranslations("analytics.trueCost");
+  const catRate = useCategoryRate();
+  const { currency } = useMoney();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: string | number) => fmtMoney(n, { compact: true });
+  const money0 = (n: string | number) => fmtMoney(n);
+  const router = useRouter();
+  const cat = data.categories.find((c) => c.id === catId);
+  const [busy, setBusy] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [name, setName] = useState(cat?.name ?? "");
+  const [color, setColor] = useState(cat?.color ?? FALLBACK);
+  const [pattern, setPattern] = useState(cat?.match.namePattern ?? "");
+  if (!cat) return null;
 
-  const dirty = name !== cat.name || color !== (cat.color ?? FALLBACK) || pattern !== (cat.match.namePattern ?? '')
+  const dirty =
+    name !== cat.name ||
+    color !== (cat.color ?? FALLBACK) ||
+    pattern !== (cat.match.namePattern ?? "");
   const run = async (fn: () => Promise<ApiResult>) => {
-    await runMutation(fn, setBusy, () => router.refresh())
-  }
+    await runMutation(fn, setBusy, () => router.refresh());
+  };
   const setAllocation = (patch: Record<string, unknown>) =>
-    run(() => mutateActiveProfile((profile) => { profile.categorySettings ??= {}; profile.categorySettings[cat.id] = { ...profile.categorySettings[cat.id], ...patch } }))
+    run(() =>
+      mutateActiveProfile((profile) => {
+        profile.categorySettings ??= {};
+        profile.categorySettings[cat.id] = { ...profile.categorySettings[cat.id], ...patch };
+      }),
+    );
 
   const baseLabel = (ALLOCATION_BASE_KEYS as readonly string[]).includes(cat.allocationBase)
     ? t(`bases.${cat.allocationBase}`)
-    : cat.allocationBase
-  const methodLabel = cat.allocationMethod === 'simple'
-    ? t('allocation.simple')
-    : cat.allocationMethod === 'weighted'
-      ? t('allocation.weighted')
-      : t('allocation.stepped')
-  const isExpense = cat.categoryType === 'expense'
-  const typeNoteKey = ({ time: 'drawer.noteTime', manual: 'drawer.noteManual', derived: 'drawer.noteDerived', formula: 'drawer.noteFormula' } as Record<string, string>)[cat.categoryType]
+    : cat.allocationBase;
+  const methodLabel =
+    cat.allocationMethod === "simple"
+      ? t("allocation.simple")
+      : cat.allocationMethod === "weighted"
+        ? t("allocation.weighted")
+        : t("allocation.stepped");
+  const isExpense = cat.categoryType === "expense";
+  const typeNoteKey = (
+    {
+      time: "drawer.noteTime",
+      manual: "drawer.noteManual",
+      derived: "drawer.noteDerived",
+      formula: "drawer.noteFormula",
+    } as Record<string, string>
+  )[cat.categoryType];
 
   return (
-    <Drawer open onClose={onClose} size="lg" title={cat.name} description={t('drawer.description', { total: money0(cat.totalAmount), rateDisplay: cat.rateDisplay, base: baseLabel, method: methodLabel })} bodyClassName="p-0 overflow-y-auto">
+    <Drawer
+      open
+      onClose={onClose}
+      size="lg"
+      title={cat.name}
+      description={t("drawer.description", {
+        total: money0(cat.totalAmount),
+        rateDisplay: cat.rateDisplay,
+        base: baseLabel,
+        method: methodLabel,
+      })}
+      bodyClassName="p-0 overflow-y-auto"
+    >
       {/* Definition / edit — account-group categories only */}
       {isExpense ? (
         <div className="border-b border-slate-100 dark:border-slate-800">
-          <button type="button" onClick={() => setEditOpen(!editOpen)} className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40">
-            <span className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200"><Wand2 size={14} className="text-slate-400" />{t('drawer.definition')}</span>
-            <span className="text-xs text-teal-600 dark:text-teal-400">{editOpen ? t('drawer.hide') : t('drawer.edit')}</span>
+          <button
+            type="button"
+            onClick={() => setEditOpen(!editOpen)}
+            className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <Wand2 size={14} className="text-slate-400" />
+              {t("drawer.definition")}
+            </span>
+            <span className="text-xs text-teal-600 dark:text-teal-400">
+              {editOpen ? t("drawer.hide") : t("drawer.edit")}
+            </span>
           </button>
           {editOpen ? (
             <div className="space-y-2.5 border-t border-slate-100 bg-slate-50/60 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/30">
               <div className="flex items-center gap-2">
-                <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-8 w-10 cursor-pointer rounded border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-950" aria-label={t('drawer.colourAria')} />
-                <input value={name} onChange={(e) => setName(e.target.value)} className="h-8 flex-1 rounded-md border border-slate-200 bg-white px-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" placeholder={t('drawer.namePlaceholder')} />
+                <input
+                  type="color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  className="h-8 w-10 cursor-pointer rounded border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-950"
+                  aria-label={t("drawer.colourAria")}
+                />
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="h-8 flex-1 rounded-md border border-slate-200 bg-white px-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                  placeholder={t("drawer.namePlaceholder")}
+                />
               </div>
               <div>
-                <p className="mb-1 text-[11px] text-slate-400 dark:text-slate-500">{t('drawer.autoMatchRule')}</p>
-                <input value={pattern} onChange={(e) => setPattern(e.target.value)} className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" placeholder={t('drawer.patternPlaceholder')} />
+                <p className="mb-1 text-[11px] text-slate-400 dark:text-slate-500">
+                  {t("drawer.autoMatchRule")}
+                </p>
+                <input
+                  value={pattern}
+                  onChange={(e) => setPattern(e.target.value)}
+                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                  placeholder={t("drawer.patternPlaceholder")}
+                />
               </div>
               <div className="flex justify-end">
-                <button type="button" disabled={!dirty || busy} onClick={() => run(() => patchGroup(cat.id, { name, color, match: { ...cat.match, namePattern: pattern || undefined } }))} className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
-                  {busy ? t('drawer.saving') : t('drawer.save')}
+                <button
+                  type="button"
+                  disabled={!dirty || busy}
+                  onClick={() =>
+                    run(() =>
+                      patchGroup(cat.id, {
+                        name,
+                        color,
+                        match: { ...cat.match, namePattern: pattern || undefined },
+                      }),
+                    )
+                  }
+                  className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                >
+                  {busy ? t("drawer.saving") : t("drawer.save")}
                 </button>
               </div>
             </div>
@@ -303,120 +550,223 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
         </div>
       ) : (
         <p className="border-b border-slate-100 bg-slate-50/40 px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-slate-800 dark:bg-slate-800/20 dark:text-slate-400">
-          {typeNoteKey ? t(typeNoteKey) : t('drawer.computedBurden')}
+          {typeNoteKey ? t(typeNoteKey) : t("drawer.computedBurden")}
         </p>
       )}
 
       {/* Allocation settings */}
       <div className="space-y-2.5 border-b border-slate-100 bg-slate-50/40 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/20">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('allocation.title')}</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          {t("allocation.title")}
+        </p>
         <div className="grid grid-cols-2 gap-2">
           <label className="text-[11px] text-slate-500 dark:text-slate-400">
-            {t('allocation.base')}
-            <Select value={cat.allocationBase} disabled={busy} onChange={(e) => setAllocation({ allocationBase: e.target.value })} className="mt-0.5 w-full" triggerClassName="h-7 text-xs">
-              {ALLOCATION_BASE_KEYS.map((k) => <option key={k} value={k}>{t(`bases.${k}`)}</option>)}
+            {t("allocation.base")}
+            <Select
+              value={cat.allocationBase}
+              disabled={busy}
+              onChange={(e) => setAllocation({ allocationBase: e.target.value })}
+              className="mt-0.5 w-full"
+              triggerClassName="h-7 text-xs"
+            >
+              {ALLOCATION_BASE_KEYS.map((k) => (
+                <option key={k} value={k}>
+                  {t(`bases.${k}`)}
+                </option>
+              ))}
             </Select>
           </label>
           <label className="text-[11px] text-slate-500 dark:text-slate-400">
-            {t('allocation.method')}
-            <Select value={cat.allocationMethod} disabled={busy} onChange={(e) => setAllocation({ allocationMethod: e.target.value })} className="mt-0.5 w-full" triggerClassName="h-7 text-xs">
-              <option value="simple">{t('allocation.simple')}</option>
-              <option value="weighted">{t('allocation.weighted')}</option>
-              <option value="stepped">{t('allocation.stepped')}</option>
+            {t("allocation.method")}
+            <Select
+              value={cat.allocationMethod}
+              disabled={busy}
+              onChange={(e) => setAllocation({ allocationMethod: e.target.value })}
+              className="mt-0.5 w-full"
+              triggerClassName="h-7 text-xs"
+            >
+              <option value="simple">{t("allocation.simple")}</option>
+              <option value="weighted">{t("allocation.weighted")}</option>
+              <option value="stepped">{t("allocation.stepped")}</option>
             </Select>
           </label>
           <label className="text-[11px] text-slate-500 dark:text-slate-400">
-            {t('allocation.rateFormat')}
-            <Select value={cat.rateFormat} disabled={busy} onChange={(e) => setAllocation({ rateFormat: e.target.value })} className="mt-0.5 w-full" triggerClassName="h-7 text-xs">
-              <option value="per_hour">{t('allocation.perHour', { currency })}</option>
-              <option value="percent_labor">{t('allocation.percentLabor')}</option>
-              <option value="percent_cost">{t('allocation.percentCost')}</option>
-              <option value="per_fte">{t('allocation.perFte', { currency })}</option>
-              <option value="per_unit">{t('allocation.perUnit', { currency })}</option>
+            {t("allocation.rateFormat")}
+            <Select
+              value={cat.rateFormat}
+              disabled={busy}
+              onChange={(e) => setAllocation({ rateFormat: e.target.value })}
+              className="mt-0.5 w-full"
+              triggerClassName="h-7 text-xs"
+            >
+              <option value="per_hour">{t("allocation.perHour", { currency })}</option>
+              <option value="percent_labor">{t("allocation.percentLabor")}</option>
+              <option value="percent_cost">{t("allocation.percentCost")}</option>
+              <option value="per_fte">{t("allocation.perFte", { currency })}</option>
+              <option value="per_unit">{t("allocation.perUnit", { currency })}</option>
             </Select>
           </label>
           <label className="flex items-end gap-1.5 pb-1 text-[11px] text-slate-500 dark:text-slate-400">
-            <input type="checkbox" checked={cat.includeInComposite} disabled={busy} onChange={(e) => setAllocation({ includeInComposite: e.target.checked })} className="h-3.5 w-3.5 rounded border-slate-300" />
-            {t('allocation.includeInComposite')}
+            <input
+              type="checkbox"
+              checked={cat.includeInComposite}
+              disabled={busy}
+              onChange={(e) => setAllocation({ includeInComposite: e.target.checked })}
+              className="h-3.5 w-3.5 rounded border-slate-300"
+            />
+            {t("allocation.includeInComposite")}
           </label>
         </div>
-        <p className="text-[11px] text-slate-400 dark:text-slate-500">{t('allocation.rateFormula', { base: baseLabel, method: methodLabel, rate: cat.rateDisplay })}</p>
+        <p className="text-[11px] text-slate-400 dark:text-slate-500">
+          {t("allocation.rateFormula", {
+            base: baseLabel,
+            method: methodLabel,
+            rate: cat.rateDisplay,
+          })}
+        </p>
       </div>
 
       {/* Per-department rates */}
       <div className="border-b border-slate-100 p-4 dark:border-slate-800">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{t('allocation.rateByDepartment')}</p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          {t("allocation.rateByDepartment")}
+        </p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {data.departments.map((d) => {
             const deptRate = cat.byDept[d.id]?.rate;
             return (
-              <div key={d.id} className="rounded-lg bg-slate-50 p-2 text-center dark:bg-slate-800/50">
+              <div
+                key={d.id}
+                className="rounded-lg bg-slate-50 p-2 text-center dark:bg-slate-800/50"
+              >
                 <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">{d.name}</p>
-                <p className="text-sm font-bold tabular-nums" style={{ color: cat.color ?? undefined }}>{catRate(deptRate, cat.rateFormat)}</p>
+                <p
+                  className="text-sm font-bold tabular-nums"
+                  style={{ color: cat.color ?? undefined }}
+                >
+                  {catRate(deptRate, cat.rateFormat)}
+                </p>
               </div>
-            )
+            );
           })}
         </div>
       </div>
 
       {/* Included accounts — account-group categories only */}
       {isExpense ? (
-      <div className="border-b border-slate-100 dark:border-slate-800">
-        <p className="px-4 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">{t('accountsPanel.included', { count: cat.accounts.length })}</p>
-        <SharedTable className="w-full text-sm">
-          <SharedTableBody>
-            {cat.accounts.map((a) => (
-              <SharedTableRow key={a.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                <SharedTableCell className="px-4 py-2">
-                  <button type="button" onClick={() => onDrillAccount({ kind: 'account', id: a.id, name: a.name, sub: a.number ? t('drill.accountSub', { number: a.number }) : undefined })} className="text-left text-slate-700 hover:text-teal-600 dark:text-slate-300 dark:hover:text-teal-400" title={t('accountsPanel.viewTransactions')}>
-                    {a.number ? <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span> : null}
-                    {a.name}
-                  </button>
-                </SharedTableCell>
-                <SharedTableCell className="px-2 py-2 text-center">
-                  {a.pinned
-                    ? <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-700 dark:bg-teal-950/50 dark:text-teal-400"><Pin size={9} />{t('accountsPanel.pinned')}</span>
-                    : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">{t('accountsPanel.rule')}</span>}
-                </SharedTableCell>
-                <SharedTableCell className="px-2 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(a.amount)}</SharedTableCell>
-                <SharedTableCell className="py-2 pl-1 pr-3 text-right">
-                  <span className="inline-flex items-center gap-1">
-                    <Select
-                      value=""
-                      disabled={busy}
-                      onChange={(e) => { const v = e.target.value; if (v) void run(() => pinAccount(v, a.id)) }}
-                      className="w-28"
-                      triggerClassName="h-6 px-1.5 text-[11px]"
-                      aria-label={t('accountsPanel.moveAria', { name: a.name })}
+        <div className="border-b border-slate-100 dark:border-slate-800">
+          <p className="px-4 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            {t("accountsPanel.included", { count: cat.accounts.length })}
+          </p>
+          <SharedTable className="w-full text-sm">
+            <SharedTableBody>
+              {cat.accounts.map((a) => (
+                <SharedTableRow
+                  key={a.id}
+                  className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+                >
+                  <SharedTableCell className="px-4 py-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onDrillAccount({
+                          kind: "account",
+                          id: a.id,
+                          name: a.name,
+                          sub: a.number ? t("drill.accountSub", { number: a.number }) : undefined,
+                        })
+                      }
+                      className="text-left text-slate-700 hover:text-teal-600 dark:text-slate-300 dark:hover:text-teal-400"
+                      title={t("accountsPanel.viewTransactions")}
                     >
-                      <option value="">{t('accountsPanel.moveTo')}</option>
-                      {data.categories.filter((c) => c.id !== cat.id).map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </Select>
+                      {a.number ? (
+                        <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span>
+                      ) : null}
+                      {a.name}
+                    </button>
+                  </SharedTableCell>
+                  <SharedTableCell className="px-2 py-2 text-center">
                     {a.pinned ? (
-                      <button type="button" disabled={busy} title={t('accountsPanel.unpinTitle')} onClick={() => run(() => unpinAccount(cat.id, a.id))} className="rounded-md border border-slate-200 px-1.5 py-1 text-[10px] text-slate-500 hover:text-rose-500 dark:border-slate-700">{t('accountsPanel.unpin')}</button>
-                    ) : null}
-                  </span>
-                </SharedTableCell>
-              </SharedTableRow>
-            ))}
-          </SharedTableBody>
-        </SharedTable>
-      </div>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-700 dark:bg-teal-950/50 dark:text-teal-400">
+                        <Pin size={9} />
+                        {t("accountsPanel.pinned")}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                        {t("accountsPanel.rule")}
+                      </span>
+                    )}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-2 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">
+                    {money0(a.amount)}
+                  </SharedTableCell>
+                  <SharedTableCell className="py-2 pl-1 pr-3 text-right">
+                    <span className="inline-flex items-center gap-1">
+                      <Select
+                        value=""
+                        disabled={busy}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v) void run(() => pinAccount(v, a.id));
+                        }}
+                        className="w-28"
+                        triggerClassName="h-6 px-1.5 text-[11px]"
+                        aria-label={t("accountsPanel.moveAria", { name: a.name })}
+                      >
+                        <option value="">{t("accountsPanel.moveTo")}</option>
+                        {data.categories
+                          .filter((c) => c.id !== cat.id)
+                          .map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                      </Select>
+                      {a.pinned ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          title={t("accountsPanel.unpinTitle")}
+                          onClick={() => run(() => unpinAccount(cat.id, a.id))}
+                          className="rounded-md border border-slate-200 px-1.5 py-1 text-[10px] text-slate-500 hover:text-rose-500 dark:border-slate-700"
+                        >
+                          {t("accountsPanel.unpin")}
+                        </button>
+                      ) : null}
+                    </span>
+                  </SharedTableCell>
+                </SharedTableRow>
+              ))}
+            </SharedTableBody>
+          </SharedTable>
+        </div>
       ) : null}
 
       {/* Add accounts (from unassigned) — account-group categories only */}
       {isExpense && data.unassigned.length ? (
         <div className="p-4">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{t('accountsPanel.addUnassigned')}</p>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            {t("accountsPanel.addUnassigned")}
+          </p>
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
             {data.unassigned.map((u) => (
               <li key={u.id} className="flex items-center justify-between gap-3 py-1.5 text-sm">
-                <span className="min-w-0 truncate text-slate-600 dark:text-slate-300">{u.number ? <span className="mr-2 text-xs tabular-nums text-slate-400">{u.number}</span> : null}{u.name}</span>
+                <span className="min-w-0 truncate text-slate-600 dark:text-slate-300">
+                  {u.number ? (
+                    <span className="mr-2 text-xs tabular-nums text-slate-400">{u.number}</span>
+                  ) : null}
+                  {u.name}
+                </span>
                 <span className="flex shrink-0 items-center gap-2">
                   <span className="tabular-nums text-slate-400">{money(u.amount)}</span>
-                  <button type="button" disabled={busy} onClick={() => run(() => pinAccount(cat.id, u.id))} className="rounded-md border border-teal-500/50 px-2 py-0.5 text-[11px] font-medium text-teal-600 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-teal-950/40">{t('accountsPanel.add')}</button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => run(() => pinAccount(cat.id, u.id))}
+                    className="rounded-md border border-teal-500/50 px-2 py-0.5 text-[11px] font-medium text-teal-600 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-teal-950/40"
+                  >
+                    {t("accountsPanel.add")}
+                  </button>
                 </span>
               </li>
             ))}
@@ -424,76 +774,132 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
         </div>
       ) : null}
     </Drawer>
-  )
+  );
 }
 
 /* ------------------------------------------------------ Dept + cell drills */
 
-function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData; onClose: () => void }) {
-  const t = useTranslations('analytics.trueCost')
-  const rate = useRate()
-  const catRate = useCategoryRate()
-  const whole = useWholeNumber()
-  const percent = usePercent()
-  const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: string | number) => fmtMoney(n)
-  const cat = data.categories.find((c) => c.id === cell.catId)
-  const dept = data.departments.find((d) => d.id === cell.deptId)
-  if (!cat || !dept) return null
+function CellFlyout({
+  cell,
+  data,
+  onClose,
+}: {
+  cell: CellRef;
+  data: TrueCostData;
+  onClose: () => void;
+}) {
+  const t = useTranslations("analytics.trueCost");
+  const rate = useRate();
+  const catRate = useCategoryRate();
+  const whole = useWholeNumber();
+  const percent = usePercent();
+  const fmtMoney = useAnalyticsMoney();
+  const money0 = (n: string | number) => fmtMoney(n);
+  const cat = data.categories.find((c) => c.id === cell.catId);
+  const dept = data.departments.find((d) => d.id === cell.deptId);
+  if (!cat || !dept) return null;
   // The loader's exact untagged split for this category's own allocation
   // base — rendered, never re-derived, so the drawer reconciles to the cell
   // for every base (total_hours, square_feet, units and custom included).
-  const deptShare = cat.deptShare[dept.id] ?? '0'
-  const cellData = cat.byDept[dept.id] ?? { amount: 0, rate: null }
+  const deptShare = cat.deptShare[dept.id] ?? "0";
+  const cellData = cat.byDept[dept.id] ?? { amount: 0, rate: null };
   const rows = cat.accounts
     .map((a) => {
-      const tagged = a.deptAmounts[dept.id] ?? '0.0000'
-      const allocated = mulDecimal(a.untaggedAmount, deptShare)
-      return { a, tagged, allocated, total: add(tagged, allocated) }
+      const tagged = a.deptAmounts[dept.id] ?? "0.0000";
+      const allocated = mulDecimal(a.untaggedAmount, deptShare);
+      return { a, tagged, allocated, total: add(tagged, allocated) };
     })
-    .filter((x) => compareMoney(x.total, '0') !== 0)
-    .sort((x, y) => compareMoney(y.total, x.total))
-  const taggedSum = rows.reduce((s, x) => add(s, x.tagged), '0.0000')
-  const allocatedSum = rows.reduce((s, x) => add(s, x.allocated), '0.0000')
+    .filter((x) => compareMoney(x.total, "0") !== 0)
+    .sort((x, y) => compareMoney(y.total, x.total));
+  const taggedSum = rows.reduce((s, x) => add(s, x.tagged), "0.0000");
+  const allocatedSum = rows.reduce((s, x) => add(s, x.allocated), "0.0000");
 
   return (
-    <Drawer open onClose={onClose} size="lg" title={`${cat.name} — ${dept.name}`} description={t('cellFlyout.description')} bodyClassName="p-0 overflow-y-auto">
+    <Drawer
+      open
+      onClose={onClose}
+      size="lg"
+      title={`${cat.name} — ${dept.name}`}
+      description={t("cellFlyout.description")}
+      bodyClassName="p-0 overflow-y-auto"
+    >
       {/* Rate math strip */}
       <div className="grid grid-cols-3 gap-px border-b border-slate-100 bg-slate-100 dark:border-slate-800 dark:bg-slate-800">
         {[
-          { label: t('cellFlyout.expenseInDept'), value: money0(cellData.amount) },
-          { label: t('cellFlyout.deptBilledHours'), value: whole(dept.billedHours) },
-          { label: t('cellFlyout.rate'), value: catRate(cellData.rate, cat.rateFormat) },
+          { label: t("cellFlyout.expenseInDept"), value: money0(cellData.amount) },
+          { label: t("cellFlyout.deptBilledHours"), value: whole(dept.billedHours) },
+          { label: t("cellFlyout.rate"), value: catRate(cellData.rate, cat.rateFormat) },
         ].map((s, i) => (
           <div key={i} className="bg-white p-3.5 text-center dark:bg-slate-900">
-            <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">{s.value}</p>
-            <p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">{s.label}</p>
+            <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
+              {s.value}
+            </p>
+            <p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              {s.label}
+            </p>
           </div>
         ))}
       </div>
-      {cat.categoryType === 'expense' ? (
+      {cat.categoryType === "expense" ? (
         <>
           <p className="border-b border-slate-100 bg-slate-50/60 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/30 dark:text-slate-400">
-            {t('cellFlyout.expenseMath', { direct: money0(taggedSum), dept: dept.name, allocated: money0(allocatedSum), share: percent(toChartNumber(mulDecimal(deptShare, '100')), 1), base: t(`bases.${cat.allocationBase}`), billed: Math.round(dept.billedHours) })}
+            {t("cellFlyout.expenseMath", {
+              direct: money0(taggedSum),
+              dept: dept.name,
+              allocated: money0(allocatedSum),
+              share: percent(toChartNumber(mulDecimal(deptShare, "100")), 1),
+              base: t(`bases.${cat.allocationBase}`),
+              billed: Math.round(dept.billedHours),
+            })}
           </p>
           <SharedTable className="w-full text-sm">
             <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
               <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('cellFlyout.colAccount')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('cellFlyout.colDeptTagged')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('cellFlyout.colAllocated')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('cellFlyout.colTotal')}</SharedTableHead>
-                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('cellFlyout.colRateHr')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">
+                  {t("cellFlyout.colAccount")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("cellFlyout.colDeptTagged")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("cellFlyout.colAllocated")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("cellFlyout.colTotal")}
+                </SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">
+                  {t("cellFlyout.colRateHr")}
+                </SharedTableHead>
               </SharedTableRow>
             </SharedTableHeader>
             <SharedTableBody>
               {rows.map(({ a, tagged, allocated, total }) => (
-                <SharedTableRow key={a.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{a.number ? <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span> : null}{a.name}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{compareMoney(tagged, '0') !== 0 ? money0(tagged) : '—'}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{compareMoney(allocated, '0') !== 0 ? money0(allocated) : '—'}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{money0(total)}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{rate(dept.billedHours > 0 ? toChartNumber(div(total, String(dept.billedHours))) : 0)}</SharedTableCell>
+                <SharedTableRow
+                  key={a.id}
+                  className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+                >
+                  <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">
+                    {a.number ? (
+                      <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span>
+                    ) : null}
+                    {a.name}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                    {compareMoney(tagged, "0") !== 0 ? money0(tagged) : "—"}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">
+                    {compareMoney(allocated, "0") !== 0 ? money0(allocated) : "—"}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">
+                    {money0(total)}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                    {rate(
+                      dept.billedHours > 0
+                        ? toChartNumber(div(total, String(dept.billedHours)))
+                        : 0,
+                    )}
+                  </SharedTableCell>
                 </SharedTableRow>
               ))}
             </SharedTableBody>
@@ -501,47 +907,62 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
         </>
       ) : (
         <p className="px-4 py-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-          {cat.categoryType === 'time'
-            ? t('cellFlyout.timeMath', { dept: dept.name, billed: Math.round(dept.billedHours) })
-            : t('cellFlyout.otherMath', { amount: money0(cellData.amount), dept: dept.name, billed: Math.round(dept.billedHours) })}
+          {cat.categoryType === "time"
+            ? t("cellFlyout.timeMath", { dept: dept.name, billed: Math.round(dept.billedHours) })
+            : t("cellFlyout.otherMath", {
+                amount: money0(cellData.amount),
+                dept: dept.name,
+                billed: Math.round(dept.billedHours),
+              })}
         </p>
       )}
     </Drawer>
-  )
+  );
 }
 
 /* -------------------------------------------------------------- Categories */
 
 function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: string) => void }) {
-  const t = useTranslations('analytics.trueCost')
-  const catRate = useCategoryRate()
-  const whole = useWholeNumber()
-  const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: string | number) => fmtMoney(n)
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const categoryTypeLabel = (type: TrueCostData['categories'][number]['categoryType']) => {
-    if (type === 'expense') return t('cards.typeExpense')
-    if (type === 'time') return t('cards.typeTime')
-    if (type === 'manual') return t('custom.typeManual')
-    if (type === 'derived') return t('custom.typeDerived')
-    return t('custom.typeFormula')
-  }
+  const t = useTranslations("analytics.trueCost");
+  const catRate = useCategoryRate();
+  const whole = useWholeNumber();
+  const fmtMoney = useAnalyticsMoney();
+  const money0 = (n: string | number) => fmtMoney(n);
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const categoryTypeLabel = (type: TrueCostData["categories"][number]["categoryType"]) => {
+    if (type === "expense") return t("cards.typeExpense");
+    if (type === "time") return t("cards.typeTime");
+    if (type === "manual") return t("custom.typeManual");
+    if (type === "derived") return t("custom.typeDerived");
+    return t("custom.typeFormula");
+  };
   const assign = async (groupId: string, accountId: string) => {
-    await runMutation(() => pinAccount(groupId, accountId), setBusy, () => router.refresh())
-  }
+    await runMutation(
+      () => pinAccount(groupId, accountId),
+      setBusy,
+      () => router.refresh(),
+    );
+  };
   return (
     <div className="space-y-5">
-      {compareMoney(data.labor.unratedHours, '0') > 0 ? (
-        <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span>{t('categories.unratedNote', { hours: Number(data.labor.unratedHours) })}</span></p>
+      {compareMoney(data.labor.unratedHours, "0") > 0 ? (
+        <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <span>{t("categories.unratedNote", { hours: Number(data.labor.unratedHours) })}</span>
+        </p>
       ) : null}
       <Panel
-        title={t('panels.overheadCategories')}
+        title={t("panels.overheadCategories")}
         icon={Layers}
-        hint={t('hints.clickToInspect')}
+        hint={t("hints.clickToInspect")}
         actions={
-          <Link href="/admin/setup/account-groups" className="rounded-md border border-teal-500/50 px-2.5 py-1 text-xs font-medium text-teal-600 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-teal-950/40">
-            <PlusCircle size={11} className="mr-1 inline" />{t('actions.newCategory')}
+          <Link
+            href="/admin/setup/account-groups"
+            className="rounded-md border border-teal-500/50 px-2.5 py-1 text-xs font-medium text-teal-600 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-teal-950/40"
+          >
+            <PlusCircle size={11} className="mr-1 inline" />
+            {t("actions.newCategory")}
           </Link>
         }
         bodyClassName="p-0"
@@ -549,76 +970,153 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
         <SharedTable className="w-full text-sm">
           <SharedTableHeader>
             <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              <SharedTableHead className="px-4 py-2 text-left font-medium">{t('deptFlyout.colCategory')}</SharedTableHead>
-              <SharedTableHead className="px-4 py-2 text-left font-medium">{t('cards.type')}</SharedTableHead>
-              <SharedTableHead className="px-4 py-2 text-left font-medium">{t('cards.base')}</SharedTableHead>
-              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('cards.accounts')}</SharedTableHead>
-              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('deptFlyout.colExpense')}</SharedTableHead>
-              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('deptFlyout.colRate')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-left font-medium">
+                {t("deptFlyout.colCategory")}
+              </SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-left font-medium">
+                {t("cards.type")}
+              </SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-left font-medium">
+                {t("cards.base")}
+              </SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">
+                {t("cards.accounts")}
+              </SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">
+                {t("deptFlyout.colExpense")}
+              </SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">
+                {t("deptFlyout.colRate")}
+              </SharedTableHead>
             </SharedTableRow>
           </SharedTableHeader>
           <SharedTableBody>
             {data.categories.map((c) => (
-              <InteractiveTableRow key={c.id} onClick={() => openCat(c.id)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
+              <InteractiveTableRow
+                key={c.id}
+                onClick={() => openCat(c.id)}
+                className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40"
+                noAnimate
+              >
                 <SharedTableCell className="px-4 py-2.5">
                   <span className="flex items-center gap-2.5">
-                    <span className="grid h-7 w-7 place-items-center rounded-lg" style={{ backgroundColor: `${c.color ?? FALLBACK}22`, color: c.color ?? FALLBACK }}><Layers size={13} /></span>
+                    <span
+                      className="grid h-7 w-7 place-items-center rounded-lg"
+                      style={{
+                        backgroundColor: `${c.color ?? FALLBACK}22`,
+                        color: c.color ?? FALLBACK,
+                      }}
+                    >
+                      <Layers size={13} />
+                    </span>
                     <span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span>
                   </span>
                 </SharedTableCell>
-                <SharedTableCell className="px-4 py-2.5"><span className="rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-medium capitalize text-sky-700 dark:bg-sky-950/50 dark:text-sky-400" style={{ borderLeft: `3px solid ${c.color ?? FALLBACK}` }}>{categoryTypeLabel(c.categoryType)}</span></SharedTableCell>
-                <SharedTableCell className="px-4 py-2.5 text-xs text-slate-400 dark:text-slate-500">{t(`bases.${c.allocationBase}`)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{c.categoryType === 'expense' ? whole(c.accounts.length) : '—'}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-300">{money0(c.totalAmount)}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{catRate(c.rate, c.rateFormat)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2.5">
+                  <span
+                    className="rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-medium capitalize text-sky-700 dark:bg-sky-950/50 dark:text-sky-400"
+                    style={{ borderLeft: `3px solid ${c.color ?? FALLBACK}` }}
+                  >
+                    {categoryTypeLabel(c.categoryType)}
+                  </span>
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2.5 text-xs text-slate-400 dark:text-slate-500">
+                  {t(`bases.${c.allocationBase}`)}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                  {c.categoryType === "expense" ? whole(c.accounts.length) : "—"}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-300">
+                  {money0(c.totalAmount)}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  {catRate(c.rate, c.rateFormat)}
+                </SharedTableCell>
               </InteractiveTableRow>
             ))}
             <SharedTableRow className="bg-slate-50/70 font-semibold dark:bg-slate-800/40">
-              <SharedTableCell className="px-4 py-2.5 text-slate-800 dark:text-slate-200">{t('deptFlyout.composite')}</SharedTableCell>
-              <SharedTableCell /><SharedTableCell /><SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500">{whole(data.kpis.overheadAccounts)}</SharedTableCell>
-              <SharedTableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-slate-800 dark:text-slate-200">{money0(data.kpis.totalOverhead)}</SharedTableCell>
-              <SharedTableCell className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-slate-900 dark:text-slate-100">{catRate(data.kpis.compositeRate, data.kpis.compositeFormat)}</SharedTableCell>
+              <SharedTableCell className="px-4 py-2.5 text-slate-800 dark:text-slate-200">
+                {t("deptFlyout.composite")}
+              </SharedTableCell>
+              <SharedTableCell />
+              <SharedTableCell />
+              <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500">
+                {whole(data.kpis.overheadAccounts)}
+              </SharedTableCell>
+              <SharedTableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-slate-800 dark:text-slate-200">
+                {money0(data.kpis.totalOverhead)}
+              </SharedTableCell>
+              <SharedTableCell className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                {catRate(data.kpis.compositeRate, data.kpis.compositeFormat)}
+              </SharedTableCell>
             </SharedTableRow>
           </SharedTableBody>
         </SharedTable>
       </Panel>
 
       {data.unassigned.length ? (
-        <Panel title={t('panels.unassignedAccounts')} icon={AlertTriangle} hint={t('hints.assignToCategory')} bodyClassName="p-0">
+        <Panel
+          title={t("panels.unassignedAccounts")}
+          icon={AlertTriangle}
+          hint={t("hints.assignToCategory")}
+          bodyClassName="p-0"
+        >
           {data.categories.length === 0 ? (
             <p className="border-b border-slate-200 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-400">
-              {t('accountsPanel.noCategories')}{' '}
-              <Link href="/admin/setup/account-groups" className="font-medium text-teal-600 hover:underline dark:text-teal-400">
-                {t('actions.newCategory')}
+              {t("accountsPanel.noCategories")}{" "}
+              <Link
+                href="/admin/setup/account-groups"
+                className="font-medium text-teal-600 hover:underline dark:text-teal-400"
+              >
+                {t("actions.newCategory")}
               </Link>
             </p>
           ) : null}
           <SharedTable className="w-full text-sm">
             <SharedTableBody>
               {data.unassigned.map((a) => (
-                <SharedTableRow key={a.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{a.number ? <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span> : null}{a.name}</SharedTableCell>
-                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-amber-700 dark:text-amber-400">{money0(a.amount)}</SharedTableCell>
+                <SharedTableRow
+                  key={a.id}
+                  className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+                >
+                  <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">
+                    {a.number ? (
+                      <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span>
+                    ) : null}
+                    {a.name}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-amber-700 dark:text-amber-400">
+                    {money0(a.amount)}
+                  </SharedTableCell>
                   <SharedTableCell className="w-52 px-4 py-1.5 text-right">
                     <Select
                       value=""
                       disabled={busy}
-                      onChange={(e) => { const v = e.target.value; if (v) void assign(v, a.id) }}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v) void assign(v, a.id);
+                      }}
                       className="w-44"
                       triggerClassName="h-7 text-xs"
-                      aria-label={t('accountsPanel.assignAria', { name: a.name })}
+                      aria-label={t("accountsPanel.assignAria", { name: a.name })}
                     >
-                      <option value="">{t('accountsPanel.assignTo')}</option>
+                      <option value="">{t("accountsPanel.assignTo")}</option>
                       {data.categories.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
                       ))}
                     </Select>
                   </SharedTableCell>
                 </SharedTableRow>
               ))}
               <SharedTableRow className="bg-amber-50/60 font-semibold dark:bg-amber-950/20">
-                <SharedTableCell className="px-4 py-2 text-amber-800 dark:text-amber-300">{t('categories.notInComposite')}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-amber-800 dark:text-amber-300">{money0(data.unassigned.reduce((s, a) => add(s, a.amount), '0.0000'))}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-amber-800 dark:text-amber-300">
+                  {t("categories.notInComposite")}
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-amber-800 dark:text-amber-300">
+                  {money0(data.unassigned.reduce((s, a) => add(s, a.amount), "0.0000"))}
+                </SharedTableCell>
                 <SharedTableCell />
               </SharedTableRow>
             </SharedTableBody>
@@ -626,47 +1124,80 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
         </Panel>
       ) : null}
     </div>
-  )
+  );
 }
 
 /* ------------------------------------------------------------------ Matrix */
 
 function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef) => void }) {
-  const t = useTranslations('analytics.trueCost')
-  const today = useBusinessToday()
-  const catRate = useCategoryRate()
-  const { currency } = useMoney()
-  const rates = data.categories.map((c) => c.rate).filter((r): r is number => r != null && r > 0)
+  const t = useTranslations("analytics.trueCost");
+  const today = useBusinessToday();
+  const catRate = useCategoryRate();
+  const { currency } = useMoney();
+  const rates = data.categories.map((c) => c.rate).filter((r): r is number => r != null && r > 0);
   // Refused rates export as blank, never 0.00: a zero would read as priced.
-  const csvRate = (r: number | null | undefined): string => (r == null ? '' : String(r))
-  const avg = rates.length ? rates.reduce((s, v) => s + v, 0) / rates.length : 0
+  const csvRate = (r: number | null | undefined): string => (r == null ? "" : String(r));
+  const avg = rates.length ? rates.reduce((s, v) => s + v, 0) / rates.length : 0;
   // The under/over-performance band is dashboard configuration (percentage
   // points around the average), never a client constant.
-  const band = data.config.matrixBandPp / 100
+  const band = data.config.matrixBandPp / 100;
   const cellTone = (r: number) => {
-    if (r === 0) return 'text-slate-300 dark:text-slate-600'
-    if (r < avg * (1 - band)) return 'text-emerald-600 dark:text-emerald-400'
-    if (r > avg * (1 + band)) return 'text-rose-600 dark:text-rose-400'
-    return 'text-slate-600 dark:text-slate-300'
-  }
+    if (r === 0) return "text-slate-300 dark:text-slate-600";
+    if (r < avg * (1 - band)) return "text-emerald-600 dark:text-emerald-400";
+    if (r > avg * (1 + band)) return "text-rose-600 dark:text-rose-400";
+    return "text-slate-600 dark:text-slate-300";
+  };
   return (
     <Panel
-      title={t('panels.rateMatrix')}
+      title={t("panels.rateMatrix")}
       icon={Grid3X3}
       actions={
         <span className="flex items-center gap-3 text-[11px] text-slate-400 dark:text-slate-500">
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />{t('matrix.belowAvg')}</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-slate-400" />{t('matrix.average')}</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-rose-500" />{t('matrix.aboveAvg')}</span>
+          <span className="flex items-center gap-1">
+            <span className="h-2 w-2 rounded-sm bg-emerald-500" />
+            {t("matrix.belowAvg")}
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="h-2 w-2 rounded-sm bg-slate-400" />
+            {t("matrix.average")}
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="h-2 w-2 rounded-sm bg-rose-500" />
+            {t("matrix.aboveAvg")}
+          </span>
           <button
             type="button"
-            onClick={() => exportCsv('burden-rate-matrix', [t('deptFlyout.colCategory'), t('cards.base'), ...data.departments.map((d) => t('matrix.deptWithCurrency', { name: d.name, currency })), t('matrix.overallWithCurrency', { currency })], [
-              ...data.categories.map((c) => [c.name, t('matrix.cellBase'), ...data.departments.map((d) => csvRate(c.byDept[d.id]?.rate)), csvRate(c.rate)]),
-              [t('matrix.totalBurden'), t('matrix.cellBase'), ...data.departments.map((d) => csvRate(d.composite)), csvRate(data.kpis.compositeRate)],
-            ], today)}
+            onClick={() =>
+              exportCsv(
+                "burden-rate-matrix",
+                [
+                  t("deptFlyout.colCategory"),
+                  t("cards.base"),
+                  ...data.departments.map((d) =>
+                    t("matrix.deptWithCurrency", { name: d.name, currency }),
+                  ),
+                  t("matrix.overallWithCurrency", { currency }),
+                ],
+                [
+                  ...data.categories.map((c) => [
+                    c.name,
+                    t("matrix.cellBase"),
+                    ...data.departments.map((d) => csvRate(c.byDept[d.id]?.rate)),
+                    csvRate(c.rate),
+                  ]),
+                  [
+                    t("matrix.totalBurden"),
+                    t("matrix.cellBase"),
+                    ...data.departments.map((d) => csvRate(d.composite)),
+                    csvRate(data.kpis.compositeRate),
+                  ],
+                ],
+                today,
+              )
+            }
             className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
           >
-            <Download size={11} /> {t('matrix.csv')}
+            <Download size={11} /> {t("matrix.csv")}
           </button>
         </span>
       }
@@ -676,67 +1207,107 @@ function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef
         <SharedTable className="w-full text-sm">
           <SharedTableHeader>
             <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              <SharedTableHead className="px-4 py-2 text-left font-medium">{t('deptFlyout.colCategory')}</SharedTableHead>
-              <SharedTableHead className="px-3 py-2 text-left font-medium">{t('cards.base')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-left font-medium">
+                {t("deptFlyout.colCategory")}
+              </SharedTableHead>
+              <SharedTableHead className="px-3 py-2 text-left font-medium">
+                {t("cards.base")}
+              </SharedTableHead>
               {data.departments.map((d) => (
-                <SharedTableHead key={d.id} className="whitespace-nowrap px-3 py-2 text-right font-medium">{d.name}</SharedTableHead>
+                <SharedTableHead
+                  key={d.id}
+                  className="whitespace-nowrap px-3 py-2 text-right font-medium"
+                >
+                  {d.name}
+                </SharedTableHead>
               ))}
-              <SharedTableHead className="px-4 py-2 text-right font-bold">{t('matrix.colOverall')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-bold">
+                {t("matrix.colOverall")}
+              </SharedTableHead>
             </SharedTableRow>
           </SharedTableHeader>
           <SharedTableBody>
             {data.categories.map((c) => (
-              <SharedTableRow key={c.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+              <SharedTableRow
+                key={c.id}
+                className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+              >
                 <SharedTableCell className="whitespace-nowrap px-4 py-2">
                   <span className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: c.color ?? FALLBACK }} />
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                      style={{ backgroundColor: c.color ?? FALLBACK }}
+                    />
                     <span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span>
                   </span>
                 </SharedTableCell>
-                <SharedTableCell className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500">{t('matrix.cellBase')}</SharedTableCell>
+                <SharedTableCell className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500">
+                  {t("matrix.cellBase")}
+                </SharedTableCell>
                 {data.departments.map((d) => {
-                  const r = c.byDept[d.id]?.rate
+                  const r = c.byDept[d.id]?.rate;
                   return (
                     <SharedTableCell key={d.id} className="p-0 text-right">
                       <button
                         type="button"
                         onClick={() => onDrill({ catId: c.id, deptId: d.id })}
-                        className={cn('w-full px-3 py-2 text-right tabular-nums transition-colors hover:bg-teal-50 dark:hover:bg-teal-950/40', cellTone(r ?? 0))}
-                        title={t('matrix.cellTitle', { cat: c.name, dept: d.name })}
+                        className={cn(
+                          "w-full px-3 py-2 text-right tabular-nums transition-colors hover:bg-teal-50 dark:hover:bg-teal-950/40",
+                          cellTone(r ?? 0),
+                        )}
+                        title={t("matrix.cellTitle", { cat: c.name, dept: d.name })}
                       >
                         {catRate(r, c.rateFormat)}
                       </button>
                     </SharedTableCell>
-                  )
+                  );
                 })}
-                <SharedTableCell className="bg-slate-50/70 px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:bg-slate-800/40 dark:text-slate-200">{c.rate == null ? '—' : c.rateDisplay}</SharedTableCell>
+                <SharedTableCell className="bg-slate-50/70 px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:bg-slate-800/40 dark:text-slate-200">
+                  {c.rate == null ? "—" : c.rateDisplay}
+                </SharedTableCell>
               </SharedTableRow>
             ))}
             <SharedTableRow className="border-t-2 border-slate-200 bg-slate-50/70 font-bold dark:border-slate-700 dark:bg-slate-800/40">
-              <SharedTableCell className="px-4 py-2.5 text-slate-900 dark:text-slate-100">{t('matrix.totalBurden')}</SharedTableCell>
+              <SharedTableCell className="px-4 py-2.5 text-slate-900 dark:text-slate-100">
+                {t("matrix.totalBurden")}
+              </SharedTableCell>
               <SharedTableCell />
               {data.departments.map((d) => {
                 const deptTotal = data.totals.byDept[d.id];
                 return (
-                  <SharedTableCell key={d.id} className="px-3 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">{catRate(deptTotal, data.kpis.compositeFormat)}</SharedTableCell>
-                )
+                  <SharedTableCell
+                    key={d.id}
+                    className="px-3 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100"
+                  >
+                    {catRate(deptTotal, data.kpis.compositeFormat)}
+                  </SharedTableCell>
+                );
               })}
-              <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">{catRate(data.totals.overall, data.kpis.compositeFormat)}</SharedTableCell>
+              <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">
+                {catRate(data.totals.overall, data.kpis.compositeFormat)}
+              </SharedTableCell>
             </SharedTableRow>
           </SharedTableBody>
         </SharedTable>
       </div>
       <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-        {t('matrix.footnote')}
+        {t("matrix.footnote")}
       </p>
     </Panel>
-  )
+  );
 }
 
 /* -------------------------------------------------------------- Absorption */
 
-const PRESETS = ['full_rate', 'full_hours', 'full_cut', 'balanced', 'rate_hours', 'conservative'] as const
-type PresetKey = (typeof PRESETS)[number]
+const PRESETS = [
+  "full_rate",
+  "full_hours",
+  "full_cut",
+  "balanced",
+  "rate_hours",
+  "conservative",
+] as const;
+type PresetKey = (typeof PRESETS)[number];
 const PRESET_MIX: Record<PresetKey, { rate: number; hours: number; cost: number; util: number }> = {
   full_rate: { rate: 100, hours: 0, cost: 0, util: 0 },
   full_hours: { rate: 0, hours: 100, cost: 0, util: 0 },
@@ -744,175 +1315,437 @@ const PRESET_MIX: Record<PresetKey, { rate: number; hours: number; cost: number;
   balanced: { rate: 34, hours: 33, cost: 33, util: 0 },
   rate_hours: { rate: 50, hours: 50, cost: 0, util: 0 },
   conservative: { rate: 20, hours: 10, cost: 10, util: 5 },
-}
+};
 
 function AbsorptionTab({ data }: { data: TrueCostData }) {
-  const t = useTranslations('analytics.trueCost')
-  const rate = useRate()
-  const catRate = useCategoryRate()
-  const whole = useWholeNumber()
-  const percent = usePercent()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: string | number) => fmtMoney(n, { compact: true })
-  const k = data.kpis
-  const gap = Math.abs(Math.min(0, k.gap ?? 0)) // the shortfall to recover
-  const [rateAdj, setRateAdj] = useState(0)
-  const [hoursAdj, setHoursAdj] = useState(0)
-  const [costAdj, setCostAdj] = useState(0)
-  const [utilAdj, setUtilAdj] = useState(0)
-  const [months, setMonths] = useState(6)
-  const under = k.gap != null && k.gap < 0
+  const t = useTranslations("analytics.trueCost");
+  const rate = useRate();
+  const catRate = useCategoryRate();
+  const whole = useWholeNumber();
+  const percent = usePercent();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: string | number) => fmtMoney(n, { compact: true });
+  const k = data.kpis;
+  const gap = Math.abs(Math.min(0, k.gap ?? 0)); // the shortfall to recover
+  const [rateAdj, setRateAdj] = useState(0);
+  const [hoursAdj, setHoursAdj] = useState(0);
+  const [costAdj, setCostAdj] = useState(0);
+  const [utilAdj, setUtilAdj] = useState(0);
+  const [months, setMonths] = useState(6);
+  const under = k.gap != null && k.gap < 0;
 
   const model = useMemo(() => {
-    const utilGain = Math.min(1 - k.utilization, utilAdj / 100)
-    const utilRecovery = k.totalOverhead * utilGain
-    const remaining = Math.max(0, gap - utilRecovery)
-    const viaRate = remaining * (rateAdj / 100)
-    const viaHours = remaining * (hoursAdj / 100)
-    const viaCost = remaining * (costAdj / 100)
-    const recovered = utilRecovery + viaRate + viaHours + viaCost
-    const newGap = Math.min(0, k.gap ?? 0) + recovered
-    const rateBump = k.billedHours > 0 ? viaRate / k.billedHours : 0
-    const extraHours = k.compositeRate !== null && k.compositeRate > 0 ? viaHours / k.compositeRate : 0
-    const costCutPct = k.totalOverhead > 0 ? (viaCost / k.totalOverhead) * 100 : 0
-    const newAbsorption = k.totalOverhead > 0 ? (((k.burdenApplied ?? 0) + recovered) / k.totalOverhead) * 100 : 100
-    return { recovered, newGap, rateBump, extraHours, costCutPct, newAbsorption, utilRecovery, coverage: gap > 0 ? (recovered / gap) * 100 : 100 }
-  }, [k, gap, rateAdj, hoursAdj, costAdj, utilAdj])
+    const utilGain = Math.min(1 - k.utilization, utilAdj / 100);
+    const utilRecovery = k.totalOverhead * utilGain;
+    const remaining = Math.max(0, gap - utilRecovery);
+    const viaRate = remaining * (rateAdj / 100);
+    const viaHours = remaining * (hoursAdj / 100);
+    const viaCost = remaining * (costAdj / 100);
+    const recovered = utilRecovery + viaRate + viaHours + viaCost;
+    const newGap = Math.min(0, k.gap ?? 0) + recovered;
+    const rateBump = k.billedHours > 0 ? viaRate / k.billedHours : 0;
+    const extraHours =
+      k.compositeRate !== null && k.compositeRate > 0 ? viaHours / k.compositeRate : 0;
+    const costCutPct = k.totalOverhead > 0 ? (viaCost / k.totalOverhead) * 100 : 0;
+    const newAbsorption =
+      k.totalOverhead > 0 ? (((k.burdenApplied ?? 0) + recovered) / k.totalOverhead) * 100 : 100;
+    return {
+      recovered,
+      newGap,
+      rateBump,
+      extraHours,
+      costCutPct,
+      newAbsorption,
+      utilRecovery,
+      coverage: gap > 0 ? (recovered / gap) * 100 : 100,
+    };
+  }, [k, gap, rateAdj, hoursAdj, costAdj, utilAdj]);
 
-  const applyPreset = (key: PresetKey) => { const set = PRESET_MIX[key]; setRateAdj(set.rate); setHoursAdj(set.hours); setCostAdj(set.cost); setUtilAdj(set.util) }
-  const chargedRate = k.billedHours > 0 && k.burdenApplied != null ? k.burdenApplied / k.billedHours : 0
+  const applyPreset = (key: PresetKey) => {
+    const set = PRESET_MIX[key];
+    setRateAdj(set.rate);
+    setHoursAdj(set.hours);
+    setCostAdj(set.cost);
+    setUtilAdj(set.util);
+  };
+  const chargedRate =
+    k.billedHours > 0 && k.burdenApplied != null ? k.burdenApplied / k.billedHours : 0;
 
-  const levers: { labelKey: string; descKey: string; icon: typeof DollarSign; value: number; set: (n: number) => void; max: number; suffix: string; impact: string }[] = [
-    { labelKey: 'absorption.leverRaiseLabel', descKey: 'absorption.leverRaiseDesc', icon: DollarSign, value: rateAdj, set: setRateAdj, max: 100, suffix: t('absorption.suffixOfGap'), impact: t('absorption.impactRate', { value: rate(model.rateBump) }) },
-    { labelKey: 'absorption.leverHoursLabel', descKey: 'absorption.leverHoursDesc', icon: Clock, value: hoursAdj, set: setHoursAdj, max: 100, suffix: t('absorption.suffixOfGap'), impact: t('absorption.impactHours', { count: Math.round(model.extraHours) }) },
-    { labelKey: 'absorption.leverCutLabel', descKey: 'absorption.leverCutDesc', icon: TrendingDown, value: costAdj, set: setCostAdj, max: 100, suffix: t('absorption.suffixOfGap'), impact: t('absorption.impactCost', { value: percent(model.costCutPct, 1) }) },
-    { labelKey: 'absorption.leverUtilLabel', descKey: 'absorption.leverUtilDesc', icon: Percent, value: utilAdj, set: setUtilAdj, max: Math.max(1, Math.round((1 - k.utilization) * 100)), suffix: t('absorption.suffixPpGained'), impact: t('absorption.impactUtil', { value: money(model.utilRecovery) }) },
-  ]
+  const levers: {
+    labelKey: string;
+    descKey: string;
+    icon: typeof DollarSign;
+    value: number;
+    set: (n: number) => void;
+    max: number;
+    suffix: string;
+    impact: string;
+  }[] = [
+    {
+      labelKey: "absorption.leverRaiseLabel",
+      descKey: "absorption.leverRaiseDesc",
+      icon: DollarSign,
+      value: rateAdj,
+      set: setRateAdj,
+      max: 100,
+      suffix: t("absorption.suffixOfGap"),
+      impact: t("absorption.impactRate", { value: rate(model.rateBump) }),
+    },
+    {
+      labelKey: "absorption.leverHoursLabel",
+      descKey: "absorption.leverHoursDesc",
+      icon: Clock,
+      value: hoursAdj,
+      set: setHoursAdj,
+      max: 100,
+      suffix: t("absorption.suffixOfGap"),
+      impact: t("absorption.impactHours", { count: Math.round(model.extraHours) }),
+    },
+    {
+      labelKey: "absorption.leverCutLabel",
+      descKey: "absorption.leverCutDesc",
+      icon: TrendingDown,
+      value: costAdj,
+      set: setCostAdj,
+      max: 100,
+      suffix: t("absorption.suffixOfGap"),
+      impact: t("absorption.impactCost", { value: percent(model.costCutPct, 1) }),
+    },
+    {
+      labelKey: "absorption.leverUtilLabel",
+      descKey: "absorption.leverUtilDesc",
+      icon: Percent,
+      value: utilAdj,
+      set: setUtilAdj,
+      max: Math.max(1, Math.round((1 - k.utilization) * 100)),
+      suffix: t("absorption.suffixPpGained"),
+      impact: t("absorption.impactUtil", { value: money(model.utilRecovery) }),
+    },
+  ];
 
   // No applied postings, no comparison: the tab names the missing mechanism
   // and its remedy instead of planning against a modelled shortfall.
   if (data.absorptionUnavailable) {
     return (
       <div className="space-y-5">
-        <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span>{data.absorptionUnavailable}</span></p>
+        <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <span>{data.absorptionUnavailable}</span>
+        </p>
       </div>
-    )
+    );
   }
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={GaugeIcon} accent="sky" label={t('absorption.avgChargedRate')} value={rate(chargedRate)} sub={k.compositeRate == null ? (data.compositeRefusal?.message ?? t('hero.notAvailable')) : t('absorption.breakEven', { rate: rate(k.compositeRate) })} />
-        <KpiCard icon={Percent} accent="violet" label={t('hero.absorption')} value={k.absorptionPct == null ? '—' : percent(k.absorptionPct, 1)} sub={k.absorptionPct == null ? t('hero.notAvailable') : under ? t('hero.underAbsorbed') : t('hero.overAbsorbed')} tone={k.absorptionPct == null ? 'neutral' : under ? 'negative' : 'positive'} />
-        <KpiCard icon={under ? AlertTriangle : CheckCircle2} accent={under ? 'red' : 'emerald'} label={t('absorption.gap')} value={k.gap == null ? '—' : `${k.gap >= 0 ? '+' : '−'}${money(Math.abs(k.gap))}`} sub={k.gap == null ? t('hero.notAvailable') : t('absorption.gapMath', { hours: Math.round(k.billedHours), depts: data.departments.length })} tone={under ? 'negative' : 'positive'} />
-        <KpiCard icon={under ? TrendingDown : TrendingUp} accent={under ? 'red' : 'emerald'} label={t('absorption.gapPerHour')} value={k.gapPerHour == null ? '—' : `${k.gapPerHour >= 0 ? '+' : '−'}${rate(Math.abs(k.gapPerHour))}`} sub={k.gapPerHour == null ? t('hero.notAvailable') : t('absorption.perBilledHour')} tone={under ? 'negative' : 'positive'} />
+        <KpiCard
+          icon={GaugeIcon}
+          accent="sky"
+          label={t("absorption.avgChargedRate")}
+          value={rate(chargedRate)}
+          sub={
+            k.compositeRate == null
+              ? (data.compositeRefusal?.message ?? t("hero.notAvailable"))
+              : t("absorption.breakEven", { rate: rate(k.compositeRate) })
+          }
+        />
+        <KpiCard
+          icon={Percent}
+          accent="violet"
+          label={t("hero.absorption")}
+          value={k.absorptionPct == null ? "—" : percent(k.absorptionPct, 1)}
+          sub={
+            k.absorptionPct == null
+              ? t("hero.notAvailable")
+              : under
+                ? t("hero.underAbsorbed")
+                : t("hero.overAbsorbed")
+          }
+          tone={k.absorptionPct == null ? "neutral" : under ? "negative" : "positive"}
+        />
+        <KpiCard
+          icon={under ? AlertTriangle : CheckCircle2}
+          accent={under ? "red" : "emerald"}
+          label={t("absorption.gap")}
+          value={k.gap == null ? "—" : `${k.gap >= 0 ? "+" : "−"}${money(Math.abs(k.gap))}`}
+          sub={
+            k.gap == null
+              ? t("hero.notAvailable")
+              : t("absorption.gapMath", {
+                  hours: Math.round(k.billedHours),
+                  depts: data.departments.length,
+                })
+          }
+          tone={under ? "negative" : "positive"}
+        />
+        <KpiCard
+          icon={under ? TrendingDown : TrendingUp}
+          accent={under ? "red" : "emerald"}
+          label={t("absorption.gapPerHour")}
+          value={
+            k.gapPerHour == null
+              ? "—"
+              : `${k.gapPerHour >= 0 ? "+" : "−"}${rate(Math.abs(k.gapPerHour))}`
+          }
+          sub={k.gapPerHour == null ? t("hero.notAvailable") : t("absorption.perBilledHour")}
+          tone={under ? "negative" : "positive"}
+        />
       </div>
-      {data.appliedSource === 'standard-cards' ? (
-        <p className="flex items-center gap-2 rounded-lg bg-slate-100 px-3.5 py-2.5 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-300"><Info size={15} />{t('absorption.pricedFromCards')}</p>
+      {data.appliedSource === "standard-cards" ? (
+        <p className="flex items-center gap-2 rounded-lg bg-slate-100 px-3.5 py-2.5 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+          <Info size={15} />
+          {t("absorption.pricedFromCards")}
+        </p>
       ) : null}
 
       {!under ? (
-        <p className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"><CheckCircle2 size={15} />{t('absorption.fullyAbsorbed')}</p>
+        <p className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400">
+          <CheckCircle2 size={15} />
+          {t("absorption.fullyAbsorbed")}
+        </p>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-50 px-3 py-2.5 dark:bg-slate-800/40">
-            <span className="mr-1 text-xs text-slate-400 dark:text-slate-500">{t('absorption.quickScenarios')}</span>
+            <span className="mr-1 text-xs text-slate-400 dark:text-slate-500">
+              {t("absorption.quickScenarios")}
+            </span>
             {PRESETS.map((key) => (
-              <button key={key} type="button" onClick={() => applyPreset(key)} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-teal-400 hover:text-teal-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">{t(`presets.${key}`)}</button>
+              <button
+                key={key}
+                type="button"
+                onClick={() => applyPreset(key)}
+                className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-teal-400 hover:text-teal-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+              >
+                {t(`presets.${key}`)}
+              </button>
             ))}
-            <button type="button" onClick={() => { setRateAdj(0); setHoursAdj(0); setCostAdj(0); setUtilAdj(0) }} className="ml-auto rounded-md border border-slate-200 p-1.5 text-slate-400 hover:text-slate-600 dark:border-slate-700" title={t('actions.reset')}><RotateCcw size={13} /></button>
+            <button
+              type="button"
+              onClick={() => {
+                setRateAdj(0);
+                setHoursAdj(0);
+                setCostAdj(0);
+                setUtilAdj(0);
+              }}
+              className="ml-auto rounded-md border border-slate-200 p-1.5 text-slate-400 hover:text-slate-600 dark:border-slate-700"
+              title={t("actions.reset")}
+            >
+              <RotateCcw size={13} />
+            </button>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {levers.map((l) => {
-              const Icon = l.icon
+              const Icon = l.icon;
               return (
-                <div key={l.labelKey} className={cn('rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-900', l.value > 0 ? 'border-teal-400 dark:border-teal-600' : 'border-slate-200/80 dark:border-slate-800')}>
+                <div
+                  key={l.labelKey}
+                  className={cn(
+                    "rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-900",
+                    l.value > 0
+                      ? "border-teal-400 dark:border-teal-600"
+                      : "border-slate-200/80 dark:border-slate-800",
+                  )}
+                >
                   <div className="mb-3 flex items-center gap-2.5">
-                    <span className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"><Icon size={16} /></span>
+                    <span className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                      <Icon size={16} />
+                    </span>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{t(l.labelKey)}</p>
-                      <p className="truncate text-[11px] text-slate-400 dark:text-slate-500">{t(l.descKey)}</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        {t(l.labelKey)}
+                      </p>
+                      <p className="truncate text-[11px] text-slate-400 dark:text-slate-500">
+                        {t(l.descKey)}
+                      </p>
                     </div>
                   </div>
-                  <input type="range" min={0} max={l.max} value={l.value} onChange={(e) => l.set(Number(e.target.value))} className="w-full accent-teal-500" />
+                  <input
+                    type="range"
+                    min={0}
+                    max={l.max}
+                    value={l.value}
+                    onChange={(e) => l.set(Number(e.target.value))}
+                    className="w-full accent-teal-500"
+                  />
                   <div className="mt-1 flex items-center justify-between text-xs">
                     <span className="text-slate-400">{l.suffix}</span>
-                    <span className="font-bold tabular-nums text-slate-800 dark:text-slate-200">{whole(l.value)}</span>
+                    <span className="font-bold tabular-nums text-slate-800 dark:text-slate-200">
+                      {whole(l.value)}
+                    </span>
                   </div>
-                  <p className={cn('mt-2.5 rounded-md px-2 py-1.5 text-center text-[11px] font-semibold', l.value > 0 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-slate-50 text-slate-400 dark:bg-slate-800/60 dark:text-slate-500')}>{l.impact}</p>
+                  <p
+                    className={cn(
+                      "mt-2.5 rounded-md px-2 py-1.5 text-center text-[11px] font-semibold",
+                      l.value > 0
+                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                        : "bg-slate-50 text-slate-400 dark:bg-slate-800/60 dark:text-slate-500",
+                    )}
+                  >
+                    {l.impact}
+                  </p>
                 </div>
-              )
+              );
             })}
           </div>
 
-          <Panel title={t('panels.recoveryPlan')} icon={Scale} bodyClassName="p-0">
+          <Panel title={t("panels.recoveryPlan")} icon={Scale} bodyClassName="p-0">
             <div className="grid grid-cols-2 gap-px border-b border-slate-100 bg-slate-100 dark:border-slate-800 dark:bg-slate-800 sm:grid-cols-5">
               {[
-                { label: t('absorption.planRecovered'), value: money(model.recovered) },
-                { label: t('absorption.planRemainingGap'), value: `${model.newGap >= 0 ? '+' : '−'}${money(Math.abs(model.newGap))}` },
-                { label: t('absorption.planNewAbsorption'), value: percent(model.newAbsorption, 1) },
-                { label: t('absorption.planRateSurcharge'), value: `+${rate(model.rateBump)}` },
-                { label: t('absorption.planExtraBillableHrs'), value: whole(model.extraHours) },
+                { label: t("absorption.planRecovered"), value: money(model.recovered) },
+                {
+                  label: t("absorption.planRemainingGap"),
+                  value: `${model.newGap >= 0 ? "+" : "−"}${money(Math.abs(model.newGap))}`,
+                },
+                {
+                  label: t("absorption.planNewAbsorption"),
+                  value: percent(model.newAbsorption, 1),
+                },
+                { label: t("absorption.planRateSurcharge"), value: `+${rate(model.rateBump)}` },
+                { label: t("absorption.planExtraBillableHrs"), value: whole(model.extraHours) },
               ].map((s) => (
                 <div key={s.label} className="bg-white p-3.5 text-center dark:bg-slate-900">
-                  <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">{s.value}</p>
-                  <p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">{s.label}</p>
+                  <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                    {s.value}
+                  </p>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    {s.label}
+                  </p>
                 </div>
               ))}
             </div>
             <div className="p-4">
               <div className="mb-1.5 flex items-center justify-between text-xs">
-                <span className="text-slate-500 dark:text-slate-400">{t('absorption.gapCoverage')}</span>
-                <span className="text-base font-bold tabular-nums text-slate-800 dark:text-slate-200">{percent(Math.min(100, model.coverage))}</span>
+                <span className="text-slate-500 dark:text-slate-400">
+                  {t("absorption.gapCoverage")}
+                </span>
+                <span className="text-base font-bold tabular-nums text-slate-800 dark:text-slate-200">
+                  {percent(Math.min(100, model.coverage))}
+                </span>
               </div>
               <div className="h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                <div className={cn('h-full rounded-full transition-all', model.coverage >= 100 ? 'bg-emerald-500' : model.coverage >= 60 ? 'bg-teal-500' : 'bg-amber-500')} style={{ width: `${Math.min(100, model.coverage)}%` }} />
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    model.coverage >= 100
+                      ? "bg-emerald-500"
+                      : model.coverage >= 60
+                        ? "bg-teal-500"
+                        : "bg-amber-500",
+                  )}
+                  style={{ width: `${Math.min(100, model.coverage)}%` }}
+                />
               </div>
-              <div className="mt-1 flex justify-between text-[10px] text-slate-400 dark:text-slate-500"><span>{money(0)}</span><span>{t('absorption.gapOf', { amount: money(gap) })}</span></div>
+              <div className="mt-1 flex justify-between text-[10px] text-slate-400 dark:text-slate-500">
+                <span>{money(0)}</span>
+                <span>{t("absorption.gapOf", { amount: money(gap) })}</span>
+              </div>
             </div>
             <div className="border-t border-slate-100 p-4 dark:border-slate-800">
               <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t('absorption.timeline')}</p>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  {t("absorption.timeline")}
+                </p>
                 <span className="flex gap-1">
                   {[3, 6, 12].map((m) => (
-                    <button key={m} type="button" onClick={() => setMonths(m)} className={cn('rounded-md border px-2 py-1 text-xs font-medium', months === m ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300' : 'border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400')}>{t('absorption.monthShort', { months: m })}</button>
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMonths(m)}
+                      className={cn(
+                        "rounded-md border px-2 py-1 text-xs font-medium",
+                        months === m
+                          ? "border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300"
+                          : "border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400",
+                      )}
+                    >
+                      {t("absorption.monthShort", { months: m })}
+                    </button>
                   ))}
                 </span>
               </div>
               <div className="flex gap-1.5 overflow-x-auto pb-1">
                 {Array.from({ length: months }, (_, i) => {
-                  const per = model.recovered / months
-                  const cum = per * (i + 1)
-                  const done = cum >= gap
+                  const per = model.recovered / months;
+                  const cum = per * (i + 1);
+                  const done = cum >= gap;
                   return (
-                    <div key={i} className={cn('min-w-18 flex-1 rounded-lg border p-2 text-center', done ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30' : 'border-slate-200 dark:border-slate-700')}>
-                      <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">{t('absorption.monthCell', { n: i + 1 })}</p>
-                      <p className="text-[10px] tabular-nums text-slate-400 dark:text-slate-500">{money(per)}</p>
-                      <p className={cn('text-[10px] font-bold tabular-nums', done ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500')}>{percent(gap > 0 ? Math.min(100, (cum / gap) * 100) : 100)}</p>
+                    <div
+                      key={i}
+                      className={cn(
+                        "min-w-18 flex-1 rounded-lg border p-2 text-center",
+                        done
+                          ? "border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30"
+                          : "border-slate-200 dark:border-slate-700",
+                      )}
+                    >
+                      <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                        {t("absorption.monthCell", { n: i + 1 })}
+                      </p>
+                      <p className="text-[10px] tabular-nums text-slate-400 dark:text-slate-500">
+                        {money(per)}
+                      </p>
+                      <p
+                        className={cn(
+                          "text-[10px] font-bold tabular-nums",
+                          done ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500",
+                        )}
+                      >
+                        {percent(gap > 0 ? Math.min(100, (cum / gap) * 100) : 100)}
+                      </p>
                     </div>
-                  )
+                  );
                 })}
               </div>
             </div>
             <div className="border-t border-slate-100 dark:border-slate-800">
-              <p className="bg-slate-50/70 px-4 py-2 text-xs font-semibold text-slate-500 dark:bg-slate-800/40 dark:text-slate-400">{t('absorption.contributionByDept')}</p>
+              <p className="bg-slate-50/70 px-4 py-2 text-xs font-semibold text-slate-500 dark:bg-slate-800/40 dark:text-slate-400">
+                {t("absorption.contributionByDept")}
+              </p>
               <SharedTable className="w-full text-sm">
                 <SharedTableBody>
                   {data.departments.map((d) => {
-                    const contribution = (k.gapPerHour ?? 0) * d.billedHours
-                    const pct = Math.abs(k.gap ?? 0) > 0 ? (Math.abs(contribution) / Math.abs(k.gap ?? 0)) * 100 : 0
+                    const contribution = (k.gapPerHour ?? 0) * d.billedHours;
+                    const pct =
+                      Math.abs(k.gap ?? 0) > 0
+                        ? (Math.abs(contribution) / Math.abs(k.gap ?? 0)) * 100
+                        : 0;
                     return (
-                      <SharedTableRow key={d.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                        <SharedTableCell className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300">{d.name}</SharedTableCell>
-                        <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{t('absorption.hrsShort', { count: Math.round(d.billedHours) })}</SharedTableCell>
-                        <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{catRate(d.composite, data.kpis.compositeFormat)}</SharedTableCell>
-                        <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', contribution < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{contribution < 0 ? '−' : '+'}{money(Math.abs(contribution))}</SharedTableCell>
+                      <SharedTableRow
+                        key={d.id}
+                        className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+                      >
+                        <SharedTableCell className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300">
+                          {d.name}
+                        </SharedTableCell>
+                        <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                          {t("absorption.hrsShort", { count: Math.round(d.billedHours) })}
+                        </SharedTableCell>
+                        <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                          {catRate(d.composite, data.kpis.compositeFormat)}
+                        </SharedTableCell>
+                        <SharedTableCell
+                          className={cn(
+                            "px-4 py-2 text-right font-semibold tabular-nums",
+                            contribution < 0
+                              ? "text-rose-600 dark:text-rose-400"
+                              : "text-emerald-600 dark:text-emerald-400",
+                          )}
+                        >
+                          {contribution < 0 ? "−" : "+"}
+                          {money(Math.abs(contribution))}
+                        </SharedTableCell>
                         <SharedTableCell className="w-40 px-4 py-2">
-                          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-rose-400" style={{ width: `${Math.min(100, pct)}%` }} /></div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                            <div
+                              className="h-full rounded-full bg-rose-400"
+                              style={{ width: `${Math.min(100, pct)}%` }}
+                            />
+                          </div>
                         </SharedTableCell>
                       </SharedTableRow>
-                    )
+                    );
                   })}
                 </SharedTableBody>
               </SharedTable>
@@ -921,174 +1754,336 @@ function AbsorptionTab({ data }: { data: TrueCostData }) {
         </>
       )}
     </div>
-  )
+  );
 }
 
 /* ------------------------------------------------------------ Selling Rate */
 
-interface CostRow { name: string; type: 'percent_labor' | 'percent_subtotal' | 'flat'; value: number }
+interface CostRow {
+  name: string;
+  type: "percent_labor" | "percent_subtotal" | "flat";
+  value: number;
+}
 
 function SellingTab({ data }: { data: TrueCostData }) {
-  const t = useTranslations('analytics.trueCost')
-  const rate = useRate()
-  const catRate = useCategoryRate()
-  const percent = usePercent()
-  const format = useFormatter()
-  const { currency } = useMoney()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: string | number) => fmtMoney(n, { compact: true })
-  const k = data.kpis
-  const emp = data.labor
+  const t = useTranslations("analytics.trueCost");
+  const rate = useRate();
+  const catRate = useCategoryRate();
+  const percent = usePercent();
+  const format = useFormatter();
+  const { currency } = useMoney();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: string | number) => fmtMoney(n, { compact: true });
+  const k = data.kpis;
+  const emp = data.labor;
 
   // Planner inputs start from measured owners, never invented constants: the
   // manual labor seed is the employees' own hours-weighted average, the
   // burden seed is the computed composite, additional costs start empty,
   // and margin and premium multipliers start unset (no assumed margin).
   const seedManualRate = () => {
-    const hours = emp.employees.reduce((s, e) => add(s, String(e.hours)), '0.0000')
-    if (compareMoney(hours, '0') <= 0) return 0
-    const cost = emp.employees.reduce((s, e) => add(s, mulDecimal(String(e.rate), String(e.hours))), '0.0000')
-    return toChartNumber(div(cost, hours))
-  }
-  const [laborSource, setLaborSource] = useState<'employee' | 'manual'>('employee')
-  const [laborDept, setLaborDept] = useState('')
-  const [laborTitle, setLaborTitle] = useState('')
-  const [laborAgg, setLaborAgg] = useState<'average' | 'median' | 'weighted'>('weighted')
-  const [laborManual, setLaborManual] = useState<number>(seedManualRate)
-  const [burdenSource, setBurdenSource] = useState('all')
-  const [burdenManual, setBurdenManual] = useState<number | null>(k.compositeRate)
-  const [costs, setCosts] = useState<CostRow[]>([])
-  const [marginType, setMarginType] = useState<'margin' | 'markup'>('margin')
-  const [margin, setMargin] = useState(0)
-  const [otMult, setOtMult] = useState<number | null>(null)
-  const [dtMult, setDtMult] = useState<number | null>(null)
+    const hours = emp.employees.reduce((s, e) => add(s, String(e.hours)), "0.0000");
+    if (compareMoney(hours, "0") <= 0) return 0;
+    const cost = emp.employees.reduce(
+      (s, e) => add(s, mulDecimal(String(e.rate), String(e.hours))),
+      "0.0000",
+    );
+    return toChartNumber(div(cost, hours));
+  };
+  const [laborSource, setLaborSource] = useState<"employee" | "manual">("employee");
+  const [laborDept, setLaborDept] = useState("");
+  const [laborTitle, setLaborTitle] = useState("");
+  const [laborAgg, setLaborAgg] = useState<"average" | "median" | "weighted">("weighted");
+  const [laborManual, setLaborManual] = useState<number>(seedManualRate);
+  const [burdenSource, setBurdenSource] = useState("all");
+  const [burdenManual, setBurdenManual] = useState<number | null>(k.compositeRate);
+  const [costs, setCosts] = useState<CostRow[]>([]);
+  const [marginType, setMarginType] = useState<"margin" | "markup">("margin");
+  const [margin, setMargin] = useState(0);
+  const [otMult, setOtMult] = useState<number | null>(null);
+  const [dtMult, setDtMult] = useState<number | null>(null);
 
-  const titles = useMemo(() => [...new Set(emp.employees.map((e) => e.title))].sort(), [emp.employees])
+  const titles = useMemo(
+    () => [...new Set(emp.employees.map((e) => e.title))].sort(),
+    [emp.employees],
+  );
 
-  const laborPool = useMemo(() => emp.employees.filter((e) => (!laborDept || e.deptId === laborDept) && (!laborTitle || e.title === laborTitle)), [emp.employees, laborDept, laborTitle])
+  const laborPool = useMemo(
+    () =>
+      emp.employees.filter(
+        (e) => (!laborDept || e.deptId === laborDept) && (!laborTitle || e.title === laborTitle),
+      ),
+    [emp.employees, laborDept, laborTitle],
+  );
   // Every derived planner figure is an exact decimal string (or null when an
   // input is missing): operator entries convert through their decimal text,
   // never through float arithmetic. Display formatters round at render.
   const laborRate = useMemo<string | null>(() => {
-    if (laborSource === 'manual') return String(laborManual)
-    if (!laborPool.length) return null
-    if (laborAgg === 'average') {
-      const sum = laborPool.reduce((s, e) => add(s, String(e.rate)), '0.0000')
-      return div(sum, String(laborPool.length))
+    if (laborSource === "manual") return String(laborManual);
+    if (!laborPool.length) return null;
+    if (laborAgg === "average") {
+      const sum = laborPool.reduce((s, e) => add(s, String(e.rate)), "0.0000");
+      return div(sum, String(laborPool.length));
     }
-    if (laborAgg === 'median') {
-      const sorted = [...laborPool].sort((a, b) => a.rate - b.rate)
-      const mid = sorted[Math.floor(sorted.length / 2)]
-      return mid == null ? null : String(mid.rate)
+    if (laborAgg === "median") {
+      const sorted = [...laborPool].sort((a, b) => a.rate - b.rate);
+      const mid = sorted[Math.floor(sorted.length / 2)];
+      return mid == null ? null : String(mid.rate);
     }
-    const h = laborPool.reduce((s, e) => add(s, String(e.hours)), '0.0000')
-    if (compareMoney(h, '0') <= 0) return null
-    return div(laborPool.reduce((s, e) => add(s, mulDecimal(String(e.rate), String(e.hours))), '0.0000'), h)
-  }, [laborSource, laborManual, laborPool, laborAgg])
-  const laborMin = laborPool.length ? String(Math.min(...laborPool.map((e) => e.rate))) : null
-  const laborMax = laborPool.length ? String(Math.max(...laborPool.map((e) => e.rate))) : null
+    const h = laborPool.reduce((s, e) => add(s, String(e.hours)), "0.0000");
+    if (compareMoney(h, "0") <= 0) return null;
+    return div(
+      laborPool.reduce((s, e) => add(s, mulDecimal(String(e.rate), String(e.hours))), "0.0000"),
+      h,
+    );
+  }, [laborSource, laborManual, laborPool, laborAgg]);
+  const laborMin = laborPool.length ? String(Math.min(...laborPool.map((e) => e.rate))) : null;
+  const laborMax = laborPool.length ? String(Math.max(...laborPool.map((e) => e.rate))) : null;
 
   // The burden leg is null while the composite refuses: every figure built
   // on it renders '—' (with the refusal banner above the tabs) instead of
   // planning against a zero burden.
-  const burdenRate: string | null = burdenSource === 'manual'
-    ? (burdenManual == null ? null : String(burdenManual))
-    : burdenSource === 'all'
-      ? (k.compositeRate == null ? null : String(k.compositeRate))
-      // A department whose composite refused contributes null, never the
-      // Overall rate: planning against another scope's number hides the refusal.
-      : ((v) => (v == null ? null : String(v)))(data.totals.byDept[burdenSource] ?? null)
-  const burdenDeptName = burdenSource === 'all' ? t('selling.allDepartments') : burdenSource === 'manual' ? t('selling.manual') : data.departments.find((d) => d.id === burdenSource)?.name ?? '—'
+  const burdenRate: string | null =
+    burdenSource === "manual"
+      ? burdenManual == null
+        ? null
+        : String(burdenManual)
+      : burdenSource === "all"
+        ? k.compositeRate == null
+          ? null
+          : String(k.compositeRate)
+        : // A department whose composite refused contributes null, never the
+          // Overall rate: planning against another scope's number hides the refusal.
+          ((v) => (v == null ? null : String(v)))(data.totals.byDept[burdenSource] ?? null);
+  const burdenDeptName =
+    burdenSource === "all"
+      ? t("selling.allDepartments")
+      : burdenSource === "manual"
+        ? t("selling.manual")
+        : (data.departments.find((d) => d.id === burdenSource)?.name ?? "—");
 
-  const subtotal = laborRate === null || burdenRate === null ? null : add(laborRate, burdenRate)
+  const subtotal = laborRate === null || burdenRate === null ? null : add(laborRate, burdenRate);
   const costShare = (base: string | null, pct: number): string | null =>
-    base === null ? null : mulDecimal(base, div(String(pct), '100'))
+    base === null ? null : mulDecimal(base, div(String(pct), "100"));
   const additional = costs.reduce<string | null>((s, c) => {
-    if (s === null) return null
-    if (c.type === 'percent_labor') return add(s, costShare(laborRate, c.value) ?? '0.0000')
-    if (c.type === 'percent_subtotal') return subtotal === null ? null : add(s, costShare(subtotal, c.value) ?? '0.0000')
-    return add(s, String(c.value))
-  }, '0.0000')
-  const totalCost = subtotal === null || additional === null ? null : add(subtotal, additional)
+    if (s === null) return null;
+    if (c.type === "percent_labor") return add(s, costShare(laborRate, c.value) ?? "0.0000");
+    if (c.type === "percent_subtotal")
+      return subtotal === null ? null : add(s, costShare(subtotal, c.value) ?? "0.0000");
+    return add(s, String(c.value));
+  }, "0.0000");
+  const totalCost = subtotal === null || additional === null ? null : add(subtotal, additional);
   const applyMargin = (cost: string): string =>
-    marginType === 'margin'
-      ? (margin < 100 ? div(mulDecimal(cost, '100'), String(100 - margin)) : cost)
-      : div(mulDecimal(cost, String(100 + margin)), '100')
-  const sellingRate = totalCost === null ? null : applyMargin(totalCost)
-  const profit = sellingRate === null || totalCost === null ? null : add(sellingRate, neg(totalCost))
+    marginType === "margin"
+      ? margin < 100
+        ? div(mulDecimal(cost, "100"), String(100 - margin))
+        : cost
+      : div(mulDecimal(cost, String(100 + margin)), "100");
+  const sellingRate = totalCost === null ? null : applyMargin(totalCost);
+  const profit =
+    sellingRate === null || totalCost === null ? null : add(sellingRate, neg(totalCost));
   const ratioPct = (part: string | null, whole: string | null): number =>
-    part === null || whole === null || compareMoney(whole, '0') <= 0 ? 0 : toChartNumber(mulDecimal(div(part, whole), '100'))
-  const grossMargin = ratioPct(profit, sellingRate)
-  const markup = ratioPct(profit, totalCost)
-  const seg = (v: string | null) => (sellingRate != null && compareMoney(sellingRate, '0') > 0 && v !== null
-    ? `${Math.max(0, toChartNumber(mulDecimal(div(v, sellingRate), '100')))}%`
-    : '0%')
+    part === null || whole === null || compareMoney(whole, "0") <= 0
+      ? 0
+      : toChartNumber(mulDecimal(div(part, whole), "100"));
+  const grossMargin = ratioPct(profit, sellingRate);
+  const markup = ratioPct(profit, totalCost);
+  const seg = (v: string | null) =>
+    sellingRate != null && compareMoney(sellingRate, "0") > 0 && v !== null
+      ? `${Math.max(0, toChartNumber(mulDecimal(div(v, sellingRate), "100")))}%`
+      : "0%";
   const premium = (mult: number | null) => {
-    if (mult === null || laborRate === null || burdenRate === null || additional === null) return null
-    return applyMargin(add(add(mulDecimal(laborRate, String(mult)), burdenRate), additional))
-  }
+    if (mult === null || laborRate === null || burdenRate === null || additional === null)
+      return null;
+    return applyMargin(add(add(mulDecimal(laborRate, String(mult)), burdenRate), additional));
+  };
 
-  const setCost = (i: number, patch: Partial<CostRow>) => setCosts(costs.map((c, j) => (j === i ? { ...c, ...patch } : c)))
-  const costAmount = (c: CostRow): string | null => (c.type === 'percent_labor' ? costShare(laborRate, c.value) : c.type === 'percent_subtotal' ? (subtotal === null ? null : costShare(subtotal, c.value)) : String(c.value))
+  const setCost = (i: number, patch: Partial<CostRow>) =>
+    setCosts(costs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  const costAmount = (c: CostRow): string | null =>
+    c.type === "percent_labor"
+      ? costShare(laborRate, c.value)
+      : c.type === "percent_subtotal"
+        ? subtotal === null
+          ? null
+          : costShare(subtotal, c.value)
+        : String(c.value);
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={Calculator} accent="sky" label={t('selling.sellingRate')} value={sellingRate == null ? '—' : rate(toChartNumber(sellingRate))} sub={t('selling.costMultiple', { multiple: format.number(totalCost != null && compareMoney(totalCost, '0') > 0 && sellingRate != null ? toChartNumber(div(sellingRate, totalCost)) : 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })} />
-        <KpiCard icon={Layers} accent="violet" label={t('selling.totalCost')} value={totalCost == null ? '—' : rate(toChartNumber(totalCost))} sub={t('selling.costStack')} />
-        <KpiCard icon={DollarSign} accent="emerald" label={t('selling.profitPerHour')} value={profit == null ? '—' : rate(toChartNumber(profit))} sub={profit == null ? '—' : t('selling.per1kHours', { money: money(mulDecimal(profit, '1000')) })} tone="positive" />
-        <KpiCard icon={Percent} accent="amber" label={t('selling.grossMargin')} value={percent(grossMargin)} sub={t('selling.markupPct', { markup: percent(markup) })} />
+        <KpiCard
+          icon={Calculator}
+          accent="sky"
+          label={t("selling.sellingRate")}
+          value={sellingRate == null ? "—" : rate(toChartNumber(sellingRate))}
+          sub={t("selling.costMultiple", {
+            multiple: format.number(
+              totalCost != null && compareMoney(totalCost, "0") > 0 && sellingRate != null
+                ? toChartNumber(div(sellingRate, totalCost))
+                : 0,
+              { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+            ),
+          })}
+        />
+        <KpiCard
+          icon={Layers}
+          accent="violet"
+          label={t("selling.totalCost")}
+          value={totalCost == null ? "—" : rate(toChartNumber(totalCost))}
+          sub={t("selling.costStack")}
+        />
+        <KpiCard
+          icon={DollarSign}
+          accent="emerald"
+          label={t("selling.profitPerHour")}
+          value={profit == null ? "—" : rate(toChartNumber(profit))}
+          sub={
+            profit == null
+              ? "—"
+              : t("selling.per1kHours", { money: money(mulDecimal(profit, "1000")) })
+          }
+          tone="positive"
+        />
+        <KpiCard
+          icon={Percent}
+          accent="amber"
+          label={t("selling.grossMargin")}
+          value={percent(grossMargin)}
+          sub={t("selling.markupPct", { markup: percent(markup) })}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         {/* Builder */}
         <div className="lg:col-span-7">
-          <Panel title={t('panels.sellingBuilder')} icon={Calculator} actions={<button type="button" onClick={() => { setLaborSource('employee'); setLaborDept(''); setLaborTitle(''); setLaborAgg('weighted'); setBurdenSource('all'); setCosts([]); setMargin(0); setMarginType('margin') }} className="rounded-md border border-slate-200 p-1.5 text-slate-400 hover:text-slate-600 dark:border-slate-700" title={t('actions.reset')}><RotateCcw size={13} /></button>} bodyClassName="p-0">
+          <Panel
+            title={t("panels.sellingBuilder")}
+            icon={Calculator}
+            actions={
+              <button
+                type="button"
+                onClick={() => {
+                  setLaborSource("employee");
+                  setLaborDept("");
+                  setLaborTitle("");
+                  setLaborAgg("weighted");
+                  setBurdenSource("all");
+                  setCosts([]);
+                  setMargin(0);
+                  setMarginType("margin");
+                }}
+                className="rounded-md border border-slate-200 p-1.5 text-slate-400 hover:text-slate-600 dark:border-slate-700"
+                title={t("actions.reset")}
+              >
+                <RotateCcw size={13} />
+              </button>
+            }
+            bodyClassName="p-0"
+          >
             {/* Direct Labor */}
             <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
               <div className="flex items-center gap-3">
-                <span className="grid h-8 w-8 place-items-center rounded-lg bg-sky-100 text-sky-600 dark:bg-sky-950/50 dark:text-sky-400"><UserRound size={15} /></span>
+                <span className="grid h-8 w-8 place-items-center rounded-lg bg-sky-100 text-sky-600 dark:bg-sky-950/50 dark:text-sky-400">
+                  <UserRound size={15} />
+                </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{t('selling.directLabor')}</p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                    {t("selling.directLabor")}
+                  </p>
                   <p className="text-xs text-slate-400 dark:text-slate-500">
-                    {laborSource === 'manual' ? t('selling.manualEntry') : laborPool.length ? t('selling.weightedFrom', { count: laborPool.length, min: rate(toChartNumber(laborMin ?? '0')), max: rate(toChartNumber(laborMax ?? '0')) }) : t('selling.noMatchingEmployees')}
+                    {laborSource === "manual"
+                      ? t("selling.manualEntry")
+                      : laborPool.length
+                        ? t("selling.weightedFrom", {
+                            count: laborPool.length,
+                            min: rate(toChartNumber(laborMin ?? "0")),
+                            max: rate(toChartNumber(laborMax ?? "0")),
+                          })
+                        : t("selling.noMatchingEmployees")}
                   </p>
                 </div>
-                <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{laborRate == null ? '—' : rate(toChartNumber(laborRate))}</p>
+                <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                  {laborRate == null ? "—" : rate(toChartNumber(laborRate))}
+                </p>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-11">
                 <FilterPill icon={Wand2}>
-                  <Select value={laborSource} onChange={(e) => setLaborSource(e.target.value as 'employee' | 'manual')} className="w-32" triggerClassName={PILL_TRIGGER} aria-label={t('selling.labourSource')}>
-                    <option value="employee">{t('selling.fromEmployees')}</option>
-                    <option value="manual">{t('selling.manualEntryOption')}</option>
+                  <Select
+                    value={laborSource}
+                    onChange={(e) => setLaborSource(e.target.value as "employee" | "manual")}
+                    className="w-32"
+                    triggerClassName={PILL_TRIGGER}
+                    aria-label={t("selling.labourSource")}
+                  >
+                    <option value="employee">{t("selling.fromEmployees")}</option>
+                    <option value="manual">{t("selling.manualEntryOption")}</option>
                   </Select>
                 </FilterPill>
-                {laborSource === 'employee' ? (
+                {laborSource === "employee" ? (
                   <>
                     <FilterPill icon={Building2}>
-                      <Select value={laborDept} onChange={(e) => setLaborDept(e.target.value)} className="w-28" triggerClassName={PILL_TRIGGER} aria-label={t('selling.departmentFilter')}>
-                        <option value="">{t('selling.allDepts')}</option>
-                        {data.departments.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                      <Select
+                        value={laborDept}
+                        onChange={(e) => setLaborDept(e.target.value)}
+                        className="w-28"
+                        triggerClassName={PILL_TRIGGER}
+                        aria-label={t("selling.departmentFilter")}
+                      >
+                        <option value="">{t("selling.allDepts")}</option>
+                        {data.departments.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name}
+                          </option>
+                        ))}
                       </Select>
                     </FilterPill>
                     <FilterPill icon={UserRound}>
-                      <Select value={laborTitle} onChange={(e) => setLaborTitle(e.target.value)} className="w-40" triggerClassName={PILL_TRIGGER} aria-label={t('selling.labourClassFilter')}>
-                        <option value="">{t('selling.allLabourClasses')}</option>
-                        {titles.map((ti) => (<option key={ti} value={ti}>{ti}</option>))}
+                      <Select
+                        value={laborTitle}
+                        onChange={(e) => setLaborTitle(e.target.value)}
+                        className="w-40"
+                        triggerClassName={PILL_TRIGGER}
+                        aria-label={t("selling.labourClassFilter")}
+                      >
+                        <option value="">{t("selling.allLabourClasses")}</option>
+                        {titles.map((ti) => (
+                          <option key={ti} value={ti}>
+                            {ti}
+                          </option>
+                        ))}
                       </Select>
                     </FilterPill>
                     <FilterPill icon={Calculator}>
-                      <Select value={laborAgg} onChange={(e) => setLaborAgg(e.target.value as 'average' | 'median' | 'weighted')} className="w-26" triggerClassName={PILL_TRIGGER} aria-label={t('selling.aggregation')}>
-                        <option value="average">{t('selling.average')}</option>
-                        <option value="median">{t('selling.median')}</option>
-                        <option value="weighted">{t('selling.weighted')}</option>
+                      <Select
+                        value={laborAgg}
+                        onChange={(e) =>
+                          setLaborAgg(e.target.value as "average" | "median" | "weighted")
+                        }
+                        className="w-26"
+                        triggerClassName={PILL_TRIGGER}
+                        aria-label={t("selling.aggregation")}
+                      >
+                        <option value="average">{t("selling.average")}</option>
+                        <option value="median">{t("selling.median")}</option>
+                        <option value="weighted">{t("selling.weighted")}</option>
                       </Select>
                     </FilterPill>
-                    <span className="rounded-full bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">{t('selling.employeesCount', { count: laborPool.length })}</span>
+                    <span className="rounded-full bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">
+                      {t("selling.employeesCount", { count: laborPool.length })}
+                    </span>
                   </>
                 ) : (
                   <span className="flex items-center gap-1 text-xs text-slate-500">
-                    <span>{currency}</span><input type="number" value={laborManual} step={0.5} onChange={(e) => setLaborManual(Number(e.target.value) || 0)} className="h-7 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /><span>{t('selling.perHour')}</span>
+                    <span>{currency}</span>
+                    <input
+                      type="number"
+                      value={laborManual}
+                      step={0.5}
+                      onChange={(e) => setLaborManual(Number(e.target.value) || 0)}
+                      className="h-7 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                    />
+                    <span>{t("selling.perHour")}</span>
                   </span>
                 )}
               </div>
@@ -1097,27 +2092,59 @@ function SellingTab({ data }: { data: TrueCostData }) {
             {/* Overhead Burden */}
             <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
               <div className="flex items-center gap-3">
-                <span className="grid h-8 w-8 place-items-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-950/50 dark:text-violet-400"><Layers size={15} /></span>
+                <span className="grid h-8 w-8 place-items-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-950/50 dark:text-violet-400">
+                  <Layers size={15} />
+                </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{t('selling.overheadBurden')}</p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                    {t("selling.overheadBurden")}
+                  </p>
                   <p className="text-xs text-slate-400 dark:text-slate-500">{burdenDeptName}</p>
                 </div>
-                <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{burdenRate == null ? '—' : rate(toChartNumber(burdenRate))}</p>
+                <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                  {burdenRate == null ? "—" : rate(toChartNumber(burdenRate))}
+                </p>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-11">
                 <FilterPill icon={Building2}>
-                  <Select value={burdenSource} onChange={(e) => setBurdenSource(e.target.value)} className="w-60" triggerClassName={PILL_TRIGGER} aria-label={t('selling.overheadSource')}>
-                    <option value="all">{t('selling.allDepartmentsRate', { rate: catRate(k.compositeRate, k.compositeFormat) })}</option>
+                  <Select
+                    value={burdenSource}
+                    onChange={(e) => setBurdenSource(e.target.value)}
+                    className="w-60"
+                    triggerClassName={PILL_TRIGGER}
+                    aria-label={t("selling.overheadSource")}
+                  >
+                    <option value="all">
+                      {t("selling.allDepartmentsRate", {
+                        rate: catRate(k.compositeRate, k.compositeFormat),
+                      })}
+                    </option>
                     {data.departments.map((d) => {
                       const optionRate = data.totals.byDept[d.id];
-                      return (<option key={d.id} value={d.id}>{d.name} ({catRate(optionRate, k.compositeFormat)})</option>)
+                      return (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({catRate(optionRate, k.compositeFormat)})
+                        </option>
+                      );
                     })}
-                    <option value="manual">{t('selling.manualEntryOption')}</option>
+                    <option value="manual">{t("selling.manualEntryOption")}</option>
                   </Select>
                 </FilterPill>
-                {burdenSource === 'manual' ? (
+                {burdenSource === "manual" ? (
                   <span className="flex items-center gap-1 text-xs text-slate-500">
-                    <span>{currency}</span><input type="number" value={burdenManual ?? ''} step={0.5} onChange={(e) => setBurdenManual(e.target.value === '' ? null : Number(e.target.value))} placeholder={t('selling.perHour')} aria-label={t('selling.overheadBurden')} className="h-7 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /><span>{t('selling.perHour')}</span>
+                    <span>{currency}</span>
+                    <input
+                      type="number"
+                      value={burdenManual ?? ""}
+                      step={0.5}
+                      onChange={(e) =>
+                        setBurdenManual(e.target.value === "" ? null : Number(e.target.value))
+                      }
+                      placeholder={t("selling.perHour")}
+                      aria-label={t("selling.overheadBurden")}
+                      className="h-7 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                    />
+                    <span>{t("selling.perHour")}</span>
                   </span>
                 ) : null}
               </div>
@@ -1126,101 +2153,260 @@ function SellingTab({ data }: { data: TrueCostData }) {
             {/* Additional Costs */}
             <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
               <div className="flex items-center gap-3">
-                <span className="grid h-8 w-8 place-items-center rounded-lg bg-pink-100 text-pink-600 dark:bg-pink-950/50 dark:text-pink-400"><PlusCircle size={15} /></span>
+                <span className="grid h-8 w-8 place-items-center rounded-lg bg-pink-100 text-pink-600 dark:bg-pink-950/50 dark:text-pink-400">
+                  <PlusCircle size={15} />
+                </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{t('selling.additionalCosts')}</p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">{t('selling.gaFees')}</p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                    {t("selling.additionalCosts")}
+                  </p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    {t("selling.gaFees")}
+                  </p>
                 </div>
-                <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{additional == null ? '—' : rate(toChartNumber(additional))}</p>
+                <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                  {additional == null ? "—" : rate(toChartNumber(additional))}
+                </p>
               </div>
               <div className="mt-2 space-y-1.5 pl-11">
                 {costs.map((c, i) => (
                   <div key={i} className="flex items-center gap-2">
-                    <input value={c.name} onChange={(e) => setCost(i, { name: e.target.value })} placeholder={t('selling.namePlaceholder')} className="h-7 w-24 rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
-                    <Select value={c.type} onChange={(e) => setCost(i, { type: e.target.value as CostRow['type'] })} className="w-32" triggerClassName="h-7 text-xs" aria-label={t('selling.costBasis')}>
-                      <option value="percent_labor">{t('allocation.percentLabor')}</option>
-                      <option value="percent_subtotal">{t('selling.percentSubtotal')}</option>
-                      <option value="flat">{t('selling.flatPerHour', { currency })}</option>
+                    <input
+                      value={c.name}
+                      onChange={(e) => setCost(i, { name: e.target.value })}
+                      placeholder={t("selling.namePlaceholder")}
+                      className="h-7 w-24 rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                    />
+                    <Select
+                      value={c.type}
+                      onChange={(e) => setCost(i, { type: e.target.value as CostRow["type"] })}
+                      className="w-32"
+                      triggerClassName="h-7 text-xs"
+                      aria-label={t("selling.costBasis")}
+                    >
+                      <option value="percent_labor">{t("allocation.percentLabor")}</option>
+                      <option value="percent_subtotal">{t("selling.percentSubtotal")}</option>
+                      <option value="flat">{t("selling.flatPerHour", { currency })}</option>
                     </Select>
-                    <input type="number" value={c.value} step={0.5} onChange={(e) => setCost(i, { value: Number(e.target.value) || 0 })} className="h-7 w-16 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
-                    <span className="flex-1 text-right text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">{(() => { const amt = costAmount(c); return amt == null ? '—' : rate(toChartNumber(amt)) })()}</span>
-                    <button type="button" onClick={() => setCosts(costs.filter((_, j) => j !== i))} aria-label={t('selling.removeCostComponent', { name: c.name || t('selling.unnamedCostComponent') })} className="rounded-md bg-rose-50 px-1.5 py-1 text-[10px] text-rose-500 hover:bg-rose-100 dark:bg-rose-950/40">✕</button>
+                    <input
+                      type="number"
+                      value={c.value}
+                      step={0.5}
+                      onChange={(e) => setCost(i, { value: Number(e.target.value) || 0 })}
+                      className="h-7 w-16 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                    />
+                    <span className="flex-1 text-right text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">
+                      {(() => {
+                        const amt = costAmount(c);
+                        return amt == null ? "—" : rate(toChartNumber(amt));
+                      })()}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCosts(costs.filter((_, j) => j !== i))}
+                      aria-label={t("selling.removeCostComponent", {
+                        name: c.name || t("selling.unnamedCostComponent"),
+                      })}
+                      className="rounded-md bg-rose-50 px-1.5 py-1 text-[10px] text-rose-500 hover:bg-rose-100 dark:bg-rose-950/40"
+                    >
+                      ✕
+                    </button>
                   </div>
                 ))}
-                <button type="button" onClick={() => setCosts([...costs, { name: '', type: 'flat', value: 0 }])} className="w-full rounded-md border border-dashed border-slate-200 py-1 text-xs text-teal-600 hover:bg-teal-50/50 dark:border-slate-700 dark:text-teal-400">{t('selling.addCostComponent')}</button>
+                <button
+                  type="button"
+                  onClick={() => setCosts([...costs, { name: "", type: "flat", value: 0 }])}
+                  className="w-full rounded-md border border-dashed border-slate-200 py-1 text-xs text-teal-600 hover:bg-teal-50/50 dark:border-slate-700 dark:text-teal-400"
+                >
+                  {t("selling.addCostComponent")}
+                </button>
               </div>
             </div>
 
             {/* Target Margin */}
             <div className="flex items-center gap-3 border-b border-amber-100 bg-amber-50/70 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-950/20">
-              <span className="grid h-8 w-8 place-items-center rounded-lg bg-amber-200/70 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400"><Percent size={15} /></span>
+              <span className="grid h-8 w-8 place-items-center rounded-lg bg-amber-200/70 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400">
+                <Percent size={15} />
+              </span>
               <div className="min-w-32">
-                <p className="text-sm font-semibold text-amber-900 dark:text-amber-300">{t('selling.targetMargin')}</p>
-                <Select value={marginType} onChange={(e) => setMarginType(e.target.value as 'margin' | 'markup')} className="mt-0.5 w-24" triggerClassName="h-6 text-xs" aria-label={t('selling.marginMode')}>
-                  <option value="margin">{t('selling.margin')}</option>
-                  <option value="markup">{t('selling.markup')}</option>
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-300">
+                  {t("selling.targetMargin")}
+                </p>
+                <Select
+                  value={marginType}
+                  onChange={(e) => setMarginType(e.target.value as "margin" | "markup")}
+                  className="mt-0.5 w-24"
+                  triggerClassName="h-6 text-xs"
+                  aria-label={t("selling.marginMode")}
+                >
+                  <option value="margin">{t("selling.margin")}</option>
+                  <option value="markup">{t("selling.markup")}</option>
                 </Select>
               </div>
-              <input type="number" value={margin} min={0} step={0.5} onChange={(e) => setMargin(Number(e.target.value) || 0)} aria-label={t('selling.targetMargin')} className="h-8 w-20 rounded-md border border-amber-200 bg-white px-2 text-right tabular-nums dark:border-amber-900/40 dark:bg-slate-950" />
-              <p className="w-12 text-right text-lg font-bold tabular-nums text-amber-800 dark:text-amber-300">{percent(margin)}</p>
+              <input
+                type="number"
+                value={margin}
+                min={0}
+                step={0.5}
+                onChange={(e) => setMargin(Number(e.target.value) || 0)}
+                aria-label={t("selling.targetMargin")}
+                className="h-8 w-20 rounded-md border border-amber-200 bg-white px-2 text-right tabular-nums dark:border-amber-900/40 dark:bg-slate-950"
+              />
+              <p className="w-12 text-right text-lg font-bold tabular-nums text-amber-800 dark:text-amber-300">
+                {percent(margin)}
+              </p>
             </div>
 
             {/* Stacked bar */}
             <div className="bg-slate-50/60 px-4 py-3 dark:bg-slate-800/30">
               <div className="flex h-6 overflow-hidden rounded-lg text-[9px] font-semibold text-white">
-                <div className="grid place-items-center bg-sky-500" style={{ width: seg(laborRate) }}>{t('selling.segLabor')}</div>
-                <div className="grid place-items-center bg-violet-500" style={{ width: seg(burdenRate) }}>{t('selling.segOverhead')}</div>
-                <div className="grid place-items-center bg-pink-500" style={{ width: seg(additional) }}>{t('selling.segPlusCosts')}</div>
-                <div className="grid place-items-center bg-emerald-500" style={{ width: seg(profit) }}>{t('selling.segProfit')}</div>
+                <div
+                  className="grid place-items-center bg-sky-500"
+                  style={{ width: seg(laborRate) }}
+                >
+                  {t("selling.segLabor")}
+                </div>
+                <div
+                  className="grid place-items-center bg-violet-500"
+                  style={{ width: seg(burdenRate) }}
+                >
+                  {t("selling.segOverhead")}
+                </div>
+                <div
+                  className="grid place-items-center bg-pink-500"
+                  style={{ width: seg(additional) }}
+                >
+                  {t("selling.segPlusCosts")}
+                </div>
+                <div
+                  className="grid place-items-center bg-emerald-500"
+                  style={{ width: seg(profit) }}
+                >
+                  {t("selling.segProfit")}
+                </div>
               </div>
               <div className="mt-1.5 flex justify-center gap-4 text-[10px] text-slate-400 dark:text-slate-500">
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-sky-500" />{t('selling.segLabor')}</span>
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-violet-500" />{t('selling.segOverhead')}</span>
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-pink-500" />{t('selling.legendAdditional')}</span>
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />{t('selling.segProfit')}</span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-sm bg-sky-500" />
+                  {t("selling.segLabor")}
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-sm bg-violet-500" />
+                  {t("selling.segOverhead")}
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-sm bg-pink-500" />
+                  {t("selling.legendAdditional")}
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-sm bg-emerald-500" />
+                  {t("selling.segProfit")}
+                </span>
               </div>
             </div>
 
             {/* Totals */}
             <div className="space-y-1 border-t border-slate-100 bg-slate-50/60 px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-800/30">
               {[
-                [t('selling.rowLaborCost'), laborRate == null ? '—' : rate(toChartNumber(laborRate))], [t('selling.rowOverheadCost'), burdenRate == null ? '—' : rate(toChartNumber(burdenRate))], [t('selling.rowAdditionalCosts'), additional == null ? '—' : rate(toChartNumber(additional))],
+                [
+                  t("selling.rowLaborCost"),
+                  laborRate == null ? "—" : rate(toChartNumber(laborRate)),
+                ],
+                [
+                  t("selling.rowOverheadCost"),
+                  burdenRate == null ? "—" : rate(toChartNumber(burdenRate)),
+                ],
+                [
+                  t("selling.rowAdditionalCosts"),
+                  additional == null ? "—" : rate(toChartNumber(additional)),
+                ],
               ].map(([l, v]) => (
-                <div key={l} className="flex justify-between"><span className="text-xs text-slate-500 dark:text-slate-400">{l}</span><span className="font-medium tabular-nums text-slate-700 dark:text-slate-200">{v}</span></div>
+                <div key={l} className="flex justify-between">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{l}</span>
+                  <span className="font-medium tabular-nums text-slate-700 dark:text-slate-200">
+                    {v}
+                  </span>
+                </div>
               ))}
-              <div className="flex justify-between border-t border-slate-200 pt-1.5 dark:border-slate-700"><span className="text-xs font-bold text-slate-700 dark:text-slate-200">{t('selling.rowTotalCost')}</span><span className="font-bold tabular-nums text-slate-900 dark:text-slate-100">{totalCost == null ? '—' : rate(toChartNumber(totalCost))}</span></div>
-              <div className="flex justify-between"><span className="text-xs text-slate-500 dark:text-slate-400">{t('selling.rowProfitMargin')}</span><span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">+{profit == null ? '—' : rate(toChartNumber(profit))}</span></div>
+              <div className="flex justify-between border-t border-slate-200 pt-1.5 dark:border-slate-700">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                  {t("selling.rowTotalCost")}
+                </span>
+                <span className="font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                  {totalCost == null ? "—" : rate(toChartNumber(totalCost))}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {t("selling.rowProfitMargin")}
+                </span>
+                <span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  +{profit == null ? "—" : rate(toChartNumber(profit))}
+                </span>
+              </div>
             </div>
 
             {/* Final rate banner */}
             <div className="flex items-center justify-between bg-gradient-to-r from-teal-700 to-teal-500 px-4 py-3.5 text-white">
               <div>
-                <p className="text-xs opacity-90">{t('selling.sellingRate')}</p>
-                <p className="text-[10px] opacity-70">{marginType === 'margin' ? t('selling.bannerSubMargin', { margin: percent(margin) }) : t('selling.bannerSubMarkup', { margin: percent(margin) })}</p>
+                <p className="text-xs opacity-90">{t("selling.sellingRate")}</p>
+                <p className="text-[10px] opacity-70">
+                  {marginType === "margin"
+                    ? t("selling.bannerSubMargin", { margin: percent(margin) })
+                    : t("selling.bannerSubMarkup", { margin: percent(margin) })}
+                </p>
               </div>
-              <p className="text-2xl font-bold tabular-nums">{sellingRate == null ? '—' : rate(toChartNumber(sellingRate))}</p>
+              <p className="text-2xl font-bold tabular-nums">
+                {sellingRate == null ? "—" : rate(toChartNumber(sellingRate))}
+              </p>
             </div>
 
             {/* Premium rates */}
             <div className="grid grid-cols-2 gap-3 border-t border-slate-100 px-4 py-3 dark:border-slate-800">
-              {[{ label: t('selling.overtime'), mult: otMult, set: setOtMult }, { label: t('selling.doubleTime'), mult: dtMult, set: setDtMult }].map((p) => (
+              {[
+                { label: t("selling.overtime"), mult: otMult, set: setOtMult },
+                { label: t("selling.doubleTime"), mult: dtMult, set: setDtMult },
+              ].map((p) => (
                 <div key={p.label} className="flex items-center gap-2 text-xs">
                   <span className="w-20 text-slate-500 dark:text-slate-400">{p.label}</span>
-                  <input type="number" value={p.mult ?? ''} step={0.1} min={1} onChange={(e) => p.set(e.target.value === '' ? null : Number(e.target.value))} placeholder="×" aria-label={p.label} className="h-7 w-14 rounded-md border border-slate-200 bg-white px-1.5 text-center tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                  <input
+                    type="number"
+                    value={p.mult ?? ""}
+                    step={0.1}
+                    min={1}
+                    onChange={(e) => p.set(e.target.value === "" ? null : Number(e.target.value))}
+                    placeholder="×"
+                    aria-label={p.label}
+                    className="h-7 w-14 rounded-md border border-slate-200 bg-white px-1.5 text-center tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                  />
                   <span className="text-slate-400">×</span>
-                  <span className="flex-1 rounded-md bg-slate-50 px-2 py-1 text-right font-semibold tabular-nums text-slate-700 dark:bg-slate-800/60 dark:text-slate-200">{(() => { const p2 = premium(p.mult); return p2 == null ? '—' : rate(toChartNumber(p2)) })()}</span>
+                  <span className="flex-1 rounded-md bg-slate-50 px-2 py-1 text-right font-semibold tabular-nums text-slate-700 dark:bg-slate-800/60 dark:text-slate-200">
+                    {(() => {
+                      const p2 = premium(p.mult);
+                      return p2 == null ? "—" : rate(toChartNumber(p2));
+                    })()}
+                  </span>
                 </div>
               ))}
             </div>
             {emp.premiumPresets.length > 0 ? (
               <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-4 py-2.5 text-xs dark:border-slate-800">
-                <span className="text-slate-400 dark:text-slate-500">{t('selling.presetHint')}</span>
+                <span className="text-slate-400 dark:text-slate-500">
+                  {t("selling.presetHint")}
+                </span>
                 {emp.premiumPresets.map((preset) => (
                   <button
                     key={preset.id}
                     type="button"
-                    title={t('selling.presetTitle', { name: preset.name, multiplier: preset.multiplier })}
-                    onClick={() => (preset.classification === 'overtime' ? setOtMult : setDtMult)(toChartNumber(preset.multiplier))}
+                    title={t("selling.presetTitle", {
+                      name: preset.name,
+                      multiplier: preset.multiplier,
+                    })}
+                    onClick={() =>
+                      (preset.classification === "overtime" ? setOtMult : setDtMult)(
+                        toChartNumber(preset.multiplier),
+                      )
+                    }
                     className="rounded-full border border-slate-200 px-2 py-0.5 font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                   >
                     {preset.name} ×{preset.multiplier}
@@ -1233,260 +2419,537 @@ function SellingTab({ data }: { data: TrueCostData }) {
 
         {/* Right: Margin Explorer + Cost Breakdown */}
         <div className="space-y-5 lg:col-span-5">
-          <Panel title={t('panels.marginExplorer')} icon={SlidersHorizontal}>
+          <Panel title={t("panels.marginExplorer")} icon={SlidersHorizontal}>
             <div className="text-center">
-              <p className="text-4xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{percent(margin)}</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500">{t('selling.explorerTarget', { mode: marginType === 'margin' ? t('selling.margin') : t('selling.markup') })}</p>
+              <p className="text-4xl font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                {percent(margin)}
+              </p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                {t("selling.explorerTarget", {
+                  mode: marginType === "margin" ? t("selling.margin") : t("selling.markup"),
+                })}
+              </p>
             </div>
-            <input type="number" value={margin} min={0} step={0.5} onChange={(e) => setMargin(Number(e.target.value) || 0)} aria-label={t('selling.targetMargin')} className="my-3 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-center tabular-nums dark:border-slate-700 dark:bg-slate-950" />
+            <input
+              type="number"
+              value={margin}
+              min={0}
+              step={0.5}
+              onChange={(e) => setMargin(Number(e.target.value) || 0)}
+              aria-label={t("selling.targetMargin")}
+              className="my-3 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-center tabular-nums dark:border-slate-700 dark:bg-slate-950"
+            />
             <div className="grid grid-cols-2 gap-2.5">
               {[
-                [t('selling.sellingRate'), sellingRate == null ? '—' : rate(toChartNumber(sellingRate)), 'text-sky-600 dark:text-sky-400'],
-                [t('selling.profitPerHour'), profit == null ? '—' : rate(toChartNumber(profit)), 'text-emerald-600 dark:text-emerald-400'],
-                [t('selling.markupPctLabel'), percent(markup), ''],
-                [t('selling.per1kLabel'), profit == null ? '—' : money(mulDecimal(profit, '1000')), ''],
+                [
+                  t("selling.sellingRate"),
+                  sellingRate == null ? "—" : rate(toChartNumber(sellingRate)),
+                  "text-sky-600 dark:text-sky-400",
+                ],
+                [
+                  t("selling.profitPerHour"),
+                  profit == null ? "—" : rate(toChartNumber(profit)),
+                  "text-emerald-600 dark:text-emerald-400",
+                ],
+                [t("selling.markupPctLabel"), percent(markup), ""],
+                [
+                  t("selling.per1kLabel"),
+                  profit == null ? "—" : money(mulDecimal(profit, "1000")),
+                  "",
+                ],
               ].map(([l, v, tone]) => (
-                <div key={l as string} className="rounded-lg bg-slate-50/80 p-2.5 text-center dark:bg-slate-800/40">
-                  <p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">{l}</p>
-                  <p className={cn('text-base font-bold tabular-nums', (tone as string) || 'text-slate-800 dark:text-slate-200')}>{v}</p>
+                <div
+                  key={l as string}
+                  className="rounded-lg bg-slate-50/80 p-2.5 text-center dark:bg-slate-800/40"
+                >
+                  <p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    {l}
+                  </p>
+                  <p
+                    className={cn(
+                      "text-base font-bold tabular-nums",
+                      (tone as string) || "text-slate-800 dark:text-slate-200",
+                    )}
+                  >
+                    {v}
+                  </p>
                 </div>
               ))}
             </div>
             <div className="mt-3 flex flex-wrap justify-center gap-1.5">
               {[15, 20, 25, 30, 35, 40].map((m) => (
-                <button key={m} type="button" onClick={() => setMargin(m)} className={cn('rounded-full border px-2.5 py-1 text-xs font-medium', margin === m ? 'border-teal-500 bg-teal-500 text-white' : 'border-slate-200 text-slate-500 hover:border-teal-400 dark:border-slate-700 dark:text-slate-400')}>{percent(m)}</button>
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMargin(m)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-xs font-medium",
+                    margin === m
+                      ? "border-teal-500 bg-teal-500 text-white"
+                      : "border-slate-200 text-slate-500 hover:border-teal-400 dark:border-slate-700 dark:text-slate-400",
+                  )}
+                >
+                  {percent(m)}
+                </button>
               ))}
             </div>
           </Panel>
-          <Panel title={t('panels.costBreakdown')} icon={ChartArea}>
+          <Panel title={t("panels.costBreakdown")} icon={ChartArea}>
             <Donut
               height={230}
               data={[
-                { name: t('selling.directLabor'), value: laborRate },
-                { name: t('selling.overheadBurden'), value: burdenRate },
-                { name: t('selling.legendAdditional'), value: additional },
-                { name: t('selling.segProfit'), value: profit },
-              ].filter((s) => s.value != null && compareMoney(s.value, '0') > 0).map((s) => ({ name: s.name, value: toChartNumber(s.value ?? '0') }))}
+                { name: t("selling.directLabor"), value: laborRate },
+                { name: t("selling.overheadBurden"), value: burdenRate },
+                { name: t("selling.legendAdditional"), value: additional },
+                { name: t("selling.segProfit"), value: profit },
+              ]
+                .filter((s) => s.value != null && compareMoney(s.value, "0") > 0)
+                .map((s) => ({ name: s.name, value: toChartNumber(s.value ?? "0") }))}
             />
           </Panel>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /* ----------------------------------------------------------- Configuration */
 
 /** Composite method + active-profile switcher ( + getActiveProfile). */
 function CompositePanel({ data }: { data: TrueCostData }) {
-  const t = useTranslations('analytics.trueCost')
-  const catRate = useCategoryRate()
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("analytics.trueCost");
+  const catRate = useCategoryRate();
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
   const run = async (fn: () => Promise<ApiResult>) => {
-    await runMutation(fn, setBusy, () => router.refresh())
-  }
-  const [newProfile, setNewProfile] = useState('')
-  const [baseRate, setBaseRate] = useState(String(data.config.baseLaborRate ?? ''))
+    await runMutation(fn, setBusy, () => router.refresh());
+  };
+  const [newProfile, setNewProfile] = useState("");
+  const [baseRate, setBaseRate] = useState(String(data.config.baseLaborRate ?? ""));
 
   return (
-    <Panel title={t('panels.compositeProfiles')} icon={SlidersHorizontal}>
+    <Panel title={t("panels.compositeProfiles")} icon={SlidersHorizontal}>
       <div className="space-y-3">
         <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
-          {t('config.compositeMethod')}
-          <Select value={data.config.compositeMethod} disabled={busy} onChange={(e) => run(() => mutateActiveProfile((p) => { p.compositeMethod = e.target.value as TrueCostProfile['compositeMethod'] }))} className="mt-1 w-full" triggerClassName="h-8 text-sm">
-            <option value="sum">{t('config.methodSum')}</option>
-            <option value="weighted">{t('config.methodWeighted')}</option>
-            <option value="cascading">{t('config.methodCascading')}</option>
+          {t("config.compositeMethod")}
+          <Select
+            value={data.config.compositeMethod}
+            disabled={busy}
+            onChange={(e) =>
+              run(() =>
+                mutateActiveProfile((p) => {
+                  p.compositeMethod = e.target.value as TrueCostProfile["compositeMethod"];
+                }),
+              )
+            }
+            className="mt-1 w-full"
+            triggerClassName="h-8 text-sm"
+          >
+            <option value="sum">{t("config.methodSum")}</option>
+            <option value="weighted">{t("config.methodWeighted")}</option>
+            <option value="cascading">{t("config.methodCascading")}</option>
           </Select>
-          <span className="mt-1 block text-[11px] text-slate-400 dark:text-slate-500">{t('config.currentComposite', { rate: catRate(data.kpis.compositeRate, data.kpis.compositeFormat) })}</span>
+          <span className="mt-1 block text-[11px] text-slate-400 dark:text-slate-500">
+            {t("config.currentComposite", {
+              rate: catRate(data.kpis.compositeRate, data.kpis.compositeFormat),
+            })}
+          </span>
         </label>
 
         {/* The remedy the cascading refusal names: an explicit hourly rate
             for periods with no costed labor, or empty for no assumption. */}
         <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
-          {t('config.baseLaborRate')}
+          {t("config.baseLaborRate")}
           <span className="mt-1 flex items-center gap-2">
             <input
               value={baseRate}
               onChange={(e) => setBaseRate(e.target.value)}
-              placeholder={t('config.baseLaborRatePlaceholder')}
+              placeholder={t("config.baseLaborRatePlaceholder")}
               inputMode="decimal"
               disabled={busy}
               className="h-8 w-40 rounded-md border border-slate-200 bg-white px-2 text-sm tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
             />
             <button
               type="button"
-              disabled={busy || baseRate === String(data.config.baseLaborRate ?? '')}
-              onClick={() => run(() => mutateActiveProfile((p) => { p.baseLaborRate = baseRate.trim() }))}
+              disabled={busy || baseRate === String(data.config.baseLaborRate ?? "")}
+              onClick={() =>
+                run(() =>
+                  mutateActiveProfile((p) => {
+                    p.baseLaborRate = baseRate.trim();
+                  }),
+                )
+              }
               className="rounded-md border border-teal-500/50 px-2 py-1 text-[11px] font-medium text-teal-600 hover:bg-teal-50 disabled:opacity-40 dark:text-teal-400 dark:hover:bg-teal-950/40"
             >
-              {t('config.baseLaborRateSave')}
+              {t("config.baseLaborRateSave")}
             </button>
           </span>
-          <span className="mt-1 block text-[11px] text-slate-400 dark:text-slate-500">{t('config.baseLaborRateHelp')}</span>
+          <span className="mt-1 block text-[11px] text-slate-400 dark:text-slate-500">
+            {t("config.baseLaborRateHelp")}
+          </span>
         </label>
 
         <div>
-          <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">{t('config.activeProfile')}</p>
+          <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+            {t("config.activeProfile")}
+          </p>
           <div className="flex flex-wrap gap-1.5">
             {data.config.profiles.map((p) => (
-              <button key={p.id} type="button" disabled={busy} onClick={() => run(() => switchProfile(p.id))}
-                className={cn('rounded-full border px-2.5 py-1 text-xs font-medium', p.id === data.config.activeProfileId ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300' : 'border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400')}>
+              <button
+                key={p.id}
+                type="button"
+                disabled={busy}
+                onClick={() => run(() => switchProfile(p.id))}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-xs font-medium",
+                  p.id === data.config.activeProfileId
+                    ? "border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300"
+                    : "border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400",
+                )}
+              >
                 {p.name}
               </button>
             ))}
           </div>
           <div className="mt-2 flex items-center gap-2">
-            <input value={newProfile} onChange={(e) => setNewProfile(e.target.value)} placeholder={t('config.newProfilePlaceholder')} className="h-7 w-40 rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
-            <button type="button" disabled={busy || !newProfile.trim()} onClick={() => { const name = newProfile.trim(); void run(async () => {
-              const res = await fetch('/api/analytics/true-cost/config')
-              if (!res.ok) return { ok: false, error: await readApiErrorMessage(res, 'Could not load True Cost configuration') }
-              const cfg = await res.json() as TrueCostConfigResponse
-              const active = cfg.profiles.find((p) => p.id === cfg.activeProfileId) ?? cfg.profiles[0]
-              if (!active) return { ok: false, error: 'No True Cost profile is configured — add a profile before duplicating.' }
-              const id = `profile_${Math.random().toString(36).slice(2, 10)}`
-              cfg.profiles.push({ ...active, id, name })
-              cfg.activeProfileId = id
-              // Clear the input only once the save lands: a refused save
-              // must not lose what the user typed.
-              const result = await apiCall('/api/analytics/true-cost/config', {
-                method: 'PUT',
-                body: JSON.stringify({ activeProfileId: cfg.activeProfileId, profiles: cfg.profiles, expectedRevision: cfg.revision }),
-              })
-              if (result.ok) setNewProfile('')
-              return result
-            }) }} className="rounded-md border border-teal-500/50 px-2 py-1 text-[11px] font-medium text-teal-600 hover:bg-teal-50 disabled:opacity-40 dark:text-teal-400 dark:hover:bg-teal-950/40">{t('config.duplicateActive')}</button>
+            <input
+              value={newProfile}
+              onChange={(e) => setNewProfile(e.target.value)}
+              placeholder={t("config.newProfilePlaceholder")}
+              className="h-7 w-40 rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+            />
+            <button
+              type="button"
+              disabled={busy || !newProfile.trim()}
+              onClick={() => {
+                const name = newProfile.trim();
+                void run(async () => {
+                  const res = await fetch("/api/analytics/true-cost/config");
+                  if (!res.ok)
+                    return {
+                      ok: false,
+                      error: await readApiErrorMessage(
+                        res,
+                        "Could not load True Cost configuration",
+                      ),
+                    };
+                  const cfg = (await res.json()) as TrueCostConfigResponse;
+                  const active =
+                    cfg.profiles.find((p) => p.id === cfg.activeProfileId) ?? cfg.profiles[0];
+                  if (!active)
+                    return {
+                      ok: false,
+                      error:
+                        "No True Cost profile is configured — add a profile before duplicating.",
+                    };
+                  const id = `profile_${Math.random().toString(36).slice(2, 10)}`;
+                  cfg.profiles.push({ ...active, id, name });
+                  cfg.activeProfileId = id;
+                  // Clear the input only once the save lands: a refused save
+                  // must not lose what the user typed.
+                  const result = await apiCall("/api/analytics/true-cost/config", {
+                    method: "PUT",
+                    body: JSON.stringify({
+                      activeProfileId: cfg.activeProfileId,
+                      profiles: cfg.profiles,
+                      expectedRevision: cfg.revision,
+                    }),
+                  });
+                  if (result.ok) setNewProfile("");
+                  return result;
+                });
+              }}
+              className="rounded-md border border-teal-500/50 px-2 py-1 text-[11px] font-medium text-teal-600 hover:bg-teal-50 disabled:opacity-40 dark:text-teal-400 dark:hover:bg-teal-950/40"
+            >
+              {t("config.duplicateActive")}
+            </button>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{t('config.profileNote')}</p>
+          <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+            {t("config.profileNote")}
+          </p>
         </div>
       </div>
     </Panel>
-  )
+  );
 }
 
 function ConfigTab({ data }: { data: TrueCostData }) {
-  const t = useTranslations('analytics.trueCost')
-  const rate = useRate()
-  const compositeMethod = data.config.compositeMethod === 'sum'
-    ? t('config.valueSum')
-    : data.config.compositeMethod === 'weighted'
-      ? t('config.valueWeighted')
-      : t('config.valueCascading')
+  const t = useTranslations("analytics.trueCost");
+  const rate = useRate();
+  const compositeMethod =
+    data.config.compositeMethod === "sum"
+      ? t("config.valueSum")
+      : data.config.compositeMethod === "weighted"
+        ? t("config.valueWeighted")
+        : t("config.valueCascading");
   const items = [
-    { label: t('config.itemMethod'), value: compositeMethod, note: t('config.noteMethod') },
-    { label: t('config.itemCategories'), value: t('config.categoryCount', { count: data.categories.length }), note: t('config.noteCategories') },
-    { label: t('config.itemCentres'), value: t('config.departmentCount', { count: data.departments.length }), note: t('config.noteCentres') },
-    { label: t('config.itemBases'), value: t('config.basesValue', { count: ALLOCATION_BASE_KEYS.length }), note: t('config.noteBases') },
-    { label: t('config.itemNonBillable'), value: t('config.nonBillableIncluded'), note: t('config.noteNonBillable') },
-    { label: t('config.itemDirectLabour'), value: t('config.directExcluded'), note: t('config.noteDirect') },
-    { label: t('config.itemAbsorptionModel'), value: data.hasBurdenGL ? t('config.glApplied') : t('hero.notAvailable'), note: data.hasBurdenGL ? t('config.noteAbsorptionGl') : (data.absorptionUnavailable ?? t('hero.notAvailable')) },
-    { label: t('config.itemLabourRates'), value: t('config.labourRatesValue', { count: data.labor.count }), note: t('config.noteLabourRates', { min: rate(data.labor.min), max: rate(data.labor.max), weighted: rate(data.labor.weighted) }) },
-  ]
+    { label: t("config.itemMethod"), value: compositeMethod, note: t("config.noteMethod") },
+    {
+      label: t("config.itemCategories"),
+      value: t("config.categoryCount", { count: data.categories.length }),
+      note: t("config.noteCategories"),
+    },
+    {
+      label: t("config.itemCentres"),
+      value: t("config.departmentCount", { count: data.departments.length }),
+      note: t("config.noteCentres"),
+    },
+    {
+      label: t("config.itemBases"),
+      value: t("config.basesValue", { count: ALLOCATION_BASE_KEYS.length }),
+      note: t("config.noteBases"),
+    },
+    {
+      label: t("config.itemNonBillable"),
+      value: t("config.nonBillableIncluded"),
+      note: t("config.noteNonBillable"),
+    },
+    {
+      label: t("config.itemDirectLabour"),
+      value: t("config.directExcluded"),
+      note: t("config.noteDirect"),
+    },
+    {
+      label: t("config.itemAbsorptionModel"),
+      value: data.hasBurdenGL ? t("config.glApplied") : t("hero.notAvailable"),
+      note: data.hasBurdenGL
+        ? t("config.noteAbsorptionGl")
+        : (data.absorptionUnavailable ?? t("hero.notAvailable")),
+    },
+    {
+      label: t("config.itemLabourRates"),
+      value: t("config.labourRatesValue", { count: data.labor.count }),
+      note: t("config.noteLabourRates", {
+        min: rate(data.labor.min),
+        max: rate(data.labor.max),
+        weighted: rate(data.labor.weighted),
+      }),
+    },
+  ];
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <CompositePanel data={data} />
         <CustomCategoryManager data={data} />
       </div>
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-      <Panel title={t('panels.modelAssumptions')} icon={SlidersHorizontal} bodyClassName="p-0">
-        <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
-          {items.map((i) => (
-            <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{i.label}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{i.note}</p>
-              </div>
-              <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{i.value}</span>
-            </li>
-          ))}
-        </ul>
-      </Panel>
-      <Panel title={t('panels.howItWorks')} icon={Info}>
-        <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-          <p>{t('config.howIntro')}</p>
-          <ul className="list-disc space-y-1 pl-5 text-slate-500 dark:text-slate-400">
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('config.howCategories')}</span> → {t('config.howCategoriesBody')}</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('config.howMatrix')}</span> → {t('config.howMatrixBody')}</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('config.howLabourRates')}</span> → {t('config.howLabourRatesBody')}</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('config.howGapModeler')}</span> → {t('config.howGapModelerBody')}</li>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Panel title={t("panels.modelAssumptions")} icon={SlidersHorizontal} bodyClassName="p-0">
+          <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
+            {items.map((i) => (
+              <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {i.label}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{i.note}</p>
+                </div>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  {i.value}
+                </span>
+              </li>
+            ))}
           </ul>
-        </div>
-      </Panel>
+        </Panel>
+        <Panel title={t("panels.howItWorks")} icon={Info}>
+          <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+            <p>{t("config.howIntro")}</p>
+            <ul className="list-disc space-y-1 pl-5 text-slate-500 dark:text-slate-400">
+              <li>
+                <span className="font-medium text-slate-700 dark:text-slate-200">
+                  {t("config.howCategories")}
+                </span>{" "}
+                → {t("config.howCategoriesBody")}
+              </li>
+              <li>
+                <span className="font-medium text-slate-700 dark:text-slate-200">
+                  {t("config.howMatrix")}
+                </span>{" "}
+                → {t("config.howMatrixBody")}
+              </li>
+              <li>
+                <span className="font-medium text-slate-700 dark:text-slate-200">
+                  {t("config.howLabourRates")}
+                </span>{" "}
+                → {t("config.howLabourRatesBody")}
+              </li>
+              <li>
+                <span className="font-medium text-slate-700 dark:text-slate-200">
+                  {t("config.howGapModeler")}
+                </span>{" "}
+                → {t("config.howGapModelerBody")}
+              </li>
+            </ul>
+          </div>
+        </Panel>
+      </div>
     </div>
-    </div>
-  )
+  );
 }
 
 /** Manage config-driven custom categories: manual / derived / formula. */
 function CustomCategoryManager({ data }: { data: TrueCostData }) {
-  const t = useTranslations('analytics.trueCost')
-  const { currency } = useMoney()
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [name, setName] = useState('')
-  const [type, setType] = useState<'manual' | 'derived' | 'formula'>('manual')
-  const [fixedTotal, setFixedTotal] = useState('')
-  const [sourceCategory, setSourceCategory] = useState('')
-  const [percentage, setPercentage] = useState('10')
-  const [formula, setFormula] = useState('')
+  const t = useTranslations("analytics.trueCost");
+  const { currency } = useMoney();
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState("");
+  const [type, setType] = useState<"manual" | "derived" | "formula">("manual");
+  const [fixedTotal, setFixedTotal] = useState("");
+  const [sourceCategory, setSourceCategory] = useState("");
+  const [percentage, setPercentage] = useState("10");
+  const [formula, setFormula] = useState("");
 
   const run = async (fn: () => Promise<ApiResult>) => {
-    await runMutation(fn, setBusy, () => router.refresh())
-  }
+    await runMutation(fn, setBusy, () => router.refresh());
+  };
   const add = () => {
-    const cat: CustomCategory = { id: `cat_${crypto.randomUUID().slice(0, 8)}`, name: name.trim(), type, color: '#64748b', allocationBase: 'billed_hours', rateFormat: 'per_hour', includeInComposite: true }
-    if (type === 'manual') cat.manualConfig = { entryMode: 'fixed_total', fixedTotal }
-    else if (type === 'derived') cat.derivedConfig = { sourceCategory, percentage, allocationBase: 'same' }
-    else cat.formulaConfig = { formula }
+    const cat: CustomCategory = {
+      id: `cat_${crypto.randomUUID().slice(0, 8)}`,
+      name: name.trim(),
+      type,
+      color: "#64748b",
+      allocationBase: "billed_hours",
+      rateFormat: "per_hour",
+      includeInComposite: true,
+    };
+    if (type === "manual") cat.manualConfig = { entryMode: "fixed_total", fixedTotal };
+    else if (type === "derived")
+      cat.derivedConfig = { sourceCategory, percentage, allocationBase: "same" };
+    else cat.formulaConfig = { formula };
     void run(async () => {
-      const result = await mutateActiveProfile((p) => { p.customCategories ??= []; p.customCategories.push(cat) })
+      const result = await mutateActiveProfile((p) => {
+        p.customCategories ??= [];
+        p.customCategories.push(cat);
+      });
       // Clear the inputs only once the save lands: a refused save must not
       // lose what the user typed.
-      if (result.ok) { setName(''); setFixedTotal(''); setFormula('') }
-      return result
-    })
-  }
-  const remove = (id: string) => run(() => mutateActiveProfile((p) => { p.customCategories = (p.customCategories ?? []).filter((c: CustomCategory) => c.id !== id) }))
-  const fixedTotalIsZero = /^[-+]?0+(?:\.0+)?$/.test(fixedTotal.trim())
-  const addDisabled = busy || !name.trim() || (type === 'manual' && (!fixedTotal.trim() || fixedTotalIsZero)) || (type === 'derived' && !sourceCategory) || (type === 'formula' && !formula.trim())
-  const typeLabel = (value: string) => value === 'manual'
-    ? t('custom.typeManual')
-    : value === 'derived'
-      ? t('custom.typeDerived')
-      : t('custom.typeFormula')
+      if (result.ok) {
+        setName("");
+        setFixedTotal("");
+        setFormula("");
+      }
+      return result;
+    });
+  };
+  const remove = (id: string) =>
+    run(() =>
+      mutateActiveProfile((p) => {
+        p.customCategories = (p.customCategories ?? []).filter((c: CustomCategory) => c.id !== id);
+      }),
+    );
+  const fixedTotalIsZero = /^[-+]?0+(?:\.0+)?$/.test(fixedTotal.trim());
+  const addDisabled =
+    busy ||
+    !name.trim() ||
+    (type === "manual" && (!fixedTotal.trim() || fixedTotalIsZero)) ||
+    (type === "derived" && !sourceCategory) ||
+    (type === "formula" && !formula.trim());
+  const typeLabel = (value: string) =>
+    value === "manual"
+      ? t("custom.typeManual")
+      : value === "derived"
+        ? t("custom.typeDerived")
+        : t("custom.typeFormula");
 
   return (
-    <Panel title={t('panels.customCategories')} icon={PlusCircle} hint={t('hints.customTypes')}>
+    <Panel title={t("panels.customCategories")} icon={PlusCircle} hint={t("hints.customTypes")}>
       {data.config.customCategories.length ? (
         <ul className="mb-3 divide-y divide-slate-50 dark:divide-slate-800/60">
           {data.config.customCategories.map((c) => (
             <li key={c.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
-              <span className="min-w-0"><span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span><span className="ml-2 text-xs text-slate-400">{typeLabel(c.type)}</span></span>
-              <button type="button" disabled={busy} onClick={() => remove(c.id)} className="shrink-0 rounded-md border border-slate-200 px-2 py-0.5 text-[11px] text-slate-500 hover:text-rose-500 dark:border-slate-700">{t('custom.remove')}</button>
+              <span className="min-w-0">
+                <span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span>
+                <span className="ml-2 text-xs text-slate-400">{typeLabel(c.type)}</span>
+              </span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => remove(c.id)}
+                className="shrink-0 rounded-md border border-slate-200 px-2 py-0.5 text-[11px] text-slate-500 hover:text-rose-500 dark:border-slate-700"
+              >
+                {t("custom.remove")}
+              </button>
             </li>
           ))}
         </ul>
-      ) : <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">{t('custom.empty')}</p>}
+      ) : (
+        <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">{t("custom.empty")}</p>
+      )}
       <div className="space-y-2 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
         <div className="flex gap-2">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('drawer.namePlaceholder')} className="h-7 flex-1 rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
-          <Select value={type} onChange={(e) => setType(e.target.value as typeof type)} className="w-28" triggerClassName="h-7 text-xs"><option value="manual">{t('custom.typeManual')}</option><option value="derived">{t('custom.typeDerived')}</option><option value="formula">{t('custom.typeFormula')}</option></Select>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t("drawer.namePlaceholder")}
+            className="h-7 flex-1 rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+          />
+          <Select
+            value={type}
+            onChange={(e) => setType(e.target.value as typeof type)}
+            className="w-28"
+            triggerClassName="h-7 text-xs"
+          >
+            <option value="manual">{t("custom.typeManual")}</option>
+            <option value="derived">{t("custom.typeDerived")}</option>
+            <option value="formula">{t("custom.typeFormula")}</option>
+          </Select>
         </div>
-        {type === 'manual' && <input type="number" value={fixedTotal} onChange={(e) => setFixedTotal(e.target.value)} placeholder={t('custom.fixedTotalPlaceholder', { currency })} className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />}
-        {type === 'derived' && <div className="flex gap-2">
-          <Select value={sourceCategory} onChange={(e) => setSourceCategory(e.target.value)} className="flex-1" triggerClassName="h-7 text-xs"><option value="">{t('custom.sourceCategory')}</option>{data.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select>
-          <input type="number" value={percentage} onChange={(e) => setPercentage(e.target.value)} title={t('custom.pctOfSource')} className="h-7 w-16 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
-        </div>}
-        {type === 'formula' && <input value={formula} onChange={(e) => setFormula(e.target.value)} placeholder={t('custom.formulaPlaceholder')} className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />}
-        <button type="button" disabled={addDisabled} onClick={add} className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 hover:bg-teal-700">{t('custom.add')}</button>
+        {type === "manual" && (
+          <input
+            type="number"
+            value={fixedTotal}
+            onChange={(e) => setFixedTotal(e.target.value)}
+            placeholder={t("custom.fixedTotalPlaceholder", { currency })}
+            className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+          />
+        )}
+        {type === "derived" && (
+          <div className="flex gap-2">
+            <Select
+              value={sourceCategory}
+              onChange={(e) => setSourceCategory(e.target.value)}
+              className="flex-1"
+              triggerClassName="h-7 text-xs"
+            >
+              <option value="">{t("custom.sourceCategory")}</option>
+              {data.categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+            <input
+              type="number"
+              value={percentage}
+              onChange={(e) => setPercentage(e.target.value)}
+              title={t("custom.pctOfSource")}
+              className="h-7 w-16 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+            />
+          </div>
+        )}
+        {type === "formula" && (
+          <input
+            value={formula}
+            onChange={(e) => setFormula(e.target.value)}
+            placeholder={t("custom.formulaPlaceholder")}
+            className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+          />
+        )}
+        <button
+          type="button"
+          disabled={addDisabled}
+          onClick={add}
+          className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 hover:bg-teal-700"
+        >
+          {t("custom.add")}
+        </button>
         <p className="text-[11px] leading-snug text-slate-400 dark:text-slate-500">
-          {t('custom.formulaHelpPre')}
-          <code>base.revenue</code>, <code>base.billed_hours</code>, <code>base.labor_dollars</code>,{' '}
-          <code>base.headcount</code>, <code>base.direct_cost</code> {t('custom.formulaHelpAnd')} <code>cat.&lt;id&gt;</code>.
+          {t("custom.formulaHelpPre")}
+          <code>base.revenue</code>, <code>base.billed_hours</code>, <code>base.labor_dollars</code>
+          , <code>base.headcount</code>, <code>base.direct_cost</code> {t("custom.formulaHelpAnd")}{" "}
+          <code>cat.&lt;id&gt;</code>.
         </p>
       </div>
     </Panel>
-  )
+  );
 }

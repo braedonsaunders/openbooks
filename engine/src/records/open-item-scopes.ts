@@ -126,12 +126,16 @@ export interface OpenItemsAsOfScope {
  */
 export function openItemsAsOfSql(scope: OpenItemsAsOfScope): SQL {
   const { orgId, asOf, bookId } = scope;
-  const kindList = sql.join(scope.kinds.map((kind) => sql`${kind}`), sql`, `);
+  const kindList = sql.join(
+    scope.kinds.map((kind) => sql`${kind}`),
+    sql`, `,
+  );
   const normalDebit = scope.normalSign === "debit";
   // A credit memo carries the opposite sign of the side's items.
-  const sideLine = (kind: SQL, amount: SQL) => normalDebit
-    ? sql`((${kind} = ${scope.creditKind} and ${amount} < 0) or (${kind} <> ${scope.creditKind} and ${amount} > 0))`
-    : sql`((${kind} = ${scope.creditKind} and ${amount} > 0) or (${kind} <> ${scope.creditKind} and ${amount} < 0))`;
+  const sideLine = (kind: SQL, amount: SQL) =>
+    normalDebit
+      ? sql`((${kind} = ${scope.creditKind} and ${amount} < 0) or (${kind} <> ${scope.creditKind} and ${amount} > 0))`
+      : sql`((${kind} = ${scope.creditKind} and ${amount} > 0) or (${kind} <> ${scope.creditKind} and ${amount} < 0))`;
   const live = (status: SQL, voidedAt: SQL) =>
     sql`(${status} = 'posted' or (${voidedAt} is not null and ${voidedAt}::date > ${asOf}::date))`;
   const candidates = candidateLinesCte(scope);

@@ -1,133 +1,239 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
-import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
-import { stubModules } from '../../../testing/stub-modules'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
+import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
+import { stubModules } from "../../../testing/stub-modules";
 
-await bootJsdomEnvironment({ url: 'http://localhost/analytics/financial-health?period=this_fiscal_year' })
-stubModules({ navigation: 'export function useSearchParams(){return new URLSearchParams(window.location.search)}' })
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { act } = React
-const { createRoot } = await import('react-dom/client')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../messages/en')).default
-const { useAnalyticsTab } = await import('./use-analytics-tab')
-const tabs = ['overview', 'items'] as const
-type Props = { data: { label: string; _analyticsRead: { slug: string; tab: string; query: string; observedAt: string } } }
-let selected: ReturnType<typeof useAnalyticsTab<Props, typeof tabs[number]>>
+await bootJsdomEnvironment({
+  url: "http://localhost/analytics/financial-health?period=this_fiscal_year",
+});
+stubModules({
+  navigation:
+    "export function useSearchParams(){return new URLSearchParams(window.location.search)}",
+});
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { act } = React;
+const { createRoot } = await import("react-dom/client");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../messages/en")).default;
+const { useAnalyticsTab } = await import("./use-analytics-tab");
+const tabs = ["overview", "items"] as const;
+type Props = {
+  data: {
+    label: string;
+    _analyticsRead: { slug: string; tab: string; query: string; observedAt: string };
+  };
+};
+let selected: ReturnType<typeof useAnalyticsTab<Props, (typeof tabs)[number]>>;
 function Probe({ initial }: { initial: Props }) {
   // eslint-disable-next-line react-hooks/globals -- the probe exposes the hook's latest result to the assertions
-  selected = useAnalyticsTab('financial-health', initial, tabs)
-  return <div>{selected.loading ? 'loading' : selected.error ?? selected.props.data.label}</div>
+  selected = useAnalyticsTab("financial-health", initial, tabs);
+  return <div>{selected.loading ? "loading" : (selected.error ?? selected.props.data.label)}</div>;
 }
 function payload(label: string, tab: string, query: string, at: number): Props {
-  return { data: { label, _analyticsRead: { slug: 'financial-health', tab, query, observedAt: new Date(at).toISOString() } } }
+  return {
+    data: {
+      label,
+      _analyticsRead: {
+        slug: "financial-health",
+        tab,
+        query,
+        observedAt: new Date(at).toISOString(),
+      },
+    },
+  };
 }
 async function harness(t: TestContext) {
-  const visibility = Object.getOwnPropertyDescriptor(document, 'visibilityState')
-  let hidden = false
-  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => hidden ? 'hidden' : 'visible' })
-  const now = Date.now, originalFetch = globalThis.fetch
-  const originalSet = window.setTimeout, originalClear = window.clearTimeout
-  let clock = now(), nextTimer = 0
-  const timers = new Map<number, () => void>()
-  const requests: { url: string; signal: AbortSignal; resolve(value: Response): void }[] = []
-  Date.now = () => clock
-  window.setTimeout = ((callback: () => void) => { const id = ++nextTimer; timers.set(id, callback); return id }) as typeof window.setTimeout
-  window.clearTimeout = (id) => { timers.delete(id as number) }
-  globalThis.fetch = ((url: string, options: RequestInit) => new Promise<Response>(resolve => requests.push({ url, signal: options.signal!, resolve }))) as typeof fetch
-  window.history.replaceState(null, '', '/analytics/financial-health?period=this_fiscal_year')
-  const host = document.createElement('div'); document.body.appendChild(host)
-  const root = createRoot(host)
+  const visibility = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  let hidden = false;
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => (hidden ? "hidden" : "visible"),
+  });
+  const now = Date.now,
+    originalFetch = globalThis.fetch;
+  const originalSet = window.setTimeout,
+    originalClear = window.clearTimeout;
+  let clock = now(),
+    nextTimer = 0;
+  const timers = new Map<number, () => void>();
+  const requests: { url: string; signal: AbortSignal; resolve(value: Response): void }[] = [];
+  Date.now = () => clock;
+  window.setTimeout = ((callback: () => void) => {
+    const id = ++nextTimer;
+    timers.set(id, callback);
+    return id;
+  }) as typeof window.setTimeout;
+  window.clearTimeout = (id) => {
+    timers.delete(id as number);
+  };
+  globalThis.fetch = ((url: string, options: RequestInit) =>
+    new Promise<Response>((resolve) =>
+      requests.push({ url, signal: options.signal!, resolve }),
+    )) as typeof fetch;
+  window.history.replaceState(null, "", "/analytics/financial-health?period=this_fiscal_year");
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   t.after(async () => {
-    await act(async () => root.unmount()); host.remove()
-    Date.now = now; globalThis.fetch = originalFetch
-    window.setTimeout = originalSet; window.clearTimeout = originalClear
-    if (visibility) Object.defineProperty(document, 'visibilityState', visibility)
-    else delete (document as { visibilityState?: string }).visibilityState
-    assert.equal(timers.size, 0, 'unmount disposes the refresh timer')
-  })
-  const initial = payload('initial', 'overview', 'period=this_fiscal_year', clock)
-  const render = () => act(async () => root.render(<NextIntlClientProvider locale="en" messages={messages}><Probe initial={initial} /></NextIntlClientProvider>))
-  await render()
-  return { host, requests, render, now: () => clock, hide: async (value: boolean) => {
-    hidden = value
-    await act(async () => document.dispatchEvent(new window.Event('visibilitychange')))
-  }, advance: async () => {
-    clock += 30_001
-    const callbacks = [...timers.values()]; timers.clear()
-    await act(async () => { for (const callback of callbacks) callback() })
-  } }
+    await act(async () => root.unmount());
+    host.remove();
+    Date.now = now;
+    globalThis.fetch = originalFetch;
+    window.setTimeout = originalSet;
+    window.clearTimeout = originalClear;
+    if (visibility) Object.defineProperty(document, "visibilityState", visibility);
+    else delete (document as { visibilityState?: string }).visibilityState;
+    assert.equal(timers.size, 0, "unmount disposes the refresh timer");
+  });
+  const initial = payload("initial", "overview", "period=this_fiscal_year", clock);
+  const render = () =>
+    act(async () =>
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <Probe initial={initial} />
+        </NextIntlClientProvider>,
+      ),
+    );
+  await render();
+  return {
+    host,
+    requests,
+    render,
+    now: () => clock,
+    hide: async (value: boolean) => {
+      hidden = value;
+      await act(async () => document.dispatchEvent(new window.Event("visibilitychange")));
+    },
+    advance: async () => {
+      clock += 30_001;
+      const callbacks = [...timers.values()];
+      timers.clear();
+      await act(async () => {
+        for (const callback of callbacks) callback();
+      });
+    },
+  };
 }
 
-test('an open tab refreshes after expiry and retains its body while the next source read is pending', async t => {
-  const h = await harness(t)
-  assert.equal(h.requests.length, 0)
-  await h.advance()
-  assert.equal(h.requests.length, 1)
-  assert.equal(h.host.textContent, 'initial')
-  await act(async () => h.requests[0]!.resolve(Response.json(payload('refreshed', 'overview', 'period=this_fiscal_year', h.now()))))
-  assert.equal(h.host.textContent, 'refreshed')
-  assert.equal(h.requests.length, 1, 'resolution must not cause an immediate fetch loop')
-})
+test("an open tab refreshes after expiry and retains its body while the next source read is pending", async (t) => {
+  const h = await harness(t);
+  assert.equal(h.requests.length, 0);
+  await h.advance();
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.host.textContent, "initial");
+  await act(async () =>
+    h.requests[0]!.resolve(
+      Response.json(payload("refreshed", "overview", "period=this_fiscal_year", h.now())),
+    ),
+  );
+  assert.equal(h.host.textContent, "refreshed");
+  assert.equal(h.requests.length, 1, "resolution must not cause an immediate fetch loop");
+});
 
-test('background analytics pauses expiry reads and resumes one expired live read on return', async t => {
-  const h = await harness(t)
-  await h.hide(true)
-  await h.advance()
-  await h.advance()
-  assert.equal(h.requests.length, 0)
-  assert.equal(h.host.textContent, 'initial')
-  await h.hide(false)
-  assert.equal(h.requests.length, 1)
-  await act(async () => h.requests[0]!.resolve(Response.json(payload('current', 'overview', 'period=this_fiscal_year', h.now()))))
-  assert.equal(h.host.textContent, 'current')
-  await h.hide(true)
-  await h.hide(false)
-  assert.equal(h.requests.length, 1, 'a still-fresh observation is retained without extending its expiry')
-})
+test("background analytics pauses expiry reads and resumes one expired live read on return", async (t) => {
+  const h = await harness(t);
+  await h.hide(true);
+  await h.advance();
+  await h.advance();
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.host.textContent, "initial");
+  await h.hide(false);
+  assert.equal(h.requests.length, 1);
+  await act(async () =>
+    h.requests[0]!.resolve(
+      Response.json(payload("current", "overview", "period=this_fiscal_year", h.now())),
+    ),
+  );
+  assert.equal(h.host.textContent, "current");
+  await h.hide(true);
+  await h.hide(false);
+  assert.equal(
+    h.requests.length,
+    1,
+    "a still-fresh observation is retained without extending its expiry",
+  );
+});
 
-test('hiding during a source read aborts it and a late response cannot replace the resumed observation', async t => {
-  const h = await harness(t)
-  await h.advance()
-  await h.hide(true)
-  assert.ok(h.requests[0]!.signal.aborted)
-  await h.hide(false)
-  assert.equal(h.requests.length, 2)
-  await act(async () => h.requests[1]!.resolve(Response.json(payload('current', 'overview', 'period=this_fiscal_year', h.now()))))
-  await act(async () => h.requests[0]!.resolve(Response.json(payload('obsolete', 'overview', 'period=this_fiscal_year', h.now()))))
-  assert.equal(h.host.textContent, 'current')
-})
+test("hiding during a source read aborts it and a late response cannot replace the resumed observation", async (t) => {
+  const h = await harness(t);
+  await h.advance();
+  await h.hide(true);
+  assert.ok(h.requests[0]!.signal.aborted);
+  await h.hide(false);
+  assert.equal(h.requests.length, 2);
+  await act(async () =>
+    h.requests[1]!.resolve(
+      Response.json(payload("current", "overview", "period=this_fiscal_year", h.now())),
+    ),
+  );
+  await act(async () =>
+    h.requests[0]!.resolve(
+      Response.json(payload("obsolete", "overview", "period=this_fiscal_year", h.now())),
+    ),
+  );
+  assert.equal(h.host.textContent, "current");
+});
 
-test('changing the selected tab aborts its superseded read and ignores a late response', async t => {
-  const h = await harness(t)
-  await act(async () => selected.setTab('items')); await h.render()
-  assert.equal(h.requests.length, 1)
-  assert.equal(h.host.textContent, 'loading')
-  await act(async () => selected.setTab('overview')); await h.render()
-  assert.ok(h.requests[0]!.signal.aborted)
-  await act(async () => h.requests[0]!.resolve(Response.json(payload('old items', 'items', 'period=this_fiscal_year', h.now()))))
-  assert.equal(h.host.textContent, 'initial')
-})
+test("changing the selected tab aborts its superseded read and ignores a late response", async (t) => {
+  const h = await harness(t);
+  await act(async () => selected.setTab("items"));
+  await h.render();
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.host.textContent, "loading");
+  await act(async () => selected.setTab("overview"));
+  await h.render();
+  assert.ok(h.requests[0]!.signal.aborted);
+  await act(async () =>
+    h.requests[0]!.resolve(
+      Response.json(payload("old items", "items", "period=this_fiscal_year", h.now())),
+    ),
+  );
+  assert.equal(h.host.textContent, "initial");
+});
 
-test('a source refusal is shown by name and retry opens one new request', async t => {
-  const h = await harness(t)
-  await act(async () => selected.setTab('items')); await h.render()
-  await act(async () => h.requests[0]!.resolve(Response.json({ error: 'Configure the statement book before reading this period.' }, { status: 422 })))
-  assert.equal(h.host.textContent, 'Configure the statement book before reading this period.')
-  await act(async () => selected.retry())
-  assert.equal(h.requests.length, 2)
-  await act(async () => h.requests[1]!.resolve(Response.json(payload('items', 'items', 'period=this_fiscal_year', h.now()))))
-  assert.equal(h.host.textContent, 'items')
-})
+test("a source refusal is shown by name and retry opens one new request", async (t) => {
+  const h = await harness(t);
+  await act(async () => selected.setTab("items"));
+  await h.render();
+  await act(async () =>
+    h.requests[0]!.resolve(
+      Response.json(
+        { error: "Configure the statement book before reading this period." },
+        { status: 422 },
+      ),
+    ),
+  );
+  assert.equal(h.host.textContent, "Configure the statement book before reading this period.");
+  await act(async () => selected.retry());
+  assert.equal(h.requests.length, 2);
+  await act(async () =>
+    h.requests[1]!.resolve(
+      Response.json(payload("items", "items", "period=this_fiscal_year", h.now())),
+    ),
+  );
+  assert.equal(h.host.textContent, "items");
+});
 
-test('figures observed before the freshness window say so while their newer read runs', async t => {
-  const h = await harness(t)
-  assert.equal(selected.refreshing, undefined, 'a current observation carries no label')
-  await h.advance()
-  assert.equal(h.host.textContent, 'initial', 'the shown figures stay while the next read is pending')
-  assert.equal(selected.refreshing, payload('initial', 'overview', 'period=this_fiscal_year', h.now() - 30_001).data._analyticsRead.observedAt)
-  await act(async () => h.requests[0]!.resolve(Response.json(payload('refreshed', 'overview', 'period=this_fiscal_year', h.now()))))
-  assert.equal(h.host.textContent, 'refreshed')
-  assert.equal(selected.refreshing, undefined, 'the newer read clears the label')
-})
+test("figures observed before the freshness window say so while their newer read runs", async (t) => {
+  const h = await harness(t);
+  assert.equal(selected.refreshing, undefined, "a current observation carries no label");
+  await h.advance();
+  assert.equal(
+    h.host.textContent,
+    "initial",
+    "the shown figures stay while the next read is pending",
+  );
+  assert.equal(
+    selected.refreshing,
+    payload("initial", "overview", "period=this_fiscal_year", h.now() - 30_001).data._analyticsRead
+      .observedAt,
+  );
+  await act(async () =>
+    h.requests[0]!.resolve(
+      Response.json(payload("refreshed", "overview", "period=this_fiscal_year", h.now())),
+    ),
+  );
+  assert.equal(h.host.textContent, "refreshed");
+  assert.equal(selected.refreshing, undefined, "the newer read clears the label");
+});
