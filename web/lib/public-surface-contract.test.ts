@@ -44,10 +44,12 @@ function walkFiles(dir: string, name: string): string[] {
 /** web/app/api/v1/vendors/route.ts -> /api/v1/vendors ; [id] -> x. */
 function routeSamplePath(file: string): string {
   const rel = file.slice(webApp.length).replaceAll("\\", "/");
-  return rel
-    .replace(/\/route\.ts$/, "")
-    .replace(/\[\.\.\.[^\]]+\]/g, "x")
-    .replace(/\[[^\]]+\]/g, "x") || "/";
+  return (
+    rel
+      .replace(/\/route\.ts$/, "")
+      .replace(/\[\.\.\.[^\]]+\]/g, "x")
+      .replace(/\[[^\]]+\]/g, "x") || "/"
+  );
 }
 
 /** web/app/survey/[token]/page.tsx -> /survey/x. */
@@ -83,7 +85,11 @@ test("every /api/v1 route authenticates in-route and never reads the session coo
     const source = readFileSync(file, "utf8");
     const rel = file.slice(webApp.length + 1);
     if (V1_HEALTH.test(file)) {
-      assert.match(source, /Unauthenticated health/, `${rel} is the documented-unauthenticated exception`);
+      assert.match(
+        source,
+        /Unauthenticated health/,
+        `${rel} is the documented-unauthenticated exception`,
+      );
       assert.doesNotMatch(source, SESSION_READ, `${rel} must not read the session cookie`);
       continue;
     }
@@ -158,7 +164,8 @@ const TOKEN_SURFACES: TokenSurface[] = [
   {
     dir: join(webApp, "api", "portal"),
     kind: "api",
-    tokenMarker: /resolvePortalSession|requestPortalLink|requestPortalReturn|portalReturnableSources/,
+    tokenMarker:
+      /resolvePortalSession|requestPortalLink|requestPortalReturn|portalReturnableSources/,
     refusalMarker: /public: 'token'/,
   },
   {
@@ -194,9 +201,10 @@ const TOKEN_SURFACES: TokenSurface[] = [
 
 test("sessionless HR/time surfaces are public, token-authenticated in-route, and CSRF-exempt only as APIs", () => {
   for (const surface of TOKEN_SURFACES) {
-    const files = surface.kind === "api"
-      ? walkFiles(surface.dir, "route.ts")
-      : walkFiles(surface.dir, "page.tsx");
+    const files =
+      surface.kind === "api"
+        ? walkFiles(surface.dir, "route.ts")
+        : walkFiles(surface.dir, "page.tsx");
     assert.ok(files.length > 0, `expected route files under ${surface.dir}`);
     for (const file of files) {
       const source = readFileSync(file, "utf8");
@@ -225,21 +233,32 @@ test("sessionless HR/time surfaces are public, token-authenticated in-route, and
   // relay signature itself and confirms every delivery by retrieval — the
   // route marker above is not a pass-through claim.
   const shipping = readFileSync(
-    join(repoRoot, "engine", "src", "sales", "shipping-labels.ts"),
+    join(repoRoot, "engine", "src", "sales", "shipping-tracking.ts"),
     "utf8",
   );
-  assert.match(shipping, /verifyRelaySignature\(input\.rawBody, signature, account\.webhookSecret\)/);
+  assert.match(
+    shipping,
+    /verifyRelaySignature\(input\.rawBody, signature, account\.webhookSecret\)/,
+  );
 });
 
 test("no public API root covers a route without its surface's auth marker", () => {
   const v1Files = walkFiles(join(webApp, "api", "v1"), "route.ts");
   for (const file of v1Files) {
     if (V1_HEALTH.test(file)) continue;
-    assert.match(readFileSync(file, "utf8"), V1_AUTH, `${file} sits under public /api/v1 without API-key auth`);
+    assert.match(
+      readFileSync(file, "utf8"),
+      V1_AUTH,
+      `${file} sits under public /api/v1 without API-key auth`,
+    );
   }
   for (const surface of TOKEN_SURFACES.filter((surface) => surface.kind === "api")) {
     for (const file of walkFiles(surface.dir, "route.ts")) {
-      assert.match(readFileSync(file, "utf8"), surface.tokenMarker, `${file} sits on a public token root without its token check`);
+      assert.match(
+        readFileSync(file, "utf8"),
+        surface.tokenMarker,
+        `${file} sits on a public token root without its token check`,
+      );
     }
   }
 });
