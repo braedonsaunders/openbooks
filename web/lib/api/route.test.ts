@@ -10,14 +10,24 @@ import { PayrollError } from "@openbooks/engine/payroll/error";
 const invalidated: string[] = [];
 Object.assign(globalThis, { __analyticsInvalidations: invalidated });
 const stateKey = Symbol.for("openbooks.route-factory-test");
-const state: { permission: "allow" | "deny401" | "deny403"; feature: "on" | "off"; scope: "allow" | "deny"; session: boolean; calls: string[] }
-  = { permission: "allow", feature: "on", scope: "allow", session: true, calls: [] };
+const state: {
+  permission: "allow" | "deny401" | "deny403";
+  feature: "on" | "off";
+  scope: "allow" | "deny";
+  session: boolean;
+  calls: string[];
+} = { permission: "allow", feature: "on", scope: "allow", session: true, calls: [] };
 (globalThis as Record<symbol, unknown>)[stateKey] = state;
 (globalThis as Record<string, unknown>).openbooksRouteFactoryNextResponse = NextResponse;
 
 const mockSources = new Map<string, string>([
-  ["mock:preview-cache", "export async function invalidateAnalyticsPreviews(orgId){globalThis.__analyticsInvalidations.push(orgId)}"],
-  ["mock:authz", `
+  [
+    "mock:preview-cache",
+    "export async function invalidateAnalyticsPreviews(orgId){globalThis.__analyticsInvalidations.push(orgId)}",
+  ],
+  [
+    "mock:authz",
+    `
     const state = globalThis[Symbol.for('openbooks.route-factory-test')];
     const NextResponse = globalThis.openbooksRouteFactoryNextResponse;
     const gate = () => ({ user: { orgId: 'org-1', id: 'user-1' }, permissions: new Set(), allowedSubsidiaryIds: null });
@@ -35,8 +45,11 @@ const mockSources = new Map<string, string>([
       state.calls.push('scope');
       return state.scope === 'deny' ? NextResponse.json({ error: 'not_found' }, { status: 404 }) : null;
     }
-  `],
-  ["mock:feature-gates", `
+  `,
+  ],
+  [
+    "mock:feature-gates",
+    `
     const state = globalThis[Symbol.for('openbooks.route-factory-test')];
     const NextResponse = globalThis.openbooksRouteFactoryNextResponse;
     const gate = () => ({ user: { orgId: 'org-1', id: 'user-1' }, permissions: new Set(), allowedSubsidiaryIds: null });
@@ -47,21 +60,27 @@ const mockSources = new Map<string, string>([
       if (state.feature === 'off') return NextResponse.json({ error: 'not_found' }, { status: 404 });
       return gate();
     }
-  `],
-  ["mock:features", `
+  `,
+  ],
+  [
+    "mock:features",
+    `
     const state = globalThis[Symbol.for('openbooks.route-factory-test')];
     export async function isFeatureEnabled() {
       state.calls.push('session-feature');
       return state.feature === 'on';
     }
-  `],
+  `,
+  ],
 ]);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@/lib/analytics/preview-invalidation") return { shortCircuit: true, url: "mock:preview-cache" };
+    if (specifier === "@/lib/analytics/preview-invalidation")
+      return { shortCircuit: true, url: "mock:preview-cache" };
     if (specifier === "@/lib/authz") return { shortCircuit: true, url: "mock:authz" };
-    if (specifier === "@/lib/feature-gates") return { shortCircuit: true, url: "mock:feature-gates" };
+    if (specifier === "@/lib/feature-gates")
+      return { shortCircuit: true, url: "mock:feature-gates" };
     if (specifier === "@/lib/features") return { shortCircuit: true, url: "mock:features" };
     return nextResolve(specifier, context);
   },
@@ -76,25 +95,40 @@ const { defineRoute } = await import("./route.ts");
 // Hooks stay registered for the factory's per-request gate import.
 
 class NamedRefusal extends Error {
-  status = 422; code = "name_required"; remedy = "Send a name.";
-  constructor() { super("name_required"); this.name = "NamedRefusal"; }
+  status = 422;
+  code = "name_required";
+  remedy = "Send a name.";
+  constructor() {
+    super("name_required");
+    this.name = "NamedRefusal";
+  }
 }
 
 function reset(overrides: Partial<typeof state> = {}): void {
-  Object.assign(state, { permission: "allow", feature: "on", scope: "allow", session: true, calls: [] }, overrides);
+  Object.assign(
+    state,
+    { permission: "allow", feature: "on", scope: "allow", session: true, calls: [] },
+    overrides,
+  );
 }
 
 const get = (url = "http://test.local/api/thing"): Request => new Request(url, { method: "GET" });
 
-const post = (body: unknown): Request => new Request("http://test.local/api/thing", {
-  method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
-});
+const post = (body: unknown): Request =>
+  new Request("http://test.local/api/thing", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
 const ok = () => NextResponse.json({ ok: true });
 
 test("public token routes skip every gate", async () => {
   reset();
-  const handler = defineRoute({ public: "token", handler: async ({ authz }) => NextResponse.json({ ok: true, authz }) });
+  const handler = defineRoute({
+    public: "token",
+    handler: async ({ authz }) => NextResponse.json({ ok: true, authz }),
+  });
   const response = await handler(get());
   assert.deepEqual(state.calls, []);
   assert.deepEqual(await response.json(), { ok: true, authz: null });
@@ -115,7 +149,11 @@ test("public session routes require a session but no permission", async () => {
 test("permission refusals pass through before the feature gate runs", async () => {
   for (const permission of ["deny401", "deny403"] as const) {
     reset({ permission });
-    const handler = defineRoute({ permission: "x", feature: "timeTracking", handler: async () => ok() });
+    const handler = defineRoute({
+      permission: "x",
+      feature: "timeTracking",
+      handler: async () => ok(),
+    });
     const response = await handler(get());
     assert.equal(response.status, permission === "deny401" ? 401 : 403);
     assert.deepEqual(state.calls, ["permission"]);
@@ -124,7 +162,11 @@ test("permission refusals pass through before the feature gate runs", async () =
 
 test("a disabled feature answers 404 without naming the feature", async () => {
   reset({ feature: "off" });
-  const handler = defineRoute({ permission: "x", feature: "timeTracking", handler: async () => ok() });
+  const handler = defineRoute({
+    permission: "x",
+    feature: "timeTracking",
+    handler: async () => ok(),
+  });
   const response = await handler(get());
   assert.equal(response.status, 404);
   assert.deepEqual(state.calls, ["permission", "feature"]);
@@ -146,7 +188,12 @@ test("an always-on surface documents its reason and skips the feature gate", asy
 test("restricted scope is refused after permission and feature pass", async () => {
   for (const scope of ["unrestricted", "root"] as const) {
     reset({ scope: "deny" });
-    const handler = defineRoute({ permission: "x", feature: "timeTracking", scope, handler: async () => ok() });
+    const handler = defineRoute({
+      permission: "x",
+      feature: "timeTracking",
+      scope,
+      handler: async () => ok(),
+    });
     const response = await handler(get());
     assert.equal(response.status, scope === "unrestricted" ? 403 : 404);
     assert.deepEqual(state.calls, ["permission", "feature", "scope"]);
@@ -160,7 +207,10 @@ test("an unknown scope fails closed instead of running unscoped", async () => {
     permission: "x",
     feature: { none: "test surface" },
     scope: "subsidiary" as never,
-    handler: async () => { ran = true; return ok(); },
+    handler: async () => {
+      ran = true;
+      return ok();
+    },
   });
   await assert.rejects(() => handler(get()), /unknown scope/);
   assert.equal(ran, false);
@@ -176,7 +226,9 @@ test("invalid route params fail closed with 400", async () => {
   });
   const bad = await handler(get(), { params: Promise.resolve({ id: "nope" }) });
   assert.equal(bad.status, 400);
-  const good = await handler(get(), { params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }) });
+  const good = await handler(get(), {
+    params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
+  });
   assert.deepEqual(await good.json(), { id: "00000000-0000-4000-8000-000000000001" });
 });
 
@@ -192,6 +244,25 @@ test("invalid bodies fail through the shared JSON boundary", async () => {
   assert.equal(bad.status, 400);
   const good = await handler(post({ name: "Cash" }));
   assert.deepEqual(await good.json(), { name: "Cash" });
+});
+
+test("body preconditions run after parameter validation and before body parsing", async () => {
+  reset();
+  const handler = defineRoute({
+    permission: "x",
+    feature: "timeTracking",
+    params: z.object({ entity: z.string() }),
+    body: z.object({ name: z.string() }),
+    beforeBody: ({ params }) => {
+      state.calls.push(`before-body:${params.entity}`);
+      return NextResponse.json({ error: "entity is command-owned" }, { status: 405 });
+    },
+    handler: async () => ok(),
+  });
+  const refused = await handler(post({}), { params: Promise.resolve({ entity: "benefit-plans" }) });
+  assert.equal(refused.status, 405);
+  assert.deepEqual(await refused.json(), { error: "entity is command-owned" });
+  assert.deepEqual(state.calls, ["permission", "feature", "before-body:benefit-plans"]);
 });
 
 test("routes may opt into a 422 body refusal without changing the factory default", async () => {
@@ -232,17 +303,41 @@ test("typed refusals become 4xx carrying code and remedy", async () => {
 
 test("engine refusals escaping handlers answer 422, conflicts 409", async () => {
   reset();
-  const refused = defineRoute({ permission: "x", feature: { none: "test surface" }, handler: async () => { throw new PayrollError("No open pay run"); } });
+  const refused = defineRoute({
+    permission: "x",
+    feature: { none: "test surface" },
+    handler: async () => {
+      throw new PayrollError("No open pay run");
+    },
+  });
   const bad = await refused(get());
   assert.equal(bad.status, 422);
   assert.deepEqual(await bad.json(), { error: "No open pay run", code: "payroll_refused" });
-  const conflicted = defineRoute({ permission: "x", feature: { none: "test surface" }, handler: async () => { throw new PaymentRevisionConflictError(); } });
+  const conflicted = defineRoute({
+    permission: "x",
+    feature: { none: "test surface" },
+    handler: async () => {
+      throw new PaymentRevisionConflictError();
+    },
+  });
   const conflict = await conflicted(get());
   assert.equal(conflict.status, 409);
-  assert.deepEqual(await conflict.json(), { error: "this payment changed after you opened it; reload and review the latest revision", code: "payment_refused" });
+  assert.deepEqual(await conflict.json(), {
+    error: "this payment changed after you opened it; reload and review the latest revision",
+    code: "payment_refused",
+  });
   const original = new Error("boom");
-  const throwing = defineRoute({ permission: "x", feature: { none: "test surface" }, handler: async () => { throw original; } });
-  await assert.rejects(() => throwing(get()), (cause) => cause === original);
+  const throwing = defineRoute({
+    permission: "x",
+    feature: { none: "test surface" },
+    handler: async () => {
+      throw original;
+    },
+  });
+  await assert.rejects(
+    () => throwing(get()),
+    (cause) => cause === original,
+  );
 });
 
 test("unknown errors rethrow instead of becoming a response", async () => {
@@ -257,57 +352,74 @@ test("unknown errors rethrow instead of becoming a response", async () => {
   await assert.rejects(() => handler(get()), /boom/);
 });
 
-test('routes may declare a larger bounded payload without widening the shared default', async () => {
+test("routes may declare a larger bounded payload without widening the shared default", async () => {
   reset();
   const body = z.object({ text: z.string() });
-  const large = { text: 'x'.repeat(1024 * 1024 + 16) };
-  const handler = defineRoute({ permission: 'x', feature: { none: 'test surface' }, body, maxBodyBytes: 2 * 1024 * 1024, handler: async ({ body }) => NextResponse.json({ length: body.text.length }) });
+  const large = { text: "x".repeat(1024 * 1024 + 16) };
+  const handler = defineRoute({
+    permission: "x",
+    feature: { none: "test surface" },
+    body,
+    maxBodyBytes: 2 * 1024 * 1024,
+    handler: async ({ body }) => NextResponse.json({ length: body.text.length }),
+  });
   assert.equal((await handler(post(large))).status, 200);
-  const defaultHandler = defineRoute({ permission: 'x', feature: { none: 'test surface' }, body, handler: async () => NextResponse.json({ ok: true }) });
+  const defaultHandler = defineRoute({
+    permission: "x",
+    feature: { none: "test surface" },
+    body,
+    handler: async () => NextResponse.json({ ok: true }),
+  });
   assert.equal((await defaultHandler(post(large))).status, 413);
-  assert.equal((await handler(post({ text: 'x'.repeat(2 * 1024 * 1024 + 16) }))).status, 413);
+  assert.equal((await handler(post({ text: "x".repeat(2 * 1024 * 1024 + 16) }))).status, 413);
 });
 
-
 test("successful organization writes invalidate analytics; reads, personal layouts and refusals do not", async () => {
-  reset(); invalidated.length = 0;
+  reset();
+  invalidated.length = 0;
   const route = defineRoute({ public: "session", handler: () => ok() });
   await route(get());
   await route(new Request("http://test.local/api/me/page-layout", { method: "PUT" }));
   assert.deepEqual(invalidated, []);
   await route(post({}));
   assert.deepEqual(invalidated, ["org-1"]);
-  const refused = defineRoute({ public: "session", handler: () => NextResponse.json({ error: "Approval required." }, { status: 422 }) });
+  const refused = defineRoute({
+    public: "session",
+    handler: () => NextResponse.json({ error: "Approval required." }, { status: 422 }),
+  });
   await refused(post({}));
   assert.deepEqual(invalidated, ["org-1"]);
 });
 
-
-test('record parameter refusals preserve opaque 404 before parsing edit bodies while authority still precedes identity', async () => {
-  reset()
-  let invoked = false
+test("record parameter refusals preserve opaque 404 before parsing edit bodies while authority still precedes identity", async () => {
+  reset();
+  let invoked = false;
   const handler = defineRoute({
-    permission: 'expenses.create', feature: 'expenses',
-    params: z.object({id: uuidString()}), invalidParamsNotFound: 'record',
-    body: z.object({memo: z.string()}),
-    handler: async () => { invoked = true; return ok() },
-  })
-  const context = {params: Promise.resolve({id:'reports'})}
-  const refused = await handler(post({}), context)
-  assert.equal(refused.status, 404)
-  assert.deepEqual(await refused.json(), {error:'not_found'})
-  assert.equal(invoked, false)
-  reset({permission:'deny403'})
-  assert.equal((await handler(post({}), context)).status, 403)
-  assert.equal(invoked, false)
-  reset()
-  const valid = {params: Promise.resolve({id:'00000000-0000-4000-8000-000000000001'})}
-  assert.equal((await handler(post({}), valid)).status, 400)
-  assert.equal(invoked, false)
-  assert.equal((await handler(post({memo:'Reviewed edit'}), valid)).status, 200)
-  assert.equal(invoked, true)
-})
-
+    permission: "expenses.create",
+    feature: "expenses",
+    params: z.object({ id: uuidString() }),
+    invalidParamsNotFound: "record",
+    body: z.object({ memo: z.string() }),
+    handler: async () => {
+      invoked = true;
+      return ok();
+    },
+  });
+  const context = { params: Promise.resolve({ id: "reports" }) };
+  const refused = await handler(post({}), context);
+  assert.equal(refused.status, 404);
+  assert.deepEqual(await refused.json(), { error: "not_found" });
+  assert.equal(invoked, false);
+  reset({ permission: "deny403" });
+  assert.equal((await handler(post({}), context)).status, 403);
+  assert.equal(invoked, false);
+  reset();
+  const valid = { params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }) };
+  assert.equal((await handler(post({}), valid)).status, 400);
+  assert.equal(invoked, false);
+  assert.equal((await handler(post({ memo: "Reviewed edit" }), valid)).status, 200);
+  assert.equal(invoked, true);
+});
 
 test("session commands without a creation feature remain available when features are disabled", async () => {
   reset({ feature: "off" });
