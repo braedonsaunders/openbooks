@@ -201,15 +201,13 @@ export async function validateSessionToken(token: string | undefined): Promise<V
   const hash = tokenHash(token!);
   // bypass: identity-bootstrap — a session cookie is resolved to its identity before any organization scope exists.
   return withBypassContext(async () => {
-    // Validation and the activity stamp are one statement: a revocation that
-    // commits first is re-checked by the update and refuses the session.
-    const result = await db.execute<ValidatedSession>(sql`
-      update auth_sessions s
-         set last_seen_at = case
-           when s.last_seen_at < now() - interval '5 minutes' then now()
-           else s.last_seen_at
-         end
-       where s.id = ${parsed.sessionId}
+    // Validation reads the session under a share lock: a revocation still in
+    // flight holds the row, so validation waits for it and then re-checks the
+    // revoked row, while concurrent requests of one session never queue
+    // behind each other. The activity stamp writes only when it is stale, at
+    // most once per five minutes, under the same liveness conditions; a stamp
+    // that matches no row means the session stopped being live.
+    const live = sql`s.id = ${parsed.sessionId}
          and s.user_id = ${parsed.userId}
          and s.token_hash = ${hash}
          and s.revoked_at is null
@@ -217,11 +215,31 @@ export async function validateSessionToken(token: string | undefined): Promise<V
          and exists (
            select 1 from users u
             where u.id = s.user_id and u.is_active
-         )
-       returning s.user_id as "userId", s.id as "sessionId", s.expires_at as "expiresAt",
-                 s.auth_method as "authMethod"
+         )`;
+    const result = await db.execute<ValidatedSession & { stale: boolean | null }>(sql`
+      select s.user_id as "userId", s.id as "sessionId", s.expires_at as "expiresAt",
+             s.auth_method as "authMethod",
+             s.last_seen_at < now() - interval '5 minutes' as stale
+        from auth_sessions s
+       where ${live}
+         for share of s
     `, "objects");
-    return result[0] ?? null;
+    const session = result[0];
+    if (!session) return null;
+    if (session.stale) {
+      const stamped = await db.execute<{ id: string }>(sql`
+        update auth_sessions s set last_seen_at = now()
+         where ${live}
+        returning s.id
+      `, "objects");
+      if (stamped.length === 0) return null;
+    }
+    return {
+      userId: session.userId,
+      sessionId: session.sessionId,
+      expiresAt: session.expiresAt,
+      authMethod: session.authMethod,
+    };
   });
 }
 
