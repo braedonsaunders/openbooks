@@ -16,7 +16,7 @@ import {
   preparedPageState,
   type PreparedListSourceKey,
 } from '../../lib/list/prepared-sources'
-import { RegisteredListTable } from '../registered-list-table'
+import { PagedTable } from '../paged-table'
 import { CellView } from './cells'
 import { WidgetSlot } from './widget-slot'
 import { nestedScope } from './list-scope'
@@ -78,7 +78,8 @@ export function RegisteredListBlockView({
   )
   const primitives = tablePrimitives('app')
   return (
-    <RegisteredListTable
+    <PagedTable
+      prepared
       source={key}
       rows={rows}
       rowKey={(row) => {
@@ -91,10 +92,12 @@ export function RegisteredListBlockView({
           ? String(resolvePath(tableScope, source.basePathField))
           : source.route
       }
-      state={
-        source.mode === 'server'
-          ? preparedPageState(source, tableScope)
-          : undefined
+      serverWindow={
+        source.mode === 'loaded'
+          ? undefined
+          : source.mode === 'server'
+            ? preparedPageState(source, tableScope)
+            : true
       }
       currentParams={searchParams}
       pageParamKey={source.paging?.pageParamKey ?? spec.sorting?.pageParamKey}
