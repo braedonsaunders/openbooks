@@ -1,26 +1,28 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { defineRoute } from '@/lib/api/route'
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { defineRoute } from "@/lib/api/route";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { lockLedgerSetupFence } from "@openbooks/engine/organization/ledger-setup";
 import { PaymentRevisionConflictError } from "@openbooks/engine/payments-core/payment-errors";
 import { postPaymentWithApplications } from "@openbooks/engine/payments/payment-posting";
 import { updateDraftPayment } from "@openbooks/engine/payments/payment-documents";
 import { type PaymentKind } from "@openbooks/engine/payments/payment-contracts";
-import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/module'
+import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
 import { runPostDocumentEffects } from "@openbooks/engine/ledger/posting-dispatch";
 import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/organization/scope";
-import { can, getAuthz, guardSubsidiaryScope } from '../../../../lib/authz'
-import { DocumentEditError, requireDocumentEditRevision } from "@openbooks/engine/records/document-edit-policy";
-import { exactMoney, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
-import { assertAllocationTargetsInScope, paymentErrorResponse, paymentPermission } from '../lib'
-import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
+import { can, guardSubsidiaryScope, type Authz } from "@/lib/authz";
+import {
+  DocumentEditError,
+  requireDocumentEditRevision,
+} from "@openbooks/engine/records/document-edit-policy";
+import { exactMoney, nullableUuidId, uuidId } from "@/lib/api/json";
+import { assertAllocationTargetsInScope, paymentErrorResponse, paymentPermission } from "../lib";
+import { ApprovalRoutingError } from "@/lib/approval-routing-error";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /** One open-item application (engine AllocationInput), shape-checked here;
  *  cross-field rules stay in the engine's posting kernel. */
@@ -30,49 +32,53 @@ const allocationInput = z.object({
   targetTransactionAmount: exactMoney(),
   targetBaseAmount: exactMoney().optional(),
   settlementRate: z.string().min(1),
-  settlementRateSource: z.enum(['same_currency', 'provider', 'manual', 'contractual', 'imported']),
+  settlementRateSource: z.enum(["same_currency", "provider", "manual", "contractual", "imported"]),
   settlementRateReference: z.string(),
   settlementFxRateId: nullableUuidId.optional(),
-})
+});
 
 const postWithApplicationsBody = z.object({
-  documentId: z.string({ error: 'documentId is required' }).refine(
-    (v) => uuidId.safeParse(v).success,
-    'documentId is required',
-  ),
+  documentId: z
+    .string({ error: "documentId is required" })
+    .refine((v) => uuidId.safeParse(v).success, "documentId is required"),
   /** Optimistic concurrency token from documents.revision_seq (exact form). */
   expectedUpdatedAt: z.string().optional(),
   allocations: z.array(allocationInput).optional(),
   withholdingAuthorisation: z.string().trim().max(100).nullable().optional(),
   withholdingAuthorisedAmount: exactMoney().nullable().optional(),
-})
+});
 
 /**
  * Explicit "Pay & post": posts the payment document through the kernel and
  * applies it to the selected open items atomically (auto-reversal on
  * application failure — see engine/src/payments/payments.ts).
  */
-async function postWithApplications(req: Request) {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+async function postWithApplications(
+  req: Request,
+  authz: Authz,
+  body: z.infer<typeof postWithApplicationsBody>,
+) {
+  const { documentId, allocations, withholdingAuthorisation, withholdingAuthorisedAmount } = body;
 
-  const parsed = await parseJsonBody(req, postWithApplicationsBody)
-  if (!parsed.ok) return parsed.response
-  const { documentId, allocations, withholdingAuthorisation, withholdingAuthorisedAmount } = parsed.data
-
-  const r = (await db.execute<{ kind: PaymentKind; status: string; subsidiaryId: string | null }>(sql`
+  const r = await db.execute<{ kind: PaymentKind; status: string; subsidiaryId: string | null }>(
+    sql`
     select kind, status, subsidiary_id as "subsidiaryId" from documents
      where id = ${documentId} and kind in ('vendor_payment', 'customer_payment')
        and org_id = ${authz.user.orgId}
-  `, 'objects'))
-  if (!r[0]) return notFound("record")
-  const scopeDenied = guardSubsidiaryScope(authz, r[0].subsidiaryId)
-  if (scopeDenied) return scopeDenied
-  const targetsDenied = await assertAllocationTargetsInScope(authz, (allocations ?? []).map(item => item.openLineId))
-  if (targetsDenied) return targetsDenied
-  const perm = paymentPermission(r[0].kind)
+  `,
+    "objects",
+  );
+  if (!r[0]) return notFound("record");
+  const scopeDenied = guardSubsidiaryScope(authz, r[0].subsidiaryId);
+  if (scopeDenied) return scopeDenied;
+  const targetsDenied = await assertAllocationTargetsInScope(
+    authz,
+    (allocations ?? []).map((item) => item.openLineId),
+  );
+  if (targetsDenied) return targetsDenied;
+  const perm = paymentPermission(r[0].kind);
   if (!can(authz, perm)) {
-    return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 })
+    return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 });
   }
   // Mandatory optimistic-concurrency evidence — same contract as
   // PATCH /api/payments/[id]: the draft branch below saves the final
@@ -80,14 +86,14 @@ async function postWithApplications(req: Request) {
   // must 409 here instead of silently overwriting a newer allocation set
   // that approval then reviews and posts. Checked after the gates so a
   // missing token never leaks document existence to an unauthorized caller.
-  let expectedRevision: string
+  let expectedRevision: string;
   try {
-    expectedRevision = requireDocumentEditRevision(parsed.data.expectedUpdatedAt)
+    expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt);
   } catch (e) {
     if (e instanceof DocumentEditError) {
-      return apiErrorResponse(e)
+      return apiErrorResponse(e);
     }
-    throw e
+    throw e;
   }
 
   try {
@@ -96,26 +102,37 @@ async function postWithApplications(req: Request) {
       // before that save and before the document row, not only in the kernel,
       // then the shared setup fence. FOR NO KEY UPDATE waits on a setup
       // reassignment's FOR SHARE instead of deadlocking its book fence.
-      await db.execute(sql`select id from orgs where id = ${authz.user.orgId} for no key update`)
-      await lockLedgerSetupFence(db, authz.user.orgId, "shared")
+      await db.execute(sql`select id from orgs where id = ${authz.user.orgId} for no key update`);
+      await lockLedgerSetupFence(db, authz.user.orgId, "shared");
 
-      const locked = (await db.execute<{ kind: PaymentKind; status: string; subsidiaryId: string | null }>(sql`
+      const locked = await db.execute<{
+        kind: PaymentKind;
+        status: string;
+        subsidiaryId: string | null;
+      }>(
+        sql`
         select kind, status, subsidiary_id as "subsidiaryId" from documents
          where id = ${documentId} and org_id = ${authz.user.orgId}
            and kind in ('vendor_payment', 'customer_payment')
          for update
-      `, 'objects'))
-      const payment = locked[0]
-      if (!payment) return { kind: 'not_found' as const }
+      `,
+        "objects",
+      );
+      const payment = locked[0];
+      if (!payment) return { kind: "not_found" as const };
       // The earlier scope check is only a fast refusal. Recheck the locked
       // row so a concurrent rehome cannot authorize this save or post.
-      await lockScopeRow(db, authz.user.orgId, "document", documentId, authz.allowedSubsidiaryIds)
-      const previousStatus = payment.status
-      if (previousStatus === 'draft') {
+      await lockScopeRow(db, authz.user.orgId, "document", documentId, authz.allowedSubsidiaryIds);
+      const previousStatus = payment.status;
+      if (previousStatus === "draft") {
         // The posting body is a convenience for the drawer's final action,
         // not an unpersisted approval bypass. Save it while the document is
         // still draft so the exact allocation set is what approval reviews.
-        if (allocations !== undefined || withholdingAuthorisation !== undefined || withholdingAuthorisedAmount !== undefined) {
+        if (
+          allocations !== undefined ||
+          withholdingAuthorisation !== undefined ||
+          withholdingAuthorisedAmount !== undefined
+        ) {
           await updateDraftPayment(
             documentId,
             { allocations, withholdingAuthorisation, withholdingAuthorisedAmount },
@@ -124,72 +141,71 @@ async function postWithApplications(req: Request) {
             // The OCC token is route-level evidence; it never enters the
             // engine's financial patch shape.
             { expectedRevision, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
-          )
+          );
         }
-        const submission = await submitAndReleaseIfUngated(
-          payment.kind,
-          documentId,
-          authz.user.id,
-        )
+        const submission = await submitAndReleaseIfUngated(payment.kind, documentId, authz.user.id);
         // A refused routing throws: answering 422 from inside this
         // transaction would commit the submission's script effects alongside
         // the refusal. The catch below answers the same 422 after the
         // rollback — including the draft allocation save above.
         if (submission.flowError) {
-          throw new ApprovalRoutingError(submission.flowError)
+          throw new ApprovalRoutingError(submission.flowError);
         }
         if (submission.gated) {
-          return { kind: 'pending' as const, requestId: submission.runId }
+          return { kind: "pending" as const, requestId: submission.runId };
         }
-      } else if (previousStatus !== 'approved') {
-        return { kind: 'invalid_status' as const, status: previousStatus }
+      } else if (previousStatus !== "approved") {
+        return { kind: "invalid_status" as const, status: previousStatus };
       }
       const result = await postPaymentWithApplications(
         documentId,
         allocations,
         authz.user.id,
-        'ui',
+        "ui",
         { deferEffects: true },
-      )
-      return { kind: 'posted' as const, result, previousStatus }
-    })
-    if (outcome.kind === 'not_found') {
-      return notFound("record")
+      );
+      return { kind: "posted" as const, result, previousStatus };
+    });
+    if (outcome.kind === "not_found") {
+      return notFound("record");
     }
-    if (outcome.kind === 'pending') {
+    if (outcome.kind === "pending") {
       return NextResponse.json(
         { ok: true, pendingApproval: true, requestId: outcome.requestId },
         { status: 202 },
-      )
+      );
     }
-    if (outcome.kind === 'invalid_status') {
+    if (outcome.kind === "invalid_status") {
       return NextResponse.json(
         { error: `payment is ${outcome.status}; only an approved payment can be posted` },
         { status: 422 },
-      )
+      );
     }
-    await runPostDocumentEffects(documentId, outcome.previousStatus)
-    return NextResponse.json({ ok: true, ...outcome.result })
+    await runPostDocumentEffects(documentId, outcome.previousStatus);
+    return NextResponse.json({ ok: true, ...outcome.result });
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return notFound("record")
+    if (e instanceof ScopeNotFoundError) return notFound("record");
     // The engine fence fired under the row lock: someone saved first.
     if (e instanceof PaymentRevisionConflictError) {
-      return apiErrorResponse(e, { safeStatus: 409 })
+      return apiErrorResponse(e, { safeStatus: 409 });
     }
     // A refused approval routing already rolled back; its message names the
     // failed flow, so it keeps it with the same 422.
     if (e instanceof ApprovalRoutingError) {
-      return apiErrorResponse(e, { safeStatus: 422 })
+      return apiErrorResponse(e, { safeStatus: 422 });
     }
-    return paymentErrorResponse(e)
+    return paymentErrorResponse(e);
   }
 }
 
 export const POST = defineRoute({
   authorize: async () => {
-    const authz = await getAuthz()
-    return authz ?? NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    const authz = await getAuthz();
+    return authz ?? NextResponse.json({ error: "unauthorized" }, { status: 401 });
   },
-  feature: { none: 'The payment record determines AP or AR posting authority and subsidiary scope inside the handler.' },
-  handler: async ({ request }) => postWithApplications(request),
-})
+  feature: {
+    none: "The payment record determines AP or AR posting authority and subsidiary scope inside the handler.",
+  },
+  body: postWithApplicationsBody,
+  handler: async ({ request, authz, body }) => postWithApplications(request, authz, body),
+});

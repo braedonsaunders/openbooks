@@ -1,22 +1,22 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { defineRoute } from '@/lib/api/route'
-import { sql } from "drizzle-orm";
+import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
-import { db } from "@openbooks/engine/platform/db";
 import {
   PaymentAcceptanceError,
   createPaymentLink,
   listPaymentLinks,
 } from "@openbooks/engine/payments/acceptance/operations";
+import {
+  paymentLinkDocumentScope,
+  paymentLinkProviderOptions,
+} from "@openbooks/engine/payments/payment-queries";
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
-import { guardPermission, type Authz } from "../../../../lib/authz";
+import { guardPermission, type Authz } from "@/lib/authz";
 import { guardSubsidiaryScope } from "@/lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
-import { isUuid } from "../../../../lib/list-params";
-import { nullableUuidId, parseJsonBody, uuidId } from "../../../../lib/api/json";
+import { isUuid } from "@/lib/list-params";
+import { nullableUuidId, uuidId } from "@/lib/api/json";
 import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -42,20 +42,12 @@ async function denyOutsideDocumentScope(
   authz: Authz,
   documentId: string,
 ): Promise<NextResponse | null> {
-  const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select subsidiary_id as "subsidiaryId" from documents
-     where id = ${documentId} and org_id = ${authz.user.orgId}
-  `, "objects"));
-  if (!owned[0]) return notFound("record");
-  return guardSubsidiaryScope(authz, owned[0].subsidiaryId);
+  const owned = await paymentLinkDocumentScope(authz.user.orgId, documentId);
+  if (!owned) return notFound("record");
+  return guardSubsidiaryScope(authz, owned.subsidiaryId);
 }
 
-async function listPaymentLinksRoute(req: Request) {
-  const gate = await guardPermission("ar.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "onlinePayments"))) {
-    return NextResponse.json({ error: "feature disabled" }, { status: 404 });
-  }
+async function listPaymentLinksRoute(req: Request, gate: Authz) {
   const documentId = new URL(req.url).searchParams.get("documentId");
   if (!documentId || !isUuid(documentId)) {
     return NextResponse.json({ error: "documentId is required" }, { status: 400 });
@@ -65,12 +57,7 @@ async function listPaymentLinksRoute(req: Request) {
   try {
     const [links, providers] = await Promise.all([
       listPaymentLinks(gate.user.orgId, documentId, gate.allowedSubsidiaryIds),
-      db.execute<{ provider: string }>(sql`
-        select provider from psp_provider_configs
-         where org_id = ${gate.user.orgId} and is_enabled and acceptance_enabled
-           and default_bank_account_id is not null
-         order by provider
-      `, "objects"),
+      paymentLinkProviderOptions(gate.user.orgId),
     ]);
     return NextResponse.json({ links, providers: providers.map((r) => r.provider) });
   } catch (e) {
@@ -79,15 +66,7 @@ async function listPaymentLinksRoute(req: Request) {
   }
 }
 
-async function createPaymentLinkRoute(req: Request) {
-  const gate = await guardPermission("ar.create");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "onlinePayments"))) {
-    return NextResponse.json({ error: "feature disabled" }, { status: 404 });
-  }
-  const parsed = await parseJsonBody(req, createLinkBody);
-  if (!parsed.ok) return parsed.response;
-  const body = parsed.data;
+async function createPaymentLinkRoute(gate: Authz, body: z.infer<typeof createLinkBody>) {
   const denied = await denyOutsideDocumentScope(gate, body.documentId);
   if (denied) return denied;
   try {
@@ -111,12 +90,14 @@ async function createPaymentLinkRoute(req: Request) {
   }
 }
 
-const paymentLinkFeature = { none: 'Payment-link handlers enforce the onlinePayments feature alongside the AP/AR permission and document scope.' } as const
 export const GET = defineRoute({
-  authorize: () => guardPermission('ar.read'), feature: paymentLinkFeature,
-  handler: async ({ request }) => listPaymentLinksRoute(request),
-})
+  authorize: () => guardPermission("ar.read"),
+  feature: "onlinePayments",
+  handler: async ({ request, authz }) => listPaymentLinksRoute(request, authz),
+});
 export const POST = defineRoute({
-  authorize: () => guardPermission('ar.create'), feature: paymentLinkFeature,
-  handler: async ({ request }) => createPaymentLinkRoute(request),
-})
+  authorize: () => guardPermission("ar.create"),
+  feature: "onlinePayments",
+  body: createLinkBody,
+  handler: async ({ authz, body }) => createPaymentLinkRoute(authz, body),
+});

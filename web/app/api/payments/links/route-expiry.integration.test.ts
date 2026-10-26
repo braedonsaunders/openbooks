@@ -10,7 +10,7 @@ import { sql } from "drizzle-orm";
 // only maps PaymentAcceptanceError to 422) instead of failing closed with a
 // named 422 and nothing written.
 const routeState = Symbol.for("openbooks-payment-links-expiry-test");
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[routeState] = {
+(globalThis as typeof globalThis & Record<symbol, unknown>)[routeState] = {
   authz: null as { user: { orgId: string; id: string } } | null,
 };
 
@@ -30,9 +30,12 @@ const hooks = registerHooks({
     // instead of the worktree copy under test. Pin the engine graph to the
     // worktree so the refusal under test is the one this change adds.
     if (specifier.startsWith("@openbooks/engine/")) {
-      return nextResolve(new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href, context);
+      return nextResolve(
+        new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href,
+        context,
+      );
     }
-    if (specifier === "../../../../lib/authz" && context.parentURL?.includes("payments/links")) {
+    if (specifier === "@/lib/authz" && context.parentURL?.includes("payments/links")) {
       return { url: "mock:payment-links-expiry-authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -51,9 +54,8 @@ const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sealJson } = await import("@openbooks/engine/platform/secrets");
 const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 
 async function fixture() {
   return withBypassContext(async () => {
@@ -79,9 +81,11 @@ async function fixture() {
     await db.execute(sql`
     update documents set status = 'approved', updated_at = now()
      where id = ${invoiceId} and org_id = ${org.orgId}`);
-    await withOrgContext(org.orgId, () => postDocument(invoiceId, {
-      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-    }));
+    await withOrgContext(org.orgId, () =>
+      postDocument(invoiceId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      }),
+    );
     await db.execute(sql`
     insert into psp_provider_configs
       (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
@@ -97,31 +101,47 @@ async function fixture() {
 
 async function post(orgId: string, body: unknown): Promise<{ status: number; json: unknown }> {
   try {
-    const response = await withOrgContext(orgId, () => POST(
-      new Request("http://localhost/api/payments/links", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-    ));
+    const response = await withOrgContext(orgId, () =>
+      POST(
+        new Request("http://localhost/api/payments/links", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      ),
+    );
     return { status: response.status, json: await response.json().catch(() => null) };
   } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } };
+    return {
+      status: 500,
+      json: { thrown: error instanceof Error ? error.message : String(error) },
+    };
   }
 }
 
 async function linkCount(orgId: string): Promise<number> {
-  const rows = await db.execute<{ count: number }>(sql`
-    select count(*)::int as count from payment_links where org_id = ${orgId}`, "objects");
+  const rows = await db.execute<{ count: number }>(
+    sql`
+    select count(*)::int as count from payment_links where org_id = ${orgId}`,
+    "objects",
+  );
   return rows[0]!.count;
 }
 
-test.after(() => hooks.deregister())
+test.after(() => hooks.deregister());
 test("POST refuses an impossible expiresOn without writing a link", async () => {
   const { org, invoiceId } = await fixture();
   try {
-    const result = await post(org.orgId, { provider: "stripe", documentId: invoiceId, expiresOn: "2024-02-30" });
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`);
+    const result = await post(org.orgId, {
+      provider: "stripe",
+      documentId: invoiceId,
+      expiresOn: "2024-02-30",
+    });
+    assert.equal(
+      result.status,
+      422,
+      `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
     assert.equal(await linkCount(org.orgId), 0);
   } finally {
     const state = (globalThis as typeof globalThis & Record<symbol, unknown>)[routeState] as {
@@ -135,7 +155,11 @@ test("POST refuses an impossible expiresOn without writing a link", async () => 
 test("POST still creates a link with a real expiresOn", async () => {
   const { org, invoiceId } = await fixture();
   try {
-    const result = await post(org.orgId, { provider: "stripe", documentId: invoiceId, expiresOn: "2024-02-29" });
+    const result = await post(org.orgId, {
+      provider: "stripe",
+      documentId: invoiceId,
+      expiresOn: "2024-02-29",
+    });
     assert.equal(result.status, 201, JSON.stringify(result.json));
     assert.equal(await linkCount(org.orgId), 1);
   } finally {

@@ -1,73 +1,45 @@
-import { paymentRunScopeSql } from '@/lib/payment-run-access'
-import { NextResponse } from 'next/server'
-import { defineRoute } from '@/lib/api/route'
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { db } from '@openbooks/engine/platform/db'
+import { NextResponse } from "next/server";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
+import {
+  listOutboundPaymentRuns,
+  paymentRunBillsInScope,
+} from "@openbooks/engine/payments/payment-queries";
 import { createPaymentRun as createPaymentRunInEngine } from "@openbooks/engine/payments/run-creation";
-import { guardPermission } from '../../../../lib/authz'
-import { isoDate, parseJsonBody, uuidId } from '../../../../lib/api/json'
-import { paymentErrorResponse } from '../lib'
+import { guardPermission, type Authz } from "@/lib/authz";
+import { isoDate, uuidId } from "@/lib/api/json";
+import { paymentErrorResponse } from "../lib";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const createRunBody = z.object({
   paymentBankProfileId: z
-    .string({ error: 'paymentBankProfileId is required' })
-    .refine((v) => uuidId.safeParse(v).success, 'paymentBankProfileId is required'),
+    .string({ error: "paymentBankProfileId is required" })
+    .refine((v) => uuidId.safeParse(v).success, "paymentBankProfileId is required"),
   billDocumentIds: z
-    .array(uuidId, { error: 'select at least one bill' })
-    .min(1, 'select at least one bill'),
+    .array(uuidId, { error: "select at least one bill" })
+    .min(1, "select at least one bill"),
   scheduledFor: isoDate().nullable().optional(),
   selectionCriteria: z.record(z.string(), z.json()).optional(),
-})
+});
 
-async function listPaymentRuns() {
-  const gate = await guardPermission('ap.pay')
-  if (gate instanceof NextResponse) return gate
-
-  const runs = (await db.execute<Record<string, unknown>>(sql`
-    select r.id, r.run_number, r.status, r.method, r.scheduled_for, r.exported_at, r.created_at,
-           a.number as bank_number, a.name as bank_name,
-           count(i.id) filter (where i.status <> 'cancelled') as instruction_count,
-           coalesce(sum(i.amount) filter (where i.status <> 'cancelled'), 0) as total
-      from payment_runs r
-      left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
-      left join payment_instructions i on i.payment_run_id = r.id and i.org_id = r.org_id
-     where ${paymentRunScopeSql(gate)} and r.direction = 'outbound'
-     group by r.id, a.number, a.name
-     order by r.created_at desc
-     limit 200
-  `, 'objects'))
-  return NextResponse.json({ runs })
+async function listPaymentRuns(gate: Authz) {
+  const runs = await listOutboundPaymentRuns(gate.user.orgId, gate.allowedSubsidiaryIds);
+  return NextResponse.json({ runs });
 }
 
 /** Create a payment run from selected posted, open vendor bills. */
-async function createPaymentRun(req: Request) {
-  const gate = await guardPermission('ap.pay')
-  if (gate instanceof NextResponse) return gate
-  const user = gate.user
-
-  const parsed = await parseJsonBody(req, createRunBody)
-  if (!parsed.ok) return parsed.response
-  const body = parsed.data
+async function createPaymentRun(gate: Authz, body: z.infer<typeof createRunBody>) {
+  const user = gate.user;
 
   // Every selected bill is a record being read into the run: restricted
   // callers may only select bills inside their subsidiary scope. Bills that
   // do not resolve in this org fail closed identically.
   if (gate.allowedSubsidiaryIds) {
-    const selected = [...new Set(body.billDocumentIds)]
-    const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
-      select id, subsidiary_id as "subsidiaryId" from documents
-       where org_id = ${user.orgId} and id = any(${`{${selected.join(',')}}`}::uuid[])
-    `, 'objects'))
-    const inScope = rows.filter(
-      (row) => row.subsidiaryId !== null && gate.allowedSubsidiaryIds!.has(row.subsidiaryId),
-    )
-    if (inScope.length !== selected.length) {
-      return notFound("record")
+    const selected = [...new Set(body.billDocumentIds)];
+    if (!(await paymentRunBillsInScope(user.orgId, selected, gate.allowedSubsidiaryIds))) {
+      return notFound("record");
     }
   }
 
@@ -80,19 +52,24 @@ async function createPaymentRun(req: Request) {
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       scheduledFor: body.scheduledFor ?? null,
       selectionCriteria: body.selectionCriteria ?? {},
-    })
-    return NextResponse.json(run)
+    });
+    return NextResponse.json(run);
   } catch (e) {
-    return paymentErrorResponse(e)
+    return paymentErrorResponse(e);
   }
 }
 
-const runCollectionFeature = { none: 'Payment runs are governed by the AP payment permission and their record-specific scope checks.' } as const
+const runCollectionFeature = {
+  none: "Payment runs are governed by the AP payment permission and their record-specific scope checks.",
+} as const;
 export const GET = defineRoute({
-  authorize: () => guardPermission('ap.pay'), feature: runCollectionFeature,
-  handler: async () => listPaymentRuns(),
-})
+  authorize: () => guardPermission("ap.pay"),
+  feature: runCollectionFeature,
+  handler: async ({ authz }) => listPaymentRuns(authz),
+});
 export const POST = defineRoute({
-  authorize: () => guardPermission('ap.pay'), feature: runCollectionFeature,
-  handler: async ({ request }) => createPaymentRun(request),
-})
+  authorize: () => guardPermission("ap.pay"),
+  feature: runCollectionFeature,
+  body: createRunBody,
+  handler: async ({ authz, body }) => createPaymentRun(authz, body),
+});

@@ -1,76 +1,76 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { generatePaymentFileArtifact, recordPaymentFileDownload } from '@openbooks/engine/payments/operations'
-import { assertRunPayeesInScope } from '@openbooks/engine/payments/run-readiness'
-import { fileContentDisposition } from '@/lib/export'
-import { refuseMaskedStorageKind } from '../../../../../../lib/file-storage'
-import { isUuid } from '../../../../../../lib/list-params'
-import { guardPaymentRunPermission, paymentErrorResponse } from '../../../lib'
+import {
+  latestApprovedPaymentFile,
+  paymentFileStatus,
+} from "@openbooks/engine/payments/payment-queries";
+import {
+  generatePaymentFileArtifact,
+  recordPaymentFileDownload,
+} from "@openbooks/engine/payments/operations";
+import { assertRunPayeesInScope } from "@openbooks/engine/payments/run-readiness";
+import { fileContentDisposition } from "@/lib/export";
+import { refuseMaskedStorageKind } from "@/lib/file-storage";
+import { isUuid } from "@/lib/list-params";
+import type { Authz } from "@/lib/authz";
+import { guardPaymentRunPermission, paymentErrorResponse } from "../../../lib";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Download the latest approved immutable file artifact. Generation is a
  * separate POST so profiles that require file approval cannot leak bytes.
  */
-async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const gate = await guardPaymentRunPermission(id)
-  if (gate instanceof NextResponse) return gate
-
+async function legacyGET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+  gate: Authz,
+) {
+  const { id } = await params;
+  if (!isUuid(id)) return notFound("record");
   try {
     // Serving stored bytes re-discloses current bank coordinates: refuse a
     // caller outside any current payee's scope exactly like generation.
-    await assertRunPayeesInScope(gate.user.orgId, id, gate.allowedSubsidiaryIds)
-    const result = (await db.execute<{ id: string; filename: string; content_type: string; storage_kind: string; bytes: Buffer | null }>(sql`
-      select pf.id, pf.filename, pf.content_type, fv.storage_kind, fb.bytes
-        from payment_files pf
-        join files fi on fi.id = pf.file_id and fi.org_id = ${gate.user.orgId}
-        join file_versions fv on fv.id = pf.file_version_id and fv.file_id = fi.id
-        left join file_blobs fb on fb.version_id = fv.id
-       where pf.payment_run_id = ${id} and pf.org_id = ${gate.user.orgId}
-         and pf.status in ('approved', 'delivered')
-       order by pf.sequence_number desc limit 1
-    `, 'objects'))
-    const file = result[0]
-    if (!file) return NextResponse.json({ error: 'no approved payment file is available' }, { status: 409 })
+    await assertRunPayeesInScope(gate.user.orgId, id, gate.allowedSubsidiaryIds);
+    const file = await latestApprovedPaymentFile(gate.user.orgId, id);
+    if (!file)
+      return NextResponse.json({ error: "no approved payment file is available" }, { status: 409 });
     // Masked-clone tombstone: the artifact row exists but its bytes were
     // never copied — refuse by name (403 via paymentErrorResponse), never as
     // a misleading 409 'no approved file'.
-    refuseMaskedStorageKind(file.storage_kind)
-    if (!file.bytes) return NextResponse.json({ error: 'no approved payment file is available' }, { status: 409 })
-    await recordPaymentFileDownload(file.id, gate.user.orgId, gate.user.id)
+    refuseMaskedStorageKind(file.storage_kind);
+    if (!file.bytes)
+      return NextResponse.json({ error: "no approved payment file is available" }, { status: 409 });
+    await recordPaymentFileDownload(file.id, gate.user.orgId, gate.user.id);
     return new NextResponse(new Uint8Array(file.bytes), {
       headers: {
-        'Content-Type': file.content_type,
-        'Content-Disposition': fileContentDisposition('attachment', file.filename),
-        'Cache-Control': 'no-store',
+        "Content-Type": file.content_type,
+        "Content-Disposition": fileContentDisposition("attachment", file.filename),
+        "Cache-Control": "no-store",
       },
-    })
+    });
   } catch (e) {
-    return paymentErrorResponse(e)
+    return paymentErrorResponse(e);
   }
 }
 
 /** Generate and persist a new file artifact for an approved run. */
-async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const gate = await guardPaymentRunPermission(id)
-  if (gate instanceof NextResponse) return gate
+async function legacyPOST(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+  gate: Authz,
+) {
+  const { id } = await params;
+  if (!isUuid(id)) return notFound("record");
   try {
     const file = await generatePaymentFileArtifact(id, gate.user.orgId, gate.user.id, {
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-    })
-    const state = (await db.execute<{ status: string }>(sql`select status from payment_files where id = ${file.id}`, 'objects'))
-    return NextResponse.json({ id: file.id, filename: file.filename, status: state[0]?.status })
+    });
+    const status = await paymentFileStatus(gate.user.orgId, file.id);
+    return NextResponse.json({ id: file.id, filename: file.filename, status });
   } catch (e) {
-    return paymentErrorResponse(e)
+    return paymentErrorResponse(e);
   }
 }
 
@@ -79,14 +79,20 @@ export const GET = defineRoute({
     const runId = String((params as { id?: string } | undefined)?.id ?? "");
     return guardPaymentRunPermission(runId);
   },
-  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
-  handler: async ({ request, params }) => legacyGET(request, { params: Promise.resolve(params as never) }),
+  feature: {
+    none: "Payment-run authorization checks the run direction, capability, and subsidiary scope.",
+  },
+  handler: async ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params as never) }, authz),
 });
 export const POST = defineRoute({
   authorize: async ({ params }) => {
     const runId = String((params as { id?: string } | undefined)?.id ?? "");
     return guardPaymentRunPermission(runId);
   },
-  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
-  handler: async ({ request, params }) => legacyPOST(request, { params: Promise.resolve(params as never) }),
+  feature: {
+    none: "Payment-run authorization checks the run direction, capability, and subsidiary scope.",
+  },
+  handler: async ({ request, params, authz }) =>
+    legacyPOST(request, { params: Promise.resolve(params as never) }, authz),
 });

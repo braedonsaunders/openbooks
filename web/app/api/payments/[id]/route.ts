@@ -1,24 +1,27 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { defineRoute } from '@/lib/api/route'
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { db } from '@openbooks/engine/platform/db'
-import { loadPaymentDocument } from "@openbooks/engine/payments/payment-queries";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
+import {
+  loadPaymentDocument,
+  paymentDocumentScope,
+} from "@openbooks/engine/payments/payment-queries";
 import { PaymentRevisionConflictError } from "@openbooks/engine/payments-core/payment-errors";
 import { updateDraftPayment } from "@openbooks/engine/payments/payment-documents";
 import { type PaymentKind } from "@openbooks/engine/payments/payment-contracts";
-import { deleteDocument, DeleteError } from '@openbooks/engine/ledger/document-delete'
-import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
-import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
-import { isUuid } from '../../../../lib/list-params'
-import { DocumentEditError, requireDocumentEditRevision } from "@openbooks/engine/records/document-edit-policy";
-import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
-import { paymentErrorResponse, assertAllocationTargetsInScope, paymentPermission } from '../lib'
+import { deleteDocument, DeleteError } from "@openbooks/engine/ledger/document-delete";
+import { assertAnyPermission, ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { can, getAuthz, guardSubsidiaryScope, type Authz } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import {
+  DocumentEditError,
+  requireDocumentEditRevision,
+} from "@openbooks/engine/records/document-edit-policy";
+import { exactMoney, isoDate, nullableUuidId, uuidId } from "@/lib/api/json";
+import { paymentErrorResponse, assertAllocationTargetsInScope, paymentPermission } from "../lib";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /** One open-item application on a draft payment (engine AllocationInput). */
 const allocationInput = z.object({
@@ -31,11 +34,11 @@ const allocationInput = z.object({
   targetBaseAmount: exactMoney().optional(),
   /** Target-currency units for one source-currency unit. Required cross-currency. */
   settlementRate: z.string().min(1),
-  settlementRateSource: z.enum(['same_currency', 'provider', 'manual', 'contractual', 'imported']),
+  settlementRateSource: z.enum(["same_currency", "provider", "manual", "contractual", "imported"]),
   /** Bank advice, contract, provider observation, or import evidence reference. */
   settlementRateReference: z.string(),
   settlementFxRateId: nullableUuidId.optional(),
-})
+});
 
 const paymentPatchBody = z.object({
   /** Optimistic concurrency token from documents.revision_seq (exact form). */
@@ -50,10 +53,18 @@ const paymentPatchBody = z.object({
   // Explicit settlement rate into the owning entity's functional currency:
   // the same strict rate/source/reason/pair/date object the invoice/bill
   // editor carries. Null clears recorded evidence; absent preserves it.
-  explicitFx: z.object({
-    rate: z.string(), source: z.string(), reason: z.string(),
-    fromCurrency: z.string(), toCurrency: z.string(), rateDate: isoDate(),
-  }).strict().nullable().optional(),
+  explicitFx: z
+    .object({
+      rate: z.string(),
+      source: z.string(),
+      reason: z.string(),
+      fromCurrency: z.string(),
+      toCurrency: z.string(),
+      rateDate: isoDate(),
+    })
+    .strict()
+    .nullable()
+    .optional(),
   allocations: z.array(allocationInput).optional(),
   // Cash received beyond the applications (customer receipts only).
   onAccountAmount: exactMoney().optional(),
@@ -61,21 +72,29 @@ const paymentPatchBody = z.object({
   // validates endpoints, signs, and capacity at save and at posting; the
   // route only shapes them. Without this field a receipt can never apply a
   // credit memo through the product API.
-  creditAllocations: z.array(z.object({
-    fromLineId: uuidId,
-    toLineId: uuidId,
-    amount: exactMoney(),
-    sourceDocumentId: uuidId,
-  })).optional(),
+  creditAllocations: z
+    .array(
+      z.object({
+        fromLineId: uuidId,
+        toLineId: uuidId,
+        amount: exactMoney(),
+        sourceDocumentId: uuidId,
+      }),
+    )
+    .optional(),
   // Stored-value tenders (customer receipts only): fresh gift-card codes or
   // already-resolved echoes (account id — the code is shown once at issue).
   // The engine resolves codes and re-verifies every tender at save and
   // posting; the route only shapes them.
-  storedValueTenders: z.array(z.union([
-    z.object({ code: z.string().min(1).max(64), amount: exactMoney() }),
-    z.object({ accountId: uuidId, amount: exactMoney() }),
-  ])).optional(),
-})
+  storedValueTenders: z
+    .array(
+      z.union([
+        z.object({ code: z.string().min(1).max(64), amount: exactMoney() }),
+        z.object({ accountId: uuidId, amount: exactMoney() }),
+      ]),
+    )
+    .optional(),
+});
 
 /** Resolve the document's kind, then gate on ap.pay / ar.pay accordingly.
  *  Permission before existence (canonical shape 4 in
@@ -87,45 +106,36 @@ async function gateForDocument(
   id: string,
   orgId: string | null,
 ): Promise<{ authz: Authz; kind: PaymentKind } | NextResponse> {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  if (!isUuid(id)) return notFound("record")
+  const authz = await getAuthz();
+  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!isUuid(id)) return notFound("record");
   try {
-    assertAnyPermission((permission) => can(authz, permission), ['ap.pay', 'ar.pay'])
+    assertAnyPermission((permission) => can(authz, permission), ["ap.pay", "ar.pay"]);
   } catch (error) {
     if (error instanceof ScopeNotFoundError) {
-      return notFound("record")
+      return notFound("record");
     }
-    throw error
+    throw error;
   }
-  const r = (await db.execute<{ kind: PaymentKind; subsidiaryId: string | null }>(sql`
-    select kind, subsidiary_id as "subsidiaryId" from documents
-     where id = ${id} and kind in ('vendor_payment', 'customer_payment')
-       and org_id = ${orgId ?? authz.user.orgId}
-  `, 'objects'))
-  if (!r[0]) return notFound("record")
-  const denied = guardSubsidiaryScope(authz, r[0].subsidiaryId)
-  if (denied) return denied
-  const kind = r[0].kind
+  const payment = await paymentDocumentScope(orgId ?? authz.user.orgId, id);
+  if (!payment) return notFound("record");
+  const denied = guardSubsidiaryScope(authz, payment.subsidiaryId);
+  if (denied) return denied;
+  const kind = payment.kind;
   // Wrong-direction callers learn nothing either: the kind-specific
   // permission fails closed with the same uniform 404, so an ap.pay-only
   // caller cannot distinguish an existing customer receipt from a missing id.
-  const perm = paymentPermission(kind)
+  const perm = paymentPermission(kind);
   if (!can(authz, perm)) {
-    return notFound("record")
+    return notFound("record");
   }
-  return { authz, kind }
+  return { authz, kind };
 }
 
-async function getPayment(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const gate = await gateForDocument(id, null)
-  if (gate instanceof NextResponse) return gate
-  const payment = await loadPaymentDocument(
-    id, gate.kind, gate.authz.user.orgId, gate.authz.allowedSubsidiaryIds,
-  )
-  if (!payment) return notFound("record")
-  return NextResponse.json(payment)
+async function getPayment(id: string, authz: Authz, kind: PaymentKind) {
+  const payment = await loadPaymentDocument(id, kind, authz.user.orgId, authz.allowedSubsidiaryIds);
+  if (!payment) return notFound("record");
+  return NextResponse.json(payment);
 }
 
 /** Autosave for draft payments: header fields + open-item allocations.
@@ -134,32 +144,22 @@ async function getPayment(_req: Request, { params }: { params: Promise<{ id: str
  * `updated_at` token it loaded, and the engine writes only when that token
  * still matches the row locked FOR UPDATE inside the write transaction — so
  * two concurrent saves can never silently overwrite one another. */
-async function patchPayment(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const gate = await gateForDocument(id, null)
-  if (gate instanceof NextResponse) return gate
-
-  const parsed = await parseJsonBody(req, paymentPatchBody, { status: 422 })
-  if (!parsed.ok) return parsed.response
-  const body = parsed.data
+async function patchPayment(id: string, authz: Authz, body: z.infer<typeof paymentPatchBody>) {
   // Mandatory optimistic-concurrency evidence — same contract as /api/documents/[id].
-  let expectedRevision: string
+  let expectedRevision: string;
   try {
-    expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
+    expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt);
   } catch (e) {
     if (e instanceof DocumentEditError) {
-      return apiErrorResponse(e)
+      return apiErrorResponse(e);
     }
-    throw e
+    throw e;
   }
-  const allocationTargetsDenied = await assertAllocationTargetsInScope(
-    gate.authz,
-    [
-      ...(body.allocations ?? []).map((a) => a.openLineId),
-      ...(body.creditAllocations ?? []).flatMap((a) => [a.fromLineId, a.toLineId]),
-    ],
-  )
-  if (allocationTargetsDenied) return allocationTargetsDenied
+  const allocationTargetsDenied = await assertAllocationTargetsInScope(authz, [
+    ...(body.allocations ?? []).map((a) => a.openLineId),
+    ...(body.creditAllocations ?? []).flatMap((a) => [a.fromLineId, a.toLineId]),
+  ]);
+  if (allocationTargetsDenied) return allocationTargetsDenied;
 
   try {
     const payment = await updateDraftPayment(
@@ -178,8 +178,8 @@ async function patchPayment(req: Request, { params }: { params: Promise<{ id: st
         creditAllocations: body.creditAllocations,
         storedValueTenders: body.storedValueTenders,
       },
-      gate.authz.user.id,
-      gate.authz.user.orgId,
+      authz.user.id,
+      authz.user.orgId,
       // The OCC token is route-level evidence; it never enters the engine's
       // financial patch shape. The engine also rechecks this scope under the
       // locked payment row; the earlier lookup is only a permission gate.
@@ -187,53 +187,94 @@ async function patchPayment(req: Request, { params }: { params: Promise<{ id: st
         expectedRevision,
         // Forward the authoritative scope as-is: explicit null is the
         // unrestricted grant, and omitting it would fail closed above.
-        allowedSubsidiaryIds: gate.authz.allowedSubsidiaryIds,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       },
-    )
-    return NextResponse.json(payment)
+    );
+    return NextResponse.json(payment);
   } catch (e) {
     // The engine fence fired under the row lock: someone saved first.
     if (e instanceof PaymentRevisionConflictError) {
-      return apiErrorResponse(e, { safeStatus: 409 })
+      return apiErrorResponse(e, { safeStatus: 409 });
     }
-    if (e instanceof ScopeNotFoundError) return notFound("record")
-    return paymentErrorResponse(e)
+    if (e instanceof ScopeNotFoundError) return notFound("record");
+    return paymentErrorResponse(e);
   }
 }
 
 /** Delete a payment/receipt (guarded: open period, no live applications). */
-async function deletePayment(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const gate = await gateForDocument(id, null)
-  if (gate instanceof NextResponse) return gate
+async function deletePayment(id: string, authz: Authz) {
   try {
-    await deleteDocument(id, gate.authz.user.id, gate.authz.user.orgId, {
-      allowedSubsidiaryIds: gate.authz.allowedSubsidiaryIds,
-    })
-    return NextResponse.json({ ok: true })
+    await deleteDocument(id, authz.user.id, authz.user.orgId, {
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    });
+    return NextResponse.json({ ok: true });
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return notFound("record")
-    if (e instanceof DeleteError) return apiErrorResponse(e)
-    throw e
+    if (e instanceof ScopeNotFoundError) return notFound("record");
+    if (e instanceof DeleteError) return apiErrorResponse(e);
+    throw e;
   }
 }
 
-const paymentParams = z.object({ id: z.string() })
+const paymentParams = z.object({ id: z.string() });
+const authorizedKinds = new WeakMap<Authz, PaymentKind>();
 const authorizePaymentRecord = async ({ params }: { request: Request; params: unknown }) => {
-  const id = (params as { id?: string } | undefined)?.id ?? ''
-  const gate = await gateForDocument(id, null)
-  return gate instanceof NextResponse ? gate : gate.authz
-}
-const paymentFeature = { none: 'The handler resolves AP or AR payment authority from the organization-scoped payment record.' } as const
+  const id = (params as { id?: string } | undefined)?.id ?? "";
+  const gate = await gateForDocument(id, null);
+  if (gate instanceof NextResponse) return gate;
+  authorizedKinds.set(gate.authz, gate.kind);
+  return gate.authz;
+};
+const paymentFeature = {
+  none: "The handler resolves AP or AR payment authority from the organization-scoped payment record.",
+} as const;
 export const GET = defineRoute({
-  authorize: authorizePaymentRecord, feature: paymentFeature, params: paymentParams,
-  handler: async ({ request, params }) => getPayment(request, { params: Promise.resolve(params) }),
-})
+  authorize: authorizePaymentRecord,
+  feature: paymentFeature,
+  params: paymentParams,
+  handler: async ({ params, authz }) => {
+    const kind = authorizedKinds.get(authz);
+    if (!kind) return notFound("record");
+    return getPayment((params as { id: string }).id, authz, kind);
+  },
+});
 export const PATCH = defineRoute({
-  authorize: authorizePaymentRecord, feature: paymentFeature, params: paymentParams,
-  handler: async ({ request, params }) => patchPayment(request, { params: Promise.resolve(params) }),
-})
+  authorize: authorizePaymentRecord,
+  feature: paymentFeature,
+  params: paymentParams,
+  body: paymentPatchBody,
+  opaque: {
+    expectedUpdatedAt: "Payment updates are partial; the handler requires the concurrency token.",
+    partyId:
+      "Payment updates are partial; each supplied field is validated before the service call.",
+    bankAccountId:
+      "Payment updates are partial; each supplied field is validated before the service call.",
+    documentDate:
+      "Payment updates are partial; each supplied field is validated before the service call.",
+    referenceNumber:
+      "Payment updates are partial; each supplied field is validated before the service call.",
+    memo: "Payment updates are partial; each supplied field is validated before the service call.",
+    withholdingAuthorisation:
+      "Payment updates are partial; each supplied field is validated before the service call.",
+    withholdingAuthorisedAmount:
+      "Payment updates are partial; each supplied field is validated before the service call.",
+    explicitFx:
+      "Payment updates are partial; each supplied field is validated before the service call.",
+    allocations:
+      "Payment updates are partial; each supplied field is validated before the service call.",
+    onAccountAmount:
+      "Payment updates are partial; each supplied field is validated before the service call.",
+    creditAllocations:
+      "Payment updates are partial; each supplied field is validated before the service call.",
+    storedValueTenders:
+      "Payment updates are partial; each supplied field is validated before the service call.",
+  },
+  invalidBodyStatus: 422,
+  handler: async ({ params, authz, body }) =>
+    patchPayment((params as { id: string }).id, authz, body),
+});
 export const DELETE = defineRoute({
-  authorize: authorizePaymentRecord, feature: paymentFeature, params: paymentParams,
-  handler: async ({ request, params }) => deletePayment(request, { params: Promise.resolve(params) }),
-})
+  authorize: authorizePaymentRecord,
+  feature: paymentFeature,
+  params: paymentParams,
+  handler: async ({ params, authz }) => deletePayment((params as { id: string }).id, authz),
+});

@@ -1,19 +1,18 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
-import { z } from 'zod'
-import { resolveUncertainDelivery } from '@openbooks/engine/payments/operations'
-import { isUuid } from '@/lib/list-params'
-import { parseJsonBody } from '@/lib/api/json'
-import { guardPaymentRunPermission, paymentErrorResponse } from '@/app/api/payments/lib'
+import { z } from "zod";
+import { resolveUncertainDelivery } from "@openbooks/engine/payments/operations";
+import { isUuid } from "@/lib/list-params";
+import type { Authz } from "@/lib/authz";
+import { guardPaymentRunPermission, paymentErrorResponse } from "@/app/api/payments/lib";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const resolveDeliveryBody = z.object({
-  outcome: z.enum(['delivered', 'approved'], { error: 'outcome must be delivered or approved' }),
-  reason: z.string().trim().min(1, 'a resolution reason is required'),
-})
+  outcome: z.enum(["delivered", "approved"], { error: "outcome must be delivered or approved" }),
+  reason: z.string().trim().min(1, "a resolution reason is required"),
+});
 
 /**
  * Resolve a delivery_uncertain file: confirm the bank has the bytes
@@ -22,25 +21,25 @@ const resolveDeliveryBody = z.object({
  * nothing arrived). Approval-grade permission; the decision and its reason
  * are audited on the file's event trail by the engine.
  */
-async function legacyPOST(req: Request, { params }: { params: Promise<{ id: string; fileId: string }> }) {
-  const { id, fileId } = await params
-  if (!isUuid(id) || !isUuid(fileId)) return notFound("record")
-  const gate = await guardPaymentRunPermission(id, 'approve')
-  if (gate instanceof NextResponse) return gate
-  const parsed = await parseJsonBody(req, resolveDeliveryBody)
-  if (!parsed.ok) return parsed.response
+async function legacyPOST(
+  { params }: { params: Promise<{ id: string; fileId: string }> },
+  gate: Authz,
+  body: z.infer<typeof resolveDeliveryBody>,
+) {
+  const { id, fileId } = await params;
+  if (!isUuid(id) || !isUuid(fileId)) return notFound("record");
   try {
     await resolveUncertainDelivery({
       fileId,
       orgId: gate.user.orgId,
       userId: gate.user.id,
-      outcome: parsed.data.outcome,
-      reason: parsed.data.reason,
+      outcome: body.outcome,
+      reason: body.reason,
       runId: id,
-    })
-    return NextResponse.json({ ok: true })
+    });
+    return NextResponse.json({ ok: true });
   } catch (e) {
-    return paymentErrorResponse(e)
+    return paymentErrorResponse(e);
   }
 }
 
@@ -49,6 +48,10 @@ export const POST = defineRoute({
     const runId = String((params as { id?: string } | undefined)?.id ?? "");
     return guardPaymentRunPermission(runId, "approve");
   },
-  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
-  handler: async ({ request, params }) => legacyPOST(request, { params: Promise.resolve(params as never) }),
+  feature: {
+    none: "Payment-run authorization checks the run direction, capability, and subsidiary scope.",
+  },
+  body: resolveDeliveryBody,
+  handler: async ({ params, authz, body }) =>
+    legacyPOST({ params: Promise.resolve(params as never) }, authz, body),
 });

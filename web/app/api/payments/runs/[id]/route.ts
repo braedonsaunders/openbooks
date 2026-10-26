@@ -1,92 +1,43 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { z } from "zod";
+import { loadPaymentRunDetail } from "@openbooks/engine/payments/payment-queries";
 import { cancelPaymentRun } from "@openbooks/engine/payments/run-cancellation";
-import { paymentRunReadiness } from "@openbooks/engine/payments/run-readiness";
-import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
-import { isUuid } from '../../../../../lib/list-params'
-import { parseJsonBody } from '../../../../../lib/api/json'
-import { guardPaymentRunPermission, paymentErrorResponse } from '../../lib'
+import { isUuid } from "@/lib/list-params";
+import type { Authz } from "@/lib/authz";
+import { guardPaymentRunPermission, paymentErrorResponse } from "../../lib";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const cancelBody = z.object({
-  reason: z.string().trim().min(1, 'a cancellation reason is required'),
-})
+  reason: z.string().trim().min(1, "a cancellation reason is required"),
+});
 
-async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const gate = await guardPaymentRunPermission(id)
-  if (gate instanceof NextResponse) return gate
-
-  const run = (await db.execute<Record<string, unknown>>(sql`
-    select r.*, a.number as bank_number, a.name as bank_name
-      from payment_runs r
-      left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
-     where r.id = ${id} and r.org_id = ${gate.user.orgId}
-  `, 'objects'))
-  if (!run[0]) return notFound("record")
-
-  // One transaction for the whole response: every payee owner is locked for
-  // share first, so a concurrent rehome blocks until these reads commit and
-  // instructions and readiness verdicts cannot disagree. Payees outside the
-  // caller's scope read as missing from both lists, like party bank reads.
-  return withOrgTransaction(gate.user.orgId, async () => {
-    const payees = await db.execute<{ id: string }>(sql`
-      select p.id from parties p
-       where p.org_id = ${gate.user.orgId} and p.id in (
-         select i.payee_party_id from payment_instructions i
-          where i.payment_run_id = ${id} and i.org_id = ${gate.user.orgId}
-       )
-       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-       for share of p
-    `, 'objects')
-    const visiblePayeeIds = gate.allowedSubsidiaryIds === null
-      ? null
-      : new Set(payees.map((payee) => payee.id))
-    // Sequential: both statements share this transaction's single connection,
-    // and the share locks above already serialize against rehome writers.
-    const instructions = await db.execute<Record<string, unknown>>(sql`
-      select i.id, i.amount, i.currency, i.status, p.display_name as payee,
-             d.id as payment_document_id, d.document_number, d.status as payment_status
-        from payment_instructions i
-        join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
-        left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
-       where i.payment_run_id = ${id} and i.org_id = ${gate.user.orgId}
-         ${visiblePayeeIds === null ? sql`` : sql`and i.payee_party_id = any (${`{${[...visiblePayeeIds].join(",")}}`}::uuid[])`}
-       order by p.display_name
-    `, 'objects')
-    const readiness = await paymentRunReadiness(id, gate.user.orgId, visiblePayeeIds)
-
-    return NextResponse.json({
-      run: run[0],
-      instructions,
-      eftConfigured: readiness.eft.ok,
-      eftMissing: readiness.eft.ok ? [] : readiness.eft.missing,
-      blockers: readiness.blockers,
-    })
-  })
+async function legacyGET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+  gate: Authz,
+) {
+  const { id } = await params;
+  if (!isUuid(id)) return notFound("record");
+  const detail = await loadPaymentRunDetail(gate.user.orgId, id, gate.allowedSubsidiaryIds);
+  return detail ? NextResponse.json(detail) : notFound("record");
 }
 
 /** Cancel a draft/exported run: deletes its draft payments, keeps the audit row. */
-async function legacyDELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const gate = await guardPaymentRunPermission(id)
-  if (gate instanceof NextResponse) return gate
-  const parsed = await parseJsonBody(req, cancelBody)
-  if (!parsed.ok) return parsed.response
-
+async function legacyDELETE(
+  { params }: { params: Promise<{ id: string }> },
+  gate: Authz,
+  body: z.infer<typeof cancelBody>,
+) {
+  const { id } = await params;
+  if (!isUuid(id)) return notFound("record");
   try {
-    await cancelPaymentRun(id, gate.user.orgId, gate.user.id, parsed.data.reason)
-    return NextResponse.json({ ok: true })
+    await cancelPaymentRun(id, gate.user.orgId, gate.user.id, body.reason);
+    return NextResponse.json({ ok: true });
   } catch (e) {
-    return paymentErrorResponse(e)
+    return paymentErrorResponse(e);
   }
 }
 
@@ -95,14 +46,21 @@ export const GET = defineRoute({
     const runId = String((params as { id?: string } | undefined)?.id ?? "");
     return guardPaymentRunPermission(runId);
   },
-  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
-  handler: async ({ request, params }) => legacyGET(request, { params: Promise.resolve(params as never) }),
+  feature: {
+    none: "Payment-run authorization checks the run direction, capability, and subsidiary scope.",
+  },
+  handler: async ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params as never) }, authz),
 });
 export const DELETE = defineRoute({
   authorize: async ({ params }) => {
     const runId = String((params as { id?: string } | undefined)?.id ?? "");
     return guardPaymentRunPermission(runId);
   },
-  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
-  handler: async ({ request, params }) => legacyDELETE(request, { params: Promise.resolve(params as never) }),
+  feature: {
+    none: "Payment-run authorization checks the run direction, capability, and subsidiary scope.",
+  },
+  body: cancelBody,
+  handler: async ({ params, authz, body }) =>
+    legacyDELETE({ params: Promise.resolve(params as never) }, authz, body),
 });
