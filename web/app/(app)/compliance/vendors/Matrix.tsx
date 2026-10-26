@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Badge } from '@openbooks/ui'
-import { RegisteredListTable } from '../../../../components/registered-list-table'
+import { PagedTable } from '../../../../components/paged-table'
 import { stateTone, type ComplianceMatrix } from '../../../../lib/compliance'
 import { decimalCmp } from '../../../../lib/statement-format'
 
@@ -42,7 +42,9 @@ export function VendorComplianceMatrix({
   }
 }) {
   return (
-    <RegisteredListTable
+    <PagedTable
+      prepared
+      searchable
       source="compliance_vendors"
       rows={rows}
       rowKey={(row) => row.partyId}
