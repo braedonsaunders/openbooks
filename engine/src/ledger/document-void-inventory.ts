@@ -570,7 +570,7 @@ export async function reverseOrderShipment(
         });
       }
     }
-    // Approved lines are storage-immutable (migration 0034): restoring the
+    // Approved lines are storage-immutable: restoring the
     // fulfilled counter is operational reconciliation state, not a
     // commercial edit. Reopen each source header while its counters restore
     // (the established order-cycle pattern), then restore approved status.
