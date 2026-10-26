@@ -31,7 +31,7 @@ export async function listAdminFlows(orgId: string): Promise<Record<string, unkn
 
 export async function listAdminFlowsForRestrictedScope(orgId: string): Promise<{
   flows: Record<string, unknown>[];
-  runs: AdminFlowRunSummary[];
+  runs: { rows: AdminFlowRunSummary[] };
 }> {
   const [flows, runs] = await Promise.all([
     db.execute<Record<string, unknown>>(

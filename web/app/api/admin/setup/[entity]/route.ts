@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
-import { guardPermission, type Authz } from "@/lib/authz";
+import { guardPermission, type Authz } from "../../../../../lib/authz";
 import { isUuid } from "@/lib/list-params";
 import {
   createSetupRecord,

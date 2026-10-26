@@ -18,7 +18,7 @@ import {
   subsidiaryScopeAllows,
   subsidiariesInScope,
   type Authz,
-} from "@/lib/authz";
+} from "../../../../../lib/authz";
 import { isUuid } from "@/lib/list-params";
 import {
   LaborCostingFeatureDisabledError,

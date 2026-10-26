@@ -33,10 +33,12 @@ function sqlText(query: unknown): string {
   if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
-      if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      if (typeof chunk === "string") return "";
+      if (!chunk || typeof chunk !== "object") return "";
+      if (Array.isArray((chunk as { queryChunks?: unknown }).queryChunks)) return sqlText(chunk);
+      const value = (chunk as { value?: unknown }).value;
+      if (typeof value === "string") return value;
+      if (Array.isArray(value)) return value.filter((part) => typeof part === "string").join("");
       return "";
     })
     .join("");
