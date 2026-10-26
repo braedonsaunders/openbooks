@@ -1,29 +1,23 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import {
-  db,
-  orgContext,
-  withOrgTransaction,
-} from "@openbooks/engine/platform/db";
+import { db, orgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { runTriggerScripts } from "@openbooks/engine/scripting/scripting";
-import { postDocument } from "@openbooks/engine/ledger/posting-document";
-import { PostingError } from "@openbooks/engine/journal/contracts";
-import { ControlAccountsIncompleteError } from "@openbooks/engine/records/control-accounts";
-import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
 import {
-  deleteDocument,
-  DeleteError,
-} from "@openbooks/engine/ledger/document-delete";
-import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
-import { FixedAssetEquipmentLinkConflict, refuseFixedAssetRehomeWithEquipment } from "@openbooks/engine/organization/scope";
+  FixedAssetEquipmentLinkConflict,
+  refuseFixedAssetRehomeWithEquipment,
+} from "@openbooks/engine/organization/scope";
 import {
-  resolveDefaultValue,
-  type FieldValueMap,
-  type FormSection,
-} from "@openbooks/forms-core";
+  createDocumentFromInput,
+  deleteDocumentInScope,
+  DocumentEditingRefusal,
+  editDocument,
+  type DocumentEditingContext,
+  type DocumentEditingResult,
+  type DocumentWriteInput,
+} from "@openbooks/engine/ledger/document-editing";
+import { resolveDefaultValue, type FieldValueMap, type FormSection } from "@openbooks/forms-core";
 import type { SessionUser } from "../auth";
 import { ensurePartyRoleRow } from "../party-roles";
-import { ApprovalRoutingError } from "../approval-routing-error";
 import { nextDocumentNumber } from "../bills.ts";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import {
@@ -55,21 +49,11 @@ import {
   withComputedFormulas,
   type RecordStatus,
 } from "../record-schema";
-import { applyDocumentEdit, createDocumentDraft, isDocKindEnabled, precomputeDocumentTotalsForCreate } from "../documents.ts";
-import { controlDeps, loadDocument, loadDocumentEditCurrent } from "@openbooks/engine/ledger/document-service";
 import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
-import { DocumentEditError } from "@openbooks/engine/records/document-edit-policy";
-import { type DocumentEditCurrent, type DocumentEditInput } from "@openbooks/engine/ledger/document-input";
 import { isFeatureEnabled } from "../features";
 import { isDocumentRevisionToken } from "@openbooks/engine/records/revision";
 import { auditSetupChange } from "../setup/audit";
 import { validateEntityBody } from "./validate";
-import {
-  findDocumentByExternalRef,
-  isExternalRefCheckViolation,
-  isExternalRefConflict,
-  resolveExternalRefPair,
-} from "../external-ref";
 import { ITEM_EQUIPMENT_KINDS } from "./registry-data";
 import {
   ITEM_REVENUE_RECOGNITION_COLUMNS,
@@ -92,11 +76,7 @@ export interface WriteResult {
   body: unknown;
 }
 
-const err = (
-  status: number,
-  error: string,
-  extra?: Record<string, unknown>,
-): WriteResult => ({
+const err = (status: number, error: string, extra?: Record<string, unknown>): WriteResult => ({
   status,
   body: { error, ...(extra ?? {}) },
 });
@@ -131,10 +111,7 @@ async function applyCustomRecord(
   user: SessionUser,
   typeKey: string,
   id: string,
-  sections: Extract<
-    ReturnType<typeof lintRecordFields>,
-    { success: true }
-  >["sections"],
+  sections: Extract<ReturnType<typeof lintRecordFields>, { success: true }>["sections"],
   body: { data?: unknown; status?: string; expectedUpdatedAt?: unknown },
   allowedScope?: ReadonlySet<string> | null,
 ): Promise<WriteResult> {
@@ -145,12 +122,15 @@ async function applyCustomRecord(
   // caller's transaction (updateRecord/createRecord wrap in
   // withOrgTransaction), so a concurrent editor serializes here and the
   // loser compares against the winner's committed revision.
-  const locked = (await db.execute(sql`
+  const locked = (
+    await db.execute(
+      sql`
     select *, ${documentRevisionCounterSql(sql`revision_seq`)} as revision from custom_records
      where id = ${id} and org_id = ${user.orgId} and type_key = ${typeKey}
-     for update`, "objects"))[0] as
-    | (Record<string, unknown> & { revision?: unknown })
-    | undefined;
+     for update`,
+      "objects",
+    )
+  )[0] as (Record<string, unknown> & { revision?: unknown }) | undefined;
   if (!locked) return err(404, "not found");
   const record = {
     id: String(locked.id),
@@ -161,23 +141,22 @@ async function applyCustomRecord(
   const allowed = await mutationSubsidiaryScope(user, allowedScope);
   if (!recordVisibleInSubsidiaryFence(sections, record.data, allowed)) return err(404, "not found");
   if (body.data !== undefined && locked.revision !== body.expectedUpdatedAt) {
-    return err(409, "This record changed after you opened it; reload the record and reapply your changes");
+    return err(
+      409,
+      "This record changed after you opened it; reload the record and reapply your changes",
+    );
   }
 
   let nextStatus: RecordStatus | undefined;
   if (body.status !== undefined) {
-    if (body.status !== "active" && body.status !== "inactive")
-      return err(422, "unknown status");
+    if (body.status !== "active" && body.status !== "inactive") return err(422, "unknown status");
     const allowed: Record<RecordStatus, RecordStatus[]> = {
       draft: ["active"],
       active: ["inactive"],
       inactive: ["active"],
     };
     if (!allowed[record.status].includes(body.status)) {
-      return err(
-        422,
-        `Cannot move a ${record.status} record to ${body.status}`,
-      );
+      return err(422, `Cannot move a ${record.status} record to ${body.status}`);
     }
     nextStatus = body.status;
   }
@@ -187,11 +166,7 @@ async function applyCustomRecord(
     if (record.status === "inactive" && nextStatus !== "active") {
       return err(422, "Reactivate this record before editing it");
     }
-    if (
-      typeof body.data !== "object" ||
-      body.data === null ||
-      Array.isArray(body.data)
-    ) {
+    if (typeof body.data !== "object" || body.data === null || Array.isArray(body.data)) {
       return err(422, "data must be an object");
     }
     // Unknown ids are refused BEFORE stripping (same contract as the
@@ -215,7 +190,8 @@ async function applyCustomRecord(
   if (nextData !== undefined) nextData = persistedData;
   const effectiveData = strippedData;
   const effectiveStatus = nextStatus ?? record.status;
-  if (!recordVisibleInSubsidiaryFence(sections, persistedData, allowed)) return err(404, "not found");
+  if (!recordVisibleInSubsidiaryFence(sections, persistedData, allowed))
+    return err(404, "not found");
   const stage = effectiveStatus === "active" ? "submit" : "draft";
   const errors = validateRecordData(sections, effectiveData, stage);
   if (errors.length > 0) {
@@ -241,11 +217,7 @@ async function applyCustomRecord(
     for (const key of Object.keys(body.data as FieldValueMap)) {
       if (nextData[key] !== undefined) supplied[key] = nextData[key];
     }
-    const unownedRecordRefs = await findUnownedRecordReferences(
-      user.orgId,
-      sections,
-      supplied,
-    );
+    const unownedRecordRefs = await findUnownedRecordReferences(user.orgId, sections, supplied);
     if (unownedRecordRefs.length > 0) {
       const field = unownedRecordRefs[0]!;
       return err(404, `${field} not found in this organization`, {
@@ -282,18 +254,16 @@ async function applyCustomRecord(
     record.id,
   );
   const blocked = outcomes.find((o) => o.status !== "ok");
-  if (blocked)
-    return err(
-      422,
-      blocked.abortReason ?? `script "${blocked.name}" ${blocked.status}`,
-    );
+  if (blocked) return err(422, blocked.abortReason ?? `script "${blocked.name}" ${blocked.status}`);
 
   const searchText =
     nextData !== undefined
       ? await buildSearchText(user.orgId, sections, nextData, record.record_number)
       : undefined;
 
-  const written = (await db.execute<Record<string, unknown>>(sql`
+  const written = (
+    await db.execute<Record<string, unknown>>(
+      sql`
     update custom_records set
       data = coalesce(${nextData !== undefined ? JSON.stringify(nextData) : null}::jsonb, data),
       search_text = coalesce(${searchText ?? null}, search_text),
@@ -301,7 +271,10 @@ async function applyCustomRecord(
       updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
     where id = ${id} and org_id = ${user.orgId}
     returning *
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!written) return err(404, "not found");
   // The lock, mutation, and immutable audit event share the caller's
   // transaction (same as the interactive route), so the before-image is the
@@ -375,12 +348,15 @@ async function createCustomRecordAttempt(
   );
   const searchText = await buildSearchText(user.orgId, sections, data, recordNumber);
 
-  const r = await db.execute<{ id: string }>(sql`
+  const r = await db.execute<{ id: string }>(
+    sql`
     insert into custom_records (org_id, type_id, type_key, record_number, data, search_text, created_by, updated_by)
     values (${user.orgId}, ${type.id}, ${typeKey}, ${recordNumber}, ${JSON.stringify(data)}::jsonb,
             ${searchText}, ${user.id}, ${user.id})
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   const id = r[0]!.id;
 
   // If the caller sent data/status, apply it on top of the seeded draft. The
@@ -388,9 +364,14 @@ async function createCustomRecordAttempt(
   // writer could have touched it: seed the revision evidence from the
   // persisted row instead of demanding a token the creator never read.
   if (body.data !== undefined || body.status !== undefined) {
-    const fresh = (await db.execute<{ revision: string }>(sql`
+    const fresh = (
+      await db.execute<{ revision: string }>(
+        sql`
       select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from custom_records
-       where id = ${id} and org_id = ${user.orgId}`, "objects"))[0];
+       where id = ${id} and org_id = ${user.orgId}`,
+        "objects",
+      )
+    )[0];
     const applied = await applyCustomRecord(
       user,
       typeKey,
@@ -433,12 +414,8 @@ async function createCustomRecord(
       await db.execute(sql.raw(`release savepoint ${savepoint}`));
       return result;
     } catch (error) {
-      await db
-        .execute(sql.raw(`rollback to savepoint ${savepoint}`))
-        .catch(() => undefined);
-      await db
-        .execute(sql.raw(`release savepoint ${savepoint}`))
-        .catch(() => undefined);
+      await db.execute(sql.raw(`rollback to savepoint ${savepoint}`)).catch(() => undefined);
+      await db.execute(sql.raw(`release savepoint ${savepoint}`)).catch(() => undefined);
       throw error;
     }
   };
@@ -470,10 +447,15 @@ async function deleteCustomRecord(
   // Lock first (same as the interactive route): the before-image below is
   // the row this delete serialized against, and a concurrent writer cannot
   // slip a mutation between the draft check and the erase.
-  const locked = (await db.execute<Record<string, unknown>>(sql`
+  const locked = (
+    await db.execute<Record<string, unknown>>(
+      sql`
     select * from custom_records
      where id = ${id} and org_id = ${user.orgId} and type_key = ${typeKey}
-     for update`, "objects"))[0];
+     for update`,
+      "objects",
+    )
+  )[0];
   if (!locked) return err(404, "not found");
   const allowed = await mutationSubsidiaryScope(user, allowedScope);
   if (!recordVisibleInSubsidiaryFence(scope.sections, locked.data as FieldValueMap, allowed)) {
@@ -482,9 +464,14 @@ async function deleteCustomRecord(
   if (locked.status !== "draft") {
     return err(422, "Only draft records can be deleted — deactivate instead");
   }
-  const deleted = (await db.execute<Record<string, unknown>>(sql`
+  const deleted = (
+    await db.execute<Record<string, unknown>>(
+      sql`
     delete from custom_records where id = ${id} and org_id = ${user.orgId}
-    returning *`, "objects"))[0];
+    returning *`,
+      "objects",
+    )
+  )[0];
   if (!deleted) return err(404, "not found");
   await auditSetupChange({
     orgId: user.orgId,
@@ -503,12 +490,7 @@ async function refuseDisabledItemRevenueRecognition(
   columns: Record<string, unknown>,
 ): Promise<WriteResult | null> {
   if (table !== "items") return null;
-  if (
-    !Object.keys(columns).some((col) =>
-      ITEM_REVENUE_RECOGNITION_COLUMNS.has(col),
-    )
-  )
-    return null;
+  if (!Object.keys(columns).some((col) => ITEM_REVENUE_RECOGNITION_COLUMNS.has(col))) return null;
   if (await isFeatureEnabled(orgId, "revenueRecognition")) return null;
   return err(404, "not found");
 }
@@ -519,8 +501,7 @@ async function refuseDisabledItemTimeTracking(
   columns: Record<string, unknown>,
 ): Promise<WriteResult | null> {
   if (table !== "items") return null;
-  if (!Object.keys(columns).some((col) => ITEM_TIME_TRACKING_COLUMNS.has(col)))
-    return null;
+  if (!Object.keys(columns).some((col) => ITEM_TIME_TRACKING_COLUMNS.has(col))) return null;
   if (await isFeatureEnabled(orgId, "timeTracking")) return null;
   return err(404, "not found");
 }
@@ -595,9 +576,14 @@ async function findUnownedEntityReferences(
   for (const [refTable, entries] of wanted) {
     const ids = [...new Set(entries.map((e) => e.value))];
     const owned = new Set(
-      (await db.execute<{ id: string }>(sql`
+      (
+        await db.execute<{ id: string }>(
+          sql`
           select id from ${sql.raw(`"${refTable}"`)}
-           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects")).map((r) => r.id),
+           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`,
+          "objects",
+        )
+      ).map((r) => r.id),
     );
     for (const entry of entries) {
       if (!owned.has(entry.value)) unowned.push(entry.column);
@@ -662,9 +648,14 @@ async function findUnownedRecordReferences(
   for (const [refTable, entries] of wanted) {
     const ids = [...new Set(entries.map((e) => e.value))];
     const owned = new Set(
-      (await db.execute<{ id: string }>(sql`
+      (
+        await db.execute<{ id: string }>(
+          sql`
           select id from ${sql.raw(`"${refTable}"`)}
-           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects")).map((r) => r.id),
+           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`,
+          "objects",
+        )
+      ).map((r) => r.id),
     );
     for (const entry of entries) {
       if (!owned.has(entry.value)) unowned.push(entry.field);
@@ -673,11 +664,7 @@ async function findUnownedRecordReferences(
   return unowned;
 }
 
-const ENTITY_SUBSIDIARY_TABLES = new Set([
-  "parties",
-  "projects",
-  "fixed_assets",
-]);
+const ENTITY_SUBSIDIARY_TABLES = new Set(["parties", "projects", "fixed_assets"]);
 
 /** An entity row as the viewer may read it: restricted custom values are removed. */
 async function viewerEntityRow(
@@ -716,9 +703,7 @@ function subsidiaryInMutationScope(
 ): boolean {
   return (
     allowed === null ||
-    (subsidiaryId !== null &&
-      subsidiaryId !== undefined &&
-      allowed.has(String(subsidiaryId)))
+    (subsidiaryId !== null && subsidiaryId !== undefined && allowed.has(String(subsidiaryId)))
   );
 }
 
@@ -755,15 +740,14 @@ async function refuseDisabledItemInventoryKind(
   const nextKind = String(columns.kind);
   if (INVENTORY_ITEM_KINDS.has(nextKind)) return err(404, "not found");
   if (!itemId) return null;
-  const existing = await db.execute<{ kind: string }>(sql`
+  const existing = await db.execute<{ kind: string }>(
+    sql`
     select kind from items where id = ${itemId} and org_id = ${orgId} limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   const storedKind = existing[0]?.kind;
-  if (
-    storedKind &&
-    INVENTORY_ITEM_KINDS.has(storedKind) &&
-    nextKind !== storedKind
-  ) {
+  if (storedKind && INVENTORY_ITEM_KINDS.has(storedKind) && nextKind !== storedKind) {
     return err(404, "not found");
   }
   return null;
@@ -780,15 +764,14 @@ async function refuseDisabledItemEquipmentKind(
   const nextKind = String(columns.kind);
   if (ITEM_EQUIPMENT_KINDS.has(nextKind)) return err(404, "not found");
   if (!itemId) return null;
-  const existing = await db.execute<{ kind: string }>(sql`
+  const existing = await db.execute<{ kind: string }>(
+    sql`
     select kind from items where id = ${itemId} and org_id = ${orgId} limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   const storedKind = existing[0]?.kind;
-  if (
-    storedKind &&
-    ITEM_EQUIPMENT_KINDS.has(storedKind) &&
-    nextKind !== storedKind
-  ) {
+  if (storedKind && ITEM_EQUIPMENT_KINDS.has(storedKind) && nextKind !== storedKind) {
     return err(404, "not found");
   }
   return null;
@@ -829,11 +812,13 @@ async function createEntity(
   const deniedCustom = undefinedCustomField(activeDefs, v.customValues);
   if (deniedCustom) return deniedCustom;
   const hiddenCustom = hiddenCustomFieldRefusal(activeDefs, viewer, v.customValues, null);
-  if (hiddenCustom) return err(403, hiddenCustom.message, { fieldErrors: { [hiddenCustom.key]: hiddenCustom.message } });
+  if (hiddenCustom)
+    return err(403, hiddenCustom.message, {
+      fieldErrors: { [hiddenCustom.key]: hiddenCustom.message },
+    });
   const defs = visibleCustomFieldDefs(activeDefs, viewer);
   const cv = validateCustomValues(defs, v.customValues);
-  if (!cv.ok)
-    return err(422, Object.values(cv.errors)[0]!, { fieldErrors: cv.errors });
+  if (!cv.ok) return err(422, Object.values(cv.errors)[0]!, { fieldErrors: cv.errors });
   // Reference custom values are uuid-SHAPED at this point but nothing proves
   // the referenced row belongs to the caller: refuse foreign or dangling ids
   // with a tenant-opaque 404 instead of persisting a cross-tenant pointer.
@@ -846,7 +831,8 @@ async function createEntity(
   }
   // Native reference columns: shape is proven by coerceScalar, ownership here.
   const unownedCreateColumns = await findUnownedEntityReferences(user.orgId, table, v.columns);
-  if (unownedCreateColumns.length > 0) return unownedEntityReferenceResult(unownedCreateColumns[0]!);
+  if (unownedCreateColumns.length > 0)
+    return unownedEntityReferenceResult(unownedCreateColumns[0]!);
   const subsidiaryGate = await guardEntitySubsidiaryMutation(
     user,
     table,
@@ -880,9 +866,12 @@ async function createEntity(
     sql`, `,
   );
   try {
-    const r = await db.execute(sql`
+    const r = await db.execute(
+      sql`
       insert into ${sql.raw(`"${table}"`)} (${colSql}) values (${valSql})
-      returning *`, "objects");
+      returning *`,
+      "objects",
+    );
     const created = r[0] as Record<string, unknown> | undefined;
     if (!created) return err(422, `could not create record: no row returned`);
     // A role-kind parties kind names its role row — the generic
@@ -925,16 +914,17 @@ async function updateEntity(
     : sql``;
   // The full locked row is the authoritative before-image for the audit
   // event below (same contract as the interactive entity routes).
-  const existing = await db.execute(sql`
+  const existing = await db.execute(
+    sql`
     select *${subsidiaryColumn}
       from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId}
-      for update`, "objects");
+      for update`,
+    "objects",
+  );
   if (!existing[0]) return err(404, "not found");
 
   const allowed = await mutationSubsidiaryScope(user, allowedScope);
-  const existingSubsidiary = (
-    existing[0] as { subsidiaryId?: string | null }
-  ).subsidiaryId;
+  const existingSubsidiary = (existing[0] as { subsidiaryId?: string | null }).subsidiaryId;
   // Subsidiary scope only constrains tables carrying the dimension (parties,
   // projects, fixed assets) — the same contract the platform list/get paths
   // enforce by checking for a subsidiary_id field first. Dimension-less rows
@@ -946,22 +936,14 @@ async function updateEntity(
   )
     return err(404, "not found");
 
-  const gated = await refuseDisabledItemFeatureColumns(
-    user.orgId,
-    table,
-    body,
-    id,
-  );
+  const gated = await refuseDisabledItemFeatureColumns(user.orgId, table, body, id);
   if (gated) return gated;
   const v = validateEntityBody(fields, body, { stage: "update" });
   if (!v.ok) return err(422, v.errors[0]!.message, { fieldErrors: v.errors });
 
   if (
     v.columns.subsidiary_id !== undefined &&
-    !subsidiaryInMutationScope(
-      allowed,
-      v.columns.subsidiary_id as string | null,
-    )
+    !subsidiaryInMutationScope(allowed, v.columns.subsidiary_id as string | null)
   ) {
     return err(403, "forbidden subsidiary");
   }
@@ -983,7 +965,8 @@ async function updateEntity(
   // coerceScalar, ownership here. v.columns carries supplied keys only, so
   // omitted references are never re-checked.
   const unownedUpdateColumns = await findUnownedEntityReferences(user.orgId, table, v.columns);
-  if (unownedUpdateColumns.length > 0) return unownedEntityReferenceResult(unownedUpdateColumns[0]!);
+  if (unownedUpdateColumns.length > 0)
+    return unownedEntityReferenceResult(unownedUpdateColumns[0]!);
 
   const sets: ReturnType<typeof sql>[] = [];
   for (const [col, value] of Object.entries(v.columns)) {
@@ -997,7 +980,10 @@ async function updateEntity(
     // A hidden field the caller echoes unchanged passes; any change to it is refused,
     // and its stored value is never overwritten by this update.
     const hiddenCustom = hiddenCustomFieldRefusal(activeDefs, viewer, v.customValues, storedCustom);
-    if (hiddenCustom) return err(403, hiddenCustom.message, { fieldErrors: { [hiddenCustom.key]: hiddenCustom.message } });
+    if (hiddenCustom)
+      return err(403, hiddenCustom.message, {
+        fieldErrors: { [hiddenCustom.key]: hiddenCustom.message },
+      });
     const defs = visibleCustomFieldDefs(activeDefs, viewer);
     // PATCH is partial: validate the effective custom bag so omitted required
     // fields are satisfied by their already-persisted values. The supplied
@@ -1007,8 +993,7 @@ async function updateEntity(
       ...((existing[0].custom as Record<string, unknown>) ?? {}),
       ...v.customValues,
     });
-    if (!cv.ok)
-      return err(422, Object.values(cv.errors)[0]!, { fieldErrors: cv.errors });
+    if (!cv.ok) return err(422, Object.values(cv.errors)[0]!, { fieldErrors: cv.errors });
     // Ownership applies to newly supplied references only: the merged bag may
     // carry legacy values written before this fence existed, and an unrelated
     // edit must not lock the row on those.
@@ -1033,10 +1018,13 @@ async function updateEntity(
   sets.push(sql`updated_at = now()`, sql`updated_by = ${user.id}`);
 
   try {
-    const r = await db.execute(sql`
+    const r = await db.execute(
+      sql`
       update ${sql.raw(`"${table}"`)} set ${sql.join(sets, sql`, `)}
       where id = ${id} and org_id = ${user.orgId}
-      returning *`, "objects");
+      returning *`,
+      "objects",
+    );
     const written = r[0] as Record<string, unknown> | undefined;
     if (!written) return err(404, "not found");
     // Adopting a role-kind kind on update backs the claim the same
@@ -1073,10 +1061,13 @@ async function deleteEntity(
   const subsidiaryColumn = ENTITY_SUBSIDIARY_TABLES.has(table)
     ? sql`, subsidiary_id as "subsidiaryId"`
     : sql``;
-  const owned = await db.execute(sql`
+  const owned = await db.execute(
+    sql`
     select *${subsidiaryColumn}
       from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId}
-      for update`, "objects");
+      for update`,
+    "objects",
+  );
   if (!owned[0]) return err(404, "not found");
   const allowed = await mutationSubsidiaryScope(user, allowedScope);
   // Subsidiary scope only constrains tables carrying the dimension (parties,
@@ -1084,17 +1075,19 @@ async function deleteEntity(
   // Dimension-less rows (items) are org-wide catalog.
   if (
     ENTITY_SUBSIDIARY_TABLES.has(table) &&
-    !subsidiaryInMutationScope(
-      allowed,
-      (owned[0] as { subsidiaryId?: string | null }).subsidiaryId,
-    )
+    !subsidiaryInMutationScope(allowed, (owned[0] as { subsidiaryId?: string | null }).subsidiaryId)
   ) {
     return err(404, "not found");
   }
   try {
-    const erased = (await db.execute(sql`
+    const erased = (
+      await db.execute(
+        sql`
       delete from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId}
-      returning *`, "objects"))[0] as Record<string, unknown> | undefined;
+      returning *`,
+        "objects",
+      )
+    )[0] as Record<string, unknown> | undefined;
     if (!erased) return err(404, "not found");
     await auditSetupChange({
       orgId: user.orgId,
@@ -1108,24 +1101,16 @@ async function deleteEntity(
   } catch (e) {
     // FK references (a party on posted documents, an item on lines, …) block
     // the delete — surface it as a conflict rather than a 500.
-    return err(
-      409,
-      `cannot delete — referenced by other records: ${(e as Error).message}`,
-    );
+    return err(409, `cannot delete — referenced by other records: ${(e as Error).message}`);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Documents (bills, invoices): NEVER a raw insert. Mint a draft through the
-// document service, then hand the header + lines to the shared
-// `applyDocumentEdit` service (the exact write path the drawer uses — custom-
-// field validation, GL re-materialization, transaction audit, on_update flows)
-// and optionally submit/post through the posting kernel.
+// Documents (bills, invoices): the engine document editing commands mint the
+// draft, write the body through the shared edit core the drawer uses, refuse
+// duplicate external references and take the requested lifecycle step. This
+// adapter maps their results and refusals to the response.
 // ---------------------------------------------------------------------------
-
-/** The REST body for a document write: the shared edit input plus a lifecycle
- *  action (draft is the default; submit routes for approval; post writes GL). */
-type DocApiBody = DocumentEditInput & { action?: "draft" | "submit" | "post" };
 
 export interface RecordWriteOptions {
   source?: "api" | "mcp" | "assistant";
@@ -1147,341 +1132,50 @@ function fallbackCustomFieldViewer(user: SessionUser): CustomFieldViewer {
   };
 }
 
-/** Run the submit/post lifecycle after an edit. Only for not-yet-posted docs
- *  (a posted doc already carries GL). Returns an error result or null on ok. */
-async function runDocumentLifecycle(
+function documentEditingContext(
   user: SessionUser,
-  id: string,
-  kind: string,
-  action: DocApiBody["action"],
-  source: "api" | "mcp" | "assistant",
-  customFieldViewer: CustomFieldViewer,
-): Promise<WriteResult | null> {
-  if (action !== "submit" && action !== "post") return null;
+  options: RecordWriteOptions,
+): DocumentEditingContext {
+  return {
+    orgId: user.orgId,
+    userId: user.id,
+    source: options.source ?? "api",
+    allowedSubsidiaryIds: options.allowedSubsidiaryIds,
+    customFieldViewer: options.customFieldViewer ?? fallbackCustomFieldViewer(user),
+  };
+}
+
+/** The saved document, or the lifecycle outcome alongside it. */
+function documentWriteResult(result: DocumentEditingResult, savedStatus: 200 | 201): WriteResult {
+  switch (result.outcome) {
+    case "saved":
+      return { status: savedStatus, body: result.document };
+    case "pending_approval":
+      return {
+        status: 202,
+        body: {
+          ok: true,
+          pendingApproval: true,
+          requestId: result.requestId,
+          document: result.document,
+        },
+      };
+    case "lifecycle_failed":
+      return {
+        status: result.refused ? 422 : 500,
+        body: { error: result.message, document: result.document },
+      };
+  }
+}
+
+async function documentWrite(run: () => Promise<WriteResult>): Promise<WriteResult> {
   try {
-    const status = await db.execute<{ status: string }>(sql`
-      select status from documents
-       where id = ${id} and org_id = ${user.orgId}
-    `, "objects");
-    if (status[0]?.status === "draft") {
-      // The submission runs in this transaction so a refused routing throws
-      // inside it: without the wrapper the submission's own transaction
-      // would commit its before_submit script effects before the 422.
-      const submission = await withOrgTransaction(user.orgId, async () => {
-        const inner = await submitAndReleaseIfUngated(kind, id, user.id);
-        if (inner.flowError) {
-          throw new ApprovalRoutingError(inner.flowError);
-        }
-        return inner;
-      });
-      if (submission.gated) {
-        return {
-          status: 202,
-          body: {
-            ok: true,
-            pendingApproval: true,
-            requestId: submission.runId,
-            document: await loadDocument(id, user.orgId, customFieldViewer),
-          },
-        };
-      }
+    return await run();
+  } catch (error) {
+    if (error instanceof DocumentEditingRefusal) {
+      return err(error.status, error.message, error.details);
     }
-    if (action === "post") {
-      const deps = await controlDeps(user.orgId);
-      await postDocument(id, deps, {
-        audit: { actorId: user.id, source },
-      });
-    }
-    return null;
-  } catch (e) {
-    // Posting refusals (kernel rules or unconfigured org control accounts)
-    // and refused approval routings (already rolled back) are request-state
-    // failures, not server defects.
-    const status =
-      e instanceof PostingError ||
-      e instanceof ControlAccountsIncompleteError ||
-      e instanceof ApprovalRoutingError
-        ? 422
-        : 500;
-    return {
-      status,
-      body: {
-        error: (e as Error).message,
-        document: await loadDocument(id, user.orgId, customFieldViewer),
-      },
-    };
-  }
-}
-
-function docEditError(e: unknown): WriteResult | null {
-  if (e instanceof DocumentEditError) {
-    return err(
-      e.status,
-      e.message,
-      e.fieldErrors ? { fieldErrors: e.fieldErrors } : undefined,
-    );
-  }
-  return null;
-}
-
-/**
- * Refuse an external (source, ref) already claimed by another document.
- * The pre-write lookup below answers the common case with the winner's id;
- * this maps the lost-race storage errors (unique 23505, pair/blank check
- * 23514) the same way so a concurrent claim never surfaces as a 500.
- */
-async function externalRefWriteRefusal(
-  user: SessionUser,
-  body: DocApiBody,
-  error: unknown,
-  excludeId?: string,
-): Promise<WriteResult | null> {
-  if (!isExternalRefConflict(error) && !isExternalRefCheckViolation(error)) return null;
-  if (isExternalRefCheckViolation(error)) {
-    return err(
-      422,
-      "externalRef and externalSource travel together and neither may be blank — send both or omit both",
-    );
-  }
-  const pair = resolveExternalRefPair({ externalRef: body.externalRef, externalSource: body.externalSource });
-  if (pair.action !== "set") {
-    return err(
-      422,
-      "externalRef and externalSource travel together and neither may be blank — send both or omit both",
-    );
-  }
-  const winner = await findDocumentByExternalRef(db, user.orgId, pair.ref, pair.source, excludeId);
-  return err(
-    409,
-    winner
-      ? `externalRef "${pair.ref}" from "${pair.source}" already exists on document ${winner.documentNumber} — send a new reference or update the existing document`
-      : `externalRef "${pair.ref}" from "${pair.source}" already exists — send a new reference or update the existing document`,
-    winner ? { existingId: winner.id } : undefined,
-  );
-}
-
-/**
- * Documents speak camelCase while the schema advertises snake_case columns.
- * Accept the advertised spelling for the external pair rather than silently
- * dropping it — a dropped dedupe key would mint the duplicate the index
- * exists to refuse.
- */
-function normalizeExternalRefBody(body: DocApiBody): DocApiBody {
-  const snake = body as DocApiBody & { external_ref?: unknown; external_source?: unknown };
-  let out = body;
-  if (out.externalRef === undefined && snake.external_ref !== undefined) {
-    out = { ...out, externalRef: snake.external_ref as string | null };
-  }
-  if (out.externalSource === undefined && snake.external_source !== undefined) {
-    out = { ...out, externalSource: snake.external_source as string | null };
-  }
-  return out;
-}
-
-/** Early duplicate check, so the common replay names the winner without writing. */
-async function externalRefDuplicate(
-  user: SessionUser,
-  body: DocApiBody,
-  excludeId?: string,
-): Promise<WriteResult | null> {
-  const pair = resolveExternalRefPair({ externalRef: body.externalRef, externalSource: body.externalSource });
-  if (pair.action === "refuse") return err(422, pair.message);
-  if (pair.action !== "set") return null;
-  const winner = await findDocumentByExternalRef(db, user.orgId, pair.ref, pair.source, excludeId);
-  if (!winner) return null;
-  return err(
-    409,
-    `externalRef "${pair.ref}" from "${pair.source}" already exists on document ${winner.documentNumber} — send a new reference or update the existing document`,
-    { existingId: winner.id },
-  );
-}
-
-async function createDocument(
-  user: SessionUser,
-  docKind: string,
-  body: DocApiBody,
-  source: "api" | "mcp" | "assistant",
-  allowedScope?: ReadonlySet<string> | null,
-  customFieldViewer: CustomFieldViewer = fallbackCustomFieldViewer(user),
-): Promise<WriteResult> {
-  body = normalizeExternalRefBody(body);
-  if (!(await isDocKindEnabled(user.orgId, docKind)))
-    return err(404, "not found");
-  if (body.subsidiaryId !== undefined && body.subsidiaryId !== null) {
-    const allowed = await mutationSubsidiaryScope(user, allowedScope);
-    if (!subsidiaryInMutationScope(allowed, body.subsidiaryId))
-      return err(403, "forbidden subsidiary");
-  }
-  if (
-    body.currency !== undefined &&
-    !(await isFeatureEnabled(user.orgId, "multiCurrency"))
-  ) {
-    return err(404, "not found");
-  }
-  const duplicate = await externalRefDuplicate(user, body);
-  if (duplicate) return duplicate;
-  let precomputedTotals;
-  try {
-    precomputedTotals = await precomputeDocumentTotalsForCreate(
-      user.orgId,
-      docKind,
-      body,
-    );
-  } catch (e) {
-    const mapped = docEditError(e);
-    if (mapped) return mapped;
-    const refusal = await externalRefWriteRefusal(user, body, e);
-    if (refusal) return refusal;
-    throw e;
-  }
-  const draft = await createDocumentDraft(user.orgId, user.id, docKind, {
-    // The actor's own scope: a restricted writer drafts in their subsidiary
-    // (or refuses by name) instead of the org root. An explicit body
-    // subsidiary was already validated above; pass it through for the
-    // factory's own check.
-    allowedSubsidiaryIds: await mutationSubsidiaryScope(user, allowedScope),
-    subsidiaryId: body.subsidiaryId ?? undefined,
-    source,
-  });
-  const draftId = draft!.id;
-  // on_create flows run before createDocumentDraft returns and may mutate the
-  // row. Initialize from the settled persisted snapshot, including its exact
-  // revision, instead of treating creation as a tokenless update.
-  const current = await loadDocumentEditCurrent(draftId, user.orgId);
-  if (!current)
-    throw new Error(
-      `draft document ${draftId} disappeared during initialization`,
-    );
-  try {
-    await applyDocumentEdit(
-      draftId,
-      current,
-      { ...body, expectedUpdatedAt: current.updatedAt },
-      { orgId: user.orgId, userId: user.id, source, precomputedTotals, customFieldViewer },
-    );
-  } catch (e) {
-    const mapped = docEditError(e);
-    if (mapped) return mapped;
-    const refusal = await externalRefWriteRefusal(user, body, e);
-    if (refusal) return refusal;
-    throw e;
-  }
-  const life = await runDocumentLifecycle(
-    user,
-    draftId,
-    docKind,
-    body.action,
-    source,
-    customFieldViewer,
-  );
-  if (life) return life;
-  return { status: 201, body: await loadDocument(draftId, user.orgId, customFieldViewer) };
-}
-
-async function updateDocument(
-  user: SessionUser,
-  docKind: string,
-  id: string,
-  body: DocApiBody,
-  source: "api" | "mcp" | "assistant",
-  allowedScope?: ReadonlySet<string> | null,
-  customFieldViewer: CustomFieldViewer = fallbackCustomFieldViewer(user),
-): Promise<WriteResult> {
-  body = normalizeExternalRefBody(body);
-  const owned = await db.execute<DocumentEditCurrent>(sql`
-    select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
-           document_date as "documentDate",
-           custom,
-           subsidiary_id as "subsidiaryId",
-           ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
-      from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}
-      for update`, "objects");
-  const row = owned[0];
-  if (!row) return err(404, "not found");
-  const allowed = await mutationSubsidiaryScope(user, allowedScope);
-  if (
-    !subsidiaryInMutationScope(
-      allowed,
-      (row as DocumentEditCurrent & { subsidiaryId?: string | null })
-        .subsidiaryId,
-    )
-  ) {
-    return err(404, "not found");
-  }
-  if (
-    body.subsidiaryId !== undefined &&
-    body.subsidiaryId !== null &&
-    !subsidiaryInMutationScope(allowed, body.subsidiaryId)
-  ) {
-    return err(403, "forbidden subsidiary");
-  }
-  if (!(await isDocKindEnabled(user.orgId, docKind)))
-    return err(404, "not found");
-  if (
-    body.currency !== undefined &&
-    !(await isFeatureEnabled(user.orgId, "multiCurrency"))
-  ) {
-    return err(404, "not found");
-  }
-  if (row.status === "voided")
-    return err(422, "a voided document cannot be edited");
-  const duplicate = await externalRefDuplicate(user, body, id);
-  if (duplicate) return duplicate;
-  try {
-    await applyDocumentEdit(id, row, body, {
-      orgId: user.orgId,
-      userId: user.id,
-      source,
-      customFieldViewer,
-    });
-  } catch (e) {
-    const mapped = docEditError(e);
-    if (mapped) return mapped;
-    const refusal = await externalRefWriteRefusal(user, body, e, id);
-    if (refusal) return refusal;
-    throw e;
-  }
-  // Posted docs already have GL; only advance the lifecycle for pre-post edits.
-  const life =
-    row.status === "posted"
-      ? null
-      : await runDocumentLifecycle(user, id, docKind, body.action, source, customFieldViewer);
-  if (life) return life;
-  return { status: 200, body: await loadDocument(id, user.orgId, customFieldViewer) };
-}
-
-async function deleteDocumentWriter(
-  user: SessionUser,
-  docKind: string,
-  id: string,
-  allowedScope?: ReadonlySet<string> | null,
-): Promise<WriteResult> {
-  const owned = await db.execute(sql`
-    select subsidiary_id as "subsidiaryId"
-      from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}
-      for update`, "objects");
-  if (!owned[0]) return err(404, "not found");
-  const allowed = await mutationSubsidiaryScope(user, allowedScope);
-  if (
-    !subsidiaryInMutationScope(
-      allowed,
-      (owned[0] as { subsidiaryId?: string | null }).subsidiaryId,
-    )
-  ) {
-    return err(404, "not found");
-  }
-  if (!(await isDocKindEnabled(user.orgId, docKind)))
-    return err(404, "not found");
-  try {
-    // `allowed` is rechecked under the document lock inside deleteDocument:
-    // the unlocked probe above can authorize entity A while a concurrent
-    // A→B rehome lands before this delete commits.
-    await deleteDocument(id, user.id, user.orgId, { allowedSubsidiaryIds: allowed });
-    return { status: 200, body: { ok: true } };
-  } catch (e) {
-    if (e instanceof ScopeNotFoundError) return err(404, "not found");
-    if (e instanceof DeleteError) return err(422, (e as Error).message);
-    throw e;
+    throw error;
   }
 }
 
@@ -1512,15 +1206,18 @@ export async function createRecord(
           options.allowedSubsidiaryIds,
           options.customFieldViewer ?? fallbackCustomFieldViewer(user),
         );
-      case "document":
-        return createDocument(
-          user,
-          resolved.writer.docKind,
-          body as DocApiBody,
-          options.source ?? "api",
-          options.allowedSubsidiaryIds,
-          options.customFieldViewer ?? fallbackCustomFieldViewer(user),
+      case "document": {
+        const kind = resolved.writer.docKind;
+        return documentWrite(async () =>
+          documentWriteResult(
+            await createDocumentFromInput(documentEditingContext(user, options), {
+              kind,
+              body: body as DocumentWriteInput,
+            }),
+            201,
+          ),
         );
+      }
       case "readonly":
         return err(405, `${resolved.key} is read-only through the API`);
     }
@@ -1552,16 +1249,19 @@ export async function updateRecord(
           options.allowedSubsidiaryIds,
           options.customFieldViewer ?? fallbackCustomFieldViewer(user),
         );
-      case "document":
-        return updateDocument(
-          user,
-          resolved.writer.docKind,
-          id,
-          body as DocApiBody,
-          options.source ?? "api",
-          options.allowedSubsidiaryIds,
-          options.customFieldViewer ?? fallbackCustomFieldViewer(user),
+      case "document": {
+        const kind = resolved.writer.docKind;
+        return documentWrite(async () =>
+          documentWriteResult(
+            await editDocument(documentEditingContext(user, options), {
+              kind,
+              documentId: id,
+              body: body as DocumentWriteInput,
+            }),
+            200,
+          ),
         );
+      }
       case "readonly":
         return err(405, `${resolved.key} is read-only through the API`);
     }
@@ -1582,19 +1282,21 @@ export async function deleteRecord(
       case "custom_record":
         return deleteCustomRecord(user, resolved.key, id, options.allowedSubsidiaryIds);
       case "entity":
-        return deleteEntity(
-          user,
-          resolved.writer.table,
-          id,
-          options.allowedSubsidiaryIds,
-        );
-      case "document":
-        return deleteDocumentWriter(
-          user,
-          resolved.writer.docKind,
-          id,
-          options.allowedSubsidiaryIds,
-        );
+        return deleteEntity(user, resolved.writer.table, id, options.allowedSubsidiaryIds);
+      case "document": {
+        const kind = resolved.writer.docKind;
+        return documentWrite(async () => {
+          await deleteDocumentInScope(
+            {
+              orgId: user.orgId,
+              userId: user.id,
+              allowedSubsidiaryIds: options.allowedSubsidiaryIds,
+            },
+            { kind, documentId: id },
+          );
+          return { status: 200, body: { ok: true } };
+        });
+      }
       case "readonly":
         return err(405, `${resolved.key} is read-only through the API`);
     }
