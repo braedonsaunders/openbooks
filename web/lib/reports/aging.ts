@@ -8,7 +8,7 @@ import { mulDecimal } from "@openbooks/engine/money/money";
 // resolve until merge; a relative import binds this checkout everywhere.
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "@openbooks/engine/records/open-item-kinds";
 import { appliedLegAmountExpr, datedAppliedAmountSql } from "@openbooks/engine/records/balance-due";
-import { asOfPostedEntryLateral } from "@openbooks/engine/records/open-item-scopes";
+import { asOfPostedEntryLateral, openItemCandidateDocumentsSql } from "@openbooks/engine/records/open-item-scopes";
 import { resolveOrgId } from "../org-scope";
 import { presentationCurrency, presentationRates, presentationSpotRatesSql, presentationAmountSql } from "../fx-presentation";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
@@ -253,7 +253,9 @@ function openDocumentsSql(
     -- hides cardinality from the planner; the bulk join was estimated at
     -- one row and became an 8-million-pair nested loop. MATERIALIZED
     -- doc_lines forces the posted/as-of/party/bucket filter first so the
-    -- lateral only probes lines that can still be open.
+    -- lateral only probes lines that can still be open. Only documents the
+    -- open-item index holds open on the date (or touched by a later
+    -- application) are rebuilt: every other document nets to zero there.
     -- Both currency legs rebuild here: the functional leg (stored base
     -- amounts and base carrying amounts — never re-translated, so the aging
     -- ties its control by construction) and the transaction leg (stored txn
@@ -283,6 +285,7 @@ function openDocumentsSql(
         join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
        where d.org_id = ${orgId}
+         and d.id in (${openItemCandidateDocumentsSql({ orgId, asOf, accounts: accountScope })})
          and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
          and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
          and ${accountScope}

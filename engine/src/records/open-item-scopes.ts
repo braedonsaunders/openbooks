@@ -110,12 +110,9 @@ export interface OpenItemsAsOfScope {
  * open-item index (open_item_balances) rather than reconstructed from every
  * document the side has ever posted.
  *
- * A line's remaining on a date differs from its live remaining only through
- * applications applied after the date (not yet consumed then) and
- * applications unapplied after the date (still consumed then). So the lines
- * that can be open on the date are the index's open lines plus the lines
- * those applications touch, each corrected by exactly those legs — the same
- * legs and carrying columns `datedAppliedAmountSql` nets.
+ * The candidate lines are the index's open lines plus the lines touched by
+ * applications applied or unapplied after the date, each corrected by
+ * exactly those legs.
  *
  * A line counts when its entry is the one carrying its document on the date
  * ({@link asOfPostedEntryLateral}). For a line on its document's live posted
@@ -137,12 +134,59 @@ export function openItemsAsOfSql(scope: OpenItemsAsOfScope): SQL {
     : sql`((${kind} = ${scope.creditKind} and ${amount} > 0) or (${kind} <> ${scope.creditKind} and ${amount} < 0))`;
   const live = (status: SQL, voidedAt: SQL) =>
     sql`(${status} = 'posted' or (${voidedAt} is not null and ${voidedAt}::date > ${asOf}::date))`;
+  const candidates = openItemCandidateLinesSql(scope);
+  return sql`
+    with ${candidates},
+    resolved as materialized (
+      select l.*, je.posting_date, je.book_id, je.source_document_id,
+             (${entryInEffectSql(orgId, asOf, "je")}) as in_effect,
+             d.id as doc_id, d.kind, d.document_number, d.status, d.voided_at
+        from lines l
+        join journal_entries je on je.id = l.entry_id and je.org_id = ${orgId}
+        left join documents d on d.posted_entry_id = je.id and d.org_id = ${orgId}
+         and (je.source_document_id is null or je.source_document_id = d.id)
+    )
+    select r.line_id as id, r.entry_id, r.doc_id, r.kind as doc_kind, r.document_number as doc_number,
+           r.party_id, r.subsidiary_id, r.posting_date as tran_date, r.due_date,
+           (case when r.kind = ${scope.creditKind} then -1 else 1 end) * r.remaining as remaining
+      from resolved r
+     where r.in_effect and r.doc_id is not null and r.book_id = ${bookId}
+       and ${live(sql`r.status`, sql`r.voided_at`)}
+       and r.kind in (${kindList})
+       and ${sideLine(sql`r.kind`, sql`r.amount`)}
+    union all
+    select r.line_id, r.entry_id, d.id, d.kind, d.document_number,
+           r.party_id, r.subsidiary_id, r.posting_date, r.due_date,
+           (case when d.kind = ${scope.creditKind} then -1 else 1 end) * r.remaining
+      from resolved r
+      join documents d on d.org_id = ${orgId} and (d.id = r.source_document_id or d.posted_entry_id = r.entry_id)
+      ${asOfPostedEntryLateral(orgId, asOf)}
+     where r.in_effect and r.doc_id is null and r.book_id = ${bookId}
+       and je.id = r.entry_id
+       and ${live(sql`d.status`, sql`d.voided_at`)}
+       and d.kind in (${kindList})
+       and ${sideLine(sql`d.kind`, sql`r.amount`)}`;
+}
+
+/**
+ * The open-item index rows that can be open on a date, as two CTEs
+ * (`corrections`, `lines`). A line's remaining on a date differs from its
+ * live remaining only through applications applied after the date (not yet
+ * consumed then) and applications unapplied after it (still consumed then),
+ * so the candidates are the open lines plus the lines those applications
+ * touch, each corrected by exactly those legs — the legs and carrying
+ * columns `datedAppliedAmountSql` nets. `lines.remaining` is the line's
+ * unsigned remaining on the date, never zero.
+ */
+function openItemCandidateLinesSql(
+  scope: Pick<OpenItemsAsOfScope, "orgId" | "asOf" | "accounts" | "subsidiaryIds" | "partyId">,
+): SQL {
+  const { orgId, asOf } = scope;
   const lineScope = sql`b.account_id in (select a.id from accounts a where a.org_id = ${orgId} and ${scope.accounts})
          and b.posting_date <= ${asOf}
          ${scope.subsidiaryIds !== undefined ? sql`and b.subsidiary_id = any(${`{${scope.subsidiaryIds.join(",")}}`}::uuid[])` : sql``}
          ${scope.partyId !== undefined ? sql`and b.party_id = ${scope.partyId}` : sql``}`;
-  return sql`
-    with corrections as materialized (
+  return sql`corrections as materialized (
       select legs.line_id, sum(legs.delta) as delta
         from (
           select x.from_line_id as line_id, x.source_amount as delta from applications x
@@ -177,34 +221,27 @@ export function openItemsAsOfSql(scope: OpenItemsAsOfScope): SQL {
         ) c
         left join corrections x on x.line_id = c.line_id
        where c.remaining + coalesce(x.delta, 0) <> 0
-    ),
-    resolved as materialized (
-      select l.*, je.posting_date, je.book_id, je.source_document_id,
-             (${entryInEffectSql(orgId, asOf, "je")}) as in_effect,
-             d.id as doc_id, d.kind, d.document_number, d.status, d.voided_at
-        from lines l
-        join journal_entries je on je.id = l.entry_id and je.org_id = ${orgId}
-        left join documents d on d.posted_entry_id = je.id and d.org_id = ${orgId}
-         and (je.source_document_id is null or je.source_document_id = d.id)
-    )
-    select r.line_id as id, r.entry_id, r.doc_id, r.kind as doc_kind, r.document_number as doc_number,
-           r.party_id, r.subsidiary_id, r.posting_date as tran_date, r.due_date,
-           (case when r.kind = ${scope.creditKind} then -1 else 1 end) * r.remaining as remaining
-      from resolved r
-     where r.in_effect and r.doc_id is not null and r.book_id = ${bookId}
-       and ${live(sql`r.status`, sql`r.voided_at`)}
-       and r.kind in (${kindList})
-       and ${sideLine(sql`r.kind`, sql`r.amount`)}
-    union all
-    select r.line_id, r.entry_id, d.id, d.kind, d.document_number,
-           r.party_id, r.subsidiary_id, r.posting_date, r.due_date,
-           (case when d.kind = ${scope.creditKind} then -1 else 1 end) * r.remaining
-      from resolved r
-      join documents d on d.org_id = ${orgId} and (d.id = r.source_document_id or d.posted_entry_id = r.entry_id)
-      ${asOfPostedEntryLateral(orgId, asOf)}
-     where r.in_effect and r.doc_id is null and r.book_id = ${bookId}
-       and je.id = r.entry_id
-       and ${live(sql`d.status`, sql`d.voided_at`)}
-       and d.kind in (${kindList})
-       and ${sideLine(sql`d.kind`, sql`r.amount`)}`;
+    )`;
+}
+
+/**
+ * The documents that can hold an open item on the side's control accounts on
+ * a date: every document owning an open-item index line that is not settled
+ * on the date. Any other document's lines are all settled on the date, so a
+ * reader that nets documents from their lines may restrict itself to these.
+ */
+export function openItemCandidateDocumentsSql(
+  scope: Pick<OpenItemsAsOfScope, "orgId" | "asOf" | "accounts">,
+): SQL {
+  const { orgId } = scope;
+  return sql`
+    with ${openItemCandidateLinesSql(scope)}
+    select je.source_document_id as id
+      from lines l
+      join journal_entries je on je.id = l.entry_id and je.org_id = ${orgId}
+     where je.source_document_id is not null
+    union
+    select d.id
+      from lines l
+      join documents d on d.posted_entry_id = l.entry_id and d.org_id = ${orgId}`;
 }
