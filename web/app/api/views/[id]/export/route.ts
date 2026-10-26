@@ -23,7 +23,7 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = "nodejs";
 
 /** Export a view to PDF, Excel or CSV (runs fresh, current data). */
-async function legacyGET(gate: Authz, req: Request, id: string) {
+async function exportSavedView(gate: Authz, req: Request, id: string) {
   const { user, permissions } = gate;
 
   const url = new URL(req.url);
@@ -78,5 +78,5 @@ export const GET = defineRoute({
     none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks.",
   },
   params: z.object({ id: z.string() }),
-  handler: async ({ request, authz, params }) => legacyGET(authz, request, params.id),
+  handler: async ({ request, authz, params }) => exportSavedView(authz, request, params.id),
 });

@@ -30,7 +30,7 @@ import {
   MAX_FEEDBACK_REQUEST_BYTES,
   feedbackToolPartsFromResult,
   feedbackTurnBody,
-} from "../../../../lib/feedback/turn";
+} from "@/lib/feedback/turn";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
-import { PDF_RECORD_TYPES } from "../../../../../../lib/pdf-templates/catalog";
-import { PERMISSION_CATALOGUE, permissionSetCovers } from "../../../../../../lib/permissions";
+import { PDF_RECORD_TYPES } from "@/lib/pdf-templates/catalog";
+import { PERMISSION_CATALOGUE, permissionSetCovers } from "@/lib/permissions";
 
 // Route boundary suite for outbound PDF email (the same harness as
 // /api/payments/[id]): the REAL route handler runs against scripted gates and

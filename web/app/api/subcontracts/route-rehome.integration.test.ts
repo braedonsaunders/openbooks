@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import { Pool } from "pg";
 import test from "node:test";
-import type { SessionUser } from "../../../lib/auth";
+import type { SessionUser } from "@/lib/auth";
 
 const engineRoot = new URL("../../../../engine/", import.meta.url).href;
 const state: { user: SessionUser | null; allowedSubsidiaryId: string | null } = {

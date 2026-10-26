@@ -66,11 +66,8 @@ const RECORD_TYPE_SEND_PERMISSION: Record<string, string> = {
 };
 
 /** GET — default recipient + labels to prefill the send dialog. */
-async function getSendOptions(
-  { params }: { params: Promise<{ recordType: string; id: string }> },
-  gate: Authz,
-) {
-  const { recordType, id } = await params;
+async function getSendOptions(params: { recordType: string; id: string }, gate: Authz) {
+  const { recordType, id } = params;
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType];
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
   if (!(await isDocKindEnabled(gate.user.orgId, meta.docKind ?? meta.key))) {
@@ -93,12 +90,8 @@ async function getSendOptions(
 }
 
 /** POST — render the record PDF and email it to the party. */
-async function sendRecord(
-  req: Request,
-  { params }: { params: Promise<{ recordType: string; id: string }> },
-  gate: Authz,
-) {
-  const { recordType, id } = await params;
+async function sendRecord(req: Request, params: { recordType: string; id: string }, gate: Authz) {
+  const { recordType, id } = params;
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType];
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
   if (!(await isDocKindEnabled(gate.user.orgId, meta.docKind ?? meta.key))) {
@@ -179,7 +172,7 @@ export const GET = defineRoute({
     none: "Record-type availability is enforced by the document-kind gate in the send dialog handler.",
   },
   params: sendParams,
-  handler: async ({ params, authz }) => getSendOptions({ params: Promise.resolve(params) }, authz),
+  handler: async ({ params, authz }) => getSendOptions(params, authz),
 });
 export const POST = defineRoute({
   authorize: authorizeRecordSend,
@@ -187,6 +180,5 @@ export const POST = defineRoute({
     none: "Record-type availability is enforced by the document-kind gate; outbound delivery also checks its write permission.",
   },
   params: sendParams,
-  handler: async ({ request, params, authz }) =>
-    sendRecord(request, { params: Promise.resolve(params) }, authz),
+  handler: async ({ request, params, authz }) => sendRecord(request, params, authz),
 });

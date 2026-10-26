@@ -42,7 +42,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "../../../lib/authz": `
+    "@/lib/authz": `
       const state = globalThis[Symbol.for('openbooks.billing-requests-route-test')]
       export async function guardPermission() {
         return {

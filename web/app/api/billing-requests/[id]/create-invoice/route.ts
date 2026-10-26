@@ -16,7 +16,7 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = "nodejs";
 
 /** Generate a draft customer_invoice from an open billing request. */
-async function legacyPOST(gate: Authz, id: string) {
+async function createInvoiceFromBillingRequest(gate: Authz, id: string) {
   if (!isUuid(id)) return notFound("record");
   try {
     const result = await generateInvoiceFromBillingRequest(
@@ -85,5 +85,5 @@ export const POST = defineRoute({
   permission: "ar.create",
   feature: "projects",
   params: z.object({ id: z.string() }),
-  handler: async ({ authz, params }) => legacyPOST(authz, params.id),
+  handler: async ({ authz, params }) => createInvoiceFromBillingRequest(authz, params.id),
 });

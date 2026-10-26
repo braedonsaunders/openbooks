@@ -32,7 +32,7 @@ export const runtime = "nodejs";
  * to a reader who cannot run it leaks the catalog (names, descriptions and the
  * stored plan itself) and hands out the id that every execution path keys on.
  */
-async function legacyGET(gate: Authz) {
+async function listViews(gate: Authz) {
   const { user, permissions } = gate;
   const rows = await loadViews(user.orgId, user.id, permissions);
   const visible = [];
@@ -56,7 +56,7 @@ export const GET = defineRoute({
   feature: {
     none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks.",
   },
-  handler: async ({ authz }) => legacyGET(authz),
+  handler: async ({ authz }) => listViews(authz),
 });
 
 export const POST = defineRoute({
@@ -66,9 +66,7 @@ export const POST = defineRoute({
   },
   body: createViewBodySchema,
   invalidBodyStatus: 422,
-  handler: async ({ request, body, authz: routeAuthz }) => {
-    const gate = routeAuthz;
-
+  handler: async ({ request, body, authz: gate }) => {
     const { user } = gate;
 
     const requestId = request.headers.get("Idempotency-Key")?.trim() ?? "";

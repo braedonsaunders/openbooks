@@ -21,7 +21,7 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = "nodejs";
 
 /** POST — assemble + persist the backup package for the request's invoice. */
-async function legacyPOST(gate: Authz, id: string) {
+async function createBillingRequestBackup(gate: Authz, id: string) {
   if (!isUuid(id)) return notFound("record");
   const req = await readBillingRequestInvoice(db, gate.user.orgId, id, gate.allowedSubsidiaryIds);
   if (!req) return notFound("record");
@@ -55,7 +55,7 @@ async function legacyPOST(gate: Authz, id: string) {
  * packet persists a PDF plus file-cabinet evidence, which a reader holding
  * only ar.read must not be able to create.
  */
-async function legacyGET(gate: Authz, id: string) {
+async function getBillingRequestBackup(gate: Authz, id: string) {
   if (!isUuid(id)) return notFound("record");
   const req = await readBillingRequestInvoice(db, gate.user.orgId, id, gate.allowedSubsidiaryIds);
   if (!req) return notFound("record");
@@ -89,12 +89,12 @@ export const POST = defineRoute({
   permission: "ar.create",
   feature: "projects",
   params: z.object({ id: z.string() }),
-  handler: async ({ authz, params }) => legacyPOST(authz, params.id),
+  handler: async ({ authz, params }) => createBillingRequestBackup(authz, params.id),
 });
 
 export const GET = defineRoute({
   permission: "ar.read",
   feature: "projects",
   params: z.object({ id: z.string() }),
-  handler: async ({ authz, params }) => legacyGET(authz, params.id),
+  handler: async ({ authz, params }) => getBillingRequestBackup(authz, params.id),
 });

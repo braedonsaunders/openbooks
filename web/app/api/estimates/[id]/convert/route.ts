@@ -38,5 +38,5 @@ export const POST = defineRoute({
   invalidParamsNotFound: "record",
   body: jsonObject,
   handler: ({ request, params, authz, body }) =>
-    convert(authz, request, { params: Promise.resolve(params) }, body),
+    convert(request, { params: Promise.resolve(params) }, authz, body),
 });

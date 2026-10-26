@@ -24,7 +24,7 @@ import {
   IMPORT_FORMATS,
   type ImportFormat,
   type ImportMode,
-} from "../../../../lib/data-io/types";
+} from "@/lib/data-io/types";
 
 export const runtime = "nodejs";
 

@@ -4,8 +4,8 @@ import { apiErrorResponse } from "@/lib/api/error-response";
 
 import { NextResponse } from "next/server";
 
-import { isUuid } from "../../../../lib/list-params";
-import { cancelBillingRequest } from "../../../../lib/billing-requests";
+import { isUuid } from "@/lib/list-params";
+import { cancelBillingRequest } from "@/lib/billing-requests";
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.discriminatedUnion("action", [
@@ -19,9 +19,7 @@ export const PATCH = defineRoute({
   feature: "projects",
   params: z.object({ id: z.string() }),
   body: requestBodySchema,
-  handler: async ({ body, params, authz: routeAuthz }) => {
-    const gate = routeAuthz;
-
+  handler: async ({ body, params, authz: gate }) => {
     const { id } = params;
     if (!isUuid(id)) return notFound("record");
 
