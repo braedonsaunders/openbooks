@@ -2,12 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@openbooks/engine/platform/db";
-import {
-  loadSettings,
-  setAlertSchedule,
-} from "@openbooks/engine/hrm/qualifications/types";
-import { guardUnrestrictedScope } from "../../../../lib/authz";
-
+import { loadSettings, setAlertSchedule } from "@openbooks/engine/hrm/qualifications/types";
 import { qualificationErrorResponse } from "../qualifications/_lib";
 
 export const runtime = "nodejs";
@@ -42,11 +37,9 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "hrm.certifications.manage",
   feature: "hrmCertifications",
+  scope: "unrestricted",
   body: setScheduleBody,
   handler: async ({ authz: gate, body: body }) => {
-    const scopeDenied = guardUnrestrictedScope(gate);
-    if (scopeDenied) return scopeDenied;
-
     try {
       const settings = await setAlertSchedule(db, {
         orgId: gate.user.orgId,
