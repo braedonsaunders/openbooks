@@ -1,5 +1,6 @@
 /** Recurring per-employee pay-component assignments — the write side of the rows the pay run prices every regular period. */
 export {
+  listEmployeePayComponentAssignments,
   employeePayComponentScopeLock,
   validateEmployeePayComponentAssignment,
   type EmployeePayComponentAssignmentInput,
@@ -7,11 +8,17 @@ export {
 } from "./assigned-components.ts";
 export { PayrollError } from "./error.ts";
 
-export { ASSIGNMENT_RUN_APPLICABILITIES, type AssignmentRunApplicability } from './assignment-run-applicability.ts';
-export { takeEmployeeConfigurationFence } from './fences.ts';
+export {
+  ASSIGNMENT_RUN_APPLICABILITIES,
+  type AssignmentRunApplicability,
+} from "./assignment-run-applicability.ts";
+export { takeEmployeeConfigurationFence } from "./fences.ts";
 
 export {
-  saveEmployeePayComponentAssignment, endEmployeePayComponentAssignment, deleteUnusedEmployeePayComponentAssignment,
-  EMPLOYEE_PAY_COMPONENT_COLUMNS, type EmployeePayComponentAssignmentRecord,
-} from './assigned-component-commands.ts';
-export { ScopeNotFoundError } from '../organization/subsidiary-scope.ts';
+  saveEmployeePayComponentAssignment,
+  endEmployeePayComponentAssignment,
+  deleteUnusedEmployeePayComponentAssignment,
+  EMPLOYEE_PAY_COMPONENT_COLUMNS,
+  type EmployeePayComponentAssignmentRecord,
+} from "./assigned-component-commands.ts";
+export { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
