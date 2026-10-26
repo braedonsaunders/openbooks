@@ -1,61 +1,61 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
+import type { Authz } from "@/lib/authz";
 
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
-import { guardPermission } from '../../../../../lib/authz'
-import { isUuid } from '../../../../../lib/list-params'
-import { hasSubsidiaryField, loadRecordTypeById } from '../../../../../lib/records'
-import { auditSetupChange } from '../../../../../lib/setup/audit'
-import {
-  describeIssue,
-  lintRecordFields,
-  typeKeyError,
-} from '../../../../../lib/record-schema'
-import { formSectionSchema, type FormSection } from '@openbooks/forms-core'
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { documentRevisionSql, isDocumentRevisionToken } from "@openbooks/engine/records/revision";
+import { isUuid } from "@/lib/list-params";
+import { hasSubsidiaryField, loadRecordTypeById } from "@/lib/records";
+import { auditSetupChange } from "@/lib/setup/audit";
+import { describeIssue, lintRecordFields, typeKeyError } from "@/lib/record-schema";
+import { formSectionSchema, type FormSection } from "@openbooks/forms-core";
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.object({
-  "allowedRoles": z.array(z.string().min(1).max(100)).max(50).nullable().optional(),
-  "description": z.string().optional(),
-  // An omitted token reaches the named reload refusal below; a supplied
-  // token must still have the exact wire shape the reader returned.
-  "expectedUpdatedAt": z.string().refine(isDocumentRevisionToken).optional(),
-  "fields": z.array(formSectionSchema).max(100).optional(),
-  "iconKey": z.string().optional(),
-  "key": z.string().optional(),
-  "name": z.string().optional(),
-  "pluralName": z.string().optional(),
-  "showInNav": z.boolean().optional(),
-  "sortOrder": z.number().optional(),
-}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
+const requestBodySchema = z
+  .object({
+    allowedRoles: z.array(z.string().min(1).max(100)).max(50).nullable().optional(),
+    description: z.string().optional(),
+    // An omitted token reaches the named reload refusal below; a supplied
+    // token must still have the exact wire shape the reader returned.
+    expectedUpdatedAt: z.string().refine(isDocumentRevisionToken).optional(),
+    fields: z.array(formSectionSchema).max(100).optional(),
+    iconKey: z.string().optional(),
+    key: z.string().optional(),
+    name: z.string().optional(),
+    pluralName: z.string().optional(),
+    showInNav: z.boolean().optional(),
+    sortOrder: z.number().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "At least one field must be provided.",
+  });
 
+export const runtime = "nodejs";
 
-
-export const runtime = 'nodejs'
-
-const ICON_KEY_RE = /^[a-z0-9-]{1,32}$/
-const TYPE_REVISION_SQL = documentRevisionSql(sql`updated_at`)
+const ICON_KEY_RE = /^[a-z0-9-]{1,32}$/;
+const TYPE_REVISION_SQL = documentRevisionSql(sql`updated_at`);
 const TYPE_REVISION_CONFLICT = {
-  error: 'This record type changed after you opened it; reload the type and try again',
-  code: 'revision_conflict',
-} as const
+  error: "This record type changed after you opened it; reload the type and try again",
+  code: "revision_conflict",
+} as const;
 
 function typeDeclaresSubsidiary(fields: unknown, name: string): boolean {
-  const lint = lintRecordFields(fields, name)
-  return lint.success && hasSubsidiaryField(lint.sections)
+  const lint = lintRecordFields(fields, name);
+  return lint.success && hasSubsidiaryField(lint.sections);
 }
 
-async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('records.manage_types')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const type = await loadRecordTypeById(gate.user.orgId, id)
-  if (!type) return notFound("record")
-  return NextResponse.json({ type })
+async function legacyGET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+  gate: Authz,
+) {
+  const { id } = await params;
+  if (!isUuid(id)) return notFound("record");
+  const type = await loadRecordTypeById(gate.user.orgId, id);
+  if (!type) return notFound("record");
+  return NextResponse.json({ type });
 }
 
 /**
@@ -66,223 +66,274 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
  * structure; structurally invalid payloads are rejected outright.
  */
 
-
 /** Delete a type — drafts only, and only before any record exists. */
-async function legacyDELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('records.manage_types')
-  if (gate instanceof NextResponse) return gate
-  const { user } = gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
+async function legacyDELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+  gate: Authz,
+) {
+  const { user } = gate;
+  const { id } = await params;
+  if (!isUuid(id)) return notFound("record");
 
   const outcome = await withOrgTransaction(user.orgId, async () => {
-    const locked = (await db.execute<{ status: string; snapshot: Record<string, unknown> }>(sql`
+    const locked = (
+      await db.execute<{ status: string; snapshot: Record<string, unknown> }>(
+        sql`
       select status, to_jsonb(custom_record_types) as snapshot
         from custom_record_types
        where id = ${id} and org_id = ${user.orgId}
        for update
-    `, 'objects'))[0]
-    if (!locked) return { kind: 'not_found' as const }
-    if (locked.status !== 'draft') {
+    `,
+        "objects",
+      )
+    )[0];
+    if (!locked) return { kind: "not_found" as const };
+    if (locked.status !== "draft") {
       return {
-        kind: 'response' as const,
+        kind: "response" as const,
         response: NextResponse.json(
-          { error: 'Only draft types can be deleted — archive published types instead' },
+          { error: "Only draft types can be deleted — archive published types instead" },
           { status: 422 },
         ),
-      }
+      };
     }
-    const records = await db.execute(sql`
+    const records = await db.execute(
+      sql`
       select 1 from custom_records where org_id = ${user.orgId} and type_id = ${id} limit 1
-    `, 'objects')
+    `,
+      "objects",
+    );
     if (records.length > 0) {
       return {
-        kind: 'response' as const,
+        kind: "response" as const,
         response: NextResponse.json(
-          { error: 'This type already has records and cannot be deleted' },
+          { error: "This type already has records and cannot be deleted" },
           { status: 422 },
         ),
-      }
+      };
     }
-    const deleted = await db.execute(sql`
+    const deleted = await db.execute(
+      sql`
       delete from custom_record_types
        where id = ${id} and org_id = ${user.orgId} and status = 'draft'
          and not exists (
            select 1 from custom_records where org_id = ${user.orgId} and type_id = ${id}
          )
       returning id
-    `, 'objects')
+    `,
+      "objects",
+    );
     if (deleted.length === 0) {
-      const live = (await db.execute<{ status: string }>(sql`
+      const live = (
+        await db.execute<{ status: string }>(
+          sql`
         select status from custom_record_types
          where id = ${id} and org_id = ${user.orgId}
-      `, 'objects'))[0]
-      if (!live) return { kind: 'not_found' as const }
-      if (live.status !== 'draft') {
+      `,
+          "objects",
+        )
+      )[0];
+      if (!live) return { kind: "not_found" as const };
+      if (live.status !== "draft") {
         return {
-          kind: 'response' as const,
+          kind: "response" as const,
           response: NextResponse.json(
-            { error: 'Only draft types can be deleted — archive published types instead' },
+            { error: "Only draft types can be deleted — archive published types instead" },
             { status: 422 },
           ),
-        }
+        };
       }
       return {
-        kind: 'response' as const,
+        kind: "response" as const,
         response: NextResponse.json(
-          { error: 'This type already has records and cannot be deleted' },
+          { error: "This type already has records and cannot be deleted" },
           { status: 422 },
         ),
-      }
+      };
     }
     // The deleted draft's configuration leaves an immutable delete event in
     // the same transaction (the before-image rode the row lock above), so a
     // removed type is still auditable after no read can observe it.
     await auditSetupChange({
       orgId: user.orgId,
-      table: 'custom_record_types',
+      table: "custom_record_types",
       rowId: id,
-      action: 'delete',
+      action: "delete",
       changes: { before: locked.snapshot },
       actorId: user.id,
-    })
-    return { kind: 'ok' as const }
-  })
-  if (outcome.kind === 'not_found') return notFound("record")
-  if (outcome.kind === 'response') return outcome.response
-  return NextResponse.json({ ok: true })
+    });
+    return { kind: "ok" as const };
+  });
+  if (outcome.kind === "not_found") return notFound("record");
+  if (outcome.kind === "response") return outcome.response;
+  return NextResponse.json({ ok: true });
 }
 
 export const GET = defineRoute({
   permission: "records.manage_types",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  params: z.object({ "id": z.string() }),
-  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+  feature: {
+    none: "Custom record types are an administrative registry with no organization feature switch.",
+  },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params) }, authz),
 });
 
 export const PATCH = defineRoute({
   permission: "records.manage_types",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  params: z.object({ "id": z.string() }),
+  feature: {
+    none: "Custom record types are an administrative registry with no organization feature switch.",
+  },
+  params: z.object({ id: z.string() }),
   body: requestBodySchema,
   handler: async ({ body, params, authz: routeAuthz }) => {
+    const gate = routeAuthz;
 
-    const gate = routeAuthz
+    const { user } = gate;
+    const { id } = params;
+    if (!isUuid(id)) return notFound("record");
 
-    const { user } = gate
-    const { id } = params
-    if (!isUuid(id)) return notFound("record")
+    const type = await loadRecordTypeById(user.orgId, id);
+    if (!type) return notFound("record");
 
-    const type = await loadRecordTypeById(user.orgId, id)
-    if (!type) return notFound("record")
-
-
-
-
-
-    if (body.name !== undefined && (typeof body.name !== 'string' || !body.name.trim() || body.name.length > 200)) {
-      return NextResponse.json({ error: 'Name must be 1–200 characters' }, { status: 422 })
+    if (
+      body.name !== undefined &&
+      (typeof body.name !== "string" || !body.name.trim() || body.name.length > 200)
+    ) {
+      return NextResponse.json({ error: "Name must be 1–200 characters" }, { status: 422 });
     }
     if (
       body.pluralName !== undefined &&
-      (typeof body.pluralName !== 'string' || !body.pluralName.trim() || body.pluralName.length > 200)
+      (typeof body.pluralName !== "string" ||
+        !body.pluralName.trim() ||
+        body.pluralName.length > 200)
     ) {
-      return NextResponse.json({ error: 'Plural name must be 1–200 characters' }, { status: 422 })
+      return NextResponse.json({ error: "Plural name must be 1–200 characters" }, { status: 422 });
     }
-    if (body.iconKey !== undefined && (typeof body.iconKey !== 'string' || !ICON_KEY_RE.test(body.iconKey))) {
-      return NextResponse.json({ error: 'Invalid icon key' }, { status: 422 })
+    if (
+      body.iconKey !== undefined &&
+      (typeof body.iconKey !== "string" || !ICON_KEY_RE.test(body.iconKey))
+    ) {
+      return NextResponse.json({ error: "Invalid icon key" }, { status: 422 });
     }
     if (
       body.description !== undefined &&
       body.description !== null &&
-      (typeof body.description !== 'string' || body.description.length > 2000)
+      (typeof body.description !== "string" || body.description.length > 2000)
     ) {
-      return NextResponse.json({ error: 'Description must be at most 2,000 characters' }, { status: 422 })
+      return NextResponse.json(
+        { error: "Description must be at most 2,000 characters" },
+        { status: 422 },
+      );
     }
     if (
       body.allowedRoles !== undefined &&
       body.allowedRoles !== null &&
       (!Array.isArray(body.allowedRoles) ||
         body.allowedRoles.length > 50 ||
-        body.allowedRoles.some((r) => typeof r !== 'string' || r.length === 0 || r.length > 100))
+        body.allowedRoles.some((r) => typeof r !== "string" || r.length === 0 || r.length > 100))
     ) {
-      return NextResponse.json({ error: 'Invalid allowed roles' }, { status: 422 })
+      return NextResponse.json({ error: "Invalid allowed roles" }, { status: 422 });
     }
     if (
       body.sortOrder !== undefined &&
       (!Number.isInteger(body.sortOrder) || Math.abs(body.sortOrder) > 100_000)
     ) {
-      return NextResponse.json({ error: 'Invalid sort order' }, { status: 422 })
+      return NextResponse.json({ error: "Invalid sort order" }, { status: 422 });
     }
     // show_in_nav rides raw into a boolean column: PostgreSQL would silently
     // coerce spellings like 'off'/'on' or throw 22P02 on anything else.
-    if (body.showInNav !== undefined && typeof body.showInNav !== 'boolean') {
-      return NextResponse.json({ error: 'Invalid show in nav flag' }, { status: 422 })
+    if (body.showInNav !== undefined && typeof body.showInNav !== "boolean") {
+      return NextResponse.json({ error: "Invalid show in nav flag" }, { status: 422 });
     }
 
-    let key: string | undefined
+    let key: string | undefined;
     if (body.key !== undefined && body.key !== type.key) {
-      if (type.status !== 'draft') {
+      if (type.status !== "draft") {
         return NextResponse.json(
-          { error: 'The key is pinned once a type has been published (records and numbering reference it)' },
+          {
+            error:
+              "The key is pinned once a type has been published (records and numbering reference it)",
+          },
           { status: 422 },
-        )
+        );
       }
-      if (typeof body.key !== 'string') return NextResponse.json({ error: 'Invalid key' }, { status: 422 })
-      const keyIssue = typeKeyError(body.key)
-      if (keyIssue) return NextResponse.json({ error: keyIssue }, { status: 422 })
-      const clash = ((await db.execute(sql`
+      if (typeof body.key !== "string")
+        return NextResponse.json({ error: "Invalid key" }, { status: 422 });
+      const keyIssue = typeKeyError(body.key);
+      if (keyIssue) return NextResponse.json({ error: keyIssue }, { status: 422 });
+      const clash = await db.execute(
+        sql`
         select 1 from custom_record_types where org_id = ${user.orgId} and key = ${body.key} and id <> ${id}
-      `, 'objects')))
+      `,
+        "objects",
+      );
       if (clash.length > 0) {
-        return NextResponse.json({ error: `A record type with key "${body.key}" already exists` }, { status: 409 })
+        return NextResponse.json(
+          { error: `A record type with key "${body.key}" already exists` },
+          { status: 409 },
+        );
       }
-      key = body.key
+      key = body.key;
     }
 
-    let fieldsJson: string | undefined
-    let nextSections: FormSection[] | undefined
-    let issues: { path: Array<string | number>; message: string }[] = []
+    let fieldsJson: string | undefined;
+    let nextSections: FormSection[] | undefined;
+    let issues: { path: Array<string | number>; message: string }[] = [];
     if (body.fields !== undefined) {
-      const lint = lintRecordFields(body.fields, body.name ?? type.name)
+      const lint = lintRecordFields(body.fields, body.name ?? type.name);
       if (!lint.success) {
         return NextResponse.json(
-          { error: `Invalid fields: ${lint.issues.slice(0, 3).map(describeIssue).join('; ')}`, issues: lint.issues },
+          {
+            error: `Invalid fields: ${lint.issues.slice(0, 3).map(describeIssue).join("; ")}`,
+            issues: lint.issues,
+          },
           { status: 422 },
-        )
+        );
       }
       // Persist the validated SECTION structure (not the flattened field list).
-      fieldsJson = JSON.stringify(lint.sections)
-      nextSections = lint.sections
-      issues = lint.issues
+      fieldsJson = JSON.stringify(lint.sections);
+      nextSections = lint.sections;
+      issues = lint.issues;
     } else {
       // Re-lint the stored fields so a rename etc. still refreshes the issue list.
-      issues = lintRecordFields(type.fields, body.name ?? type.name).issues
+      issues = lintRecordFields(type.fields, body.name ?? type.name).issues;
     }
 
     // Full-state builder saves must echo the revision they read. Substituting
     // the live server token would let a later tokenless autosave adopt a newer
     // revision and overwrite (or drop subsidiary_id from) a concurrent edit.
     if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
-      return NextResponse.json(TYPE_REVISION_CONFLICT, { status: 409 })
+      return NextResponse.json(TYPE_REVISION_CONFLICT, { status: 409 });
     }
-    const expectedRevision = body.expectedUpdatedAt
-    const fence = gate.allowedSubsidiaryIds ?? null
+    const expectedRevision = body.expectedUpdatedAt;
+    const fence = gate.allowedSubsidiaryIds ?? null;
 
     const outcome = await withOrgTransaction(user.orgId, async () => {
       // The full before-image rides the row lock: the audit event below must
       // show before/after of the configuration this save mutates (fields,
       // roles, key), and the image has to predate this transaction's own
       // UPDATE.
-      const locked = (await db.execute<{ updated_at: string; fields: unknown; name: string; snapshot: Record<string, unknown> }>(sql`
+      const locked = (
+        await db.execute<{
+          updated_at: string;
+          fields: unknown;
+          name: string;
+          snapshot: Record<string, unknown>;
+        }>(
+          sql`
         select ${TYPE_REVISION_SQL} as updated_at, fields, name,
                to_jsonb(custom_record_types) as snapshot
           from custom_record_types
          where id = ${id} and org_id = ${user.orgId}
          for update
-      `, 'objects'))[0]
-      if (!locked) return { kind: 'not_found' as const }
-      if (locked.updated_at !== expectedRevision) return { kind: 'conflict' as const }
+      `,
+          "objects",
+        )
+      )[0];
+      if (!locked) return { kind: "not_found" as const };
+      if (locked.updated_at !== expectedRevision) return { kind: "conflict" as const };
       if (
         nextSections !== undefined &&
         fence !== null &&
@@ -290,17 +341,18 @@ export const PATCH = defineRoute({
         !hasSubsidiaryField(nextSections)
       ) {
         return {
-          kind: 'response' as const,
+          kind: "response" as const,
           response: NextResponse.json(
             {
               error:
-                'Keep the subsidiary_id field; removing it would expose records from subsidiaries outside your scope',
+                "Keep the subsidiary_id field; removing it would expose records from subsidiaries outside your scope",
             },
             { status: 422 },
           ),
-        }
+        };
       }
-      const updated = await db.execute<{ snapshot: Record<string, unknown> }>(sql`
+      const updated = await db.execute<{ snapshot: Record<string, unknown> }>(
+        sql`
         update custom_record_types set
           name = coalesce(${body.name ?? null}, name),
           plural_name = coalesce(${body.pluralName ?? null}, plural_name),
@@ -316,34 +368,40 @@ export const PATCH = defineRoute({
         where id = ${id} and org_id = ${user.orgId}
           and ${TYPE_REVISION_SQL} = ${expectedRevision}
         returning to_jsonb(custom_record_types) as snapshot
-      `, 'objects')
-      if (updated.length === 0) return { kind: 'conflict' as const }
+      `,
+        "objects",
+      );
+      if (updated.length === 0) return { kind: "conflict" as const };
       // Immutable configuration audit in the SAME transaction: a committed
       // builder save without its before/after evidence is a lost refusal
       // surface, so the audit write failing rolls the save back with it.
       await auditSetupChange({
         orgId: user.orgId,
-        table: 'custom_record_types',
+        table: "custom_record_types",
         rowId: id,
-        action: 'update',
+        action: "update",
         changes: { before: locked.snapshot, after: updated[0]!.snapshot },
         actorId: user.id,
-      })
-      return { kind: 'ok' as const }
-    })
-    if (outcome.kind === 'not_found') return notFound("record")
-    if (outcome.kind === 'conflict') return NextResponse.json(TYPE_REVISION_CONFLICT, { status: 409 })
-    if (outcome.kind === 'response') return outcome.response
+      });
+      return { kind: "ok" as const };
+    });
+    if (outcome.kind === "not_found") return notFound("record");
+    if (outcome.kind === "conflict")
+      return NextResponse.json(TYPE_REVISION_CONFLICT, { status: 409 });
+    if (outcome.kind === "response") return outcome.response;
 
-    const updated = await loadRecordTypeById(user.orgId, id)
-    if (!updated) return notFound("record")
-    return NextResponse.json({ type: updated, issues })
+    const updated = await loadRecordTypeById(user.orgId, id);
+    if (!updated) return notFound("record");
+    return NextResponse.json({ type: updated, issues });
   },
 });
 
 export const DELETE = defineRoute({
   permission: "records.manage_types",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  params: z.object({ "id": z.string() }),
-  handler: async ({ request, params }) => legacyDELETE(request as never, { params: Promise.resolve(params as never) } as never),
+  feature: {
+    none: "Custom record types are an administrative registry with no organization feature switch.",
+  },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, params, authz }) =>
+    legacyDELETE(request, { params: Promise.resolve(params) }, authz),
 });
