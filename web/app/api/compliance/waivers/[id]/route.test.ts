@@ -26,15 +26,25 @@ const routeState: RouteState = {
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-/** Flatten a drizzle SQL chunk into raw text for the scripted database fake. */
+/**
+ * Flatten a drizzle SQL chunk into raw text for the scripted database fake.
+ * Static text is a StringChunk whose value is a string; bound params are
+ * scalars or nested fragments.
+ */
 function sqlText(query: unknown): string {
   const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
   if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
+      if (typeof chunk === "string" || typeof chunk === "number" || typeof chunk === "boolean") {
+        return String(chunk);
+      }
+      if (chunk === null) return "null";
+      const value = (chunk as { value?: unknown }).value;
       if (Array.isArray(value)) return value.map(String).join("");
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        return String(value);
+      }
       if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
     })

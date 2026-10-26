@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@openbooks/engine/platform/db";
-import { subsidiariesInScope } from "@/lib/authz";
+import { subsidiariesInScope } from "@/lib/authz-core";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
 import { isFeatureEnabled } from "@/lib/features";
 import { resolveIdempotentReplay } from "@/lib/api/idempotency";

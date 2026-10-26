@@ -73,3 +73,22 @@ export async function resolveAuthzByUserId(orgId: string, userId: string, runner
 export function can(authz: Authz, perm: string): boolean {
   return permissionSetCovers(authz.permissions, perm);
 }
+
+/**
+ * Write-body counterpart: true when EVERY explicitly requested subsidiary id
+ * is inside the caller's scope. Undefined/null entries mean "leave as-is /
+ * resolve at posting" and are checked by the caller's record-level gate, not
+ * here. Restricted callers may never assign a record to a subsidiary they
+ * cannot see — even one that exists and is active.
+ *
+ * Lives with the authority snapshot so route modules can apply it without
+ * loading the HTTP session resolver.
+ */
+export function subsidiariesInScope(
+  authz: Authz,
+  ids: readonly (string | null | undefined)[],
+): boolean {
+  const scope = authz.allowedSubsidiaryIds;
+  if (scope === null) return true;
+  return ids.every((id) => id !== null && id !== undefined && id !== "" && scope.has(id));
+}

@@ -13,7 +13,13 @@ import { db } from "@openbooks/engine/platform/db";
 import { currentUser } from "./auth";
 import { requestAuthzContext } from "./authz-context";
 import { can, resolveUserAuthz, type Authz } from "./authz-core";
-export { can, resolveUserAuthz, resolveAuthzByUserId, type Authz } from "./authz-core";
+export {
+  can,
+  resolveUserAuthz,
+  resolveAuthzByUserId,
+  subsidiariesInScope,
+  type Authz,
+} from "./authz-core";
 import { accessDeniedHref } from "./gate-targets";
 import { notFound } from "@/lib/api/responses";
 
@@ -166,18 +172,3 @@ export async function guardRootSubsidiaryScope(authz: Authz): Promise<NextRespon
   return guardSubsidiaryScope(authz, root);
 }
 
-/**
- * Write-body counterpart: true when EVERY explicitly requested subsidiary id
- * is inside the caller's scope. Undefined/null entries mean "leave as-is /
- * resolve at posting" and are checked by the caller's record-level gate, not
- * here. Restricted callers may never assign a record to a subsidiary they
- * cannot see — even one that exists and is active.
- */
-export function subsidiariesInScope(
-  authz: Authz,
-  ids: readonly (string | null | undefined)[],
-): boolean {
-  const scope = authz.allowedSubsidiaryIds;
-  if (scope === null) return true;
-  return ids.every((id) => id !== null && id !== undefined && id !== "" && scope.has(id));
-}
