@@ -2,8 +2,8 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
+import { readBillingRequestInvoice } from "@openbooks/engine/projects/billing-requests-read";
 import type { Authz } from "@/lib/authz";
 import { rendererUnavailableResponse } from "@/lib/api/pdf-renderer";
 import { isUuid } from "@/lib/list-params";
@@ -16,37 +16,14 @@ import {
   InvoiceBackupSourceAccessError,
   type BackupType,
 } from "@/lib/invoice-backup";
-import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
 import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";
 
-/** Resolve a billing request's generated invoice + its backup type. */
-async function requestInvoice(
-  orgId: string,
-  requestId: string,
-  allowedSubsidiaryIds: ReadonlySet<string> | null,
-) {
-  const r = await db.execute<{ invoice_document_id: string | null; backup_type: string }>(
-    sql`
-    select br.invoice_document_id, br.backup_type from billing_requests br
-      join projects p on p.id = br.project_id and p.org_id = br.org_id
-     where br.id = ${requestId} and br.org_id = ${orgId}
-       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-       and (br.invoice_document_id is null or exists (
-         select 1 from documents d where d.id = br.invoice_document_id and d.org_id = br.org_id
-           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-       ))
-  `,
-    "objects",
-  );
-  return r[0] ?? null;
-}
-
 /** POST — assemble + persist the backup package for the request's invoice. */
 async function legacyPOST(gate: Authz, id: string) {
   if (!isUuid(id)) return notFound("record");
-  const req = await requestInvoice(gate.user.orgId, id, gate.allowedSubsidiaryIds);
+  const req = await readBillingRequestInvoice(db, gate.user.orgId, id, gate.allowedSubsidiaryIds);
   if (!req) return notFound("record");
   if (!req.invoice_document_id)
     return NextResponse.json(
@@ -80,7 +57,7 @@ async function legacyPOST(gate: Authz, id: string) {
  */
 async function legacyGET(gate: Authz, id: string) {
   if (!isUuid(id)) return notFound("record");
-  const req = await requestInvoice(gate.user.orgId, id, gate.allowedSubsidiaryIds);
+  const req = await readBillingRequestInvoice(db, gate.user.orgId, id, gate.allowedSubsidiaryIds);
   if (!req) return notFound("record");
   if (!req.invoice_document_id)
     return NextResponse.json({ error: "No invoice to back up" }, { status: 404 });

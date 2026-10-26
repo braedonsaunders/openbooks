@@ -617,6 +617,7 @@
     "./pos/cart": "./src/pos/cart.ts",
     "./projects/additional-time-submission": "./src/projects/additional-time-submission.ts",
     "./projects/award-plan": "./src/projects/award-plan.ts",
+    "./projects/billing-requests-read": "./src/projects/billing-requests-read.ts",
     "./projects/billing-pricing": "./src/projects/public-billing-pricing.ts",
     "./projects/budget-baselines": "./src/projects/budget-baselines.ts",
     "./projects/construction-billing": "./src/projects/construction-billing.ts",
