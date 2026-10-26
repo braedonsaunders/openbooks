@@ -15,6 +15,7 @@ const mockAuthz = `
     if (!state.authz) return new Response(null, { status: 403 })
     return { ...state.authz, permissions: new Set(), allowedSubsidiaryIds: null }
   }
+  export function guardSubsidiaryScope() { return null }
 `;
 
 const hooks = registerHooks({

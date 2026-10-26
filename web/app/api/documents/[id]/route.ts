@@ -24,7 +24,10 @@ import { DOC_KINDS, createPermission } from "@/lib/document-kinds.ts";
 import { canReadDocumentKind } from "@/lib/flow-subject-authz.ts";
 import { lockedDocumentScopeDenied } from "@/lib/document-scope.ts";
 import { type DocumentEditInput } from "@openbooks/engine/ledger/document-input";
-import { loadDocumentEditCurrent, loadDocumentKindScope } from "@openbooks/engine/ledger/document-edit-queries";
+import {
+  loadDocumentEditCurrent,
+  loadDocumentKindScope,
+} from "@openbooks/engine/ledger/document-edit-queries";
 import { notFound } from "@/lib/api/responses";
 import { customFieldViewerFor } from "@/lib/custom-fields";
 // An absent body is an empty edit; it is refused in the handler after the
