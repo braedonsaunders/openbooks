@@ -28,11 +28,9 @@ const routeState: RouteState = {
   listCalls: [],
   createCalls: [],
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksBillingRequestsNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksBillingRequestsNextResponse =
+  NextResponse;
 
 // Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
 // mocked: hand doubles cannot produce the refusals the real modules
@@ -62,10 +60,19 @@ stubModules({
         }
       }
     `,
-    "../../../lib/projects-gate": `
+    "@/lib/feature-gates": `
+      const state = globalThis[Symbol.for('openbooks.billing-requests-route-test')]
+      export async function guardFeaturePermission() {
+        return {
+          user: { id: 'user-1', orgId: 'org-1' },
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+        }
+      }
+    `,
+    "@/lib/projects-gate": `
       export async function guardProjectsFeature() { return null }
     `,
-    "../../../lib/billing-requests": `
+    "@/lib/billing-requests": `
       const state = globalThis[Symbol.for('openbooks.billing-requests-route-test')]
       const visible = (allowed) =>
         allowed === null || allowed === undefined || allowed.has(state.projectSubsidiaryId)
@@ -96,10 +103,7 @@ const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const PROJECT_ID = "00000000-0000-4000-8000-000000000001";
 
-function reset(
-  allowedSubsidiaryIds: Scope,
-  projectSubsidiaryId = "sub-visible",
-) {
+function reset(allowedSubsidiaryIds: Scope, projectSubsidiaryId = "sub-visible") {
   routeState.allowedSubsidiaryIds = allowedSubsidiaryIds;
   routeState.projectSubsidiaryId = projectSubsidiaryId;
   routeState.listCalls = [];
@@ -107,11 +111,7 @@ function reset(
 }
 
 function get() {
-  return GET(
-    new Request(
-      `http://openbooks.test/api/billing-requests?projectId=${PROJECT_ID}`,
-    ),
-  );
+  return GET(new Request(`http://openbooks.test/api/billing-requests?projectId=${PROJECT_ID}`));
 }
 
 function post(body: Record<string, unknown>) {

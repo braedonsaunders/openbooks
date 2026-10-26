@@ -1,24 +1,34 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { guardPermission } from '../../../../../lib/authz'
-import { rendererUnavailableResponse } from '../../../../../lib/api/pdf-renderer'
-import { isUuid } from '../../../../../lib/list-params'
-import { pdfResponse, safeName } from '../../../../../lib/export'
-import { assembleInvoiceBackup, loadInvoiceBackup, InvoiceBackupImmutableError, InvoiceBackupNotFoundError, InvoiceBackupSourceAccessError, type BackupType } from '../../../../../lib/invoice-backup'
-import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
-import { guardProjectsFeature } from '../../../../../lib/projects-gate'
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import type { Authz } from "@/lib/authz";
+import { rendererUnavailableResponse } from "@/lib/api/pdf-renderer";
+import { isUuid } from "@/lib/list-params";
+import { pdfResponse, safeName } from "@/lib/export";
+import {
+  assembleInvoiceBackup,
+  loadInvoiceBackup,
+  InvoiceBackupImmutableError,
+  InvoiceBackupNotFoundError,
+  InvoiceBackupSourceAccessError,
+  type BackupType,
+} from "@/lib/invoice-backup";
+import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /** Resolve a billing request's generated invoice + its backup type. */
-async function requestInvoice(orgId: string, requestId: string, allowedSubsidiaryIds: ReadonlySet<string> | null) {
-  const r = (await db.execute<{ invoice_document_id: string | null; backup_type: string }>(sql`
+async function requestInvoice(
+  orgId: string,
+  requestId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+) {
+  const r = await db.execute<{ invoice_document_id: string | null; backup_type: string }>(
+    sql`
     select br.invoice_document_id, br.backup_type from billing_requests br
       join projects p on p.id = br.project_id and p.org_id = br.org_id
      where br.id = ${requestId} and br.org_id = ${orgId}
@@ -27,31 +37,39 @@ async function requestInvoice(orgId: string, requestId: string, allowedSubsidiar
          select 1 from documents d where d.id = br.invoice_document_id and d.org_id = br.org_id
            ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        ))
-  `, 'objects'))
-  return r[0] ?? null
+  `,
+    "objects",
+  );
+  return r[0] ?? null;
 }
 
 /** POST — assemble + persist the backup package for the request's invoice. */
-async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('ar.create')
-  if (gate instanceof NextResponse) return gate
-  const feature = await guardProjectsFeature(gate.user.orgId)
-  if (feature) return feature
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const req = await requestInvoice(gate.user.orgId, id, gate.allowedSubsidiaryIds)
-  if (!req) return notFound("record")
-  if (!req.invoice_document_id) return NextResponse.json({ error: 'This request has no invoice to back up yet' }, { status: 422 })
+async function legacyPOST(gate: Authz, id: string) {
+  if (!isUuid(id)) return notFound("record");
+  const req = await requestInvoice(gate.user.orgId, id, gate.allowedSubsidiaryIds);
+  if (!req) return notFound("record");
+  if (!req.invoice_document_id)
+    return NextResponse.json(
+      { error: "This request has no invoice to back up yet" },
+      { status: 422 },
+    );
   try {
-    const result = await assembleInvoiceBackup(gate.user.orgId, gate.user.id, req.invoice_document_id, req.backup_type as BackupType, gate.allowedSubsidiaryIds)
-    return NextResponse.json({ fileId: result.fileId, pageCount: result.pageCount })
+    const result = await assembleInvoiceBackup(
+      gate.user.orgId,
+      gate.user.id,
+      req.invoice_document_id,
+      req.backup_type as BackupType,
+      gate.allowedSubsidiaryIds,
+    );
+    return NextResponse.json({ fileId: result.fileId, pageCount: result.pageCount });
   } catch (e) {
-    if (e instanceof InvoiceBackupNotFoundError) return notFound("record")
-    if (e instanceof InvoiceBackupSourceAccessError) return apiErrorResponse(e, { safeStatus: 403 })
-    if (e instanceof InvoiceBackupImmutableError) return apiErrorResponse(e, { safeStatus: 422 })
-    const rendererRefusal = rendererUnavailableResponse(e)
-    if (rendererRefusal) return rendererRefusal
-    return apiErrorResponse(e)
+    if (e instanceof InvoiceBackupNotFoundError) return notFound("record");
+    if (e instanceof InvoiceBackupSourceAccessError)
+      return apiErrorResponse(e, { safeStatus: 403 });
+    if (e instanceof InvoiceBackupImmutableError) return apiErrorResponse(e, { safeStatus: 422 });
+    const rendererRefusal = rendererUnavailableResponse(e);
+    if (rendererRefusal) return rendererRefusal;
+    return apiErrorResponse(e);
   }
 }
 
@@ -60,42 +78,46 @@ async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: str
  * packet persists a PDF plus file-cabinet evidence, which a reader holding
  * only ar.read must not be able to create.
  */
-async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('ar.read')
-  if (gate instanceof NextResponse) return gate
-  const feature = await guardProjectsFeature(gate.user.orgId)
-  if (feature) return feature
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const req = await requestInvoice(gate.user.orgId, id, gate.allowedSubsidiaryIds)
-  if (!req) return notFound("record")
-  if (!req.invoice_document_id) return NextResponse.json({ error: 'No invoice to back up' }, { status: 404 })
+async function legacyGET(gate: Authz, id: string) {
+  if (!isUuid(id)) return notFound("record");
+  const req = await requestInvoice(gate.user.orgId, id, gate.allowedSubsidiaryIds);
+  if (!req) return notFound("record");
+  if (!req.invoice_document_id)
+    return NextResponse.json({ error: "No invoice to back up" }, { status: 404 });
   try {
-    const backup = await loadInvoiceBackup(gate.user.orgId, req.invoice_document_id, gate.allowedSubsidiaryIds)
+    const backup = await loadInvoiceBackup(
+      gate.user.orgId,
+      req.invoice_document_id,
+      gate.allowedSubsidiaryIds,
+    );
     if (!backup) {
       return NextResponse.json(
-        { error: 'No backup has been generated for this invoice yet — generate it from the billing request first' },
+        {
+          error:
+            "No backup has been generated for this invoice yet — generate it from the billing request first",
+        },
         { status: 404 },
-      )
+      );
     }
-    return pdfResponse(backup.bytes, safeName(backup.filename))
+    return pdfResponse(backup.bytes, safeName(backup.filename));
   } catch (e) {
-    if (e instanceof InvoiceBackupNotFoundError) return notFound("record")
-    if (e instanceof InvoiceBackupSourceAccessError) return apiErrorResponse(e, { safeStatus: 403 })
-    throw e
+    if (e instanceof InvoiceBackupNotFoundError) return notFound("record");
+    if (e instanceof InvoiceBackupSourceAccessError)
+      return apiErrorResponse(e, { safeStatus: 403 });
+    throw e;
   }
 }
 
 export const POST = defineRoute({
   permission: "ar.create",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  params: z.object({ "id": z.string() }),
-  handler: async ({ request, params }) => legacyPOST(request as never, { params: Promise.resolve(params as never) } as never),
+  feature: "projects",
+  params: z.object({ id: z.string() }),
+  handler: async ({ authz, params }) => legacyPOST(authz, params.id),
 });
 
 export const GET = defineRoute({
   permission: "ar.read",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  params: z.object({ "id": z.string() }),
-  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+  feature: "projects",
+  params: z.object({ id: z.string() }),
+  handler: async ({ authz, params }) => legacyGET(authz, params.id),
 });

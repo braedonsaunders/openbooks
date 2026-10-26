@@ -1,18 +1,13 @@
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { securityDepositReconciliation } from "@openbooks/engine/property/management";
-import { guardPermission } from "../../../../lib/authz";
-import { guardPropertyManagementFeature } from "../../../../lib/property-management-gate";
+import type { Authz } from "@/lib/authz";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function legacyGET(request: Request) {
-  const authz = await guardPermission("ar.read");
-  if (authz instanceof NextResponse) return authz;
-  const feature = await guardPropertyManagementFeature(authz.user.orgId);
-  if (feature) return feature;
+async function legacyGET(request: Request, authz: Authz) {
   const asOf = new URL(request.url).searchParams.get("asOf") ?? undefined;
   try {
     // The loader scopes every query to the caller inside one
@@ -31,6 +26,6 @@ async function legacyGET(request: Request) {
 
 export const GET = defineRoute({
   permission: "ar.read",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  handler: async ({ request }) => legacyGET(request as never),
+  feature: "propertyManagement",
+  handler: async ({ request, authz }) => legacyGET(request, authz),
 });

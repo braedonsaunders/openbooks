@@ -1,18 +1,18 @@
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { db } from '@openbooks/engine/platform/db'
-import { REPORT_ENTITY_MAP, defaultRowsQuery, validateReportLayout } from '@openbooks/reports'
-import { validateOrgReportQuery } from '@/lib/custom-record-report-catalog'
-import { guardPermission } from '../../../lib/authz'
-import { isUuid } from '../../../lib/list-params'
-import { canRunReportEntity, guardReportEntity } from '../../../lib/report-authz'
-import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../lib/api/idempotency'
-import { auditSetupChange } from '../../../lib/setup/audit'
-import { loadViews, slugifyViewName, uniqueViewSlug, type ViewScope } from '../../../lib/views'
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "@openbooks/engine/platform/db";
+import { REPORT_ENTITY_MAP, defaultRowsQuery, validateReportLayout } from "@openbooks/reports";
+import { validateOrgReportQuery } from "@/lib/custom-record-report-catalog";
+import type { Authz } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import { canRunReportEntity, guardReportEntity } from "@/lib/report-authz";
+import { claimIdempotentCreate, resolveIdempotentReplay } from "@/lib/api/idempotency";
+import { auditSetupChange } from "@/lib/setup/audit";
+import { loadViews, slugifyViewName, uniqueViewSlug, type ViewScope } from "@/lib/views";
 
 const createViewBodySchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -21,9 +21,9 @@ const createViewBodySchema = z.object({
   layout: z.json().optional(),
   scope: z.enum(["private", "shared"], { error: "Invalid scope" }).optional(),
   allowedRoles: z.array(z.string().trim().min(1).max(100)).max(50).nullable().optional(),
-})
+});
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * List the views visible to the caller (own private + shared).
@@ -32,17 +32,15 @@ export const runtime = 'nodejs'
  * to a reader who cannot run it leaks the catalog (names, descriptions and the
  * stored plan itself) and hands out the id that every execution path keys on.
  */
-async function legacyGET() {
-  const gate = await guardPermission('reports.read')
-  if (gate instanceof NextResponse) return gate
-  const { user, permissions } = gate
-  const rows = await loadViews(user.orgId, user.id, permissions)
-  const visible = []
+async function legacyGET(gate: Authz) {
+  const { user, permissions } = gate;
+  const rows = await loadViews(user.orgId, user.id, permissions);
+  const visible = [];
   for (const row of rows) {
-    if (!(await canRunReportEntity(gate, row.query))) continue
-    visible.push(row)
+    if (!(await canRunReportEntity(gate, row.query))) continue;
+    visible.push(row);
   }
-  return NextResponse.json({ views: visible })
+  return NextResponse.json({ views: visible });
 }
 
 /**
@@ -53,66 +51,64 @@ async function legacyGET() {
  * audit event. Cancel/close writes nothing.
  */
 
-
 export const GET = defineRoute({
   permission: "reports.read",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  handler: async () => legacyGET(),
+  feature: {
+    none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks.",
+  },
+  handler: async ({ authz }) => legacyGET(authz),
 });
 
 export const POST = defineRoute({
   permission: "reports.create",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks.",
+  },
   body: createViewBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ request, body, authz: routeAuthz }) => {
+    const gate = routeAuthz;
 
-    const gate = routeAuthz
+    const { user } = gate;
 
-    const { user } = gate
-
-    const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
+    const requestId = request.headers.get("Idempotency-Key")?.trim() ?? "";
     if (!isUuid(requestId)) {
-      return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
+      return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 400 });
     }
 
+    const name = body.name?.trim() || "Untitled view";
+    const description = body.description?.trim() || null;
 
-
-
-
-    const name = body.name?.trim() || 'Untitled view'
-    const description = body.description?.trim() || null
-
-    let query = defaultRowsQuery(REPORT_ENTITY_MAP.ledger_lines!)
+    let query = defaultRowsQuery(REPORT_ENTITY_MAP.ledger_lines!);
     if (body.query !== undefined) {
       try {
-        query = await validateOrgReportQuery(gate, body.query)
+        query = await validateOrgReportQuery(gate, body.query);
       } catch (err) {
-        return apiErrorResponse(err)
+        return apiErrorResponse(err);
       }
-      const denied = await guardReportEntity(gate, query)
-      if (denied) return denied
+      const denied = await guardReportEntity(gate, query);
+      if (denied) return denied;
     }
-    const layout = (validateReportLayout(body.layout) as Record<string, unknown> | null) ?? null
+    const layout = (validateReportLayout(body.layout) as Record<string, unknown> | null) ?? null;
 
-    const scopeValue: unknown = body.scope ?? 'private'
-    if (scopeValue !== 'private' && scopeValue !== 'shared') {
-      return NextResponse.json({ error: 'Invalid scope' }, { status: 422 })
+    const scopeValue: unknown = body.scope ?? "private";
+    if (scopeValue !== "private" && scopeValue !== "shared") {
+      return NextResponse.json({ error: "Invalid scope" }, { status: 422 });
     }
-    const scope: ViewScope = scopeValue
-    let allowedRoles: string[] | null = null
+    const scope: ViewScope = scopeValue;
+    let allowedRoles: string[] | null = null;
     if (body.allowedRoles !== undefined && body.allowedRoles !== null) {
       if (
         !Array.isArray(body.allowedRoles) ||
-        body.allowedRoles.some((r) => typeof r !== 'string' || r.trim() === '')
+        body.allowedRoles.some((r) => typeof r !== "string" || r.trim() === "")
       ) {
-        return NextResponse.json({ error: 'Invalid allowedRoles' }, { status: 422 })
+        return NextResponse.json({ error: "Invalid allowedRoles" }, { status: 422 });
       }
-      const roles = [...new Set((body.allowedRoles as string[]).map((r) => r.trim()))]
-      allowedRoles = roles.length ? roles : null
+      const roles = [...new Set((body.allowedRoles as string[]).map((r) => r.trim()))];
+      allowedRoles = roles.length ? roles : null;
     }
 
-    const slug = await uniqueViewSlug(user.orgId, slugifyViewName(name))
+    const slug = await uniqueViewSlug(user.orgId, slugifyViewName(name));
 
     const snapshot = {
       id: requestId,
@@ -125,27 +121,36 @@ export const POST = defineRoute({
       scope,
       owner_id: user.id,
       allowed_roles: allowedRoles,
-    }
-    const match = { name, description, query, layout, scope, owner_id: user.id, allowed_roles: allowedRoles }
+    };
+    const match = {
+      name,
+      description,
+      query,
+      layout,
+      scope,
+      owner_id: user.id,
+      allowed_roles: allowedRoles,
+    };
 
     const outcome = await db.transaction(async (tx) => {
       const claim = await claimIdempotentCreate(tx, {
         orgId: user.orgId,
-        table: 'saved_views',
+        table: "saved_views",
         key: requestId,
-      })
-      if (claim === 'exists') {
+      });
+      if (claim === "exists") {
         return {
-          kind: 'replay' as const,
+          kind: "replay" as const,
           result: await resolveIdempotentReplay(tx, {
             orgId: user.orgId,
-            table: 'saved_views',
+            table: "saved_views",
             key: requestId,
             match,
           }),
-        }
+        };
       }
-      const inserted = (await tx.execute<{ id: string; slug: string }>(sql`
+      const inserted = await tx.execute<{ id: string; slug: string }>(
+        sql`
         insert into saved_views
           (id, org_id, slug, name, description, query, layout, scope, owner_id,
            allowed_roles, created_by, updated_by)
@@ -157,45 +162,50 @@ export const POST = defineRoute({
         -- A retry resolves the existing audited payload below; conflicting input is refused.
         on conflict (id) do nothing
         returning id, slug
-      `, 'objects'))
+      `,
+        "objects",
+      );
       if (!inserted[0]) {
         return {
-          kind: 'replay' as const,
+          kind: "replay" as const,
           result: await resolveIdempotentReplay(tx, {
             orgId: user.orgId,
-            table: 'saved_views',
+            table: "saved_views",
             key: requestId,
             match,
           }),
-        }
+        };
       }
       await auditSetupChange(
         {
           orgId: user.orgId,
-          table: 'saved_views',
+          table: "saved_views",
           rowId: requestId,
-          action: 'insert',
+          action: "insert",
           changes: { before: null, after: snapshot },
           actorId: user.id,
           requestId,
         },
         tx,
-      )
-      return { kind: 'created' as const, result: inserted[0] }
-    })
-    if (outcome.kind === 'replay') {
-      if (outcome.result === 'conflict') {
-        return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+      );
+      return { kind: "created" as const, result: inserted[0] };
+    });
+    if (outcome.kind === "replay") {
+      if (outcome.result === "conflict") {
+        return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 409 });
       }
-      const existing = (await db.execute<{ id: string; slug: string }>(sql`
+      const existing = await db.execute<{ id: string; slug: string }>(
+        sql`
         select id, slug from saved_views
          where id = ${requestId} and org_id = ${user.orgId}
-      `, 'objects'))
+      `,
+        "objects",
+      );
       if (!existing[0]) {
-        return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+        return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 409 });
       }
-      return NextResponse.json({ id: existing[0].id, slug: existing[0].slug }, { status: 200 })
+      return NextResponse.json({ id: existing[0].id, slug: existing[0].slug }, { status: 200 });
     }
-    return NextResponse.json({ id: outcome.result.id, slug: outcome.result.slug }, { status: 201 })
+    return NextResponse.json({ id: outcome.result.id, slug: outcome.result.slug }, { status: 201 });
   },
 });
