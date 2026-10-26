@@ -1,10 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import {
-  DocumentVoidError,
-  requestDocumentVoid,
-} from "@openbooks/engine/documents";
+import { DocumentVoidError, requestDocumentVoid } from "@openbooks/engine/documents";
 import { SubmitError, submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
 import { ControlAccountsIncompleteError } from "@openbooks/engine/records/control-accounts";
 import { postDocument } from "@openbooks/engine/documents";
@@ -14,15 +11,11 @@ import { DocumentEditError } from "@openbooks/engine/documents";
 import type { DocumentEditInput } from "@openbooks/engine/documents";
 import { createPermission, postPermission, DOC_KINDS } from "../document-kinds";
 import { customFieldViewerFor } from "../custom-fields";
-// Form-specific editing remains in the shared editor adapter; the engine owns
-// the correction transaction, source checks and retained correction evidence.
-import { correctPostedDocumentWithEditor, runPostedCorrectionDraftFlows, isDocKindEnabled } from "../documents.ts";
+import { isDocKindEnabled } from "@openbooks/engine/documents/write";
+import { applyPostedDocumentCorrection } from "@openbooks/engine/ledger/document-correction-editing";
 import { isUuid } from "../list-params";
 import type { ApplicationContext } from "./context";
-import {
-  assertApplicationPermission,
-  assertSubsidiaryAccess,
-} from "./context";
+import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 type DocumentHeader = {
@@ -32,17 +25,17 @@ type DocumentHeader = {
   subsidiaryId: string | null;
 };
 
-async function documentHeader(
-  context: ApplicationContext,
-  id: string,
-): Promise<DocumentHeader> {
+async function documentHeader(context: ApplicationContext, id: string): Promise<DocumentHeader> {
   if (!isUuid(id)) throw invalidInput("documentId must be a UUID");
-  const result = (await db.execute<DocumentHeader>(sql`
+  const result = await db.execute<DocumentHeader>(
+    sql`
     select id, kind, status, subsidiary_id as "subsidiaryId"
       from documents
      where id = ${id} and org_id = ${context.authz.user.orgId}
      limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   const header = result[0];
   if (!header) throw notFound("document");
   if (!(await isDocKindEnabled(context.authz.user.orgId, header.kind))) {
@@ -58,12 +51,15 @@ async function lockDocumentHeader(
   id: string,
 ): Promise<DocumentHeader> {
   if (!isUuid(id)) throw invalidInput("documentId must be a UUID");
-  const result = (await db.execute<DocumentHeader>(sql`
+  const result = await db.execute<DocumentHeader>(
+    sql`
     select id, kind, status, subsidiary_id as "subsidiaryId"
       from documents
      where id = ${id} and org_id = ${context.authz.user.orgId}
      for update
-  `, "objects"));
+  `,
+    "objects",
+  );
   const header = result[0];
   if (!header) throw notFound("document");
   if (!(await isDocKindEnabled(context.authz.user.orgId, header.kind))) {
@@ -113,15 +109,18 @@ export function domainFailure(error: unknown): never {
   // assembler (which pulls PDF rendering no lifecycle caller may load
   // statically), so it is matched by its stable code, not by instanceof.
   if (
-    (error instanceof Error && (error as { code?: unknown }).code === 'invoice_backup_required')
-    || error instanceof DocumentVoidError
-    || error instanceof DocumentEditError
-    || error instanceof PostingError
-    || error instanceof ControlAccountsIncompleteError
-    || error instanceof SubmitError
+    (error instanceof Error && (error as { code?: unknown }).code === "invoice_backup_required") ||
+    error instanceof DocumentVoidError ||
+    error instanceof DocumentEditError ||
+    error instanceof PostingError ||
+    error instanceof ControlAccountsIncompleteError ||
+    error instanceof SubmitError
   ) {
     throw new ApplicationError(
-      (error instanceof DocumentEditError || error instanceof DocumentVoidError) && error.status === 409 ? "conflict" : "invalid_input",
+      (error instanceof DocumentEditError || error instanceof DocumentVoidError) &&
+        error.status === 409
+        ? "conflict"
+        : "invalid_input",
       error.message,
       error instanceof DocumentEditError || error instanceof DocumentVoidError ? error.status : 422,
     );
@@ -166,7 +165,11 @@ export async function advanceDocumentLifecycle(
             return {
               status: "pending_approval",
               requestId: submission.runId,
-              document: await loadDocument(input.documentId, context.authz.user.orgId, customFieldViewerFor(context.authz)),
+              document: await loadDocument(
+                input.documentId,
+                context.authz.user.orgId,
+                customFieldViewerFor(context.authz),
+              ),
             };
           }
           currentStatus = "approved";
@@ -191,7 +194,11 @@ export async function advanceDocumentLifecycle(
           }
           return {
             status: "approved",
-            document: await loadDocument(input.documentId, context.authz.user.orgId, customFieldViewerFor(context.authz)),
+            document: await loadDocument(
+              input.documentId,
+              context.authz.user.orgId,
+              customFieldViewerFor(context.authz),
+            ),
           };
         }
         if (currentStatus !== "approved") {
@@ -209,7 +216,11 @@ export async function advanceDocumentLifecycle(
         return {
           status: "posted",
           entryId,
-          document: await loadDocument(input.documentId, context.authz.user.orgId, customFieldViewerFor(context.authz)),
+          document: await loadDocument(
+            input.documentId,
+            context.authz.user.orgId,
+            customFieldViewerFor(context.authz),
+          ),
         };
       } catch (error) {
         domainFailure(error);
@@ -360,7 +371,10 @@ export async function correctPostedDocument(
   // every records/payments write, and an explicit null is an unresolved
   // entity that fails closed for a restricted scope.
   const rehomedSubsidiaryId = input.correction.subsidiaryId;
-  assertSubsidiaryAccess(context, rehomedSubsidiaryId === undefined ? header.subsidiaryId : rehomedSubsidiaryId);
+  assertSubsidiaryAccess(
+    context,
+    rehomedSubsidiaryId === undefined ? header.subsidiaryId : rehomedSubsidiaryId,
+  );
   const outcome = await executeIdempotent({
     context,
     operation: "documents.correct",
@@ -370,22 +384,19 @@ export async function correctPostedDocument(
       try {
         // The engine locks and rechecks the source, grants and feature state.
         // Completed idempotency keys replay without invoking this callback.
-        const corrected = await correctPostedDocumentWithEditor(
-          input.documentId,
-          input.correction,
-          { orgId: context.authz.user.orgId, userId: context.authz.user.id, source: context.source },
-        );
-        const { replacement } = corrected;
-        // Approval routing is part of the idempotent command. Flow runs, gates,
-        // and deferred effects must commit with the correction and void so a
-        // failed dispatch rolls the command back and a replay cannot skip it.
-        // In-place corrections keep the source: no replacement draft exists.
-        if (corrected.kind === 'void-and-reissue') {
-          await runPostedCorrectionDraftFlows(replacement.id, replacement.kind, {
+        // Replacement draft flows dispatch with the correction, so a failed
+        // dispatch rolls the command back and a replay cannot skip it.
+        const corrected = await applyPostedDocumentCorrection(
+          {
             orgId: context.authz.user.orgId,
             userId: context.authz.user.id,
             source: context.source,
-          });
+          },
+          { documentId: input.documentId, correction: input.correction },
+          { draftFlows: "with-correction" },
+        );
+        const { replacement } = corrected;
+        if (corrected.kind === "void-and-reissue") {
           return {
             correctionOutcome: corrected.kind,
             correctionId: replacement.id,

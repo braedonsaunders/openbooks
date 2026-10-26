@@ -371,6 +371,7 @@
     "./journal/historical-translation-evidence": "./src/journal/historical-translation-evidence.ts",
     "./ledger/cash-deposits": "./src/ledger/public-cash-deposits.ts",
     "./ledger/cash-deposits/module": "./src/ledger/cash-deposits.ts",
+    "./ledger/document-correction-editing": "./src/ledger/document-correction-editing.ts",
     "./ledger/document-defaults": "./src/ledger/document-defaults.ts",
     "./ledger/document-delete": "./src/ledger/document-delete.ts",
     "./ledger/document-editing": "./src/ledger/document-editing.ts",

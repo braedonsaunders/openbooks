@@ -1,38 +1,41 @@
-import { z } from 'zod';
-import { defineRoute } from '@/lib/api/route';
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { lockedDocumentScopeDenied } from '../../../../../lib/document-scope.ts'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { DocumentVoidError } from "@openbooks/engine/ledger/document-void";
+import { correctPostedExpenseReport } from "@openbooks/engine/ledger/document-correction-editing";
+import { can, guardSubsidiaryScope } from "../../../../../lib/authz";
 import {
-  DocumentVoidError,
-  requestDocumentVoid,
-} from '@openbooks/engine/ledger/document-void'
-import { can, guardSubsidiaryScope } from '../../../../../lib/authz'
-import { DocumentEditError, requireDocumentEditRevision, validateCorrectionReason } from "@openbooks/engine/records/document-edit-policy";
-import { type ExpenseCorrectionBody, createExpenseCorrectionDraft } from '../../../../../lib/expense-edit'
-import { isUuid } from '../../../../../lib/list-params'
+  DocumentEditError,
+  requireDocumentEditRevision,
+  validateCorrectionReason,
+} from "@openbooks/engine/records/document-edit-policy";
+import type { ExpenseCorrectionBody } from "../../../../../lib/expense-edit";
+import { isUuid } from "../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({
-  // Omitted values reach the named revision/reason refusals below; a
-  // narrower schema either 400s before them or silently drops submitted
-  // edits (memo, lines) while still answering 201. The correction draft
-  // runs the same validation the draft PATCH runs.
-  amendmentReason: z.string().trim().min(1).optional(),
-  expectedUpdatedAt: z.string().min(1).optional(),
-  documentDate: z.string().optional(),
-  memo: z.string().nullable().optional(),
-  partyId: z.string().nullable().optional(),
-  paymentCardId: z.string().nullable().optional(),
-  extraDims: z.record(z.string(), z.unknown()).optional(),
-  custom: z.record(z.string(), z.unknown()).optional(),
-  lines: z.array(z.looseObject({})).optional(),
-}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
+const POSTBodySchema1 = z
+  .object({
+    // Omitted values reach the named revision/reason refusals below; a
+    // narrower schema either 400s before them or silently drops submitted
+    // edits (memo, lines) while still answering 201. The correction draft
+    // runs the same validation the draft PATCH runs.
+    amendmentReason: z.string().trim().min(1).optional(),
+    expectedUpdatedAt: z.string().min(1).optional(),
+    documentDate: z.string().optional(),
+    memo: z.string().nullable().optional(),
+    partyId: z.string().nullable().optional(),
+    paymentCardId: z.string().nullable().optional(),
+    extraDims: z.record(z.string(), z.unknown()).optional(),
+    custom: z.record(z.string(), z.unknown()).optional(),
+    lines: z.array(z.looseObject({})).optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "At least one field must be provided.",
+  });
 
-
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Correct a posted expense report — the expense half of the documents
@@ -48,8 +51,8 @@ export const runtime = 'nodejs'
  * workflow.
  */
 export const POST = defineRoute({
-  permission: 'expenses.create',
-  feature: 'expenses',
+  permission: "expenses.create",
+  feature: "expenses",
   body: POSTBodySchema1,
   opaque: {
     extraDims: "segment dimensions are validated by name in prepareExpenseEdit",
@@ -58,94 +61,81 @@ export const POST = defineRoute({
   handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
-    const user = gate.user
-    const { id } = await params
-    if (!isUuid(id)) return notFound("record")
-    const found = (await db.execute<{
-        status: string
-        subsidiaryId: string | null
-        custom: Record<string, unknown> | null
-        documentDate: string
-      }>(sql`
+    const user = gate.user;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
+    const found = await db.execute<{
+      status: string;
+      subsidiaryId: string | null;
+      custom: Record<string, unknown> | null;
+      documentDate: string;
+    }>(
+      sql`
         select status, subsidiary_id as "subsidiaryId", custom,
                document_date as "documentDate"
           from documents
          where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}
-      `, 'objects'))
-    const source = found[0]
-    if (!source) return notFound("record")
-    const denied = guardSubsidiaryScope(gate, source.subsidiaryId)
-    if (denied) return denied
-    if (!can(gate, 'expenses.create')) {
-        return NextResponse.json({ error: 'missing permission: expenses.create' }, { status: 403 })
-      }
-    if (!can(gate, 'ap.post')) {
-        return NextResponse.json({ error: 'missing permission: ap.post' }, { status: 403 })
-      }
-    if (source.status !== 'posted') {
-        return NextResponse.json({ error: 'only a posted expense report can be corrected' }, { status: 422 })
-      }
+      `,
+      "objects",
+    );
+    const source = found[0];
+    if (!source) return notFound("record");
+    const denied = guardSubsidiaryScope(gate, source.subsidiaryId);
+    if (denied) return denied;
+    if (!can(gate, "expenses.create")) {
+      return NextResponse.json({ error: "missing permission: expenses.create" }, { status: 403 });
+    }
+    if (!can(gate, "ap.post")) {
+      return NextResponse.json({ error: "missing permission: ap.post" }, { status: 403 });
+    }
+    if (source.status !== "posted") {
+      return NextResponse.json(
+        { error: "only a posted expense report can be corrected" },
+        { status: 422 },
+      );
+    }
 
-    const body = (routeBody) as ExpenseCorrectionBody
+    const body = routeBody as ExpenseCorrectionBody;
     try {
-        requireDocumentEditRevision(body.expectedUpdatedAt)
-        validateCorrectionReason(body.amendmentReason)
-      } catch (e) {
-        if (e instanceof DocumentEditError) {
-          return apiErrorResponse(e)
-        }
-        throw e
+      requireDocumentEditRevision(body.expectedUpdatedAt);
+      validateCorrectionReason(body.amendmentReason);
+    } catch (e) {
+      if (e instanceof DocumentEditError) {
+        return apiErrorResponse(e);
       }
-    let outcome: {
-        replacement: { id: string; documentNumber: string }
-        result: { status: 'voided' | 'pending_approval'; runId: string | null }
-      }
+      throw e;
+    }
     try {
-        // The replacement draft (and its mandatory `reverses` evidence) plus the
-        // source's controlled void are one atomic unit — the same guarantee as
-        // POST /api/documents/[id]/correct. Correction drafts are flow-silent
-        // until submitted (expense drafts never run on_create flows), so unlike
-        // the generic contract there is no post-commit flow dispatch here; the
-        // replacement runs its on_submit flows when it is submitted.
-        outcome = await withOrgTransaction(user.orgId, async () => {
-          // Locked scope recheck: a rehome that landed after the precheck
-          // must not let this unit correct-and-void another subsidiary's
-          // document. The replacement draft and the controlled void below
-          // share this transaction, so the lock covers both.
-          const relocked = await lockedDocumentScopeDenied(gate, id)
-          // DocumentEditError (not the void error) so the refusal keeps the
-          // uniform missing shape — no extra code field to tell it apart.
-          if (relocked) throw new DocumentEditError(404, 'not found')
-          const replacement = await createExpenseCorrectionDraft(id, body, {
-            orgId: user.orgId,
-            userId: user.id,
-            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-          })
-          const result = await requestDocumentVoid({
-            documentId: id,
-            orgId: user.orgId,
-            actorId: user.id,
-            reason: (body.amendmentReason ?? '').trim(),
-            source: 'ui',
-            expectedUpdatedAt: body.expectedUpdatedAt,
-          })
-          return { replacement, result }
-        })
-        return NextResponse.json(
-          {
-            ok: true,
-            correctionId: outcome.replacement.id,
-            correctionNumber: outcome.replacement.documentNumber,
-            voidStatus: outcome.result.status,
-            requestId: outcome.result.runId,
-          },
-          { status: outcome.result.status === 'pending_approval' ? 202 : 201 },
-        )
-      } catch (error) {
-        if (error instanceof DocumentEditError || error instanceof DocumentVoidError) {
-          return apiErrorResponse(error)
-        }
-        throw error
+      // The replacement draft (and its mandatory `reverses` evidence) plus the
+      // source's controlled void are one atomic unit under the source's row
+      // lock, rechecked against the caller's scope — the same guarantee as
+      // POST /api/documents/[id]/correct. Expense drafts are flow-silent until
+      // submitted, so there is no post-commit flow dispatch here.
+      const corrected = await correctPostedExpenseReport(
+        {
+          orgId: user.orgId,
+          userId: user.id,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+          source: "ui",
+        },
+        { documentId: id, correction: body },
+      );
+      const outcome = { replacement: corrected.replacement, result: corrected.voidResult };
+      return NextResponse.json(
+        {
+          ok: true,
+          correctionId: outcome.replacement.id,
+          correctionNumber: outcome.replacement.documentNumber,
+          voidStatus: outcome.result.status,
+          requestId: outcome.result.runId,
+        },
+        { status: outcome.result.status === "pending_approval" ? 202 : 201 },
+      );
+    } catch (error) {
+      if (error instanceof DocumentEditError || error instanceof DocumentVoidError) {
+        return apiErrorResponse(error);
       }
+      throw error;
+    }
   },
 });
