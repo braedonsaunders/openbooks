@@ -1,9 +1,8 @@
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { signOwnDocument } from "@openbooks/engine/hrm/documents/documents";
-import { guardPermission } from "../../../../../../lib/authz";
+import { guardPermission } from "@/lib/authz";
 import { hrmDocumentsErrorResponse } from "../../_lib";
 const signOwnBody = z.object({ name: z.string().trim().min(1).max(120) });
 /**
@@ -13,25 +12,21 @@ const signOwnBody = z.object({ name: z.string().trim().min(1).max(120) });
  * open signer row here, so this path never signs for another person.
  */
 export const POST = defineRoute({
-  public: "session",
+  authorize: async () => {
+    const self = await guardPermission("hrm.self.read");
+    return self instanceof NextResponse ? await guardPermission("hrm.documents.read") : self;
+  },
   feature: "hrmDocuments",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, params }) => {
-    const self = await guardPermission("hrm.self.read");
-    const actor =
-      self instanceof NextResponse
-        ? await guardPermission("hrm.documents.read")
-        : self;
-    if (actor instanceof NextResponse) return actor;
-    const parsedBody = await parseJsonBody(req, signOwnBody);
-    if (!parsedBody.ok) return parsedBody.response;
+  body: signOwnBody,
+  handler: async ({ authz: actor, params, body }) => {
     try {
       const { id } = params;
       const document = await signOwnDocument({
         orgId: actor.user.orgId,
         actorId: actor.user.id,
         documentId: id,
-        name: parsedBody.data.name,
+        name: body.name,
       });
       return NextResponse.json({ document });
     } catch (e) {

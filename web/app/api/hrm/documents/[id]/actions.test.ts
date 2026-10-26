@@ -20,7 +20,6 @@ const routeState: RouteState = {
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-
 const mockSources = new Map<string, string>([
   [
     "mock:authz",
@@ -84,13 +83,24 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmDocumentsActionsNextResponse = NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmDocumentsActionsNextResponse = NextResponse;
 
 registerHooks({
   resolve(specifier, _context, nextResolve) {
-    if (specifier === "../../../../../../lib/authz" || specifier === "./authz" || specifier === "./features") return { url: "mock:authz", shortCircuit: true };
-    if (specifier === "@openbooks/engine/hrm/documents/documents") return { url: "mock:service", shortCircuit: true };
-    if (specifier === "../../../../../../lib/hrm/document-delivery") return { url: "mock:delivery", shortCircuit: true };
+    if (
+      specifier === "../../../../../../lib/authz" ||
+      specifier === "@/lib/authz" ||
+      specifier === "@/lib/features" ||
+      specifier === "./authz" ||
+      specifier === "./features"
+    )
+      return { url: "mock:authz", shortCircuit: true };
+    if (specifier === "@openbooks/engine/hrm/documents/documents")
+      return { url: "mock:service", shortCircuit: true };
+    if (specifier === "../../../../../../lib/hrm/document-delivery")
+      return { url: "mock:delivery", shortCircuit: true };
     if (specifier === "../../route") return { url: "mock:collection", shortCircuit: true };
     return nextResolve(specifier);
   },
@@ -130,7 +140,10 @@ test("send, remind, void and hold refuse a read-only role before the service run
     (await voidRoute.POST(post("http://openbooks.test/x", { reason: "duplicate" }), ctx)).status,
     403,
   );
-  assert.equal((await holdRoute.POST(post("http://openbooks.test/x", { hold: true }), ctx)).status, 403);
+  assert.equal(
+    (await holdRoute.POST(post("http://openbooks.test/x", { hold: true }), ctx)).status,
+    403,
+  );
   assert.deepEqual(routeState.calls, [], "no write reached the service without the manage grant");
 });
 
