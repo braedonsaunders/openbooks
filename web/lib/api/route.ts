@@ -36,6 +36,12 @@ interface CommonOptions<A, P extends z.ZodType | undefined, B extends z.ZodType 
   params?: P;
   /** Preserve an opaque missing-record response for malformed record identifiers. */
   invalidParamsNotFound?: "record" | "route";
+  /** Run route preconditions after parameters but before the request body is read. */
+  beforeBody?: (ctx: {
+    request: Request;
+    authz: A;
+    params: P extends z.ZodType ? z.output<P> : unknown;
+  }) => void | NextResponse | Promise<void | NextResponse>;
   /** Select a schema for methods whose request discriminator selects the body shape. */
   body?: B | ((ctx: RouteInputContext<P>) => B | undefined);
   /** Top-level JSON body columns that intentionally remain uninterpreted. */
@@ -131,6 +137,11 @@ interface LooseOptions {
     z.ZodType | undefined,
     z.ZodType | undefined
   >["invalidParamsNotFound"];
+  beforeBody?: (ctx: {
+    request: Request;
+    authz: unknown;
+    params: unknown;
+  }) => void | NextResponse | Promise<void | NextResponse>;
   body?: z.ZodType | ((ctx: { request: Request; params: unknown }) => z.ZodType | undefined);
   opaque?: Record<string, string>;
   maxBodyBytes?: number | ((ctx: { request: Request; params: unknown }) => number | undefined);
@@ -256,6 +267,13 @@ export function defineRoute(options: LooseOptions) {
           params = resolved;
         }
       }
+
+      const bodyPrecondition = await options.beforeBody?.({
+        request,
+        authz: authz as never,
+        params: params as never,
+      });
+      if (bodyPrecondition instanceof NextResponse) return bodyPrecondition;
 
       let body: unknown;
       const routeInput = { request, params };
