@@ -60,7 +60,7 @@ interface BucketCell {
   value: string
   isZero: boolean
   tone: 'default' | 'negative'
-  drill: ReportDrillTarget
+  drill: ReportDrillTarget | undefined
 }
 
 export interface AgingSummaryRow {
@@ -135,7 +135,6 @@ export interface AgingData {
   labelBase: string
   labelTransaction: string
   bucketLabels: Record<(typeof BUCKETS)[number], string>
-  dashPlaceholder: string
   /** Set when underived consolidated rates block the report:
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
@@ -302,21 +301,31 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     bucket?: (typeof BUCKETS)[number],
   ): ReportDrillTarget => ({
     kind: 'aging',
-    subsidiaryId: q.subsidiaryId,
+    ...(q.subsidiaryId ? { subsidiaryId: q.subsidiaryId } : {}),
     label,
     side,
     asOf,
-    // A copy per target: one object shared by thousands of cells serializes
-    // as a long back-reference in every cell instead of its own few bytes.
-    dims: { ...dims },
+    // A compact copy per target: one object shared by thousands of cells
+    // serializes as a long back-reference in every cell, and unset
+    // dimensions would travel as explicit empties.
+    dims: drillDims(),
     // The drawer must reproduce the screen's selection, not the defaults.
     // The partyless row drills to exactly its documents: omitting the party
     // would drop the predicate and show every party's documents.
     currencyBasis,
-    currency: target || undefined,
+    ...(target ? { currency: target } : {}),
     ...(partyId ? { partyId } : { unassignedParty: true }),
     ...(bucket ? { bucket } : {}),
   })
+  const drillDims = (): typeof dims => {
+    const compact: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(dims)) {
+      if (value === undefined || value === null) continue
+      if (key === 'segments' && typeof value === 'object' && Object.keys(value).length === 0) continue
+      compact[key] = typeof value === 'object' ? structuredClone(value) : value
+    }
+    return compact as typeof dims
+  }
 
   const bucketCell = (
     row: Record<string, string>,
@@ -327,7 +336,8 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     value: decimalIsZero(row[b]!) ? '' : m(row[b]!),
     isZero: decimalIsZero(row[b]!),
     tone: decimalCmp(row[b]!, '0') < 0 ? 'negative' : 'default',
-    drill: bucketDrill(`${name} · ${bucketLabels[b]}`, partyId ?? undefined, b),
+    // An empty bucket has no documents to show, so it renders its dash plainly.
+    drill: decimalIsZero(row[b]!) ? undefined : bucketDrill(`${name} · ${bucketLabels[b]}`, partyId ?? undefined, b),
   })
 
   // Every open-balance surface states BOTH facts: the denomination (and, on
@@ -368,7 +378,6 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     labelBase: t('baseOption'),
     labelTransaction: t('transactionOption'),
     bucketLabels,
-    dashPlaceholder: '—',
     summaryRows: (summary?.rows ?? []).map((r, i) => {
       const reconciling = r.reconciling === true
       const name = reconciling ? t('controlEntries.label') : r.partyName ?? noParty
@@ -459,7 +468,10 @@ function bucketColumn(b: (typeof BUCKETS)[number]) {
     drill(
       item(`${b}.drill`),
       text(item(`${b}.value`), {
-        fallback: rootF('dashPlaceholder'),
+        // A literal, not a page value: a cell that reads only its row can
+        // render in the browser, so long agings send only their first rows
+        // as markup.
+        fallback: '—',
         fallbackClassName: DASH,
         tone: item(`${b}.tone`),
       }),

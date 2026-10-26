@@ -34,3 +34,20 @@ test('the export menu receives the screen params including the resolved as-of', 
     'the export must run against the screen-resolved params, not just the raw page params',
   )
 })
+
+test('a long summary renders its party rows in the browser, a window at a time', async () => {
+  const { rowsRenderInBrowser } = await import('../../../../components/viewspec/windowed-rows')
+  const spec = agingSpec({ isSummary: true, hasSummaryRows: true, ratesReady: true } as unknown as AgingData)
+  const tables: Record<string, unknown>[] = []
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) return node.forEach(visit)
+    if (typeof node !== 'object' || node === null) return
+    const block = node as Record<string, unknown>
+    if (block.kind === 'table') tables.push(block)
+    Object.values(block).forEach(visit)
+  }
+  visit(spec)
+  const summary = tables.find((table) => JSON.stringify(table.rows).includes('summaryRows'))
+  assert.ok(summary, 'the summary table is on the page')
+  assert.equal(rowsRenderInBrowser(summary as never), true, 'its cells read only their own row')
+})
