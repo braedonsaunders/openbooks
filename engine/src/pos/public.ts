@@ -39,4 +39,16 @@ export {
   type PosReceipt,
   type PosSaleLineInput,
 } from "./sales.ts";
-export { holdCart, listHeldCarts, resumeHeldCart, type HeldCartContent, type ResumedCart } from "./held-carts.ts";
+export {
+  holdCart,
+  listHeldCarts,
+  resumeHeldCart,
+  type HeldCartContent,
+  type ResumedCart,
+} from "./held-carts.ts";
+export {
+  searchPosCustomers,
+  searchPosItems,
+  type PosCustomerSearchResult,
+  type PosItemSearchResult,
+} from "./register-search.ts";
