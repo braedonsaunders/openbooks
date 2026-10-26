@@ -2,7 +2,7 @@ import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 import {
   buildQuickApprovalGraph,
   flowSubjectProfileForOrg,
@@ -10,11 +10,15 @@ import {
   listFlowSubjectProfiles,
   quickApprovalAmountField,
   validateFlowSubjectScopeRefs,
-} from '@openbooks/engine/flows/module'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
-import { activeUserIds, insertQuickApprovalFlow, readQuickApprovalSetup } from '../../../../../lib/flows/quick-approval-store'
+} from "@openbooks/engine/flows/module";
+import type { Authz } from "@/lib/authz";
+import {
+  activeUserIds,
+  insertQuickApprovalFlow,
+  readQuickApprovalSetup,
+} from "../../../../../lib/flows/quick-approval-store";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * One-step approval setup — the four-click path to a governed record kind.
@@ -28,11 +32,14 @@ export const runtime = 'nodejs'
  * delete, preserving execution history.
  */
 
-const FLOW_SUBJECT_KINDS = listFlowSubjectProfiles().map((profile) => profile.subjectKind) as [string, ...string[]];
+const FLOW_SUBJECT_KINDS = listFlowSubjectProfiles().map((profile) => profile.subjectKind) as [
+  string,
+  ...string[],
+];
 
 const approverSchema = z.union([
-  z.object({ type: z.literal('user'), userId: z.string().min(1).max(64) }),
-  z.object({ type: z.literal('role'), role: z.string().min(1).max(64) }),
+  z.object({ type: z.literal("user"), userId: z.string().min(1).max(64) }),
+  z.object({ type: z.literal("role"), role: z.string().min(1).max(64) }),
 ]);
 
 const requestBodySchema = z.object({
@@ -45,23 +52,21 @@ const requestBodySchema = z.object({
   subsidiaryIds: z.array(uuidString()).min(1).max(100).optional(),
 });
 
-async function legacyGET(req: Request) {
-  const gate = await guardFeaturePermission('flows.manage', 'flows')
-  if (gate instanceof NextResponse) return gate
-  const subjectKind = new URL(req.url).searchParams.get('subjectKind') ?? ''
+async function legacyGET(req: Request, gate: Authz) {
+  const subjectKind = new URL(req.url).searchParams.get("subjectKind") ?? "";
   if (!listFlowSubjectProfiles().some((profile) => profile.subjectKind === subjectKind)) {
-    return NextResponse.json({ error: `unknown subject kind "${subjectKind}"` }, { status: 400 })
+    return NextResponse.json({ error: `unknown subject kind "${subjectKind}"` }, { status: 400 });
   }
-  const profile = await flowSubjectProfileForOrg(gate.user.orgId, subjectKind)
+  const profile = await flowSubjectProfileForOrg(gate.user.orgId, subjectKind);
   if (!profile) {
-    return NextResponse.json({ error: `unknown subject kind "${subjectKind}"` }, { status: 400 })
+    return NextResponse.json({ error: `unknown subject kind "${subjectKind}"` }, { status: 400 });
   }
-  const setup = await readQuickApprovalSetup(gate.user.orgId, subjectKind)
-  const flow = setup.flow
-  const flowGraph = (flow?.graph ?? null) as { subjectScope?: { subsidiaryIds?: unknown } } | null
+  const setup = await readQuickApprovalSetup(gate.user.orgId, subjectKind);
+  const flow = setup.flow;
+  const flowGraph = (flow?.graph ?? null) as { subjectScope?: { subsidiaryIds?: unknown } } | null;
   const flowSubsidiaryIds = Array.isArray(flowGraph?.subjectScope?.subsidiaryIds)
     ? flowGraph.subjectScope.subsidiaryIds.map(String)
-    : []
+    : [];
   return NextResponse.json({
     flow: flow
       ? {
@@ -87,13 +92,13 @@ async function legacyGET(req: Request) {
     })),
     amountField: quickApprovalAmountField(profile),
     subjectLabel: profile.label,
-  })
+  });
 }
 
 export const GET = defineRoute({
   permission: "flows.manage",
   feature: "flows",
-  handler: async ({ request }) => legacyGET(request as Request),
+  handler: async ({ request, authz }) => legacyGET(request, authz),
 });
 
 export const POST = defineRoute({
@@ -102,46 +107,59 @@ export const POST = defineRoute({
   scope: "unrestricted",
   body: requestBodySchema,
   handler: async ({ request, body, authz: routeAuthz }) => {
-    const gate = routeAuthz
-    const user = gate.user
+    const gate = routeAuthz;
+    const user = gate.user;
 
-    const profile = await flowSubjectProfileForOrg(user.orgId, body.subjectKind)
+    const profile = await flowSubjectProfileForOrg(user.orgId, body.subjectKind);
     if (!profile) {
-      return NextResponse.json({ error: `unknown subject kind "${body.subjectKind}"` }, { status: 400 })
+      return NextResponse.json(
+        { error: `unknown subject kind "${body.subjectKind}"` },
+        { status: 400 },
+      );
     }
-    const approverIds = body.approver.type === 'user' ? await activeUserIds(user.orgId) : undefined
+    const approverIds = body.approver.type === "user" ? await activeUserIds(user.orgId) : undefined;
     const built = buildQuickApprovalGraph(
       profile,
       {
         approver: body.approver,
         ...(body.threshold !== undefined ? { threshold: body.threshold } : {}),
-        ...(body.preventSelfApproval !== undefined ? { preventSelfApproval: body.preventSelfApproval } : {}),
+        ...(body.preventSelfApproval !== undefined
+          ? { preventSelfApproval: body.preventSelfApproval }
+          : {}),
         ...(body.subsidiaryIds !== undefined ? { subsidiaryIds: body.subsidiaryIds } : {}),
       },
       approverIds,
-    )
+    );
     if (!built.ok) {
-      return NextResponse.json({ error: built.message, code: built.code }, { status: 400 })
+      return NextResponse.json({ error: built.message, code: built.code }, { status: 400 });
     }
     // Selected legal entities are native references, not free text: each
     // must belong to this organization and sit inside the writer's own
     // subsidiary ceiling (this route already requires unrestricted scope,
     // and the check stays explicit for every managed write).
-    const scopeRefusal = await validateFlowSubjectScopeRefs(user.orgId, built.graph, gate.allowedSubsidiaryIds)
+    const scopeRefusal = await validateFlowSubjectScopeRefs(
+      user.orgId,
+      built.graph,
+      gate.allowedSubsidiaryIds,
+    );
     if (scopeRefusal) {
-      return NextResponse.json({ error: scopeRefusal, code: 'bad-subject-scope' }, { status: 400 })
+      return NextResponse.json({ error: scopeRefusal, code: "bad-subject-scope" }, { status: 400 });
     }
     // The setup promises an enabled flow: prove the generated graph passes
     // the same lint the designer save path enforces before writing anything.
-    const lint = lintFlowGraphForSubject(body.subjectKind, built.graph, profile)
+    const lint = lintFlowGraphForSubject(body.subjectKind, built.graph, profile);
     if (!lint.ok) {
-      return NextResponse.json({ errors: lint.errors }, { status: 400 })
+      return NextResponse.json({ errors: lint.errors }, { status: 400 });
     }
-    const name = body.name?.trim() || `Approval: ${profile.label}`
+    const name = body.name?.trim() || `Approval: ${profile.label}`;
     const id = await insertQuickApprovalFlow({
-      orgId: user.orgId, actorId: user.id, name, subjectKind: body.subjectKind,
-      graph: built.graph, requestId: request.headers.get('X-Request-Id'),
-    })
-    return NextResponse.json({ id })
+      orgId: user.orgId,
+      actorId: user.id,
+      name,
+      subjectKind: body.subjectKind,
+      graph: built.graph,
+      requestId: request.headers.get("X-Request-Id"),
+    });
+    return NextResponse.json({ id });
   },
 });

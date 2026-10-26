@@ -1,7 +1,9 @@
 /** Stable web contract for outbound webhook emission from save paths. */
-export { emitCustomerUpdated, emitItemUpdated } from './emit.ts'
+export { emitCustomerUpdated, emitItemUpdated } from "./emit.ts";
 /** Subscribable event types for the endpoint form (grouped client-side by prefix). */
-export { FANOUT_EVENT_TYPES } from './catalog.ts'
+export { FANOUT_EVENT_TYPES } from "./catalog.ts";
+/** Read-only endpoint details and delivery history. */
+export { readWebhookEndpointActivity } from "./endpoint-reads.ts";
 /** Endpoint management for Settings → Developers → Webhooks (audited, permission-checked). */
 export {
   createWebhookEndpoint,
@@ -11,4 +13,4 @@ export {
   setWebhookEndpointStatus,
   updateWebhookEndpoint,
   WebhookEndpointError,
-} from './endpoints.ts'
+} from "./endpoints.ts";

@@ -2,14 +2,12 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
 import { auditBackupEvent, getBackupObject } from "@openbooks/engine/backup/backup";
-import { guardPermission } from "../../../../../../lib/authz";
-import { contentDisposition } from "../../../../../../lib/export";
-import { isUuid } from "../../../../../../lib/list-params";
+import { findStoredBackupArchive } from "@openbooks/engine/backup/backup-read";
+import type { Authz } from "@/lib/authz";
+import { contentDisposition } from "@/lib/export";
+import { isUuid } from "@/lib/list-params";
 import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -17,27 +15,25 @@ export const runtime = "nodejs";
  * Download a stored backup object from S3 (streamed through, never buffered).
  * The download is audit-logged — it is a disclosure of the full dataset.
  */
-async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("admin.backups.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyGET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+  gate: Authz,
+) {
   const actor = gate.user;
   const { orgId } = actor;
   const { id } = await params;
   if (!isUuid(id)) return notFound("record");
 
-  const res = (await db.execute<{
-      id: string;
-      file_name: string | null;
-      object_key: string | null;
-      status: string;
-      purged_at: string | null;
-      sha256: string | null;
-      byte_size: string | null;
-    }>(sql`
-    select id, file_name, object_key, status, purged_at, sha256, byte_size::text as byte_size
-      from backup_runs where id = ${id} and org_id = ${orgId}`, "objects"));
-  const run = res[0];
-  if (!run || run.status !== "completed" || run.purged_at || !run.object_key || !run.sha256 || !run.byte_size) {
+  const run = await findStoredBackupArchive(orgId, id);
+  if (
+    !run ||
+    run.status !== "completed" ||
+    run.purged_at ||
+    !run.object_key ||
+    !run.sha256 ||
+    !run.byte_size
+  ) {
     return NextResponse.json({ error: "backup not found" }, { status: 404 });
   }
 
@@ -67,7 +63,10 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
     String(object.ContentLength) !== run.byte_size
   ) {
     console.error(`[backup] stored object metadata mismatch for run ${run.id}`);
-    return NextResponse.json({ error: "backup object failed integrity metadata validation" }, { status: 502 });
+    return NextResponse.json(
+      { error: "backup object failed integrity metadata validation" },
+      { status: 502 },
+    );
   }
 
   const base = (run.file_name ?? "backup").replace(/\.json\.gz$/, "");
@@ -89,8 +88,11 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
 
 export const GET = defineRoute({
   permission: "admin.backups.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "Backup downloads are governed by backup management permission and organization-wide backup policy.",
+  },
   scope: "unrestricted",
-  params: z.object({ "id": z.string() }),
-  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params) }, authz),
 });

@@ -2,10 +2,8 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
-import { auditBackupEvent, computeNextRunAt, type BackupPolicyShape } from "@openbooks/engine/backup/backup";
-
+import { computeNextRunAt, type BackupPolicyShape } from "@openbooks/engine/backup/backup";
+import { saveBackupPolicy, type BackupPolicyValues } from "@openbooks/engine/backup/policy";
 
 const requestBodySchema = z.discriminatedUnion("frequency", [
   z.object({
@@ -34,7 +32,6 @@ const requestBodySchema = z.discriminatedUnion("frequency", [
   }),
 ]);
 
-
 export const runtime = "nodejs";
 
 /**
@@ -45,23 +42,18 @@ export const runtime = "nodejs";
 
 const FREQUENCIES = new Set(["daily", "weekly", "monthly"]);
 
-
-
 export const PUT = defineRoute({
   permission: "admin.backups.manage",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "Backup retention policy is organization-wide setup governed by backup management permission.",
+  },
   scope: "unrestricted",
   body: requestBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
-
     const gate = routeAuthz;
 
     const actor = gate.user;
     const { orgId } = actor;
-
-
-
-
 
     const enabled = body.enabled;
     if (typeof enabled !== "boolean") {
@@ -69,7 +61,10 @@ export const PUT = defineRoute({
     }
     const frequency = body.frequency;
     if (typeof frequency !== "string" || !FREQUENCIES.has(frequency)) {
-      return NextResponse.json({ error: "frequency must be daily, weekly, or monthly" }, { status: 400 });
+      return NextResponse.json(
+        { error: "frequency must be daily, weekly, or monthly" },
+        { status: 400 },
+      );
     }
     const intIn = (v: unknown, min: number, max: number): number | null => {
       const n = Number(v);
@@ -92,79 +87,14 @@ export const PUT = defineRoute({
       return NextResponse.json({ error: "maxKeep must be an integer 1–100" }, { status: 400 });
     }
 
-    const shape: BackupPolicyShape = {
+    const shape = {
       frequency: frequency as BackupPolicyShape["frequency"],
       hourUtc,
       dayOfWeek,
       dayOfMonth,
-    };
+    } satisfies BackupPolicyShape;
     const nextRunAt = enabled ? computeNextRunAt(shape, new Date()).toISOString() : null;
-
-    await withOrgTransaction(orgId, async () => {
-      // Serialize absent-row creation as well as updates: FOR UPDATE alone has
-      // nothing to lock when this organization has not configured a policy yet.
-      await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'backup-policy:' + orgId}, 0))`);
-      const existing = (await db.execute<{
-        enabled: boolean;
-        frequency: string;
-        hour_utc: number;
-        day_of_week: number;
-        day_of_month: number;
-        max_keep: number;
-      }>(sql`
-      select enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep
-        from backup_policies where org_id = ${orgId} for update`, "objects"));
-      const before = existing[0];
-
-      await db.execute(sql`
-        insert into backup_policies
-          (org_id, enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep, next_run_at, created_by, updated_by)
-        values
-          (${orgId}, ${enabled}, ${frequency}, ${hourUtc}, ${dayOfWeek}, ${dayOfMonth}, ${maxKeep},
-           ${nextRunAt}, ${actor.id}, ${actor.id})
-        on conflict (org_id) do update set
-          enabled = excluded.enabled,
-          frequency = excluded.frequency,
-          hour_utc = excluded.hour_utc,
-          day_of_week = excluded.day_of_week,
-          day_of_month = excluded.day_of_month,
-          max_keep = excluded.max_keep,
-          next_run_at = excluded.next_run_at,
-          updated_at = now(),
-          updated_by = excluded.updated_by
-        where backup_policies.org_id = ${orgId}`);
-
-      const after = (await db.execute<{
-        enabled: boolean;
-        frequency: string;
-        hour_utc: number;
-        day_of_week: number;
-        day_of_month: number;
-        max_keep: number;
-      }>(sql`
-        select enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep
-          from backup_policies where org_id = ${orgId} for update`, "objects"))[0];
-      if (!after) throw new Error('backup policy upsert matched no row');
-      const changes: Record<string, unknown> = { event: "backup_policy_updated" };
-      const fields = [
-        ["enabled", before?.enabled ?? null, after.enabled],
-        ["frequency", before?.frequency ?? null, after.frequency],
-        ["hourUtc", before?.hour_utc ?? null, after.hour_utc],
-        ["dayOfWeek", before?.day_of_week ?? null, after.day_of_week],
-        ["dayOfMonth", before?.day_of_month ?? null, after.day_of_month],
-        ["maxKeep", before?.max_keep ?? null, after.max_keep],
-      ] as const;
-      for (const [key, from, to] of fields) {
-        if (from !== to) changes[key] = [from, to];
-      }
-      await auditBackupEvent({
-        orgId,
-        tableName: "backup_policies",
-        rowId: orgId,
-        actorId: actor.id,
-        changes,
-      });
-    });
+    await saveBackupPolicy(orgId, actor.id, { ...shape, enabled, maxKeep }, nextRunAt);
 
     return NextResponse.json({ ok: true, nextRunAt });
   },
