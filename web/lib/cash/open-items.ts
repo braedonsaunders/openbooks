@@ -77,8 +77,56 @@ export async function openItemSourceQuery(
   // sum for both legs, which mixes denominations on cross-currency credits).
   // Both the result and its nonzero filter consume remaining. Materializing
   // the scoped rows evaluates the dated application sum once per control line.
+  //
+  // Only documents that can still be open on the date are reconstructed. A
+  // line's as-of remaining differs from its live remaining (maintained in
+  // open_item_balances) only through applications applied after the date or
+  // unapplied at any time, so the candidates are the lines open today plus
+  // the lines those applications touch, and the documents that own them.
+  // Every other document's chosen entry nets to zero on the date.
   return sql`
-    with oi as materialized (
+    with candidate_lines as materialized (
+      select b.line_id from open_item_balances b where b.org_id = ${orgId} and b.is_open
+      union
+      select x.from_line_id from applications x
+       where x.org_id = ${orgId} and x.unapplied_at is null and x.applied_on > ${asOf}
+      union
+      select x.to_line_id from applications x
+       where x.org_id = ${orgId} and x.unapplied_at is null and x.applied_on > ${asOf}
+      union
+      select x.from_line_id from applications x
+       where x.org_id = ${orgId} and x.unapplied_at is not null and x.unapplied_at::date > ${asOf}::date
+      union
+      select x.to_line_id from applications x
+       where x.org_id = ${orgId} and x.unapplied_at is not null and x.unapplied_at::date > ${asOf}::date
+    ),
+    -- A candidate line counts only on an entry that can be in effect on the
+    -- date — the same eligibility the as-of entry choice applies — so lines
+    -- left open on entries reversed by then never widen the reconstruction.
+    candidate_entries as materialized (
+      select distinct cl.entry_id as id
+        from candidate_lines c
+        join journal_lines cl on cl.id = c.line_id and cl.org_id = ${orgId}
+        join journal_entries je on je.id = cl.entry_id and je.org_id = cl.org_id
+       where je.status in ('posted', 'reversed')
+         and je.reverses_entry_id is null
+         and je.posting_date <= ${asOf}
+         and not exists (
+           select 1 from journal_entries r
+            where r.org_id = ${orgId} and r.reverses_entry_id = je.id and r.posting_date <= ${asOf}
+         )
+    ),
+    candidate_docs as materialized (
+      select je.source_document_id as id
+        from candidate_entries ce
+        join journal_entries je on je.id = ce.id and je.org_id = ${orgId}
+       where je.source_document_id is not null
+      union
+      select d.id
+        from candidate_entries ce
+        join documents d on d.posted_entry_id = ce.id and d.org_id = ${orgId}
+    ),
+    oi as materialized (
       select jl.id, jl.party_id, jl.entry_id, je.posting_date as tran_date, jl.due_date,
              d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
              sub.base_currency as func,
@@ -91,6 +139,7 @@ export async function openItemSourceQuery(
          and ${side === 'ap' ? apOpenAccountScope(sql`a`, orgId) : arOpenAccountScope(sql`a`)}
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
        where d.org_id = ${orgId}
+         and d.id in (select id from candidate_docs)
          and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
          and ${kindFilter}
          ${subScope(sql`jl.subsidiary_id`, subIds)}

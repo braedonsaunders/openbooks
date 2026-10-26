@@ -326,6 +326,16 @@ export const RECORD_PROTECTION_TRIGGER_CONTRACTS = [
     function: "openbooks_party_payment_stats",
   },
   {
+    table: "applications",
+    trigger: "open_item_balances_application",
+    function: "openbooks_open_item_balances_application",
+  },
+  {
+    table: "journal_lines",
+    trigger: "open_item_balances_line",
+    function: "openbooks_open_item_balances_line",
+  },
+  {
     table: "payment_run_items",
     trigger: "payment_run_item_guard",
     function: "payment_run_item_guard",

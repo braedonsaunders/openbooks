@@ -229,6 +229,14 @@ export const HRM_THROUGH_PICK_GUARD_ATTRIBUTES = [
     config: [],
   },
   {
+    name: "openbooks_open_item_balances_application",
+    config: ["search_path=pg_catalog,public"],
+  },
+  {
+    name: "openbooks_open_item_balances_line",
+    config: ["search_path=pg_catalog,public"],
+  },
+  {
     name: "openbooks_party_payment_stats",
     config: [],
   },

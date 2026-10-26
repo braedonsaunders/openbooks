@@ -631,6 +631,7 @@ export const TENANT_TABLE_POLICIES = {
   "nonprofit_frameworks": "clone:catalog-uuid-rebase",
   "notifications": "clone:catalog-uuid-rebase",
   "number_sequences": "clone:catalog-uuid-rebase",
+  "open_item_balances": "skip:no-copy",
   "order_line_cancellations": "clone:catalog-uuid-rebase",
   "org_business_calendars": "clone:catalog-uuid-rebase",
   "org_nav_configs": "clone:catalog-uuid-rebase",

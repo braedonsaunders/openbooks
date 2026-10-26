@@ -180,6 +180,9 @@ export const EXCLUDE = new Set([
   // Derived settlement-behaviour rollup — the applications trigger
   // repopulates it as the settlements are copied.
   "party_payment_stats",
+  // Derived open-item rollup — rebuilt after the copy from the cloned lines
+  // and applications.
+  "open_item_balances",
   // Executable scheduler work is never copied. scheduler_outbox carries a
   // GLOBAL unique on (kind, occurrence_key), so copying an org-bound row
   // verbatim collides with the source's own row (PG 23505 on

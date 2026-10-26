@@ -1,0 +1,1 @@
+Creates a derived open-item rollup and fills it from existing journal lines and applications; it changes no source rows and has no data precondition.

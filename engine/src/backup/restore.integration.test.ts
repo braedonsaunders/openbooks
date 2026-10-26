@@ -386,7 +386,7 @@ test("populated ledger exports, restores, and revalidates with nonzero fidelity"
     // archives and rebuilt on restore, so they compare by their verify
     // functions instead of byte counts — the n=0 tombstones the live
     // triggers leave behind are contract-equivalent to absent rows.
-    const derivedAggregates = new Set(["gl_month_activity", "party_payment_stats"]);
+    const derivedAggregates = new Set(["gl_month_activity", "party_payment_stats", "open_item_balances"]);
     const comparableCounts = (counts: Record<string, number>): Record<string, number> =>
       Object.fromEntries(Object.entries(counts).filter(([name]) => !derivedAggregates.has(name)));
     await db.execute(sql`update documents set open_balance = 999 where id = ${invoiceId}`); const beforeCounts = await orgRowCounts(source.orgId);
@@ -446,6 +446,8 @@ test("populated ledger exports, restores, and revalidates with nonzero fidelity"
     assert.deepEqual(statsVerify, [], "rebuilt payment stats must verify against the restored applications");
     const glVerify = await db.execute(sql`select * from openbooks_gl_activity_verify(${source.orgId})`, "objects");
     assert.deepEqual(glVerify, [], "rebuilt GL activity must verify against the restored ledger");
+    const openItemVerify = await db.execute(sql`select * from openbooks_open_item_balances_verify(${source.orgId})`, "objects");
+    assert.deepEqual(openItemVerify, [], "rebuilt open-item balances must verify against the restored lines and applications");
     for (const name of ["journal_entries", "journal_lines", "documents", "document_lines", "applications",
       "accounting_books", "document_links", "custom_field_defs", "folders", "files", "file_attachments"]) {
       assert.ok((beforeCounts[name] ?? 0) > 0, `the seeded ledger must hold nonzero ${name} rows`);

@@ -41,6 +41,8 @@ test("immutability guards admit a sandbox wipe only through the authorized org c
     "openbooks_gl_activity_entry",
     "openbooks_gl_activity_line",
     "openbooks_party_payment_stats",
+    "openbooks_open_item_balances_application",
+    "openbooks_open_item_balances_line",
     "posted_document_financial_guard",
     "protect_country_tax_pack_installation",
     "subscription_amendment_immutable_guard",

@@ -30,11 +30,11 @@ export const ORGLESS_BACKUP_TABLES = [
  * They are intentionally omitted and must be reviewed/re-created after restore.
  */
 /**
- * gl_month_activity and party_payment_stats are derived: their triggers
- * rebuild them row-by-row as a restore re-inserts the entries, lines and
- * settlements, so carrying them in the archive would double-count.
+ * gl_month_activity, party_payment_stats and open_item_balances are derived:
+ * restore rebuilds them from the re-inserted entries, lines and settlements,
+ * so carrying them in the archive would double-count.
  */
-export const ORG_SCOPED_BACKUP_EXCLUSIONS = ["user_org_access", "gl_month_activity", "party_payment_stats"] as const;
+export const ORG_SCOPED_BACKUP_EXCLUSIONS = ["user_org_access", "gl_month_activity", "party_payment_stats", "open_item_balances"] as const;
 
 export const BACKUP_FORMAT = "openbooks-backup" as const;
 export const BACKUP_FORMAT_VERSION = 3 as const;

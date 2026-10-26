@@ -857,6 +857,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
     // stale values left by a refresh before applying the new source snapshot.
     await db.execute(sql`select openbooks_gl_activity_rebuild(${opts.sandboxOrgId})`);
     await db.execute(sql`select openbooks_party_payment_stats_rebuild(${opts.sandboxOrgId})`);
+    await db.execute(sql`select openbooks_open_item_balances_rebuild(${opts.sandboxOrgId})`);
     // Evidence for the clone authority asserted above (OM-13): one audit row
     // in the target org recording the provenance and scope of this copy, so
     // closed-period history carried under openbooks.clone is attributable.

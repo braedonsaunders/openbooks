@@ -224,6 +224,14 @@ export const HRM_THROUGH_PICK_GUARD_DIGESTS = [
     sha256: "4c9747e8c4e63f4f5b34c7df406aa58ce9f5fdcec7319bfbc6424f060f1304d2",
   },
   {
+    name: "openbooks_open_item_balances_application",
+    sha256: "1d35322dabfd46a34688e999e40e6260a5222923fa2d087c005086bca2df62d2",
+  },
+  {
+    name: "openbooks_open_item_balances_line",
+    sha256: "03f5718d95734f9532794ade4fd222c391115e77557f8f045a5d137a8dd0a67d",
+  },
+  {
     name: "openbooks_party_payment_stats",
     sha256: "d1f84260a2e8e8cf6c324759fbeef57f032e481e04b07fdd4daa4fc91fe34247",
   },
