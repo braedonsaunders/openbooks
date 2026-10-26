@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Drawer, Input, SearchSelect, Textarea } from '@openbooks/ui'
-import { RegisteredListTable } from '../../../../components/registered-list-table'
+import { PagedTable } from '../../../../components/paged-table'
 import { useMoney } from '@/components/money-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
 import { SCHEDULE_STATUS_VARIANT } from './ScheduleDrawer'
@@ -61,7 +61,9 @@ export function AmortizationSchedulesPanel({
           {waterfallHref && <Link href={waterfallHref} className="font-medium text-teal-700 dark:text-teal-300">{t('list.waterfall')}</Link>}
         </div>
       </div>
-      <RegisteredListTable
+      <PagedTable
+        prepared
+        searchable
         source="amortization_schedules"
         rows={rows}
         rowKey={(row) => row.id}
@@ -168,7 +170,9 @@ export function AmortizationRunPanel({
           ))}
         </ul>
       )}
-      <RegisteredListTable
+      <PagedTable
+        prepared
+        searchable
         source="amortization_due"
         rows={due}
         rowKey={(row) => row.id}
@@ -227,7 +231,8 @@ export function AmortizationReconciliationPanel({
           {tied ? t('reconciliation.tied') : t('reconciliation.untied')}
         </p>
       )}
-      <RegisteredListTable
+      <PagedTable
+        prepared
         source="amortization_reconciliation"
         rows={rows}
         rowKey={(row) => row.id}

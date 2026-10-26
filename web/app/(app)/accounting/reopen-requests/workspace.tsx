@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { Badge, UrlDrawer } from '@openbooks/ui'
-import { RegisteredListTable } from '../../../../components/registered-list-table'
+import { PagedTable } from '../../../../components/paged-table'
 import { ReopenDecisionEvidence } from '../../../../components/reopen-decision-evidence'
 import { mergeHref } from '../../../../lib/list-params'
 import { ReopenDecision } from './ReopenDecision'
@@ -20,12 +20,13 @@ export function ReopenRequestsWorkspace({ data }: { data: ReopenRequestsWorkspac
         {data.scopedMessage}
       </p>
     ) : (
-      <RegisteredListTable<Row>
+      <PagedTable<Row>
+        prepared
         source="close_reopen_requests"
         rows={data.rows}
         rowKey={row => String(row.id)}
         empty={data.empty}
-        state={{ total: data.total, page: data.page, perPage: data.perPage }}
+        serverWindow={{ total: data.total, page: data.page, perPage: data.perPage }}
         basePath="/accounting/reopen-requests"
         currentParams={data.sp}
         columns={[
