@@ -1,19 +1,13 @@
 import { defineRoute } from "@/lib/api/route";
-import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
-import {
-  listExports,
-  requestExport,
-} from "@openbooks/engine/hrm/documents/dsar";
-import { guardPermission } from "../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
+import { listExports, requestExport } from "@openbooks/engine/hrm/documents/dsar";
+import { guardPermission } from "@/lib/authz";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { requestExportBody } from "../retention-schedules/bodies";
 
-/** Subject-access exports are part of HR documents (which requires HRM). */
-export async function gateExports(orgId: string): Promise<NextResponse | null> {
-  if (!(await isFeatureEnabled(orgId, "hrmDocuments"))) return notFound("record");
-  return null;
+export async function authorizeExportAccess() {
+  const hr = await guardPermission("hrm.documents.manage");
+  return hr instanceof NextResponse ? await guardPermission("hrm.self.read") : hr;
 }
 
 export const GET = defineRoute({
@@ -40,18 +34,10 @@ export const GET = defineRoute({
  * worker; the row starts queued.
  */
 export const POST = defineRoute({
-  public: "session",
+  authorize: authorizeExportAccess,
+  feature: "hrmDocuments",
   body: requestExportBody,
-  handler: async ({ body: body }) => {
-    // The service fences subject-vs-manage itself, so the route admits
-    // both HR readers and self-service logins; anyone else meets 403 here.
-    const hr = await guardPermission("hrm.documents.manage");
-    const actor =
-      hr instanceof NextResponse ? await guardPermission("hrm.self.read") : hr;
-    if (actor instanceof NextResponse) return actor;
-    const off = await gateExports(actor.user.orgId);
-    if (off) return off;
-
+  handler: async ({ authz: actor, body }) => {
     try {
       const exportRequest = await requestExport({
         orgId: actor.user.orgId,

@@ -3,24 +3,15 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { fileContentDisposition } from "@/lib/export";
 import { downloadExport } from "@openbooks/engine/hrm/documents/dsar";
-import { guardPermission } from "../../../../../../lib/authz";
 import { hrmDocumentsErrorResponse } from "../../../documents/_lib";
-import { gateExports } from "../../route";
+import { authorizeExportAccess } from "../../route";
 
 /** Download a finished export (subject or manage) — ready flips to delivered; incomplete stays incomplete. */
 export const GET = defineRoute({
-  public: "session",
+  authorize: authorizeExportAccess,
+  feature: "hrmDocuments",
   params: z.object({ id: z.string().min(1) }),
-  handler: async ({ request: _req, params: routeParams }) => {
-    const hr = await guardPermission("hrm.documents.manage");
-    const actor =
-      hr instanceof NextResponse ? await guardPermission("hrm.self.read") : hr;
-    if (actor instanceof NextResponse) return actor;
-    // Gate like the sibling routes: a ready export must not stay
-    // downloadable with HR documents (or HRM itself) switched off — this
-    // is the route that hands over a subject's whole data zip.
-    const gate = await gateExports(actor.user.orgId);
-    if (gate) return gate;
+  handler: async ({ authz: actor, params: routeParams }) => {
     try {
       const { id } = routeParams;
       const file = await downloadExport({
