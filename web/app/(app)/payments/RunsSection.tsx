@@ -15,8 +15,7 @@ import { Alert, AlertDescription, AlertTitle, Badge, UrlDrawer } from '@openbook
 import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
-import { RegisteredListTable } from '../../../components/registered-list-table'
-import type { ServerPagedColumn } from '../../../components/server-paged-table'
+import { PagedTable, type PagedColumn } from '../../../components/paged-table'
 import { isUuid, parsePrefixedListParams, pickString } from '../../../lib/list-params'
 import { dateTime } from '../../../lib/format'
 import { RunBuilder, type RunBill } from './RunBuilder'
@@ -231,7 +230,7 @@ export async function RunsSection({
   // Pre-rendered server cells for the shared registered runs table. Search,
   // status filter, sort and paging stay URL-driven against the loader's
   // server window — the table never filters or reslices that window again.
-  const runColumns: ServerPagedColumn<PaymentRunRow>[] = [
+  const runColumns: PagedColumn<PaymentRunRow>[] = [
     {
       key: 'number',
       header: <>{t('runs.columns.run')}</>,
@@ -420,7 +419,8 @@ export async function RunsSection({
           <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{t(collections ? 'runs.collectionDescription' : 'runs.description')}</p>
         </div>
 
-        <RegisteredListTable
+        <PagedTable
+          prepared
           source="payments_runs"
           rows={runs}
           columns={runColumns}
@@ -432,7 +432,7 @@ export async function RunsSection({
                 : tCommon('feedback.noResults')}
             </p>
           }
-          state={{ total: runsFilteredTotal, page: runParams.page, perPage: runParams.perPage }}
+          serverWindow={{ total: runsFilteredTotal, page: runParams.page, perPage: runParams.perPage }}
           basePath={basePath}
           currentParams={sp}
           sort={runParams.sort}
