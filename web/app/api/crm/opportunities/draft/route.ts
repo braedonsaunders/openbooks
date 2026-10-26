@@ -1,71 +1,97 @@
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { defineRoute } from '@/lib/api/route'
-import { crmSharedScope } from '../../../../../lib/crm-scope'
-import { parseJsonBody } from "@/lib/api/json"
-import { NextResponse } from 'next/server';
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { ensureCrmDefaults, nextOpportunityNumber, promoteCrmAccount } from '@openbooks/engine/crm/crm'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { defineRoute } from "@/lib/api/route";
+import { crmSharedScope } from "@/lib/crm-scope";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  ensureCrmDefaults,
+  nextOpportunityNumber,
+  promoteCrmAccount,
+} from "@openbooks/engine/crm/crm";
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.strictObject({
   partyId: uuidString().nullable().optional(),
-})
+});
 
-
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 export const POST = defineRoute({
-  permission: 'crm.opportunities.manage',
-  feature: 'crm',
-  handler: async ({ request: req, authz: gate }) => {
-    const { user } = gate
-    if (gate.allowedSubsidiaryIds?.size === 0) return notFound("record")
-    const parsedBody = await parseJsonBody(req, requestBodySchema);
-    if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data
+  permission: "crm.opportunities.manage",
+  feature: "crm",
+  body: requestBodySchema,
+  handler: async ({ authz: gate, body }) => {
+    const { user } = gate;
+    if (gate.allowedSubsidiaryIds?.size === 0) return notFound("record");
     if (body.partyId) {
-      const exists = (await db.execute(sql`select is_active from parties where id = ${body.partyId} and org_id = ${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)}`, 'objects'))
-      if (!exists[0]) return NextResponse.json({ error: 'account not found' }, { status: 404 })
-      if (!exists[0].is_active) return NextResponse.json({ error: 'an active account is required for new opportunities' }, { status: 422 })
+      const exists = await db.execute(
+        sql`select is_active from parties where id = ${body.partyId} and org_id = ${user.orgId}${crmSharedScope(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}`,
+        "objects",
+      );
+      if (!exists[0]) return NextResponse.json({ error: "account not found" }, { status: 404 });
+      if (!exists[0].is_active)
+        return NextResponse.json(
+          { error: "an active account is required for new opportunities" },
+          { status: 422 },
+        );
     }
-    await ensureCrmDefaults(user.orgId, user.id)
+    await ensureCrmDefaults(user.orgId, user.id);
     const [number, org] = await Promise.all([
       nextOpportunityNumber(user.orgId),
-      (db.execute(sql`select base_currency from orgs where id = ${user.orgId}`, 'objects')),
-    ])
+      db.execute(sql`select base_currency from orgs where id = ${user.orgId}`, "objects"),
+    ]);
     const opportunity = await db.transaction(async (tx) => {
       if (body.partyId) {
-        const visible = await tx.execute(sql`select id, is_active from parties where id=${body.partyId} and org_id=${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)} for update`, 'objects')
-        if (!visible[0]) return notFound("record")
-        if (!visible[0].is_active) return NextResponse.json({ error: 'an active account is required for new opportunities' }, { status: 422 })
+        const visible = await tx.execute(
+          sql`select id, is_active from parties where id=${body.partyId} and org_id=${user.orgId}${crmSharedScope(sql`subsidiary_id`, gate.allowedSubsidiaryIds)} for update`,
+          "objects",
+        );
+        if (!visible[0]) return notFound("record");
+        if (!visible[0].is_active)
+          return NextResponse.json(
+            { error: "an active account is required for new opportunities" },
+            { status: 422 },
+          );
       }
-      const status = (await tx.execute(sql`
+      const status = await tx.execute(
+        sql`
         select id, probability, default_forecast_category from crm_opportunity_statuses
-         where org_id = ${user.orgId} and is_default and is_active order by sequence limit 1`, 'objects'))
-      const s = status[0]!
-      const inserted = (await tx.execute<{ id: string }>(sql`
+         where org_id = ${user.orgId} and is_default and is_active order by sequence limit 1`,
+        "objects",
+      );
+      const s = status[0]!;
+      const inserted = await tx.execute<{ id: string }>(
+        sql`
         insert into crm_opportunities
           (org_id, opportunity_number, title, party_id, owner_user_id, status_id, probability,
            forecast_category, currency, is_active, created_by, updated_by)
         values (${user.orgId}, ${number}, 'New opportunity', ${body.partyId ?? null}, ${user.id}, ${s.id},
                 ${s.probability}, ${s.default_forecast_category}, ${org[0]!.base_currency}, false, ${user.id}, ${user.id})
-        returning id`, 'objects'))
+        returning id`,
+        "objects",
+      );
       // A draft opportunity only touches CRM lifecycle: prospect creates no AR
       // state, so there is no role to require. This route is CRM-gated, so the
       // lifecycle write always lands.
-      if (body.partyId) await promoteCrmAccount(tx, { orgId: user.orgId, partyId: body.partyId, actorId: user.id, toStage: 'prospect', sourceKind: 'opportunity', sourceId: inserted[0]!.id })
+      if (body.partyId)
+        await promoteCrmAccount(tx, {
+          orgId: user.orgId,
+          partyId: body.partyId,
+          actorId: user.id,
+          toStage: "prospect",
+          sourceKind: "opportunity",
+          sourceId: inserted[0]!.id,
+        });
       await tx.execute(sql`
         insert into crm_opportunity_stage_events
           (org_id, opportunity_id, to_status_id, probability, forecast_category, reason, created_by, updated_by)
         values (${user.orgId}, ${inserted[0]!.id}, ${s.id}, ${s.probability}, ${s.default_forecast_category},
-                'Opportunity created', ${user.id}, ${user.id})`)
-      return inserted[0]!
-    })
-    if (opportunity instanceof NextResponse) return opportunity
-    return NextResponse.json(opportunity)
-
+                'Opportunity created', ${user.id}, ${user.id})`);
+      return inserted[0]!;
+    });
+    if (opportunity instanceof NextResponse) return opportunity;
+    return NextResponse.json(opportunity);
   },
-})
+});

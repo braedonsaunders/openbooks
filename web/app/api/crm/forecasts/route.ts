@@ -1,146 +1,211 @@
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { defineRoute } from '@/lib/api/route'
-import { parseJsonBody } from "@/lib/api/json"
-import { NextResponse } from 'next/server';
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { normalizeMoney } from '@openbooks/engine/money/money'
-import { guardPermission } from '../../../../lib/authz'
-import { isUuid } from '../../../../lib/list-params'
-import { addCalendarDays, addMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
-import { calculateForecast } from '../../../../lib/crm'
-import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
-import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { defineRoute } from "@/lib/api/route";
+import { jsonObject, validateJsonBody } from "@/lib/api/json";
+import { NextResponse } from "next/server";
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { normalizeMoney } from "@openbooks/engine/money/money";
+import { guardPermission } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import {
+  addCalendarDays,
+  addMonthsStart,
+  businessToday,
+  startOfMonth,
+  isIsoCalendarDate,
+} from "@openbooks/engine/platform/business-date/module";
+import { calculateForecast } from "@/lib/crm";
+import { canonicalDecimal, compareDecimal } from "@/lib/exact-decimal";
+import { moneyRefusal } from "@/lib/payroll-decimal-refusal";
 import { notFound } from "@/lib/api/responses";
 
 const forecastAmount = z.string().superRefine((value, ctx) => {
-  const parsed = canonicalDecimal(value, 4)
-  if (parsed === null) ctx.addIssue({ code: 'custom', message: moneyRefusal('Override amount', value) })
-  else if (compareDecimal(parsed, '0') < 0) ctx.addIssue({ code: 'custom', message: 'Override amount must be non-negative' })
-  else if (parsed.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) {
-    ctx.addIssue({ code: 'custom', message: 'Override amount is out of range; at most 15 whole digits fit the ledger' })
+  const parsed = canonicalDecimal(value, 4);
+  if (parsed === null)
+    ctx.addIssue({ code: "custom", message: moneyRefusal("Override amount", value) });
+  else if (compareDecimal(parsed, "0") < 0)
+    ctx.addIssue({ code: "custom", message: "Override amount must be non-negative" });
+  else if (parsed.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Override amount is out of range; at most 15 whole digits fit the ledger",
+    });
   }
-})
+});
 
 // Each forecast target must be a UUID or an explicit null. A non-UUID value of
 // any type (false, 0, "") is refused with the named, translated message for
 // that target, so the operator sees which field to fix.
 function requestBodySchema(messages: { invalidOwnerTarget: string; invalidTeamTarget: string }) {
-  return z.strictObject({
-    periodStart: z.string().refine(isIsoCalendarDate, 'periodStart must be a real calendar date (YYYY-MM-DD)'),
-    periodEnd: z.string().refine(isIsoCalendarDate, 'periodEnd must be a real calendar date (YYYY-MM-DD)'),
-    ownerUserId: uuidString({ error: messages.invalidOwnerTarget }).nullable().optional(),
-    salesTeamId: uuidString({ error: messages.invalidTeamTarget }).nullable().optional(),
-    overrideAmount: forecastAmount.nullable().optional(),
-    snapshotKind: z.enum(['calculated', 'rep_override', 'manager_override']).optional(),
-    currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()).nullable().optional(),
-    note: z.string().max(2000).nullable().optional(),
-  }).refine((body) => body.periodEnd >= body.periodStart, {
-    message: 'periodEnd must be on or after periodStart', path: ['periodEnd'],
-  }).refine((body) => !(body.ownerUserId && body.salesTeamId), {
-    message: 'choose at most one owner or team', path: ['salesTeamId'],
-  })
+  return z
+    .strictObject({
+      periodStart: z
+        .string()
+        .refine(isIsoCalendarDate, "periodStart must be a real calendar date (YYYY-MM-DD)"),
+      periodEnd: z
+        .string()
+        .refine(isIsoCalendarDate, "periodEnd must be a real calendar date (YYYY-MM-DD)"),
+      ownerUserId: uuidString({ error: messages.invalidOwnerTarget }).nullable().optional(),
+      salesTeamId: uuidString({ error: messages.invalidTeamTarget }).nullable().optional(),
+      overrideAmount: forecastAmount.nullable().optional(),
+      snapshotKind: z.enum(["calculated", "rep_override", "manager_override"]).optional(),
+      currency: z
+        .string()
+        .trim()
+        .regex(/^[A-Za-z]{3}$/)
+        .transform((value) => value.toUpperCase())
+        .nullable()
+        .optional(),
+      note: z.string().max(2000).nullable().optional(),
+    })
+    .refine((body) => body.periodEnd >= body.periodStart, {
+      message: "periodEnd must be on or after periodStart",
+      path: ["periodEnd"],
+    })
+    .refine((body) => !(body.ownerUserId && body.salesTeamId), {
+      message: "choose at most one owner or team",
+      path: ["salesTeamId"],
+    });
 }
 
-
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 export const GET = defineRoute({
-  permission: 'crm.forecasts.read',
-  feature: 'crm',
+  permission: "crm.forecasts.read",
+  feature: "crm",
   handler: async ({ request: req, authz: gate }) => {
-    const params = new URL(req.url).searchParams
-    const today = await businessToday(gate.user.orgId)
-    const defaultStart = startOfMonth(today)
-    const defaultEnd = addCalendarDays(addMonthsStart(defaultStart, 3), -1)
-    const periodStart = params.get('periodStart') ?? defaultStart
-    const periodEnd = params.get('periodEnd') ?? defaultEnd
-    const ownerUserId = params.get('ownerUserId')
-    const salesTeamId = params.get('salesTeamId')
-    if (!isIsoCalendarDate(periodStart) || !isIsoCalendarDate(periodEnd) || periodEnd < periodStart) return NextResponse.json({ error: 'invalid forecast period' }, { status: 422 })
-    if (ownerUserId && !isUuid(ownerUserId)) return NextResponse.json({ error: 'invalid owner' }, { status: 422 })
-    if (salesTeamId && !isUuid(salesTeamId)) return NextResponse.json({ error: 'invalid sales team' }, { status: 422 })
+    const params = new URL(req.url).searchParams;
+    const today = await businessToday(gate.user.orgId);
+    const defaultStart = startOfMonth(today);
+    const defaultEnd = addCalendarDays(addMonthsStart(defaultStart, 3), -1);
+    const periodStart = params.get("periodStart") ?? defaultStart;
+    const periodEnd = params.get("periodEnd") ?? defaultEnd;
+    const ownerUserId = params.get("ownerUserId");
+    const salesTeamId = params.get("salesTeamId");
+    if (!isIsoCalendarDate(periodStart) || !isIsoCalendarDate(periodEnd) || periodEnd < periodStart)
+      return NextResponse.json({ error: "invalid forecast period" }, { status: 422 });
+    if (ownerUserId && !isUuid(ownerUserId))
+      return NextResponse.json({ error: "invalid owner" }, { status: 422 });
+    if (salesTeamId && !isUuid(salesTeamId))
+      return NextResponse.json({ error: "invalid sales team" }, { status: 422 });
     // Quotas carry no subsidiary lineage, so a subsidiary-restricted caller
     // must not receive them at all: a quota for an owner or team whose
     // opportunities sit in another entity would leak across the boundary.
     // Fail closed with an explicit notice instead of an empty-looking list.
-    const quotasRestricted = gate.allowedSubsidiaryIds !== null
-    const [forecast, quotas, snapshots] = (await Promise.all([
-      calculateForecast({ orgId: gate.user.orgId, periodStart, periodEnd, ownerUserId, salesTeamId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }),
+    const quotasRestricted = gate.allowedSubsidiaryIds !== null;
+    const [forecast, quotas, snapshots] = await Promise.all([
+      calculateForecast({
+        orgId: gate.user.orgId,
+        periodStart,
+        periodEnd,
+        ownerUserId,
+        salesTeamId,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      }),
       quotasRestricted
         ? Promise.resolve([])
-        : db.execute(sql`
+        : db.execute(
+            sql`
         select q.*, u.display_name as owner_name, t.name as sales_team_name from crm_sales_quotas q
         left join parties u on u.id = q.employee_id and u.org_id=q.org_id left join crm_sales_teams t on t.id = q.sales_team_id and t.org_id = q.org_id
         where q.org_id = ${gate.user.orgId} and q.lifecycle='approved' and q.period_start <= ${periodEnd}::date and q.period_end >= ${periodStart}::date
           ${ownerUserId ? sql`and q.employee_id = (select party_id from users where id=${ownerUserId} and org_id=q.org_id)` : sql``}
           ${salesTeamId ? sql`and q.sales_team_id = ${salesTeamId}` : sql``}
-        order by q.period_start, coalesce(u.display_name, t.name)`, 'objects'),
-      db.execute(sql`
+        order by q.period_start, coalesce(u.display_name, t.name)`,
+            "objects",
+          ),
+      db.execute(
+        sql`
         select s.*, u.name as owner_name, t.name as sales_team_name from crm_forecast_snapshots s
         left join users u on u.id = s.owner_user_id left join crm_sales_teams t on t.id = s.sales_team_id and t.org_id = s.org_id
         where s.org_id = ${gate.user.orgId} and ${gate.allowedSubsidiaryIds === null} and s.period_start = ${periodStart}::date and s.period_end = ${periodEnd}::date
           ${ownerUserId ? sql`and s.owner_user_id = ${ownerUserId}` : sql``}
           ${salesTeamId ? sql`and s.sales_team_id = ${salesTeamId}` : sql``}
-        order by s.as_of desc limit 50`, 'objects'),
-    ]))
-    const t = await getTranslations('crm')
-    return NextResponse.json({ periodStart, periodEnd, forecast, quotas, snapshots,
-      quotasNotice: quotasRestricted ? t('forecasts.quotasRestrictedNotice') : null })
-
+        order by s.as_of desc limit 50`,
+        "objects",
+      ),
+    ]);
+    const t = await getTranslations("crm");
+    return NextResponse.json({
+      periodStart,
+      periodEnd,
+      forecast,
+      quotas,
+      snapshots,
+      quotasNotice: quotasRestricted ? t("forecasts.quotasRestrictedNotice") : null,
+    });
   },
-})
+});
 
 export const POST = defineRoute({
-  permission: 'crm.forecasts.manage',
-  feature: 'crm',
-  handler: async ({ request: req, authz: gate }) => {
+  permission: "crm.forecasts.manage",
+  feature: "crm",
+  body: jsonObject,
+  handler: async ({ authz: gate, body: rawBody }) => {
     // Stored forecasts aggregate the whole organization and lack entity lineage.
-    if (gate.allowedSubsidiaryIds !== null) return notFound("record")
-    const { user } = gate
-    const t = await getTranslations('crm')
-    const parsedBody = await parseJsonBody(req, requestBodySchema({
-      invalidOwnerTarget: t('forecasts.invalidOwnerTarget'),
-      invalidTeamTarget: t('forecasts.invalidTeamTarget'),
-    }), { status: 422 });
+    if (gate.allowedSubsidiaryIds !== null) return notFound("record");
+    const { user } = gate;
+    const t = await getTranslations("crm");
+    const parsedBody = validateJsonBody(
+      rawBody,
+      requestBodySchema({
+        invalidOwnerTarget: t("forecasts.invalidOwnerTarget"),
+        invalidTeamTarget: t("forecasts.invalidTeamTarget"),
+      }),
+      { status: 422 },
+    );
     if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data
-    const { periodStart, periodEnd } = body
+    const body = parsedBody.data;
+    const { periodStart, periodEnd } = body;
     // An explicit null means the caller is targeting a team (or, with both
     // null, the whole organization). When the owner key is absent we retain the
     // convenient personal-snapshot default.
-    const rawOwnerUserId = body.ownerUserId === undefined ? user.id : body.ownerUserId
-    const rawSalesTeamId = body.salesTeamId ?? null
-    const ownerUserId = rawOwnerUserId
-    const salesTeamId = rawSalesTeamId
-    const overrideRaw = body.overrideAmount == null || body.overrideAmount === ''
-      ? null
-      : canonicalDecimal(body.overrideAmount, 4)
+    const rawOwnerUserId = body.ownerUserId === undefined ? user.id : body.ownerUserId;
+    const rawSalesTeamId = body.salesTeamId ?? null;
+    const ownerUserId = rawOwnerUserId;
+    const salesTeamId = rawSalesTeamId;
+    const overrideRaw =
+      body.overrideAmount == null || body.overrideAmount === ""
+        ? null
+        : canonicalDecimal(body.overrideAmount, 4);
     // override_amount is numeric(19,4): a wider figure would die in Postgres as
     // a raw storage failure (HTTP 500 — this verb has no catch), so refuse it
     // here with a named 422 and nothing written.
-    const overrideAmount = overrideRaw === null ? null : normalizeMoney(overrideRaw)
-    const kind = body.snapshotKind ?? (overrideAmount === null ? 'calculated' : 'rep_override')
-    if (typeof kind !== 'string' || !['calculated', 'rep_override', 'manager_override'].includes(kind)) return NextResponse.json({ error: 'invalid snapshot kind' }, { status: 422 })
-    if ((kind === 'calculated') !== (overrideAmount === null)) {
-      return NextResponse.json({ error: 'snapshot kind must match the presence of an override amount' }, { status: 422 })
+    const overrideAmount = overrideRaw === null ? null : normalizeMoney(overrideRaw);
+    const kind = body.snapshotKind ?? (overrideAmount === null ? "calculated" : "rep_override");
+    if (
+      typeof kind !== "string" ||
+      !["calculated", "rep_override", "manager_override"].includes(kind)
+    )
+      return NextResponse.json({ error: "invalid snapshot kind" }, { status: 422 });
+    if ((kind === "calculated") !== (overrideAmount === null)) {
+      return NextResponse.json(
+        { error: "snapshot kind must match the presence of an override amount" },
+        { status: 422 },
+      );
     }
-    const requestedCurrency = body.currency ?? null
-    if (kind === 'manager_override' || (ownerUserId !== user.id && overrideAmount !== null)) {
-      const overrideGate = await guardPermission('crm.forecasts.override')
-      if (overrideGate instanceof NextResponse) return overrideGate
+    const requestedCurrency = body.currency ?? null;
+    if (kind === "manager_override" || (ownerUserId !== user.id && overrideAmount !== null)) {
+      const overrideGate = await guardPermission("crm.forecasts.override");
+      if (overrideGate instanceof NextResponse) return overrideGate;
     }
     // calculateForecast only tests these for truthiness, so collapse the
     // already-validated values to its scope type without touching the raw
     // values stored on the snapshot row below.
-    const forecast = await calculateForecast({ orgId: user.orgId, periodStart, periodEnd,
-      ownerUserId: typeof ownerUserId === 'string' || ownerUserId == null ? ownerUserId : undefined,
-      salesTeamId: typeof salesTeamId === 'string' || salesTeamId == null ? salesTeamId : undefined })
+    const forecast = await calculateForecast({
+      orgId: user.orgId,
+      periodStart,
+      periodEnd,
+      ownerUserId: typeof ownerUserId === "string" || ownerUserId == null ? ownerUserId : undefined,
+      salesTeamId: typeof salesTeamId === "string" || salesTeamId == null ? salesTeamId : undefined,
+    });
     if (overrideAmount !== null && !requestedCurrency && forecast.length !== 1) {
-      return NextResponse.json({ error: 'choose one currency for the override amount' }, { status: 422 })
+      return NextResponse.json(
+        { error: "choose one currency for the override amount" },
+        { status: 422 },
+      );
     }
     const created = await db.transaction(async (tx) => {
       // Snapshot targets are UUID-shaped at this point but may belong to
@@ -148,37 +213,87 @@ export const POST = defineRoute({
       // Postgres would store tenant B's user or team id in tenant A's
       // snapshot. Refuse by name inside the write, mirroring the quota save.
       if (ownerUserId) {
-        const owner = await tx.execute(sql`select id from users where id = ${ownerUserId} and org_id = ${gate.user.orgId}`, 'objects')
+        const owner = await tx.execute(
+          sql`select id from users where id = ${ownerUserId} and org_id = ${gate.user.orgId}`,
+          "objects",
+        );
         if (!owner.length) {
-          return NextResponse.json({ error: t('forecasts.ownerOutsideOrganization') }, { status: 422 })
+          return NextResponse.json(
+            { error: t("forecasts.ownerOutsideOrganization") },
+            { status: 422 },
+          );
         }
       }
       if (salesTeamId) {
-        const team = await tx.execute(sql`select id from crm_sales_teams where id = ${salesTeamId} and org_id = ${gate.user.orgId}`, 'objects')
+        const team = await tx.execute(
+          sql`select id from crm_sales_teams where id = ${salesTeamId} and org_id = ${gate.user.orgId}`,
+          "objects",
+        );
         if (!team.length) {
-          return NextResponse.json({ error: t('forecasts.teamOutsideOrganization') }, { status: 422 })
+          return NextResponse.json(
+            { error: t("forecasts.teamOutsideOrganization") },
+            { status: 422 },
+          );
         }
       }
-      if (requestedCurrency && !(await tx.execute(sql`select code from currencies where code=${requestedCurrency}`, 'objects')).length) {
-        return NextResponse.json({ error: 'invalid forecast currency' }, { status: 422 })
+      if (
+        requestedCurrency &&
+        !(
+          await tx.execute(
+            sql`select code from currencies where code=${requestedCurrency}`,
+            "objects",
+          )
+        ).length
+      ) {
+        return NextResponse.json({ error: "invalid forecast currency" }, { status: 422 });
       }
-      let rows = requestedCurrency ? forecast.filter(row => row.currency === requestedCurrency) : forecast
-      const emptyPipeline = rows.length === 0
+      let rows = requestedCurrency
+        ? forecast.filter((row) => row.currency === requestedCurrency)
+        : forecast;
+      const emptyPipeline = rows.length === 0;
       if (emptyPipeline) {
         // Zero activity is still forecast evidence. An explicit currency wins;
         // otherwise use the organization's configured reporting basis and stamp
         // that choice. No nonzero amount is converted or borrowed from a currency.
-        const currency = requestedCurrency ?? (await tx.execute<{ base_currency: string }>(sql`
-          select base_currency from orgs where id=${user.orgId}`, 'objects'))[0]?.base_currency
-        if (!currency) return NextResponse.json({ error: 'organization reporting currency is required' }, { status: 422 })
-        rows = [{ currency, pipeline_amount: '0.0000', weighted_amount: '0.0000', worst_case_amount: '0.0000',
-          most_likely_amount: '0.0000', upside_amount: '0.0000', closed_amount: '0.0000' }]
+        const currency =
+          requestedCurrency ??
+          (
+            await tx.execute<{ base_currency: string }>(
+              sql`
+          select base_currency from orgs where id=${user.orgId}`,
+              "objects",
+            )
+          )[0]?.base_currency;
+        if (!currency)
+          return NextResponse.json(
+            { error: "organization reporting currency is required" },
+            { status: 422 },
+          );
+        rows = [
+          {
+            currency,
+            pipeline_amount: "0.0000",
+            weighted_amount: "0.0000",
+            worst_case_amount: "0.0000",
+            most_likely_amount: "0.0000",
+            upside_amount: "0.0000",
+            closed_amount: "0.0000",
+          },
+        ];
       }
-      const detail = { calculatedAt: new Date().toISOString(), emptyPipeline,
-        currencySource: requestedCurrency ? 'selected' : emptyPipeline ? 'organization_base_currency' : 'forecast' }
-      const ids: string[] = []
+      const detail = {
+        calculatedAt: new Date().toISOString(),
+        emptyPipeline,
+        currencySource: requestedCurrency
+          ? "selected"
+          : emptyPipeline
+            ? "organization_base_currency"
+            : "forecast",
+      };
+      const ids: string[] = [];
       for (const row of rows) {
-        const result = (await tx.execute<{ id: string }>(sql`
+        const result = await tx.execute<{ id: string }>(
+          sql`
           insert into crm_forecast_snapshots
             (org_id, owner_user_id, sales_team_id, period_start, period_end, snapshot_kind, currency,
              pipeline_amount, weighted_amount, worst_case_amount, most_likely_amount, upside_amount,
@@ -186,13 +301,14 @@ export const POST = defineRoute({
           values (${user.orgId}, ${ownerUserId}, ${salesTeamId}, ${periodStart}, ${periodEnd}, ${kind}, ${row.currency},
                   ${row.pipeline_amount}, ${row.weighted_amount}, ${row.worst_case_amount}, ${row.most_likely_amount},
                   ${row.upside_amount}, ${row.closed_amount}, ${overrideAmount}, ${body.note ?? null},
-                  ${JSON.stringify(detail)}::jsonb, ${user.id}, ${user.id}) returning id`, 'objects'))
-        ids.push(result[0]!.id)
+                  ${JSON.stringify(detail)}::jsonb, ${user.id}, ${user.id}) returning id`,
+          "objects",
+        );
+        ids.push(result[0]!.id);
       }
-      return ids
-    })
-    if (created instanceof NextResponse) return created
-    return NextResponse.json({ ids: created }, { status: 201 })
-
+      return ids;
+    });
+    if (created instanceof NextResponse) return created;
+    return NextResponse.json({ ids: created }, { status: 201 });
   },
-})
+});
