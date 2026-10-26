@@ -124,6 +124,7 @@ type LooseHandler = (ctx: {
   params: never;
   body: never;
 }) => Promise<Response> | Response;
+type LooseInputContext = { request: Request; params: never };
 
 interface LooseOptions {
   public?: "token" | "session";
@@ -139,12 +140,12 @@ interface LooseOptions {
   >["invalidParamsNotFound"];
   beforeBody?: (ctx: {
     request: Request;
-    authz: unknown;
-    params: unknown;
+    authz: never;
+    params: never;
   }) => void | NextResponse | Promise<void | NextResponse>;
-  body?: z.ZodType | ((ctx: { request: Request; params: unknown }) => z.ZodType | undefined);
+  body?: z.ZodType | ((ctx: LooseInputContext) => z.ZodType | undefined);
   opaque?: Record<string, string>;
-  maxBodyBytes?: number | ((ctx: { request: Request; params: unknown }) => number | undefined);
+  maxBodyBytes?: number | ((ctx: LooseInputContext) => number | undefined);
   invalidBodyStatus?: number;
   handler: LooseHandler;
 }
@@ -276,7 +277,7 @@ export function defineRoute(options: LooseOptions) {
       if (bodyPrecondition instanceof NextResponse) return bodyPrecondition;
 
       let body: unknown;
-      const routeInput = { request, params };
+      const routeInput = { request, params: params as never };
       const bodySchema =
         typeof options.body === "function" ? options.body(routeInput) : options.body;
       if (bodySchema) {
