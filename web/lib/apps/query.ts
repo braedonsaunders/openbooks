@@ -38,7 +38,9 @@ export async function queryAppRecords(ctx: AppPlatformContext, raw: unknown) {
   for (const key of new Set([plan.from.type, ...plan.joins.map(j => j.type)])) {
     const type = schema.find(s => s.key === key)
     const resolved = await resolveApiType(ctx.orgId, key)
-    if (!type || !resolved || !type.operations.includes('list') || !ctx.userCan(type.readPermission) || !permissionSetCovers(new Set(ctx.grantedPermissions), type.readPermission)) throw new AppPlatformError(`Query source unavailable: ${key}`, 403)
+    if (!type || !resolved || !type.operations.includes('list')) throw new AppPlatformError(`Query source unavailable: ${key} is not a listable record type; ob.platform.schema() lists the types this app may query`, 403)
+    if (!permissionSetCovers(new Set(ctx.grantedPermissions), type.readPermission)) throw new AppPlatformError(`Query source unavailable: ${key} needs ${type.readPermission}; add it to the manifest permissions and have it granted at activation`, 403)
+    if (!ctx.userCan(type.readPermission)) throw new AppPlatformError(`Query source unavailable: ${key} needs ${type.readPermission}, which the signed-in user does not hold`, 403)
     if (resolved.dynamic && !Object.hasOwn(custom, `custom:${key}`)) throw new AppPlatformError(`Query source unavailable: ${key}`, 403)
     const fields = resolved.dynamic
       ? custom[`custom:${key}`]!.columns.filter(c => c.key.startsWith('field_')).map(c => ({ ...c, key: c.key.slice(6) }))

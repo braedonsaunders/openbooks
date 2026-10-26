@@ -13,7 +13,7 @@ import { DASHBOARD_COMPOSITION, PRESENTATION_WIDGETS } from '../presentation-wid
 import { RECORD_FIELD_TYPES } from '../record-schema'
 import { NAV_GROUP_BY_KEY } from '@openbooks/engine/navigation/nav-registry'
 import { extensionContributionTargetErrors } from '../apps/contribution-targets'
-import { AppError, getAppByKey, listApps, installApp, type UploadBundle } from '../apps/store'
+import { AppError, appSettingSnapshot, getAppByKey, listApps, installApp, type UploadBundle } from '../apps/store'
 import { requestHash } from './idempotency-core'
 import { previewLayout } from './page-layouts'
 import { ExtensionProjectionError } from '@openbooks/engine/extensions/pages'
@@ -54,7 +54,11 @@ export function validateExtensionBundle(input: unknown): UploadBundle {
     else try {
       const ui = parseNativeExtension(entry.content, manifest)
       if (ui.screens.some(screen => screen.kind === 'records') && !manifest.permissions.includes('records.read')) errors.push('Native record screens require records.read')
-    } catch (error) { errors.push(error instanceof Error ? error.message : 'Invalid native UI') }
+    } catch (error) {
+      errors.push(error instanceof z.ZodError
+        ? error.issues.map(issue => `${entry.path} ${issue.path.join('.')}: ${issue.message}`).join('; ')
+        : error instanceof Error ? error.message : 'Invalid native UI')
+    }
   }
   if (manifest.permissions.some(permission => !APP_PLATFORM_PERMISSIONS.includes(permission))) errors.push('Unknown app permission')
   const granted = bundle.grantedPermissions ?? manifest.permissions
@@ -189,7 +193,7 @@ export async function describeExtensionVocabulary(context: ApplicationContext) {
     contributions: {
       navGroups: [...NAV_GROUP_BY_KEY.keys()],
       settingValueTypes: ['boolean', 'number', 'string', 'json'],
-      settingNote: 'A setting appears under Admin → Setup → app settings; backends read its current value with ob.settings.get(key), falling back to defaultValue until an administrator changes it.',
+      settingNote: 'A setting appears under Admin → Setup → app settings, where an administrator changes it. Backends read its current value with ob.settings.get(key), falling back to defaultValue until changed; get_app_package returns the installed app\'s current values. A draft\'s defaultValue never overrides a stored value.',
     },
     permissions: APP_PLATFORM_PERMISSIONS,
     example: {
@@ -213,7 +217,10 @@ export async function getExtensionPackage(context: ApplicationContext, input: { 
   if (!version) throw notFound('app version')
   const files = await db.execute<{ path: string; content: string; isBinary: boolean }>(sql`select path,content,is_binary as "isBinary" from app_files
     where org_id=${context.authz.user.orgId} and app_id=${app.id} and version_id=${version.id} order by path`, 'objects')
-  return { key: input.key, versionId: version.id, bundle: { manifest: version.manifest, files, grantedPermissions: app.grantedPermissions } }
+  // Current setting values ride along so an author sees the configuration
+  // the installed backend actually reads through ob.settings.
+  const settings = version.id === app.activeVersionId ? await appSettingSnapshot(context.authz.user.orgId, app.key, app.manifest) : undefined
+  return { key: input.key, versionId: version.id, bundle: { manifest: version.manifest, files, grantedPermissions: app.grantedPermissions }, ...(settings ? { settings } : {}) }
 }
 
 export async function discardExtensionDraft(context: ApplicationContext, input: { draftId: string; contentHash: string }) {

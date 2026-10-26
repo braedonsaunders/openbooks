@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { withV1Request } from "../../../../lib/api/v1-request";
@@ -7,7 +8,16 @@ import { resolvedFeatureState } from "../../../../lib/features";
 
 export const runtime = "nodejs";
 
-/** GET /api/v1/commands — the application catalog visible to this API key. */
+/** The command's request body as JSON Schema, the same contract MCP clients receive. */
+function inputJsonSchema(schema: z.ZodType): unknown {
+  try {
+    return z.toJSONSchema(schema, { io: "input", unrepresentable: "any" });
+  } catch {
+    return null;
+  }
+}
+
+/** GET /api/v1/commands — the application catalog visible to this API key, with each command's input schema. */
 async function handleV1GET(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/commands", async (auth, context) => {
     const features = await resolvedFeatureState(auth.user.orgId);
@@ -20,6 +30,7 @@ async function handleV1GET(request: Request): Promise<NextResponse> {
         readOnly: definition.readOnly,
         destructive: definition.destructive,
         href: `/api/v1/commands/${definition.name}`,
+        inputSchema: inputJsonSchema(definition.inputSchema),
       }));
     return { status: 200, body: { commands } };
   });

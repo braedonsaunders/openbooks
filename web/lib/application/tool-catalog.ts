@@ -420,8 +420,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "list_page_layout_history", title: "List Page Layout History",
-    description: "Every layout ever saved for a route, newest first, with who saved it and why. A save deactivates its predecessor rather than deleting it, so this is how an edit gets undone after the fact.",
-    inputSchema: z.object({ route: ROUTE }),
+    description: "Every layout ever saved for a route, newest first, with its layer, who saved it and the note given at save. A save deactivates its predecessor rather than deleting it, so this is how an edit gets undone after the fact. includeSpecs returns each version's document for comparison.",
+    inputSchema: z.object({ route: ROUTE, includeSpecs: z.boolean().optional().describe("Include each version's stored layout document.") }).strict(),
     readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...(await listLayoutHistory(context, input as never)),

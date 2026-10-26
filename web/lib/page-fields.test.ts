@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { boundPaths, describeFields, unresolvedPaths } from './page-fields'
+import { bindLiteralProps, boundPaths, describeFields, unresolvedPaths } from './page-fields'
 
 const paths = (data: unknown) => describeFields(data).fields.map((field) => field.path)
 const find = (data: unknown, path: string) =>
@@ -131,4 +131,27 @@ test('a path under a value the catalog could not open is not claimed missing', (
   const data = { detail: null, summary: { total: '1.00' } }
   assert.deepEqual(unresolvedPaths({ body: [{ kind: 'text', content: { $: 'detail.note' } }] }, describeFields(data)), [])
   assert.equal(unresolvedPaths({ body: [{ kind: 'text', content: { $: 'summary.count' } }] }, describeFields(data)).length, 1)
+})
+
+test('built-in widget props are bound back to the loader paths they came from', () => {
+  const rows: unknown[] = []
+  const data = { title: 'Customers', directory: [{ href: '/customers', label: 'Customers' }], arOutstanding: 'CA$0', arOverdue: 'CA$0', total: 'CA$0', perPage: 25, topExposure: rows, other: [] }
+  const builtIn = {
+    header: [{ kind: 'page-header', title: { $: 'title' }, actions: [{ widget: 'module-home-tabs', props: { tabs: [] } }] }],
+    body: [
+      { kind: 'widget', widget: 'directory-section', props: { items: [{ href: '/customers', label: 'Customers' }], title: 'Customers' } },
+      // CA$0 appears at three paths: the prop name picks one; with no named path it stays literal.
+      { kind: 'widget', widget: 'customer-ar-pulse', props: { outstanding: 'CA$0', amount: 'CA$0', size: 25 } },
+      // The same (empty) list instance the loader produced binds by identity.
+      { kind: 'widget', widget: 'relationships-section', props: { rows, fallback: [] } },
+      { kind: 'table', rows: { $: 'directory' }, rowKey: { $: 'href' }, columns: [{ header: 'Link', cell: { kind: 'widget', widget: 'link-cell', props: { label: 'Customers' } } }] },
+    ],
+  }
+  const bound = bindLiteralProps(builtIn, data) as typeof builtIn
+  assert.deepEqual(bound.body[0]!.props, { items: { $: 'directory' }, title: { $: 'title' } })
+  assert.deepEqual(bound.body[1]!.props, { outstanding: { $: 'arOutstanding' }, amount: 'CA$0', size: { $: 'perPage' } })
+  assert.deepEqual(bound.body[2]!.props, { rows: { $: 'topExposure' }, fallback: [] })
+  assert.deepEqual(bound.header[0]!.actions![0]!.props, { tabs: [] })
+  // A cell resolves against its row, so its literal props are untouched.
+  assert.deepEqual((bound.body[3] as { columns: { cell: { props: unknown } }[] }).columns[0]!.cell.props, { label: 'Customers' })
 })

@@ -322,3 +322,92 @@ function distance(a: string, b: string): number {
   }
   return previous[b.length]!
 }
+
+/**
+ * A page's built-in spec with its widget props bound to the loader output.
+ *
+ * Native specs are built from the data they render, so a widget prop holds
+ * the RESOLVED value — this request's rows, labels and totals. Copied into an
+ * override as-is, those values would freeze: the page would keep showing what
+ * the author happened to see. Every top-level widget, frame and header-action
+ * prop whose value came from the loader output is replaced by a reference to
+ * that path, so the edited layout stays live: a list or object passed through
+ * unchanged binds by identity, other values by equality. A primitive found at
+ * more than one path is ambiguous and stays literal.
+ */
+export function bindLiteralProps<T>(spec: T, data: unknown): T {
+  const index = new Map<string, string[]>()
+  // Structured values the spec passed through unchanged are the SAME object
+  // as in the loader output, so identity binds them exactly — including an
+  // empty list, which by value would be indistinguishable from any other.
+  const identity = new Map<object, string>()
+  const record = (value: unknown, path: string, depth: number) => {
+    if (depth > MAX_DEPTH + 1 || !path) return
+    if (value && typeof value === 'object' && !identity.has(value)) identity.set(value, path)
+    if (bindable(value)) {
+      const key = stableJson(value)
+      const paths = index.get(key) ?? []
+      paths.push(path)
+      index.set(key, paths)
+    }
+    if (value && typeof value === 'object' && !Array.isArray(value) && !isReactNode(value as object)) {
+      for (const [name, child] of Object.entries(value as Record<string, unknown>)) {
+        if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) record(child, path ? `${path}.${name}` : name, depth + 1)
+      }
+    }
+  }
+  if (data && typeof data === 'object') {
+    for (const [name, child] of Object.entries(data as Record<string, unknown>)) {
+      if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) record(child, name, 1)
+    }
+  }
+  const bind = (props: Record<string, unknown>) => Object.fromEntries(Object.entries(props).map(([name, value]) => {
+    if (value && typeof value === 'object' && identity.has(value)) return [name, { $: identity.get(value)! }]
+    if (!bindable(value) || isRef(value)) return [name, value]
+    const paths = index.get(stableJson(value))
+    if (!paths?.length) return [name, value]
+    const structured = typeof value === 'object'
+    if (!structured && paths.length > 1) {
+      // Equal primitives at several paths (two totals both "CA$0") are told
+      // apart only when exactly one path is named for the prop.
+      const named = paths.filter((path) => path.split('.').pop()!.toLowerCase().includes(name.toLowerCase()))
+      return named.length === 1 ? [name, { $: named[0]! }] : [name, value]
+    }
+    const path = [...paths].sort((a, b) => a.length - b.length || a.localeCompare(b))[0]!
+    return [name, { $: path }]
+  }))
+  const visit = (node: unknown, inCell: boolean): unknown => {
+    if (Array.isArray(node)) return node.map((child) => visit(child, inCell))
+    if (!node || typeof node !== 'object') return node
+    const source = node as Record<string, unknown>
+    const out: Record<string, unknown> = {}
+    for (const [name, value] of Object.entries(source)) {
+      if (name === 'props' && value && typeof value === 'object' && !Array.isArray(value) && !inCell && (typeof source.widget === 'string' || typeof source.frame === 'string')) {
+        out[name] = bind(value as Record<string, unknown>)
+      } else {
+        // Cells resolve against a row, so their literals are left alone.
+        out[name] = visit(value, inCell || name === 'cell' || name === 'inner')
+      }
+    }
+    return out
+  }
+  return visit(spec, false) as T
+}
+
+function isRef(value: unknown): boolean {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 1 && typeof (value as { $?: unknown }).$ === 'string'
+}
+
+function bindable(value: unknown): boolean {
+  if (typeof value === 'string') return value.length > 0
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (Array.isArray(value)) return value.length > 0
+  if (value && typeof value === 'object') return !isReactNode(value) && Object.keys(value).length > 0
+  return false
+}
+
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_, inner) => inner && typeof inner === 'object' && !Array.isArray(inner)
+    ? Object.fromEntries(Object.keys(inner).sort().map((key) => [key, (inner as Record<string, unknown>)[key]]))
+    : inner)
+}

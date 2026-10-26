@@ -1,17 +1,19 @@
 import 'server-only'
 
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/platform/db'
 import { BLOCK_KINDS, CELL_KINDS, SPEC_VERSION, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { FRAME_NAMES, WIDGET_NAMES } from '../../components/viewspec/registry-names'
 import { WIDGET_CONTRACTS } from '../../components/viewspec/widget-contracts'
 import { specShapes } from '../page-spec-shapes'
-import { DASHBOARD_COMPOSITION, PRESENTATION_WIDGETS } from '../presentation-widgets'
+import { DASHBOARD_COMPOSITION, PRESENTATION_WIDGETS, presentationPropErrors } from '../presentation-widgets'
 import { dashboardTileCatalog } from '../dashboard-tile-catalog'
 import { AUTHORING_REGISTRIES, RENDER_REGISTRIES } from '../../components/viewspec/registries'
 import { can } from '../authz'
 import { withAuthzContext } from '../authz-context'
 import type { ApplicationContext } from './context'
 import { forbidden } from './errors'
-import { boundPaths, describeFields, unresolvedPaths } from '../page-fields'
+import { bindLiteralProps, boundPaths, describeFields, unresolvedPaths } from '../page-fields'
 import { MissingSegmentError, PAGE_REGISTRY, PAGE_ROUTES } from '../page-registry'
 import { validateAgainstRegistries } from '../page-spec-validate'
 import {
@@ -233,6 +235,8 @@ async function checkAgainstRoute(
   spec: PageSpec,
   inputs: RouteInputs,
 ): Promise<{ errors: string[]; warnings: string[] }> {
+  const literalErrors = presentationPropErrors(spec)
+  if (literalErrors.length) return { errors: literalErrors, warnings: [] }
   const entry = PAGE_REGISTRY[route]
   if (!entry) {
     const near = nearestRoutes(route)
@@ -332,7 +336,9 @@ export async function describePageLayout(
   if (!loaded.ok) return { ...common, described: false as const, ...loaded.refusal }
   const data = loaded.data
 
-  const builtIn = page.spec(data)
+  // Widget props in a native spec carry this request's resolved values; bind
+  // them back to their loader paths so an edited copy stays live.
+  const builtIn = bindLiteralProps(page.spec(data), data)
   const catalog = describeFields(data)
   return {
     ...common,
@@ -345,7 +351,7 @@ export async function describePageLayout(
     widgetProps: widgetPropsOf(builtIn),
     fields: catalog.fields,
     fieldsTruncated: catalog.truncated,
-    note: 'Field paths are resolved against the loader output. Paths under an array\'s `item` resolve against a ROW — that is what a table\'s columns and a repeat\'s blocks see.',
+    note: 'Field paths are resolved against the loader output. Paths under an array\'s `item` resolve against a ROW — that is what a table\'s columns and a repeat\'s blocks see. Widget props in builtIn are bound to their loader paths wherever the value came from the data; a prop that is still a literal is a fixed setting of the page.',
   }
 }
 
@@ -381,6 +387,8 @@ export async function validateLayout(
   const result = validateAgainstRegistries(input.spec, registries)
   if (!result.ok) return { valid: false, route: input.route ?? null, errors: result.errors, warnings: [] as string[] }
   const route = input.route ?? result.spec.route
+  const literalErrors = presentationPropErrors(result.spec)
+  if (literalErrors.length) return { valid: false, route: route ?? null, errors: literalErrors, warnings: [] as string[] }
   if (!route) {
     return {
       valid: true,
@@ -482,9 +490,18 @@ export async function setLayout(
  * always there; until now nothing could read it, which made "deactivated, not
  * deleted" a promise with no way to collect on it.
  */
-export async function listLayoutHistory(context: ApplicationContext, input: { route: string }) {
+export async function listLayoutHistory(context: ApplicationContext, input: { route: string; includeSpecs?: boolean }) {
   requireCustomization(context)
-  return { versions: await listPageSpecHistory(context.authz.user.orgId, input.route, context.authz.user.id) }
+  const versions = await listPageSpecHistory(context.authz.user.orgId, input.route, context.authz.user.id)
+  if (!input.includeSpecs || versions.length === 0) return { versions }
+  // The stored document of each listed version, so an author can compare
+  // versions before restoring one. Scoped to the ids history already proved
+  // this caller may see.
+  const ids = versions.map((version) => version.id)
+  const rows = await db.execute<{ id: string; spec: unknown }>(sql`
+    select id, spec from page_specs where org_id = ${context.authz.user.orgId} and route = ${input.route} and id in ${ids}`, 'objects')
+  const specs = new Map(rows.map((row) => [row.id, row.spec]))
+  return { versions: versions.map((version) => ({ ...version, spec: specs.get(version.id) ?? null })) }
 }
 
 /**

@@ -1,4 +1,5 @@
 import { HOME_ACCENTS, HOME_ICON_KEYS } from '../components/module-home/icon-keys'
+import { WIDGETS as DASHBOARD_TILES } from '../app/(app)/dashboard/_widget-registry'
 
 /**
  * The dashboard and presentation vocabulary an author composes screens from:
@@ -80,7 +81,7 @@ export const PRESENTATION_WIDGETS: Readonly<Record<string, PresentationWidgetDoc
   },
   'link-button': {
     purpose: 'A button that navigates.',
-    props: { href: 'in-app path', label: 'string', variant: '"default" | "outline" | "secondary" | "ghost"', size: '"sm" | "default" | "lg"', iconKey: '"plus" | "settings"' },
+    props: { href: 'in-app path', label: 'string', variant: '"default" | "outline" | "secondary" | "ghost" | "destructive" | "link"', size: '"sm" | "md" | "lg"', iconKey: '"plus" | "settings"' },
     example: { kind: 'widget', widget: 'link-button', props: { href: '/customers', label: 'Customers', variant: 'outline' } },
   },
 }
@@ -91,7 +92,7 @@ export const APP_SCREEN_WIDGETS: ReadonlySet<string> = new Set(Object.keys(PRESE
 /** House blocks for dashboards, with the vocabulary their properties take. */
 export const DASHBOARD_COMPOSITION = {
   blocks: {
-    'stat-tile': 'KPI hero tile: { kind: "stat-tile", iconKey, accent, label, value, sub?, tone? }. Put several in a grid.',
+    'stat-tile': 'KPI hero tile: { kind: "stat-tile", iconKey, accent, label, value, sub?, tone?: "default" | "positive" | "warning" | "negative" }. Values are display strings (format numbers and money in the data endpoint). Put several in a grid.',
     grid: 'Responsive layout: { kind: "grid", className: "grid gap-4 sm:grid-cols-2 xl:grid-cols-4", blocks }. Use for tile rows and two-column bodies ("grid gap-6 lg:grid-cols-3" with a panel className "lg:col-span-2").',
     panel: 'Titled card: { kind: "panel", title, iconKey?, hint?, className?, bodyClassName?, blocks }. Wrap charts, tables and lists in panels.',
     table: 'Native table over an array: { kind: "table", rows: { $: "data.rows" }, rowKey: { $: "id" }, columns: [{ header, cell: { kind: "text" | "money" | "number" | "date" | "badge" | "link", field: { $: "rowField" } } }] }.',
@@ -102,3 +103,64 @@ export const DASHBOARD_COMPOSITION = {
   accents: [...HOME_ACCENTS],
   pattern: 'A module landing: a grid of 3–4 stat-tiles, then a two-column grid with a wide panel holding a chart or table and a narrow panel holding a progress-bars or attention-list. One concept per panel; never stack unrelated tables.',
 } as const
+
+const ENUMS: Record<string, Record<string, readonly string[]>> = {
+  'link-button': { variant: ['default', 'outline', 'secondary', 'ghost', 'destructive', 'link'], size: ['sm', 'md', 'lg', 'icon'], iconKey: ['plus', 'settings'] },
+  'trend-chart': { format: ['money', 'count'] },
+  'donut-chart': { format: ['money', 'count', 'percent'] },
+  'progress-bars': { format: ['money', 'count', 'percent'] },
+}
+const ITEM_ENUMS: Record<string, { prop: string; field: string; values: readonly string[] }> = {
+  'kpi-strip': { prop: 'items', field: 'tone', values: ['good', 'bad'] },
+  'progress-bars': { prop: 'items', field: 'tone', values: ['default', 'positive', 'warning', 'negative', 'muted'] },
+  'attention-list': { prop: 'items', field: 'tone', values: ['negative', 'warning'] },
+}
+
+const isRef = (value: unknown) => !!value && typeof value === 'object' && !Array.isArray(value) && typeof (value as { $?: unknown }).$ === 'string'
+const quoted = (values: readonly string[]) => values.map((value) => JSON.stringify(value)).join(', ')
+
+/**
+ * Literal prop values a presentation widget cannot render: an unknown
+ * dashboard tile, a size outside the grid, a value outside a closed set.
+ * Bound values ({ "$": path }) are checked when they render, not here.
+ */
+export function presentationPropErrors(spec: unknown): string[] {
+  const errors: string[] = []
+  const visit = (node: unknown, path: string) => {
+    if (Array.isArray(node)) return node.forEach((child, index) => visit(child, `${path}.${index}`))
+    if (!node || typeof node !== 'object') return
+    const block = node as Record<string, unknown>
+    const name = typeof block.widget === 'string' ? block.widget : null
+    const props = block.props && typeof block.props === 'object' && !Array.isArray(block.props) ? block.props as Record<string, unknown> : null
+    if (name && props) {
+      for (const [prop, values] of Object.entries(ENUMS[name] ?? {})) {
+        const value = props[prop]
+        if (value !== undefined && !isRef(value) && !values.includes(String(value))) errors.push(`${path}.props.${prop}: ${name} ${prop} must be one of ${quoted(values)}`)
+      }
+      const items = ITEM_ENUMS[name]
+      const list = items ? props[items.prop] : undefined
+      if (items && Array.isArray(list)) list.forEach((item, index) => {
+        const value = item && typeof item === 'object' ? (item as Record<string, unknown>)[items.field] : undefined
+        if (value !== undefined && !isRef(value) && !items.values.includes(String(value))) errors.push(`${path}.props.${items.prop}.${index}.${items.field}: must be one of ${quoted(items.values)}`)
+      })
+      if (name === 'dashboard-tiles' && Array.isArray(props.widgets)) {
+        if (props.widgets.length > 24) errors.push(`${path}.props.widgets: at most 24 tiles`)
+        props.widgets.forEach((tile, index) => {
+          const at = `${path}.props.widgets.${index}`
+          const id = tile && typeof tile === 'object' ? (tile as Record<string, unknown>).id : undefined
+          if (typeof id !== 'string' || !Object.hasOwn(DASHBOARD_TILES, id) || id.startsWith('personal-')) {
+            errors.push(`${at}.id: unknown dashboard tile ${JSON.stringify(id)}; describe_page_layout_vocabulary lists dashboardTiles`)
+            return
+          }
+          for (const dimension of ['w', 'h'] as const) {
+            const value = (tile as Record<string, unknown>)[dimension]
+            if (value !== undefined && (!Number.isInteger(value) || (value as number) < 1 || (value as number) > 12)) errors.push(`${at}.${dimension}: must be a whole number from 1 to 12`)
+          }
+        })
+      }
+    }
+    for (const [key, child] of Object.entries(block)) if (key !== 'props') visit(child, path ? `${path}.${key}` : key)
+  }
+  visit(spec, '')
+  return errors
+}

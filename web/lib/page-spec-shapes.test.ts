@@ -37,3 +37,12 @@ test('every block and cell kind publishes its required and optional properties',
   assert.equal(cells.drill!.required.inner, 'Cell')
   assert.ok(['page-header', 'table', 'panel', 'repeat', 'widget', 'frame'].every((kind) => kind in blocks))
 })
+
+test('a field reference nested inside a widget prop is refused, a whole-prop reference is not', () => {
+  const nested = validateAgainstRegistries({
+    specVersion: 1, layout: 'list', header: [],
+    body: [{ kind: 'widget', widget: 'link-button', props: { href: { $: 'href' }, label: { text: { $: 'label' } } } }],
+  }, registries)
+  assert.equal(nested.ok, false)
+  assert.deepEqual(nested.ok ? [] : nested.errors, ['widget "link-button" prop "label" nests a field reference; a reference binds only as a whole prop value ("label": { "$": "path" })'])
+})

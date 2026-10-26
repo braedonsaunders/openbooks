@@ -1,11 +1,11 @@
 import { z } from 'zod'
-import { pageSpecSchema, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import type { PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { formSectionSchema } from '@openbooks/forms-core'
 import { lintRecordFields } from '../record-schema'
 import type { AppManifest } from './manifest'
 import { validateAgainstRegistries } from '../page-spec-validate'
 import { WIDGET_CONTRACTS } from '../../components/viewspec/widget-contracts'
-import { APP_SCREEN_WIDGETS } from '../presentation-widgets'
+import { APP_SCREEN_WIDGETS, presentationPropErrors } from '../presentation-widgets'
 
 const APP_SCREEN_CONTRACTS = Object.fromEntries([...APP_SCREEN_WIDGETS].map((name) => [name, WIDGET_CONTRACTS[name] ?? { props: [] }]))
 
@@ -21,7 +21,9 @@ export const nativeExtensionSchema = z.object({
       description: z.string().max(2000).optional(),
       /** A declared GET endpoint whose returned body the spec binds as `data.*`, run read-only as the viewer. */
       data: z.object({ endpoint: screenKey }).strict().optional(),
-      spec: pageSpecSchema.transform(value => value as PageSpec),
+      // Checked by the shared spec validator below, which names the exact
+      // property inside a block rather than dumping the whole union failure.
+      spec: z.custom<PageSpec>((value) => value !== null && typeof value === 'object' && !Array.isArray(value), 'spec must be a PageSpec object'),
     }).strict(),
     z.object({ key: screenKey, title: z.string().min(1).max(120), kind: z.literal('records'), typeKey: screenKey }).strict(),
     z.object({ key: screenKey, title: z.string().min(1).max(120), kind: z.literal('action'), endpoint: screenKey, fields: z.array(formSectionSchema).max(50), submitLabel: z.string().min(1).max(120), description: z.string().max(2000).optional(), confirmation: z.string().min(1).max(1000).optional() }).strict(),
@@ -40,6 +42,7 @@ export const nativeExtensionSchema = z.object({
         widgets: APP_SCREEN_WIDGETS, frames: new Set(), contracts: APP_SCREEN_CONTRACTS,
       })
       if (!checked.ok) for (const message of checked.errors) ctx.addIssue({ code: 'custom', path: ['screens', index, 'spec'], message })
+      else for (const message of presentationPropErrors(screen.spec)) ctx.addIssue({ code: 'custom', path: ['screens', index, 'spec'], message })
     }
   }
 })

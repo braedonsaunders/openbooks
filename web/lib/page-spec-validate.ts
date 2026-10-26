@@ -66,7 +66,18 @@ export function validateAgainstRegistries(
       errors.push(`unknown ${kind} "${name}"`)
       return
     }
-    if (kind !== 'widget' || !props) return
+    if (!props) return
+    // The renderer resolves a reference only as a whole prop value. One nested
+    // inside an object or list reaches the component unresolved, which crashes
+    // it or renders the reference itself.
+    for (const [prop, value] of Object.entries(props)) {
+      if (isFieldRef(value) || !containsFieldRef(value)) continue
+      const key = `${name}.${prop}:nested`
+      if (reported.has(key)) continue
+      reported.add(key)
+      errors.push(`${kind} "${name}" prop "${prop}" nests a field reference; a reference binds only as a whole prop value ("${prop}": { "$": "path" })`)
+    }
+    if (kind !== 'widget') return
     const contract = registries.contracts?.[name]
     // No contract, or a widget that forwards its props wholesale: nothing can
     // be said about its prop names, so nothing is.
@@ -84,6 +95,16 @@ export function validateAgainstRegistries(
   })
   if (errors.length > 0) return { ok: false, errors }
   return { ok: true, spec: result.spec }
+}
+
+function isFieldRef(value: unknown): boolean {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 1 && typeof (value as { $?: unknown }).$ === 'string'
+}
+
+function containsFieldRef(value: unknown, depth = 0): boolean {
+  if (depth > 8 || !value || typeof value !== 'object') return false
+  if (isFieldRef(value)) return true
+  return (Array.isArray(value) ? value : Object.values(value)).some((child) => containsFieldRef(child, depth + 1))
 }
 
 /**

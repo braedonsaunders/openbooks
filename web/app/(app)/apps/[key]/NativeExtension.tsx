@@ -85,11 +85,12 @@ export async function NativeScreens({ ui, appKey, name, description, grants, sea
     ? await loadScreenData({ appKey, screenKey: screen.key, endpoint: screen.data.endpoint, authz, searchParams })
     : null
   const scope = { name, description, key: appKey, app: { name, description, key: appKey }, data: loaded?.ok ? loaded.data : null }
-  const alerts = <>
-    {notice}
-    {screen.data && preview ? <Alert variant="info"><AlertDescription>{t('screenDataPreview')}</AlertDescription></Alert> : null}
-    {loaded && !loaded.ok ? <Alert variant="destructive"><AlertDescription>{t('screenDataFailed', { error: loaded.error })}</AlertDescription></Alert> : null}
-  </>
+  const alertNodes = [
+    notice ? <div key="notice">{notice}</div> : null,
+    screen.data && preview ? <Alert key="preview" variant="info"><AlertDescription>{t('screenDataPreview')}</AlertDescription></Alert> : null,
+    loaded && !loaded.ok ? <Alert key="failed" variant="destructive"><AlertDescription>{t('screenDataFailed', { error: loaded.error })}</AlertDescription></Alert> : null,
+  ].filter(Boolean)
+  const alerts = alertNodes.length ? <>{alertNodes}</> : undefined
   // Every screen wears the house page shell: an authored header when the spec
   // has one, otherwise the screen's own title, with the app's screen tabs.
   const header = screen.spec.header.length
