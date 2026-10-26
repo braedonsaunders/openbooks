@@ -78,6 +78,14 @@ const poolMax = (raw: string | undefined, fallback: number): number => {
 };
 const BASE_POOL_MAX = poolMax(env.OPENBOOKS_DB_POOL_MAX, 10);
 const READ_POOL_MAX = poolMax(env.OPENBOOKS_DB_READ_POOL_MAX, BASE_POOL_MAX);
+/**
+ * The cross-tenant login also resolves identity before any tenant scope
+ * exists: the request proxy's revocation check and session validation run on
+ * it for every request, so a page and its navigation prefetches queue on it
+ * together. It follows the request pool unless OPENBOOKS_BYPASS_POOL_MAX is
+ * set.
+ */
+const BYPASS_POOL_MAX = poolMax(env.OPENBOOKS_BYPASS_POOL_MAX, BASE_POOL_MAX);
 
 const basePool = new pg.Pool({
   connectionString: databaseUrl,
@@ -96,7 +104,7 @@ const basePool = new pg.Pool({
 
 const bypassPool = bypassDatabaseUrl ? new pg.Pool({
   connectionString: bypassDatabaseUrl,
-  max: Math.min(BASE_POOL_MAX, 4),
+  max: BYPASS_POOL_MAX,
   keepAlive: true,
   connectionTimeoutMillis: 30_000,
   query_timeout: 120_000,
