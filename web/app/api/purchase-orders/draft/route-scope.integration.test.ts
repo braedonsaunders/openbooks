@@ -30,7 +30,7 @@ const hooks = registerHooks({
     // The draft routes gate through guardFeaturePermission, which calls the
     // REAL guardPermission via web/lib's own './authz' specifier — intercept
     // that too, or the feature gate would resolve a real session.
-    if (specifier === '../../../../lib/authz' ||
+    if (specifier === '../../../../lib/authz' || specifier === '@/lib/authz' ||
         (specifier === './authz' && (context.parentURL ?? '').includes('/web/lib/'))) {
       const real = nextResolve(specifier, context).url
       const nextServer = nextResolve('next/server', context).url

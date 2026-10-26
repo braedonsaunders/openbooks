@@ -17,14 +17,15 @@ const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:t
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
-    if (specifier.endsWith("/lib/authz"))
+    // The route factory checks permission and the Projects gate together
+    // through @/lib/feature-gates at request time.
+    if (specifier === "@/lib/feature-gates")
       return virtual(`
-        export async function guardPermission() {
+        export async function guardFeaturePermission() {
           const s = globalThis.__billingRequestBoundState;
           return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: null };
         }
       `);
-    if (specifier.endsWith("/lib/projects-gate")) return virtual("export async function guardProjectsFeature() { return null }");
     return next(specifier, context);
   },
 });

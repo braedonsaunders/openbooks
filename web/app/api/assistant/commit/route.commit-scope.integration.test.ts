@@ -43,7 +43,7 @@ stubModules({
     "../../../../lib/authz": commitAuthzSource,
     "../authz": commitAuthzSource,
     "@/lib/authz": commitAuthzSource,
-    "../../../../lib/assistant/proposals": `
+    "@/lib/assistant/proposals": `
       export function verifyProposal() {
         return true
       }
