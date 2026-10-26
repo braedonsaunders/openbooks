@@ -1,5 +1,4 @@
 import { defineRoute } from "@/lib/api/route";
-import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import {
   generateStatement,
@@ -7,9 +6,8 @@ import {
   listStatements,
   renderStatementPdf,
 } from "@openbooks/engine/hrm/compensation/statements";
-import { guardPermission } from "../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
-import { isUuid } from "../../../../lib/list-params";
+import { guardPermission } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
 import { compensationErrorResponse } from "../compensation/_lib";
 import { createStatementBody } from "../compensation/bodies";
 
@@ -24,31 +22,21 @@ export const runtime = "nodejs";
  * parsing.
  */
 export const GET = defineRoute({
-  public: "session",
-  handler: async ({ request: req }) => {
+  authorize: async () => {
     const hr = await guardPermission("hrm.compensation.read");
-    const gate =
-      hr instanceof NextResponse ? await guardPermission("hrm.self.read") : hr;
-    if (gate instanceof NextResponse) return gate;
-    if (!(await isFeatureEnabled(gate.user.orgId, "hrmCompensation"))) {
-      return notFound("record");
-    }
+    return hr instanceof NextResponse ? await guardPermission("hrm.self.read") : hr;
+  },
+  feature: "hrmCompensation",
+  handler: async ({ request: req, authz: gate }) => {
     const url = new URL(req.url);
     const employmentId = url.searchParams.get("employmentId");
     if (!employmentId || !isUuid(employmentId)) {
-      return NextResponse.json(
-        { error: "employmentId must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "employmentId must be a uuid" }, { status: 400 });
     }
     const pdf = url.searchParams.get("pdf");
     try {
       if (pdf) {
-        if (!isUuid(pdf))
-          return NextResponse.json(
-            { error: "invalid statement" },
-            { status: 400 },
-          );
+        if (!isUuid(pdf)) return NextResponse.json({ error: "invalid statement" }, { status: 400 });
         const org = await getStatementOrganizationName(gate.user.orgId);
         const bytes = await renderStatementPdf({
           orgId: gate.user.orgId,
