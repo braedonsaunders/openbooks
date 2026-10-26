@@ -41,6 +41,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.cashflow-entity-route-test')]
       const sqlText = globalThis.openbooksCashflowEntitySqlText
+      export function pinnedTransactionExecutor() { return undefined }
       export const db = {
         execute(query, mode) {
           const inMode = (result) => (mode === 'objects' ? result.rows : result)
