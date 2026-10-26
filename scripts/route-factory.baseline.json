@@ -2,5 +2,5 @@
   "$comment": "The listed routes retain permission guards outside the route factory.",
   "routes": [],
   "jsonObjectImporters": 2,
-  "sqlImporters": 268
+  "sqlImporters": 267
 }
