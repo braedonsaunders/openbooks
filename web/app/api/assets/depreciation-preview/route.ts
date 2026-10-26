@@ -1,18 +1,18 @@
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody, isoDate } from "@/lib/api/json";
+import { isoDate } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { getLocale } from "next-intl/server";
-import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
-import { db } from "@openbooks/engine/platform/db";
-import { previewDepreciation } from "@openbooks/engine/assets/depreciation";
 import {
-  businessToday,
-  isIsoCalendarDate,
-} from "@openbooks/engine/platform/business-date/module";
-import { isUuid } from "../../../../lib/list-params";
-import { labelDepreciationPreview } from "../../../../lib/assets/period-labels";
+  hasActiveDepreciationBook,
+  listVisibleDepreciationAssetIds,
+  loadDepreciationPeriodStart,
+} from "@openbooks/engine/assets/depreciation-route-queries";
+import { previewDepreciation } from "@openbooks/engine/assets/depreciation";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { isUuid } from "@/lib/list-params";
+import { labelDepreciationPreview } from "@/lib/assets/period-labels";
 
 export const runtime = "nodejs";
 
@@ -42,17 +42,12 @@ function bad(error: string, field?: string, status = 422) {
 export const POST = defineRoute({
   permission: "assets.manage",
   feature: "fixedAssets",
-  handler: async ({ request, authz: gate }) => {
+  body: previewBody,
+  invalidBodyStatus: 422,
+  handler: async ({ authz: gate, body }) => {
     const user = gate.user;
 
-    const parsedBody = await parseJsonBody(request, previewBody, {
-      status: 422,
-    });
-    if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data;
-
-    const throughDate =
-      body.throughDate?.trim() || (await businessToday(user.orgId));
+    const throughDate = body.throughDate?.trim() || (await businessToday(user.orgId));
     if (!isIsoCalendarDate(throughDate)) {
       return bad("invalid_through_date", "throughDate");
     }
@@ -60,21 +55,17 @@ export const POST = defineRoute({
     const bookId = body.bookId?.trim().toLowerCase() || null;
     if (bookId) {
       if (!isUuid(bookId)) return bad("book_not_found", "bookId");
-      const book = await db.execute(sql`
-      select 1 from accounting_books
-       where id = ${bookId} and org_id = ${user.orgId} and is_active
-    `, "objects");
-      if (!book[0]) return bad("book_not_found", "bookId");
+      if (!(await hasActiveDepreciationBook(user.orgId, bookId))) {
+        return bad("book_not_found", "bookId");
+      }
     }
 
     const periodId = body.periodId?.trim().toLowerCase() || null;
     if (periodId) {
       if (!isUuid(periodId)) return bad("period_not_found", "periodId");
-      const period = await db.execute<{ starts_on: string }>(sql`
-      select starts_on::text as starts_on from accounting_periods
-       where id = ${periodId} and org_id = ${user.orgId} and not is_adjustment
-    `, "objects");
-      if (!period[0]) return bad("period_not_found", "periodId");
+      if (!(await loadDepreciationPeriodStart(user.orgId, periodId))) {
+        return bad("period_not_found", "periodId");
+      }
     }
 
     const postingDate = body.postingDate?.trim() || null;
@@ -84,26 +75,18 @@ export const POST = defineRoute({
 
     let assetIds: string[] | undefined;
     if (body.assetIds !== undefined) {
-      const ids = [
-        ...new Set(
-          body.assetIds.map((id) => id.trim().toLowerCase()).filter(Boolean),
-        ),
-      ];
-      if (ids.some((id) => !isUuid(id)))
-        return bad("unknown_asset", "assetIds");
+      const ids = [...new Set(body.assetIds.map((id) => id.trim().toLowerCase()).filter(Boolean))];
+      if (ids.some((id) => !isUuid(id))) return bad("unknown_asset", "assetIds");
       if (ids.length > 0) {
         // Tenant-owned and reader-visible, or the selection names nothing:
         // a foreign or out-of-scope id refuses rather than silently narrowing.
-        const found = await db.execute<{ id: string }>(sql`
-        select a.id from fixed_assets a
-         where a.org_id = ${user.orgId} and a.id = any(${`{${ids.join(",")}}`}::uuid[])
-           ${gate.allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
-      `, "objects");
-        const seen = new Set(
-          found.map((row) => String(row.id).toLowerCase()),
-        );
-        if (ids.some((id) => !seen.has(id)))
-          return bad("unknown_asset", "assetIds");
+        const found = await listVisibleDepreciationAssetIds({
+          orgId: user.orgId,
+          ids,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        });
+        const seen = new Set(found.map((row) => String(row.id).toLowerCase()));
+        if (ids.some((id) => !seen.has(id))) return bad("unknown_asset", "assetIds");
         assetIds = ids;
       } else {
         assetIds = [];

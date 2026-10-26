@@ -4,16 +4,20 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { UUID_RE, uuidString } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
+import {
+  hasActiveAssetCategory,
+  listAvailableAssetSubsidiaries,
+} from "@openbooks/engine/assets/asset-creation-queries";
 import { cmp } from "@openbooks/engine/money/money";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
-import { exactMoney, isoDate } from "../../../lib/api/json";
-import { isUuid } from "../../../lib/list-params";
+import { exactMoney, isoDate } from "@/lib/api/json";
+import { isUuid } from "@/lib/list-params";
 import {
   claimIdempotentCreate,
   resolveIdempotentReplay,
   SetupCreateConflict,
-} from "../../../lib/api/idempotency";
-import { conflict } from "../../../lib/api/responses";
+} from "@/lib/api/idempotency";
+import { conflict } from "@/lib/api/responses";
 import {
   FieldRefusal,
   lockAccountOverridesForAssetWrite,
@@ -46,15 +50,19 @@ export const runtime = "nodejs";
 // create and edit), so nothing the operator fills in is silently dropped.
 const amount = (field: string) =>
   exactMoney(`${field} must be a decimal string; JSON numbers are refused`);
-const blankAmount = (field: string) => z.preprocess((value, context) => {
-  if (value === "") return "";
-  const parsed = amount(field).safeParse(value);
-  if (!parsed.success) {
-    context.addIssue({ code: "custom", message: parsed.error.issues[0]?.message ?? `${field} must be a decimal string` });
-    return z.NEVER;
-  }
-  return parsed.data;
-}, z.string());
+const blankAmount = (field: string) =>
+  z.preprocess((value, context) => {
+    if (value === "") return "";
+    const parsed = amount(field).safeParse(value);
+    if (!parsed.success) {
+      context.addIssue({
+        code: "custom",
+        message: parsed.error.issues[0]?.message ?? `${field} must be a decimal string`,
+      });
+      return z.NEVER;
+    }
+    return parsed.data;
+  }, z.string());
 const nullableDate = (field: string) =>
   z.union([isoDate(`${field} must be a valid calendar date`), z.literal("")]).nullable();
 const nullableId = uuidString("must be a valid id").nullable();
@@ -68,7 +76,9 @@ const createAssetSchema = z.strictObject({
   name: z.string({ error: "name is required" }),
   assetNumber: z.string().trim().max(80).nullable().optional(),
   description: z.string().nullable().optional(),
-  categoryId: z.string({ error: "categoryId is required" }).regex(UUID_RE, "categoryId must be a valid id"),
+  categoryId: z
+    .string({ error: "categoryId is required" })
+    .regex(UUID_RE, "categoryId must be a valid id"),
   subsidiaryId: nullableId.optional(),
   acquisitionCost: blankAmount("Acquisition cost").nullable().optional(),
   salvageValue: blankAmount("Salvage value").nullable().optional(),
@@ -79,7 +89,10 @@ const createAssetSchema = z.strictObject({
   serialNumber: z.string().trim().max(200).nullable().optional(),
   method: z.enum(ASSET_METHODS).nullable().optional(),
   depreciationMethodId: nullableId.optional(),
-  lifeMonths: z.union([z.number().int(), z.string().regex(/^\d+$/, "lifeMonths must be a whole number")]).nullable().optional(),
+  lifeMonths: z
+    .union([z.number().int(), z.string().regex(/^\d+$/, "lifeMonths must be a whole number")])
+    .nullable()
+    .optional(),
   ratePercent: blankAmount("Rate percent").nullable().optional(),
   unitsTotal: blankAmount("Units total").nullable().optional(),
   convention: z.enum(ASSET_CONVENTIONS).nullable().optional(),
@@ -145,8 +158,7 @@ export const POST = defineRoute({
     const user = gate.user;
 
     const requestId = request.headers.get("Idempotency-Key")?.trim() ?? "";
-    if (!isUuid(requestId))
-      return bad("invalid_idempotency_key", undefined, 400);
+    if (!isUuid(requestId)) return bad("invalid_idempotency_key", undefined, 400);
 
     const body = routeBody;
 
@@ -160,36 +172,24 @@ export const POST = defineRoute({
     const categoryId = strOrNull(body.categoryId)?.toLowerCase() ?? null;
     if (!categoryId) return bad("category_required", "categoryId");
     if (!isUuid(categoryId)) return bad("invalid_category", "categoryId");
-    const category = await db.execute<{ id: string }>(sql`
-    select id from asset_categories
-     where org_id = ${user.orgId} and is_active and id = ${categoryId}
-  `, "objects");
-    if (
-      !category.some((row) => String(row.id).toLowerCase() === categoryId)
-    ) {
+    if (!(await hasActiveAssetCategory(user.orgId, categoryId))) {
       return bad("invalid_category", "categoryId");
     }
 
-    const suppliedSubsidiaryId =
-      strOrNull(body.subsidiaryId)?.toLowerCase() ?? null;
+    const suppliedSubsidiaryId = strOrNull(body.subsidiaryId)?.toLowerCase() ?? null;
     if (
       suppliedSubsidiaryId &&
       (!isUuid(suppliedSubsidiaryId) ||
-        (gate.allowedSubsidiaryIds &&
-          !gate.allowedSubsidiaryIds.has(suppliedSubsidiaryId)))
+        (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(suppliedSubsidiaryId)))
     ) {
       return bad("invalid_subsidiary", "subsidiaryId");
     }
-    const subsidiaries = await db.execute<{ id: string }>(sql`
-    select id from subsidiaries
-     where org_id = ${user.orgId} and is_active and not is_elimination
-       ${gate.allowedSubsidiaryIds ? sql`and id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
-     order by (parent_id is null) desc, name
-  `, "objects");
+    const subsidiaries = await listAvailableAssetSubsidiaries({
+      orgId: user.orgId,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    });
     const subsidiaryId = suppliedSubsidiaryId
-      ? subsidiaries.some(
-          (row) => String(row.id).toLowerCase() === suppliedSubsidiaryId,
-        )
+      ? subsidiaries.some((row) => String(row.id).toLowerCase() === suppliedSubsidiaryId)
         ? suppliedSubsidiaryId
         : null
       : subsidiaries[0]
@@ -199,24 +199,18 @@ export const POST = defineRoute({
       return bad("invalid_subsidiary", "subsidiaryId");
     }
     if (!subsidiaryId) {
-      return NextResponse.json(
-        { error: "no_available_subsidiary" },
-        { status: 409 },
-      );
+      return NextResponse.json({ error: "no_available_subsidiary" }, { status: 409 });
     }
 
     const cost = moneyOrNull(body.acquisitionCost) ?? "0";
     if (cost === "unreadable" || cost === "too-wide")
       return bad("acquisition_cost_invalid", "acquisitionCost");
-    if (cmp(cost, "0") < 0)
-      return bad("acquisition_cost_negative", "acquisitionCost");
+    if (cmp(cost, "0") < 0) return bad("acquisition_cost_negative", "acquisitionCost");
     const salvage = moneyOrNull(body.salvageValue) ?? "0";
     if (salvage === "unreadable" || salvage === "too-wide")
       return bad("salvage_value_invalid", "salvageValue");
-    if (cmp(salvage, "0") < 0)
-      return bad("salvage_value_negative", "salvageValue");
-    if (cmp(salvage, cost) > 0)
-      return bad("salvage_exceeds_cost", "salvageValue");
+    if (cmp(salvage, "0") < 0) return bad("salvage_value_negative", "salvageValue");
+    if (cmp(salvage, cost) > 0) return bad("salvage_exceeds_cost", "salvageValue");
 
     const acquiredOn = strOrNull(body.acquiredOn);
     if (acquiredOn !== null && !isIsoCalendarDate(acquiredOn)) {
@@ -249,11 +243,7 @@ export const POST = defineRoute({
     try {
       method = parseAssetMethod(body.method) ?? null;
       depreciationMethodId =
-        (await parseDepreciationMethodId(
-          db,
-          user.orgId,
-          body.depreciationMethodId,
-        )) ?? null;
+        (await parseDepreciationMethodId(db, user.orgId, body.depreciationMethodId)) ?? null;
       lifeMonths = parseLifeMonths(body.lifeMonths) ?? null;
       ratePercent = parseRatePercent(body.ratePercent) ?? null;
       unitsTotal = parseUnitsTotal(body.unitsTotal) ?? null;
@@ -288,11 +278,7 @@ export const POST = defineRoute({
           "invalid_expense_account",
         )) ?? null;
       customBag = await parseCustomBag(user.orgId, body.custom);
-      const taxClean = await parseTaxDepreciation(
-        db,
-        user.orgId,
-        body.taxDepreciation,
-      );
+      const taxClean = await parseTaxDepreciation(db, user.orgId, body.taxDepreciation);
       if (taxClean !== undefined) customBag.taxDepreciation = taxClean;
     } catch (error) {
       if (error instanceof FieldRefusal) {
@@ -353,16 +339,11 @@ export const POST = defineRoute({
               if (replay === "replay") return { id: requestId, replayed: true };
               throw new SetupCreateConflict("changed-payload");
             }
-            await lockAccountOverridesForAssetWrite(
-              tx,
-              user.orgId,
-              subsidiaryId,
-              [
-                { id: assetAccountId, code: "invalid_asset_account" },
-                { id: accumAccountId, code: "invalid_accumulated_account" },
-                { id: expenseAccountId, code: "invalid_expense_account" },
-              ],
-            );
+            await lockAccountOverridesForAssetWrite(tx, user.orgId, subsidiaryId, [
+              { id: assetAccountId, code: "invalid_asset_account" },
+              { id: accumAccountId, code: "invalid_accumulated_account" },
+              { id: expenseAccountId, code: "invalid_expense_account" },
+            ]);
             // Same org-wide fence as the legacy draft factory and the
             // equipment-capitalization path: max()+1 stays serialized across
             // every allocator, and the unique constraint is the final
@@ -373,16 +354,20 @@ export const POST = defineRoute({
             )`);
             let assetNumber = suppliedNumber;
             if (!assetNumber) {
-              const nextRes = await tx.execute<{ n: number }>(sql`
+              const nextRes = await tx.execute<{ n: number }>(
+                sql`
               select coalesce(max((regexp_replace(asset_number, '\\D', '', 'g'))::int), 0) + 1 as n
                 from fixed_assets
-               where org_id = ${user.orgId} and asset_number ~ '^FA-\\d+$'`, "objects");
+               where org_id = ${user.orgId} and asset_number ~ '^FA-\\d+$'`,
+                "objects",
+              );
               assetNumber = `FA-${String(Number(nextRes[0]?.n ?? 1)).padStart(4, "0")}`;
             }
             // Another transaction may claim this key after the preflight read;
             // a missing RETURNING row below is resolved from the immutable
             // audit image as either an exact replay or a typed conflict.
-            const inserted = await tx.execute<{ id: string }>(sql`
+            const inserted = await tx.execute<{ id: string }>(
+              sql`
             insert into fixed_assets
               (id, org_id, category_id, subsidiary_id, asset_number, name, description,
                status, acquisition_cost, salvage_value, acquired_on, in_service_on,
@@ -402,7 +387,9 @@ export const POST = defineRoute({
                ${user.id}, ${user.id})
             -- A retry is accepted only after the existing audited create payload is verified below.
             on conflict (id) do nothing
-            returning id`, "objects");
+            returning id`,
+              "objects",
+            );
             if (!inserted[0]) {
               const replay = await resolveIdempotentReplay(tx, {
                 orgId: user.orgId,
@@ -430,12 +417,9 @@ export const POST = defineRoute({
           replayed = outcome.replayed;
           break;
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
+          const message = error instanceof Error ? error.message : String(error);
           if (error instanceof SetupCreateConflict) throw error;
-          const numberConflict = message.includes(
-            "fixed_assets_org_asset_number_unique",
-          );
+          const numberConflict = message.includes("fixed_assets_org_asset_number_unique");
           if (!numberConflict) throw error;
           // A supplied number names its remedy; an auto number recomputes
           // once the winner is committed, then retries inside this same save.
@@ -449,17 +433,13 @@ export const POST = defineRoute({
       }
       if (error instanceof SetupCreateConflict) {
         return conflict(error.code, {
-          remedy:
-            "Close and reopen the asset drawer to retry with a fresh request key.",
+          remedy: "Close and reopen the asset drawer to retry with a fresh request key.",
         });
       }
       throw error;
     }
 
     if (!createdId) return bad("save_failed", undefined, 500);
-    return NextResponse.json(
-      { id: createdId },
-      { status: replayed ? 200 : 201 },
-    );
+    return NextResponse.json({ id: createdId }, { status: replayed ? 200 : 201 });
   },
 });

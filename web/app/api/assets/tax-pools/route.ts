@@ -3,23 +3,23 @@ import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { activePostingPrimaryBookId } from "@openbooks/engine/platform/database";
 import {
-  listTaxRegimes,
-  runTaxPool,
-} from "@openbooks/engine/tax-returns/pool-run";
+  findActiveTaxPoolBook,
+  findTaxPoolSubsidiary,
+  listTaxPoolRouteRows,
+} from "@openbooks/engine/assets/tax-pool-route-queries";
+import { activePostingPrimaryBookId } from "@openbooks/engine/platform/database";
+import { listTaxRegimes, runTaxPool } from "@openbooks/engine/tax-returns/pool-run";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import {
   SubsidiaryError,
   defaultPostingSubsidiaryId,
   loadSubsidiaryContext,
 } from "@openbooks/engine/organization/subsidiaries";
-import { guardSubsidiaryScope } from "../../../../lib/authz";
-import { isUuid } from "../../../../lib/list-params";
-import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
-import { isoDate } from "../../../../lib/api/json";
+import { guardSubsidiaryScope } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import { isoDate } from "@/lib/api/json";
 import { notFound } from "@/lib/api/responses";
 const postBodySchema0 = z.strictObject({
   regime: z.string().trim().min(1, "regime cannot be empty").optional(),
@@ -37,9 +37,7 @@ export const runtime = "nodejs";
 /** A year the run window can be built from: the Jan-1 fallback must be a real calendar day. */
 function isRunnableTaxYear(value: unknown): value is number {
   return (
-    typeof value === "number" &&
-    Number.isSafeInteger(value) &&
-    isIsoCalendarDate(`${value}-01-01`)
+    typeof value === "number" && Number.isSafeInteger(value) && isIsoCalendarDate(`${value}-01-01`)
   );
 }
 
@@ -65,15 +63,11 @@ export const GET = defineRoute({
     const taxYear = Number(p.get("taxYear"));
     if (!Number.isInteger(taxYear))
       return NextResponse.json({ error: "taxYear required" }, { status: 422 });
-    const r = await db.execute<Record<string, string>>(sql`
-    select pp.tax_year, tp.class_code, tp.regime,
-           pp.opening_balance::text, pp.additions::text, pp.dispositions::text,
-           pp.allowance::text, pp.closing_balance::text, pp.recapture::text, pp.terminal_loss::text
-      from tax_pool_periods pp
-      join tax_depreciation_pools tp on tp.id = pp.pool_id and tp.org_id = pp.org_id
-     where pp.org_id = ${gate.user.orgId} and pp.tax_year = ${taxYear}
-       ${subsidiaryVisibleFilter(sql`tp.subsidiary_id`, gate.allowedSubsidiaryIds)}
-     order by tp.class_code`, "objects");
+    const r = await listTaxPoolRouteRows({
+      orgId: gate.user.orgId,
+      taxYear,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    });
     return NextResponse.json({ rows: r });
   },
 });
@@ -91,8 +85,7 @@ export const POST = defineRoute({
     if (!regime || !availableRegimes.some((item) => item.code === regime)) {
       return NextResponse.json(
         {
-          error:
-            "tax depreciation regime is not enabled for this company country",
+          error: "tax depreciation regime is not enabled for this company country",
         },
         { status: 422 },
       );
@@ -112,29 +105,17 @@ export const POST = defineRoute({
       ["Year start", body.yearStart],
       ["Year end", body.yearEnd],
     ] as const) {
-      if (
-        value !== undefined &&
-        value !== null &&
-        value !== "" &&
-        !isIsoCalendarDate(value)
-      ) {
+      if (value !== undefined && value !== null && value !== "" && !isIsoCalendarDate(value)) {
         return NextResponse.json(
           { error: `${label} must be a real calendar date (YYYY-MM-DD)` },
           { status: 422 },
         );
       }
     }
-    const yearStart = isIsoCalendarDate(body.yearStart)
-      ? body.yearStart
-      : `${taxYear}-01-01`;
-    const yearEnd = isIsoCalendarDate(body.yearEnd)
-      ? body.yearEnd
-      : `${taxYear}-12-31`;
+    const yearStart = isIsoCalendarDate(body.yearStart) ? body.yearStart : `${taxYear}-01-01`;
+    const yearEnd = isIsoCalendarDate(body.yearEnd) ? body.yearEnd : `${taxYear}-12-31`;
     if (yearStart > yearEnd)
-      return NextResponse.json(
-        { error: "year start must not follow year end" },
-        { status: 422 },
-      );
+      return NextResponse.json({ error: "year start must not follow year end" }, { status: 422 });
     if (yearStart !== `${taxYear}-01-01` || yearEnd !== `${taxYear}-12-31`) {
       return NextResponse.json(
         {
@@ -150,14 +131,9 @@ export const POST = defineRoute({
       if (typeof body.bookId !== "string" || !isUuid(body.bookId)) {
         return NextResponse.json({ error: "invalid bookId" }, { status: 422 });
       }
-      const book = await db.execute<{ id: string }>(sql`
-      select id
-        from accounting_books
-       where id = ${body.bookId} and org_id = ${gate.user.orgId} and is_active
-       limit 1`, "objects");
-      if (!book[0])
-        return notFound("record");
-      bookId = book[0].id;
+      const book = await findActiveTaxPoolBook(gate.user.orgId, body.bookId);
+      if (!book) return notFound("record");
+      bookId = book.id;
     } else {
       bookId = await activePostingPrimaryBookId(gate.user.orgId);
     }
@@ -177,18 +153,12 @@ export const POST = defineRoute({
       // A malformed id names nothing: same answer as a subsidiary in another
       // org, and answered before the id reaches SQL (a raw uuid comparison
       // throws 22P02 out of the handler as a 500).
-      if (!isUuid(requestedSubsidiaryId))
-        return notFound("record");
+      if (!isUuid(requestedSubsidiaryId)) return notFound("record");
       const requestedDenied = guardSubsidiaryScope(gate, requestedSubsidiaryId);
       if (requestedDenied) return requestedDenied;
-      const subsidiary = await db.execute<{ id: string }>(sql`
-      select id
-        from subsidiaries
-       where id = ${requestedSubsidiaryId} and org_id = ${gate.user.orgId}
-       limit 1`, "objects");
-      if (!subsidiary[0])
-        return notFound("record");
-      subsidiaryId = subsidiary[0].id;
+      const subsidiary = await findTaxPoolSubsidiary(gate.user.orgId, requestedSubsidiaryId);
+      if (!subsidiary) return notFound("record");
+      subsidiaryId = subsidiary.id;
     } else {
       subsidiaryId = await rootSubsidiary(gate.user.orgId);
     }
@@ -202,18 +172,11 @@ export const POST = defineRoute({
     if (denied) return denied;
 
     try {
-      const result = await runTaxPool(
-        gate.user.orgId,
-        bookId,
-        subsidiaryId,
-        regime,
-        taxYear,
-        {
-          yearStart,
-          yearEnd,
-          actorId: gate.user.id,
-        },
-      );
+      const result = await runTaxPool(gate.user.orgId, bookId, subsidiaryId, regime, taxYear, {
+        yearStart,
+        yearEnd,
+        actorId: gate.user.id,
+      });
       return NextResponse.json(result);
     } catch (e: unknown) {
       return apiErrorResponse(e, { safeStatus: 422 });

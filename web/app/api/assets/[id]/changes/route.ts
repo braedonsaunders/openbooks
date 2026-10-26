@@ -5,13 +5,10 @@ import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import {
-  lockScopeRow,
-  ScopeNotFoundError,
-} from "@openbooks/engine/organization/scope";
+import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { proposeAssetChange } from "@openbooks/engine/assets/asset-changes";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
-import { exactMoney, parseJsonBody } from "@/lib/api/json";
+import { exactMoney } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
 
 import { notFound } from "@/lib/api/responses";
@@ -97,45 +94,38 @@ export const GET = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid asset" }, { status: 422 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid asset" }, { status: 422 });
     const orgId = gate.user.orgId;
     try {
       const result = await db.transaction(async (tx) => {
         // Keep the owner check and every dependent read under one asset lock.
-        await lockScopeRow(
-          tx,
-          orgId,
-          "fixed_asset",
-          id,
-          gate.allowedSubsidiaryIds,
-          "share",
-        );
-        const subsidiaries = (await tx.execute<{
+        await lockScopeRow(tx, orgId, "fixed_asset", id, gate.allowedSubsidiaryIds, "share");
+        const subsidiaries = (
+          await tx.execute<{
             id: string;
             name: string;
             base_currency: string;
             is_elimination: boolean;
           }>(
-            sql`select id,name,base_currency,is_elimination from subsidiaries where org_id=${orgId} and is_active order by name`, "objects",
-          )).filter(
-          (s) =>
-            !gate.allowedSubsidiaryIds || gate.allowedSubsidiaryIds.has(s.id),
-        );
+            sql`select id,name,base_currency,is_elimination from subsidiaries where org_id=${orgId} and is_active order by name`,
+            "objects",
+          )
+        ).filter((s) => !gate.allowedSubsidiaryIds || gate.allowedSubsidiaryIds.has(s.id));
         const books = await tx.execute<{ id: string; name: string }>(
-            sql`select id,name from accounting_books where org_id=${orgId} and is_active order by is_primary desc,name`, "objects",
-          );
+          sql`select id,name from accounting_books where org_id=${orgId} and is_active order by is_primary desc,name`,
+          "objects",
+        );
         const groupBooks = await tx.execute<{ book_id: string; group_currency: string }>(
-            sql`select book_id,group_currency from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null order by book_id`, "objects",
-          );
+          sql`select book_id,group_currency from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null order by book_id`,
+          "objects",
+        );
         const groupScope = await tx.execute<{ elimination_subsidiary_id: string }>(
-            sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null`, "objects",
-          );
+          sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null`,
+          "objects",
+        );
         if (
           gate.allowedSubsidiaryIds &&
-          groupScope.some(
-            (s) => !gate.allowedSubsidiaryIds!.has(s.elimination_subsidiary_id),
-          )
+          groupScope.some((s) => !gate.allowedSubsidiaryIds!.has(s.elimination_subsidiary_id))
         )
           return { deniedGroupScope: true as const };
         return { subsidiaries, books, groupBooks };
@@ -152,20 +142,14 @@ export const POST = defineRoute({
   permission: "assets.manage",
   feature: "fixedAssets",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz: gate, params }) => {
+  body: assetChangeSchema,
+  invalidBodyStatus: 422,
+  handler: async ({ authz: gate, params, body }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid asset" }, { status: 422 });
-    const body = await parseJsonBody(req, assetChangeSchema, { status: 422 });
-    if (!body.ok) return body.response;
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid asset" }, { status: 422 });
     try {
       return NextResponse.json({
-        changeId: await proposeAssetChange(
-          gate.user.orgId,
-          id,
-          gate.user.id,
-          body.data,
-        ),
+        changeId: await proposeAssetChange(gate.user.orgId, id, gate.user.id, body),
       });
     } catch (e) {
       return apiErrorResponse(e, { safeStatus: 422 });
